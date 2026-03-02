@@ -1115,6 +1115,16 @@ enum nvme_power_measurement_type {
 };
 
 /**
+ * enum nvme_power_measurement_action - Power measurement actions.
+ * @NVME_PMA_STOP:  Stop power measurement
+ * @NVME_PMA_START: Start power measurement
+ */
+enum nvme_power_measurement_action {
+    NVME_PMA_STOP	= 0x0,
+    NVME_PMA_START	= 0x1,
+};
+
+/**
  * nvme_psd_power_scale() - power scale occupies the upper 3 bits
  * @ps: power scale value
  *
@@ -8857,7 +8867,7 @@ enum nvme_cmd_get_log_lid {
  * @NVME_FEAT_FID_CONF_DEV_PERSONALITY: Configurable Device Personality
  * @NVME_FEAT_FID_POWER_LIMIT:		Power Limit
  * @NVME_FEAT_FID_POWER_THRESH:		Power Threshold
- * @NVME_FEAT_FID_POEWR_MEASUREMENT:	Power Measurement
+ * @NVME_FEAT_FID_POWER_MEASUREMENT:	Power Measurement
  * @NVME_FEAT_FID_EMB_MGMT_CTRL_ADDR:	Embedded Management Controller Address
  * @NVME_FEAT_FID_HOST_MGMT_AGENT_ADDR:	Host Management Agent Address
  * @NVME_FEAT_FID_ENH_CTRL_METADATA:	Enhanced Controller Metadata
@@ -8907,7 +8917,7 @@ enum nvme_features_id {
 	NVME_FEAT_FID_CONF_DEV_PERSONALITY			= 0x22,
 	NVME_FEAT_FID_POWER_LIMIT				= 0x23,
 	NVME_FEAT_FID_POWER_THRESH				= 0x24,
-	NVME_FEAT_FID_POEWR_MEASUREMENT				= 0x25,
+	NVME_FEAT_FID_POWER_MEASUREMENT				= 0x25,
 	NVME_FEAT_FID_EMB_MGMT_CTRL_ADDR			= 0x78,
 	NVME_FEAT_FID_HOST_MGMT_AGENT_ADDR			= 0x79,
 	NVME_FEAT_FID_ENH_CTRL_METADATA				= 0x7d,
@@ -9087,6 +9097,12 @@ enum nvme_features_id {
  * @NVME_FEAT_POWER_THRESH_PMTS_MASK:
  * @NVME_FEAT_POWER_THRESH_EPT_SHIFT:
  * @NVME_FEAT_POWER_THRESH_EPT_MASK:
+ * @NVME_FEAT_POWER_MEAS_ACT_SHIFT:
+ * @NVME_FEAT_POWER_MEAS_ACT_MASK:
+ * @NVME_FEAT_POWER_MEAS_PMTS_SHIFT:
+ * @NVME_FEAT_POWER_MEAS_PMTS_MASK:
+ * @NVME_FEAT_POWER_MEAS_SMT_SHIFT:
+ * @NVME_FEAT_POWER_MEAS_SMT_MASK:
  **/
 enum nvme_feat {
 	NVME_FEAT_ARBITRATION_BURST_SHIFT	= 0,
@@ -9253,6 +9269,12 @@ enum nvme_feat {
 	NVME_FEAT_POWER_THRESH_PMTS_MASK = 0xf,
 	NVME_FEAT_POWER_THRESH_EPT_SHIFT = 31,
 	NVME_FEAT_POWER_THRESH_EPT_MASK	= 0x1,
+	NVME_FEAT_POWER_MEAS_ACT_SHIFT	= 0,
+	NVME_FEAT_POWER_MEAS_ACT_MASK	= 0xf,
+	NVME_FEAT_POWER_MEAS_PMTS_SHIFT	= 4,
+	NVME_FEAT_POWER_MEAS_PMTS_MASK	= 0xf,
+	NVME_FEAT_POWER_MEAS_SMT_SHIFT	= 16,
+	NVME_FEAT_POWER_MEAS_SMT_MASK	= 0xffff,
 };
 
 /**
