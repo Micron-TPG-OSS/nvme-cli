@@ -754,7 +754,7 @@ static int feat_power_thresh(int argc, char **argv, struct command *acmd,
 }
 
 static int power_meas_set(struct nvme_transport_handle *hdl, const __u8 fid,
-			  __u8 action, __u8 pmts, __u16 smt, bool sv)
+			  __u8 action, __u8 pmts, __u16 smt, __u8 uidx, bool sv)
 {
 	__u32 cdw11 = NVME_SET(action, FEAT_POWER_MEAS_ACT) |
 		      NVME_SET(pmts, FEAT_POWER_MEAS_PMTS) |
@@ -762,7 +762,7 @@ static int power_meas_set(struct nvme_transport_handle *hdl, const __u8 fid,
 	__u64 result;
 	int err;
 
-	err = nvme_set_features(hdl, 0, fid, sv, cdw11, 0, 0, 0, 0, NULL, 0,
+	err = nvme_set_features(hdl, 0, fid, sv, cdw11, 0, 0, uidx, 0, NULL, 0,
 			&result);
 
 	nvme_show_init();
@@ -806,9 +806,10 @@ static int feat_power_meas(int argc, char **argv, struct command *cmd,
 	struct config cfg = { 0 };
 
 	FEAT_ARGS(opts,
-		  OPT_BYTE("act", 'a', &cfg.act, action),
-		  OPT_BYTE("pmts", 'm', &cfg.pmts, pmts),
-		  OPT_SHRT("smt", 'T', &cfg.smt, smt));
+		  OPT_BYTE("act", 0, &cfg.act, action),
+		  OPT_BYTE("pmts", 0, &cfg.pmts, pmts),
+		  OPT_SHRT("smt", 0, &cfg.smt, smt),
+		  OPT_BYTE("uuid-index", 'u', &cfg.uidx, uuid_index));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, POWER_MEAS_DESC, opts);
 	if (err)
@@ -818,6 +819,7 @@ static int feat_power_meas(int argc, char **argv, struct command *cmd,
 	    argconfig_parse_seen(opts, "pmts") ||
 	    argconfig_parse_seen(opts, "smt"))
 		err = power_meas_set(hdl, fid, cfg.act, cfg.pmts, cfg.smt,
+				     cfg.uidx,
 				     argconfig_parse_seen(opts, "save"));
 	else
 		err = feat_get(hdl, fid, 0, cfg.sel, 0, power_meas_feat);
