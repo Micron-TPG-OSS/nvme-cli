@@ -1525,6 +1525,21 @@ const char *nvme_power_measurement_type_to_string(__u8 pmt)
 	return "Reserved";
 }
 
+
+const char *nvme_power_measurement_action_to_string(__u8 act)
+{
+	switch (act) {
+	case 0:
+		return "Stop";
+	case 1:
+		return "Start";
+	default:
+		break;
+	}
+
+	return "Reserved";
+}
+
 void nvme_feature_show(enum nvme_features_id fid, int sel, unsigned int result)
 {
 	nvme_print(show_feature, NORMAL, fid, sel, result);
