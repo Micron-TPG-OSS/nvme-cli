@@ -4147,11 +4147,28 @@ static void json_feature_show_fields_power_thresh(struct json_object *r,
 	obj_add_str(r, "Power Threshold Scale (PTS)",
 		    nvme_feature_power_limit_scale_to_string(field));
 
-	field = NVME_FEAT_POWER_THRESH_PTV(result);
-	obj_add_uint(r, "Power Threshold Value (PTV)", field);
+	__u16 ptv = NVME_FEAT_POWER_THRESH_PTV(result);
+	obj_add_uint(r, "Power Threshold Value (PTV)", ptv);
 
-	k = get_power_and_scale(field, NVME_FEAT_POWER_THRESH_PTS(result));
+	k = get_power_and_scale(ptv, NVME_FEAT_POWER_THRESH_PTS(result));
 	obj_add_str(r, "Power Threshold", k);
+}
+
+static void json_feature_show_fields_power_meas(struct json_object *r,
+						unsigned int result)
+{
+	__u8 field;
+
+	field = NVME_FEAT_POWER_MEAS_ACT(result);
+	obj_add_str(r, "Action (ACT)",
+		nvme_power_measurement_action_to_string(field));
+
+	field = NVME_FEAT_POWER_MEAS_PMTS(result);
+	obj_add_str(r, "Power Measurement Type Select (PMTS)",
+		nvme_power_measurement_type_to_string(field));
+
+	__u16 smt = NVME_FEAT_POWER_MEAS_SMT(result);
+	obj_add_uint(r, "Stop Measurement Time (SMT)", smt);
 }
 
 static void json_feature_show(enum nvme_features_id fid, int sel, unsigned int result)
@@ -4298,6 +4315,9 @@ static void json_feature_show_fields(enum nvme_features_id fid, unsigned int res
 		break;
 	case NVME_FEAT_FID_POWER_THRESH:
 		json_feature_show_fields_power_thresh(r, result);
+		break;
+	case NVME_FEAT_FID_POWER_MEASUREMENT:
+		json_feature_show_fields_power_meas(r, result);
 		break;
 	default:
 		break;
