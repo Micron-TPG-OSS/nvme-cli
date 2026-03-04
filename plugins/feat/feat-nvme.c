@@ -786,6 +786,14 @@ static int power_meas_set(struct nvme_transport_handle *hdl, const __u8 fid,
 static int feat_power_meas(int argc, char **argv, struct command *cmd,
 			   struct plugin *plugin)
 {
+	struct config {
+		__u8 act;
+		__u8 pmts;
+		__u16 smt;
+		__u8 uidx;
+		__u8 sel;
+	};
+
 	const char *action = "action [0-1]: stop|start";
 	const char *pmts = "power measurement type select";
 	const char *smt = "stop measurement time";
@@ -795,14 +803,6 @@ static int feat_power_meas(int argc, char **argv, struct command *cmd,
 	_cleanup_nvme_transport_handle_ struct nvme_transport_handle *hdl =
 	    NULL;
 	int err;
-
-	struct config {
-		__u8 act;
-		__u8 pmts;
-		__u16 smt;
-		__u8 uidx;
-		__u8 sel;
-	};
 
 	struct config cfg = { 0 };
 

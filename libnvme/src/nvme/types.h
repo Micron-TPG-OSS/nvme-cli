@@ -1120,8 +1120,8 @@ enum nvme_power_measurement_type {
  * @NVME_PMA_START: Start power measurement
  */
 enum nvme_power_measurement_action {
-    NVME_PMA_STOP	= 0x0,
-    NVME_PMA_START	= 0x1,
+	NVME_PMA_STOP	= 0x0,
+	NVME_PMA_START	= 0x1,
 };
 
 /**
