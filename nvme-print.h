@@ -63,6 +63,7 @@ struct print_ops {
 	void (*ns_list_log)(struct nvme_ns_list *log, const char *devname, bool alloc);
 	void (*nvm_id_ns)(struct nvme_nvm_id_ns *nvm_ns, unsigned int nsid, struct nvme_id_ns *ns, unsigned int lba_index, bool cap_only);
 	void (*persistent_event_log)(void *pevent_log_info, __u8 action, __u32 size, const char *devname);
+	void (*power_meas_log)(struct nvme_power_meas_log *log, __u32 size);
 	void (*predictable_latency_event_agg_log)(struct nvme_aggregate_predictable_lat_event *pea_log, __u64 log_entries, __u32 size, const char *devname);
 	void (*predictable_latency_per_nvmset)(struct nvme_nvmset_predictable_lat_log *plpns_log, __u16 nvmset_id, const char *devname);
 	void (*primary_ctrl_cap)(const struct nvme_primary_ctrl_cap *caps);
@@ -364,6 +365,8 @@ void json_print(struct json_object *r);
 struct json_object *obj_create_array_obj(struct json_object *o, const char *k);
 void nvme_show_mgmt_addr_list_log(struct nvme_mgmt_addr_list_log *ma_list,
 				  nvme_print_flags_t flags);
+void nvme_show_power_meas_log(struct nvme_power_meas_log *log, __u32 size,
+			      nvme_print_flags_t flags);
 void nvme_show_rotational_media_info_log(struct nvme_rotational_media_info_log *info,
 					 nvme_print_flags_t flags);
 void nvme_show_dispersed_ns_psub_log(struct nvme_dispersed_ns_participating_nss_log *log,

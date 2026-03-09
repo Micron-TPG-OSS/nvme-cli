@@ -6554,6 +6554,46 @@ static void stdout_pull_model_ddc_req_log(struct nvme_pull_model_ddc_req_log *lo
 	d((unsigned char *)log->osp, osp_len, 16, 1);
 }
 
+static void stdout_power_meas_log(struct nvme_power_meas_log *log, __u32 size)
+{
+	__u16 nphd = le16_to_cpu(log->nphd);
+	__u16 pma = le16_to_cpu(log->pma);
+	__u8 pmt = NVME_GET(pma, PMA_PMT);
+	__u16 i;
+
+	printf("Power Measurement Log\n");
+	printf("ver           : %u\n", log->ver);
+	printf("pmgn          : %u\n", log->pmgn);
+	printf("pma           : %#06x\n", pma);
+	printf("  pme         : %u\n", NVME_GET(pma, PMA_PME));
+	printf("  ncpdf       : %u\n", NVME_GET(pma, PMA_NCPDF));
+	printf("  epf         : %u\n", NVME_GET(pma, PMA_EPF));
+	printf("  mipwrts     : %u\n", NVME_GET(pma, PMA_MIPWRTS));
+	printf("  phdo        : %u\n", NVME_GET(pma, PMA_PHDO));
+	printf("  pmt         : %u (%s)\n", pmt,
+	       nvme_power_measurement_type_to_string(pmt));
+	printf("sze           : %u\n", le32_to_cpu(log->sze));
+	printf("pmc           : %u\n", le32_to_cpu(log->pmc));
+	printf("nphd          : %u\n", nphd);
+	printf("smtr          : %u\n", le16_to_cpu(log->smtr));
+	printf("smts          : %"PRIu64"\n", le64_to_cpu(log->smts));
+	printf("phds          : %u\n", le16_to_cpu(log->phds));
+	printf("phbs          : %u\n", le16_to_cpu(log->phbs));
+	printf("nphds         : %u\n", le16_to_cpu(log->nphds));
+	printf("vss           : %u\n", le16_to_cpu(log->vss));
+	printf("phdoc         : %u\n", le32_to_cpu(log->phdoc));
+	printf("aipwr         : %#010x\n", le32_to_cpu(log->aipwr));
+	printf("mipwr         : %#010x\n", le32_to_cpu(log->mipwr));
+	printf("mipwrt        : %"PRIu64"\n", le64_to_cpu(log->mipwrt));
+	printf("ipwrpe        : %u\n", log->ipwrpe);
+
+	for (i = 0; i < nphd; i++) {
+		printf("desc[%u]:\n", i);
+		printf("  phbc        : %u\n", le32_to_cpu(log->descs[i].phbc));
+		printf("  phblt       : %#010x\n", le32_to_cpu(log->descs[i].phblt));
+	}
+}
+
 static void stdout_relatives(struct nvme_global_ctx *ctx, const char *name)
 {
 	struct nvme_resources res;
@@ -6740,6 +6780,9 @@ static void stdout_log(const char *devname, struct nvme_get_log_args *args)
 	case NVME_LOG_LID_PULL_MODEL_DDC_REQ:
 		stdout_pull_model_ddc_req_log((struct nvme_pull_model_ddc_req_log *)args->log);
 		break;
+	case NVME_LOG_LID_POWER_MEASUREMENT:
+		stdout_power_meas_log((struct nvme_power_meas_log *)args->log, args->len);
+		break;
 	case NVME_LOG_LID_RESERVATION:
 		stdout_resv_notif_log((struct nvme_resv_notification_log *)args->log, devname);
 		break;
@@ -6830,6 +6873,7 @@ static struct print_ops stdout_print_ops = {
 	.host_discovery_log		= stdout_host_discovery_log,
 	.ave_discovery_log		= stdout_ave_discovery_log,
 	.pull_model_ddc_req_log		= stdout_pull_model_ddc_req_log,
+	.power_meas_log			= stdout_power_meas_log,
 	.log				= stdout_log,
 
 	/* libnvme tree print functions */

@@ -1702,6 +1702,12 @@ void nvme_show_mgmt_addr_list_log(struct nvme_mgmt_addr_list_log *ma_list, nvme_
 	nvme_print(mgmt_addr_list_log, flags, ma_list);
 }
 
+void nvme_show_power_meas_log(struct nvme_power_meas_log *log, __u32 size,
+			      nvme_print_flags_t flags)
+{
+	nvme_print(power_meas_log, flags, log, size);
+}
+
 void nvme_show_rotational_media_info_log(struct nvme_rotational_media_info_log *info,
 					 nvme_print_flags_t flags)
 {

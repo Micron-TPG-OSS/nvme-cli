@@ -5701,6 +5701,53 @@ static void json_pull_model_ddc_req_log(struct nvme_pull_model_ddc_req_log *log)
 	obj_d(r, "osp", (unsigned char *)log->osp, osp_len, 16, 1);
 }
 
+static void json_power_meas_log(struct nvme_power_meas_log *log, __u32 size UNUSED)
+{
+	struct json_object *r = json_create_object();
+	struct json_object *descs;
+	__u16 nphd = le16_to_cpu(log->nphd);
+	__u16 pma = le16_to_cpu(log->pma);
+	__u8 pmt = NVME_GET(pma, PMA_PMT);
+	__u16 i;
+
+	obj_add_uint(r, "ver", log->ver);
+	obj_add_uint(r, "pmgn", log->pmgn);
+	obj_add_uint(r, "pma", pma);
+	obj_add_uint(r, "pme", NVME_GET(pma, PMA_PME));
+	obj_add_uint(r, "ncpdf", NVME_GET(pma, PMA_NCPDF));
+	obj_add_uint(r, "epf", NVME_GET(pma, PMA_EPF));
+	obj_add_uint(r, "mipwrts", NVME_GET(pma, PMA_MIPWRTS));
+	obj_add_uint(r, "phdo", NVME_GET(pma, PMA_PHDO));
+	obj_add_uint(r, "pmt", pmt);
+	obj_add_str(r, "pmt_str", nvme_power_measurement_type_to_string(pmt));
+	obj_add_uint(r, "sze", le32_to_cpu(log->sze));
+	obj_add_uint(r, "pmc", le32_to_cpu(log->pmc));
+	obj_add_uint(r, "nphd", nphd);
+	obj_add_uint(r, "smtr", le16_to_cpu(log->smtr));
+	obj_add_uint64(r, "smts", le64_to_cpu(log->smts));
+	obj_add_uint(r, "phds", le16_to_cpu(log->phds));
+	obj_add_uint(r, "phbs", le16_to_cpu(log->phbs));
+	obj_add_uint(r, "nphds", le16_to_cpu(log->nphds));
+	obj_add_uint(r, "vss", le16_to_cpu(log->vss));
+	obj_add_uint(r, "phdoc", le32_to_cpu(log->phdoc));
+	obj_add_uint(r, "aipwr", le32_to_cpu(log->aipwr));
+	obj_add_uint(r, "mipwr", le32_to_cpu(log->mipwr));
+	obj_add_uint64(r, "mipwrt", le64_to_cpu(log->mipwrt));
+	obj_add_uint(r, "ipwrpe", log->ipwrpe);
+
+	descs = json_create_array();
+	for (i = 0; i < nphd; i++) {
+		struct json_object *desc = json_create_object();
+
+		obj_add_uint(desc, "phbc", le32_to_cpu(log->descs[i].phbc));
+		obj_add_uint(desc, "phblt", le32_to_cpu(log->descs[i].phblt));
+		json_object_array_add(descs, desc);
+	}
+	obj_add_obj(r, "descs", descs);
+
+	json_print(r);
+}
+
 static struct print_ops json_print_ops = {
 	/* libnvme types.h print functions */
 	.ana_log			= json_ana_log,
@@ -5776,6 +5823,7 @@ static struct print_ops json_print_ops = {
 	.host_discovery_log		= json_host_discovery_log,
 	.ave_discovery_log		= json_ave_discovery_log,
 	.pull_model_ddc_req_log		= json_pull_model_ddc_req_log,
+	.power_meas_log			= json_power_meas_log,
 
 	/* libnvme tree print functions */
 	.list_item			= json_list_item,
