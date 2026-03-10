@@ -6559,6 +6559,8 @@ static void stdout_power_meas_log(struct nvme_power_meas_log *log, __u32 size)
 	__u16 nphd = le16_to_cpu(log->nphd);
 	__u16 pma = le16_to_cpu(log->pma);
 	__u8 pmt = NVME_GET(pma, PMA_PMT);
+	__u32 aipwr = le32_to_cpu(log->aipwr);
+	__u32 mipwr = le32_to_cpu(log->mipwr);
 	__u16 i;
 	bool verbose = stdout_print_ops.flags & VERBOSE;
 
@@ -6587,15 +6589,23 @@ static void stdout_power_meas_log(struct nvme_power_meas_log *log, __u32 size)
 	printf("%-47s : %u\n",   "Number of Power Histogram Descriptors Supported", le16_to_cpu(log->nphds));
 	printf("%-47s : %u\n",   "Vendor Specific Size (bytes)", le16_to_cpu(log->vss));
 	printf("%-47s : %u\n",   "Power Histogram Descriptor Overflow Count", le32_to_cpu(log->phdoc));
-	printf("%-47s : %#010x\n", "Average Interval Power", le32_to_cpu(log->aipwr));
-	printf("%-47s : %#010x\n", "Maximum Interval Power", le32_to_cpu(log->mipwr));
+	printf("%-47s : ", "Average Interval Power");
+	print_power_and_scale(aipwr & 0xffff, (aipwr >> 16) & 0x3);
+	printf("\n");
+	printf("%-47s : ", "Maximum Interval Power");
+	print_power_and_scale(mipwr & 0xffff, (mipwr >> 16) & 0x3);
+	printf("\n");
 	printf("%-47s : %"PRIu64"\n", "Maximum Interval Power Timestamp", le64_to_cpu(log->mipwrt));
 	printf("%-47s : %u\n",   "Interval Power Percent Error", log->ipwrpe);
 
 	for (i = 0; i < nphd; i++) {
+		__u32 phblt = le32_to_cpu(log->descs[i].phblt);
+
 		printf("Power Histogram Descriptor [%u]:\n", i);
-		printf("    %-43s : %u\n",     "Power Histogram Bin Count", le32_to_cpu(log->descs[i].phbc));
-		printf("    %-43s : %#010x\n", "Power Histogram Bin Lower Threshold", le32_to_cpu(log->descs[i].phblt));
+		printf("    %-43s : %u\n", "Power Histogram Bin Count", le32_to_cpu(log->descs[i].phbc));
+		printf("    %-43s : ", "Power Histogram Bin Lower Threshold");
+		print_power_and_scale(phblt & 0xffff, (phblt >> 16) & 0x3);
+		printf("\n");
 	}
 }
 
