@@ -10830,6 +10830,9 @@ static int get_power_measurement_log(int argc, char **argv, struct command *acmd
 	if (cfg.raw_binary)
 		flags = BINARY;
 
+	if (argconfig_parse_seen(opts, "verbose"))
+		flags |= VERBOSE;
+
 	/* First read minimum size to discover the full log size */
 	log = nvme_alloc(min_log_size);
 	if (!log)
