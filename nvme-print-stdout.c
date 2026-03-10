@@ -6562,35 +6562,35 @@ static void stdout_power_meas_log(struct nvme_power_meas_log *log, __u32 size)
 	__u16 i;
 
 	printf("Power Measurement Log\n");
-	printf("ver           : %u\n", log->ver);
-	printf("pmgn          : %u\n", log->pmgn);
-	printf("pma           : %#06x\n", pma);
-	printf("  pme         : %u\n", NVME_GET(pma, PMA_PME));
-	printf("  ncpdf       : %u\n", NVME_GET(pma, PMA_NCPDF));
-	printf("  epf         : %u\n", NVME_GET(pma, PMA_EPF));
-	printf("  mipwrts     : %u\n", NVME_GET(pma, PMA_MIPWRTS));
-	printf("  phdo        : %u\n", NVME_GET(pma, PMA_PHDO));
-	printf("  pmt         : %u (%s)\n", pmt,
+	printf("%-50s : %u\n",   "Version", log->ver);
+	printf("%-50s : %u\n",   "Power Measurement Generation Number", log->pmgn);
+	printf("%-50s : %#06x\n", "Power Measurement Attributes", pma);
+	printf("  %-48s : %u\n", "Power Measurement Enable", NVME_GET(pma, PMA_PME));
+	printf("  %-48s : %u\n", "Non-Contiguous Power Data Flag", NVME_GET(pma, PMA_NCPDF));
+	printf("  %-48s : %u\n", "Estimated Power Flag", NVME_GET(pma, PMA_EPF));
+	printf("  %-48s : %u\n", "Maximum Interval Power Timestamp Support", NVME_GET(pma, PMA_MIPWRTS));
+	printf("  %-48s : %u\n", "Power Histogram Descriptor Overflow", NVME_GET(pma, PMA_PHDO));
+	printf("  %-48s : %u (%s)\n", "Power Measurement Type", pmt,
 	       nvme_power_measurement_type_to_string(pmt));
-	printf("sze           : %u\n", le32_to_cpu(log->sze));
-	printf("pmc           : %u\n", le32_to_cpu(log->pmc));
-	printf("nphd          : %u\n", nphd);
-	printf("smtr          : %u\n", le16_to_cpu(log->smtr));
-	printf("smts          : %"PRIu64"\n", le64_to_cpu(log->smts));
-	printf("phds          : %u\n", le16_to_cpu(log->phds));
-	printf("phbs          : %u\n", le16_to_cpu(log->phbs));
-	printf("nphds         : %u\n", le16_to_cpu(log->nphds));
-	printf("vss           : %u\n", le16_to_cpu(log->vss));
-	printf("phdoc         : %u\n", le32_to_cpu(log->phdoc));
-	printf("aipwr         : %#010x\n", le32_to_cpu(log->aipwr));
-	printf("mipwr         : %#010x\n", le32_to_cpu(log->mipwr));
-	printf("mipwrt        : %"PRIu64"\n", le64_to_cpu(log->mipwrt));
-	printf("ipwrpe        : %u\n", log->ipwrpe);
+	printf("%-50s : %u\n",   "Size (bytes)", le32_to_cpu(log->sze));
+	printf("%-50s : %u\n",   "Power Measurement Count", le32_to_cpu(log->pmc));
+	printf("%-50s : %u\n",   "Number of Power Histogram Descriptors", nphd);
+	printf("%-50s : %u\n",   "Stop Measurement Time Remaining (minutes)", le16_to_cpu(log->smtr));
+	printf("%-50s : %"PRIu64"\n", "Stop Measurement Timestamp", le64_to_cpu(log->smts));
+	printf("%-50s : %u\n",   "Power Histogram Descriptor Size (bytes)", le16_to_cpu(log->phds));
+	printf("%-50s : %u\n",   "Power Histogram Bin Size (mW)", le16_to_cpu(log->phbs));
+	printf("%-50s : %u\n",   "Number of Power Histogram Descriptors Supported", le16_to_cpu(log->nphds));
+	printf("%-50s : %u\n",   "Vendor Specific Size (bytes)", le16_to_cpu(log->vss));
+	printf("%-50s : %u\n",   "Power Histogram Descriptor Overflow Count", le32_to_cpu(log->phdoc));
+	printf("%-50s : %#010x\n", "Average Interval Power", le32_to_cpu(log->aipwr));
+	printf("%-50s : %#010x\n", "Maximum Interval Power", le32_to_cpu(log->mipwr));
+	printf("%-50s : %"PRIu64"\n", "Maximum Interval Power Timestamp", le64_to_cpu(log->mipwrt));
+	printf("%-50s : %u\n",   "Interval Power Percent Error", log->ipwrpe);
 
 	for (i = 0; i < nphd; i++) {
-		printf("desc[%u]:\n", i);
-		printf("  phbc        : %u\n", le32_to_cpu(log->descs[i].phbc));
-		printf("  phblt       : %#010x\n", le32_to_cpu(log->descs[i].phblt));
+		printf("Power Histogram Descriptor [%u]:\n", i);
+		printf("  %-48s : %u\n",     "Power Histogram Bin Count", le32_to_cpu(log->descs[i].phbc));
+		printf("  %-48s : %#010x\n", "Power Histogram Bin Lower Threshold", le32_to_cpu(log->descs[i].phblt));
 	}
 }
 
