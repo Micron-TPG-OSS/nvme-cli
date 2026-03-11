@@ -3225,6 +3225,11 @@ static void print_ps_power_and_scale(__le16 ctr_power, __u8 scale)
 	print_power_and_scale(le16_to_cpu(ctr_power), scale);
 }
 
+static void print_power_field(__u32 pwr)
+{
+	print_power_and_scale(pwr & 0xffff, (pwr >> 16) & 0x3);
+}
+
 static void print_psd_time(const char *desc, __u8 time, __u8 ts)
 {
 	int width = 12 + strlen(desc);
@@ -4846,27 +4851,22 @@ static void stdout_auto_pst(struct nvme_feat_auto_pst *apst)
 	}
 }
 
+static const char *stdout_format_timestamp(__u8 *timestamp_bytes)
+{
+	static char buf[STR_LEN];
+	uint64_t ts_ms = int48_to_long(timestamp_bytes);
+
+	snprintf(buf, sizeof(buf), "%"PRIu64" (%s)", ts_ms,
+		nvme_format_timestamp(timestamp_bytes));
+
+	return buf;
+}
+
 static void stdout_timestamp(struct nvme_timestamp *ts)
 {
-	struct tm *tm;
-	char buffer[320];
-	time_t timestamp = int48_to_long(ts->timestamp) / 1000;
-
-	tm = localtime(&timestamp);
-
-	printf("\tThe timestamp is : %'"PRIu64" (%s)\n",
-		int48_to_long(ts->timestamp),
-		strftime(buffer, sizeof(buffer), "%c %Z", tm) ? buffer : "-");
-	printf("\t%s\n", (ts->attr & 2) ?
-		"The Timestamp field was initialized with a "\
-			"Timestamp value using a Set Features command." :
-		"The Timestamp field was initialized "\
-			"to ‘0’ by a Controller Level Reset.");
-	printf("\t%s\n", (ts->attr & 1) ?
-		"The controller may have stopped counting during vendor specific "\
-			"intervals after the Timestamp value was initialized" :
-		"The controller counted time in milliseconds "\
-			"continuously since the Timestamp value was initialized.");
+	printf("\tThe timestamp is : %s\n", stdout_format_timestamp(ts->timestamp));
+	printf("\t%s\n", nvme_format_timestamp_origin(ts->attr));
+	printf("\t%s\n", nvme_format_timestamp_sync(ts->attr));
 }
 
 static void stdout_host_mem_buffer(struct nvme_host_mem_buf_attrs *hmb)
@@ -6583,29 +6583,51 @@ static void stdout_power_meas_log(struct nvme_power_meas_log *log, __u32 size)
 	printf("%-47s : %u\n",   "Power Measurement Count", le32_to_cpu(log->pmc));
 	printf("%-47s : %u\n",   "Number of Power Histogram Descriptors", nphd);
 	printf("%-47s : %u\n",   "Stop Measurement Time Remaining (minutes)", le16_to_cpu(log->smtr));
-	printf("%-47s : %"PRIu64"\n", "Stop Measurement Timestamp", le64_to_cpu(log->smts));
+	printf("%-47s : %s\n", "Stop Measurement Timestamp", stdout_format_timestamp(log->smts.timestamp));
+
+	if (verbose) {
+		printf("    %-43s : %u (%s)\n", "Timestamp Origin",
+			(log->smts.attr >> 1) & 1,
+			nvme_format_timestamp_origin(log->smts.attr));
+		printf("    %-43s : %u (%s)\n", "Sync",
+			(log->smts.attr >> 2) & 1,
+			nvme_format_timestamp_sync(log->smts.attr));
+	}
+
 	printf("%-47s : %u\n",   "Power Histogram Descriptor Size (bytes)", le16_to_cpu(log->phds));
 	printf("%-47s : %u\n",   "Power Histogram Bin Size (mW)", le16_to_cpu(log->phbs));
 	printf("%-47s : %u\n",   "Number of Power Histogram Descriptors Supported", le16_to_cpu(log->nphds));
 	printf("%-47s : %u\n",   "Vendor Specific Size (bytes)", le16_to_cpu(log->vss));
 	printf("%-47s : %u\n",   "Power Histogram Descriptor Overflow Count", le32_to_cpu(log->phdoc));
 	printf("%-47s : ", "Average Interval Power");
-	print_power_and_scale(aipwr & 0xffff, (aipwr >> 16) & 0x3);
+	print_power_field(aipwr);
 	printf("\n");
 	printf("%-47s : ", "Maximum Interval Power");
-	print_power_and_scale(mipwr & 0xffff, (mipwr >> 16) & 0x3);
+	print_power_field(mipwr);
 	printf("\n");
-	printf("%-47s : %"PRIu64"\n", "Maximum Interval Power Timestamp", le64_to_cpu(log->mipwrt));
+	printf("%-47s : %s\n", "Maximum Interval Power Timestamp", stdout_format_timestamp(log->mipwrt.timestamp));
+
+	if (verbose) {
+		printf("    %-43s : %u (%s)\n", "Timestamp Origin",
+			(log->mipwrt.attr >> 1) & 1,
+			nvme_format_timestamp_origin(log->mipwrt.attr));
+		printf("    %-43s : %u (%s)\n", "Sync",
+			(log->mipwrt.attr >> 2) & 1,
+			nvme_format_timestamp_sync(log->mipwrt.attr));
+	}
+
 	printf("%-47s : %u\n",   "Interval Power Percent Error", log->ipwrpe);
 
-	for (i = 0; i < nphd; i++) {
-		__u32 phblt = le32_to_cpu(log->descs[i].phblt);
+	if (verbose) {
+		for (i = 0; i < nphd; i++) {
+			__u32 phblt = le32_to_cpu(log->descs[i].phblt);
 
-		printf("Power Histogram Descriptor [%u]:\n", i);
-		printf("    %-43s : %u\n", "Power Histogram Bin Count", le32_to_cpu(log->descs[i].phbc));
-		printf("    %-43s : ", "Power Histogram Bin Lower Threshold");
-		print_power_and_scale(phblt & 0xffff, (phblt >> 16) & 0x3);
-		printf("\n");
+			printf("Power Histogram Descriptor [%u]:\n", i);
+			printf("    %-43s : %u\n", "Power Histogram Bin Count", le32_to_cpu(log->descs[i].phbc));
+			printf("    %-43s : ", "Power Histogram Bin Lower Threshold");
+			print_power_field(phblt);
+			printf("\n");
+		}
 	}
 }
 

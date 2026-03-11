@@ -3762,24 +3762,10 @@ static void json_feature_show_fields_host_mem_buf(struct json_object *r, unsigne
 
 static void json_timestamp(struct json_object *r, struct nvme_timestamp *ts)
 {
-	char buffer[BUF_LEN];
-	time_t timestamp = int48_to_long(ts->timestamp) / 1000;
-	struct tm *tm = localtime(&timestamp);
-
 	obj_add_uint64(r, "timestamp", int48_to_long(ts->timestamp));
-
-	if (!strftime(buffer, sizeof(buffer), "%c %Z", tm))
-		sprintf(buffer, "%s", "-");
-
-	obj_add_str(r, "timestamp string", buffer);
-
-	obj_add_str(r, "timestamp origin", ts->attr & 2 ?
-	    "The Timestamp field was initialized with a Timestamp value using a Set Features command." :
-	    "The Timestamp field was initialized to 0h by a Controller Level Reset.");
-
-	obj_add_str(r, "synch", ts->attr & 1 ?
-	    "The controller may have stopped counting during vendor specific intervals after the Timestamp value was initialized." :
-	    "The controller counted time in milliseconds continuously since the Timestamp value was initialized.");
+	obj_add_str(r, "timestamp string", nvme_format_timestamp(ts->timestamp));
+	obj_add_str(r, "timestamp origin", nvme_format_timestamp_origin(ts->attr));
+	obj_add_str(r, "synch", nvme_format_timestamp_sync(ts->attr));
 }
 
 static void json_feature_show_fields_timestamp(struct json_object *r, unsigned char *buf)
@@ -5705,6 +5691,8 @@ static void json_power_meas_log(struct nvme_power_meas_log *log, __u32 size UNUS
 {
 	struct json_object *r = json_create_object();
 	struct json_object *descs;
+	struct json_object *smts_obj;
+	struct json_object *mipwrt_obj;
 	__u16 nphd = le16_to_cpu(log->nphd);
 	__u16 pma = le16_to_cpu(log->pma);
 	__u8 pmt = NVME_GET(pma, PMA_PMT);
@@ -5724,7 +5712,11 @@ static void json_power_meas_log(struct nvme_power_meas_log *log, __u32 size UNUS
 	obj_add_uint(r, "pmc", le32_to_cpu(log->pmc));
 	obj_add_uint(r, "nphd", nphd);
 	obj_add_uint(r, "smtr", le16_to_cpu(log->smtr));
-	obj_add_uint64(r, "smts", le64_to_cpu(log->smts));
+
+	smts_obj = json_create_object();
+	json_timestamp(smts_obj, &log->smts);
+	obj_add_obj(r, "smts", smts_obj);
+
 	obj_add_uint(r, "phds", le16_to_cpu(log->phds));
 	obj_add_uint(r, "phbs", le16_to_cpu(log->phbs));
 	obj_add_uint(r, "nphds", le16_to_cpu(log->nphds));
@@ -5732,7 +5724,11 @@ static void json_power_meas_log(struct nvme_power_meas_log *log, __u32 size UNUS
 	obj_add_uint(r, "phdoc", le32_to_cpu(log->phdoc));
 	obj_add_uint(r, "aipwr", le32_to_cpu(log->aipwr));
 	obj_add_uint(r, "mipwr", le32_to_cpu(log->mipwr));
-	obj_add_uint64(r, "mipwrt", le64_to_cpu(log->mipwrt));
+
+	mipwrt_obj = json_create_object();
+	json_timestamp(mipwrt_obj, &log->mipwrt);
+	obj_add_obj(r, "mipwrt", mipwrt_obj);
+
 	obj_add_uint(r, "ipwrpe", log->ipwrpe);
 
 	descs = json_create_array();

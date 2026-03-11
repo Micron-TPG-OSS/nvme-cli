@@ -889,6 +889,39 @@ const char *nvme_degrees_fahrenheit_string(long t)
 	return str;
 }
 
+const char *nvme_format_timestamp(__u8 *timestamp_bytes)
+{
+	static char buf[STR_LEN];
+	struct tm *tm;
+	char timebuf[STR_LEN];
+	uint64_t ts_ms = int48_to_long(timestamp_bytes);
+	time_t ts_sec = ts_ms / 1000;
+
+	tm = localtime(&ts_sec);
+	snprintf(buf, sizeof(buf), "%s",
+		strftime(timebuf, sizeof(timebuf), "%c %Z", tm) ? timebuf : "-");
+
+	return buf;
+}
+
+const char *nvme_format_timestamp_origin(__u8 attr)
+{
+	return (attr & 2) ?
+		"The Timestamp field was initialized with a "\
+			"Timestamp value using a Set Features command." :
+		"The Timestamp field was initialized "\
+			"to 0h by a Controller Level Reset.";
+}
+
+const char *nvme_format_timestamp_sync(__u8 attr)
+{
+	return (attr & 1) ?
+		"The controller may have stopped counting during vendor specific "\
+			"intervals after the Timestamp value was initialized." :
+		"The controller counted time in milliseconds "\
+			"continuously since the Timestamp value was initialized.";
+}
+
 void nvme_show_smart_log(struct nvme_smart_log *smart, unsigned int nsid,
 			 const char *devname, nvme_print_flags_t flags)
 {
