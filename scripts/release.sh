@@ -1,4 +1,10 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# This file is part of nvme.
+# Copyright (c) 2026 SUSE LLC
+#
+# Authors: Daniel Wagner <dwagner@suse.de>
 
 usage() {
     echo "Usage: release.sh [-d] VERSION"
@@ -67,7 +73,7 @@ trap cleanup EXIT
 register_cleanup
 
 # expected version regex
-re='^v([0-9]+\.[0-9]+(\.[0-9]+)?)(-rc[0-9]+)?$'
+re='^v([0-9]+\.[0-9]+(\.[0-9]+)?)(-(rc|a|b)\.[0-9]+)?$'
 
 # use the version string provided from the command line
 if [[ "$VERSION" =~ ${re} ]]; then
@@ -81,24 +87,6 @@ else
 fi
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
-
-if [ "$update_lib_dep" = true ] && [[ -f subprojects/libnvme.wrap ]]; then
-    git -C subprojects/libnvme fetch --all
-
-    # extract the version string from libnvme by using the ref
-    # defined in libnvme.wrap.
-    libnvme_ref=$(sed -n "s/revision = \([0-9a-z]\+\)/\1/p" subprojects/libnvme.wrap)
-    libnvme_VERSION=$(git -C subprojects/libnvme describe "${libnvme_ref}")
-    if [[ "${libnvme_VERSION}" =~ ${re} ]]; then
-        echo "libnvme: valid version ${libnvme_VERSION} string"
-
-        # remove the leading 'v'
-        libnvme_ver="${libnvme_VERSION#v}"
-    else
-        echo "libnvme: invalid version string ${libnvme_VERSION}"
-        exit 1
-    fi
-fi
 
 if [ "$force" = false ] ; then
     if [[ -n $(git status -s) ]]; then
@@ -169,10 +157,6 @@ done
 
 # update meson.build
 sed -i -e "0,/[ \t]version: /s/\([ \t]version: \).*/\1\'$ver\',/" meson.build
-if [[ -n "$libnvme_VERSION" ]] && [[ -f subprojects/libnvme.wrap ]]; then
-    sed -i -e "s/\(dependency('libnvme', version: '>=\)\([0-9]\+\(\.[0-9]\+\)*\)/\1$libnvme_ver/" meson.build
-fi
-
 git add meson.build
 git commit -s -m "Release $VERSION"
 
