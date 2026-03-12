@@ -6111,7 +6111,7 @@ struct nvme_power_histogram_desc {
  *		controller stops collecting interval power measurements.
  *		%0h means not specified.
  * @smts:	Stop Measurement Timestamp. Timestamp of when interval power
- *		measurements stopped being collected.
+ *		measurements stopped being collected. See &struct nvme_timestamp.
  * @phds:	Power Histogram Descriptor Size. Size in bytes of each descriptor.
  * @phbs:	Power Histogram Bin Size. Size in milliwatts of each bin.
  *		Shall be set to 250 milliwatts.
@@ -6130,7 +6130,7 @@ struct nvme_power_histogram_desc {
  *		contain the Power Scale (PWRS); see &enum nvme_psd_ps. Bits 15:0
  *		contain the Power Value (PWRV).
  * @mipwrt:	Maximum Interval Power Timestamp. Timestamp of when the maximum
- *		interval power was collected.
+ *		interval power was collected. See &struct nvme_timestamp.
  * @ipwrpe:	Interval Power Percent Error. Maximum percent error (0-100%).
  *		Values 101-254 reserved. 255 indicates not reported.
  * @rsvd57:	Reserved.
@@ -6144,7 +6144,7 @@ struct nvme_power_meas_log {
 	__le32	pmc;
 	__le16	nphd;
 	__le16	smtr;
-	__le64	smts;
+	struct nvme_timestamp	smts;
 	__le16	phds;
 	__le16	phbs;
 	__le16	nphds;
@@ -6153,7 +6153,7 @@ struct nvme_power_meas_log {
 	__u8	rsvd36[4];
 	__le32	aipwr;
 	__le32	mipwr;
-	__le64	mipwrt;
+	struct nvme_timestamp	mipwrt;
 	__u8	ipwrpe;
 	__u8	rsvd57[7];
 	struct nvme_power_histogram_desc descs[];
