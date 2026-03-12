@@ -898,8 +898,12 @@ const char *nvme_format_timestamp(__u8 *timestamp_bytes)
 	time_t ts_sec = ts_ms / 1000;
 
 	tm = localtime(&ts_sec);
-	snprintf(buf, sizeof(buf), "%s",
-		strftime(timebuf, sizeof(timebuf), "%c %Z", tm) ? timebuf : "-");
+	if (!tm) {
+		snprintf(buf, sizeof(buf), "%s", "-");
+	} else {
+		snprintf(buf, sizeof(buf), "%s",
+			 strftime(timebuf, sizeof(timebuf), "%c %Z", tm) ? timebuf : "-");
+	}
 
 	return buf;
 }
