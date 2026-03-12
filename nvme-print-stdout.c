@@ -4492,6 +4492,7 @@ static void stdout_endurance_log(struct nvme_endurance_group_log *endurance_log,
 static void stdout_smart_log(struct nvme_smart_log *smart, unsigned int nsid, const char *devname)
 {
 	__u16 temperature = smart->temperature[1] << 8 | smart->temperature[0];
+	__u32 ipm = le32_to_cpu(smart->interval_power_measurement);
 	int i;
 	bool human = stdout_print_ops.flags & VERBOSE;
 
@@ -4564,6 +4565,13 @@ static void stdout_smart_log(struct nvme_smart_log *smart, unsigned int nsid, co
 	       le32_to_cpu(smart->thm_temp1_total_time));
 	printf("Thermal Management T2 Total Time	: %u\n",
 	       le32_to_cpu(smart->thm_temp2_total_time));
+	printf("Operational Lifetime Energy Consumed	: %"PRIu64"\n",
+	       le64_to_cpu(smart->op_lifetime_energy_consumed));
+	printf("Interval Power Measurement Type		: %s\n",
+	       nvme_power_measurement_type_to_string((ipm >> 20) & 0x3f));
+	printf("Interval Power Measurement		: ");
+	print_power_field(ipm);
+	printf("\n");
 }
 
 static void stdout_ana_log(struct nvme_ana_log *ana_log, const char *devname,

@@ -3724,7 +3724,26 @@ enum nvme_err_status_field {
  *			   reached. A value of %0h, indicates that this transition
  *			   has never occurred or this field is not implemented.
  * @thm_temp2_total_time:  Total Time For Thermal Management Temperature 2
- * @rsvd232:		   Reserved
+ * @op_lifetime_energy_consumed: Operational Lifetime Energy Consumed: Contains
+ *			   the cumulative operational energy consumed by the NVM
+ *			   subsystem in watt-hours calculated from all interval
+ *			   power measurements collected from the time of
+ *			   manufacture to the point that this log page is read.
+ *			   This value is rounded up (e.g., two indicates the
+ *			   number of watt-hours consumed is greater than 1 and
+ *			   less than or equal to 2). This field shall not wrap
+ *			   once the value %FFFFFFFFFFFFFFFFh is reached. A value
+ *			   of %0h indicates that the cumulative operational energy
+ *			   consumed is not reported.
+ * @interval_power_measurement: Interval Power Measurement: Contains the average
+ *			   of power measurement samples over the most recent one
+ *			   second interval at the time of processing the Get Log
+ *			   Page command. The power in Watts is equal to the
+ *			   Interval Power Measurement Value (bits 15:0) multiplied
+ *			   by the scale indicated in the Interval Power Measurement
+ *			   Scale field (bits 17:16). A value of %0h indicates that
+ *			   the interval power measurement is not reported.
+ * @rsvd244:		   Reserved
  */
 struct nvme_smart_log {
 	__u8			critical_warning;
@@ -3751,7 +3770,9 @@ struct nvme_smart_log {
 	__le32			thm_temp2_trans_count;
 	__le32			thm_temp1_total_time;
 	__le32			thm_temp2_total_time;
-	__u8			rsvd232[280];
+	__le64			op_lifetime_energy_consumed;
+	__le32			interval_power_measurement;
+	__u8			rsvd244[268];
 };
 
 /**

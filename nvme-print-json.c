@@ -770,6 +770,8 @@ static void json_smart_log(struct nvme_smart_log *smart, unsigned int nsid,
 	obj_add_uint(r, "thm_temp2_trans_count", le32_to_cpu(smart->thm_temp2_trans_count));
 	obj_add_uint(r, "thm_temp1_total_time", le32_to_cpu(smart->thm_temp1_total_time));
 	obj_add_uint(r, "thm_temp2_total_time", le32_to_cpu(smart->thm_temp2_total_time));
+	obj_add_uint64(r,"op_lifetime_energy_consumed", le64_to_cpu(smart->op_lifetime_energy_consumed));
+	obj_add_uint(r,"interval_power_measurement", le32_to_cpu(smart->interval_power_measurement));
 
 	json_print(r);
 }
