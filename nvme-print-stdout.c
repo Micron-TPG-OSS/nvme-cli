@@ -6612,7 +6612,7 @@ static void stdout_power_meas_log(struct nvme_power_meas_log *log, __u32 size)
 			(log->mipwrt.attr >> 1) & 1,
 			nvme_format_timestamp_origin(log->mipwrt.attr));
 		printf("    %-43s : %u (%s)\n", "Sync",
-			(log->mipwrt.attr >> 2) & 1,
+			log->mipwrt.attr & 1,
 			nvme_format_timestamp_sync(log->mipwrt.attr));
 	}
 
