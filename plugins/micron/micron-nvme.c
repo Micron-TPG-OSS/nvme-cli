@@ -4414,34 +4414,19 @@ static int micron_health_info(int argc, char **argv, struct command *acmd,
 	return 0;
 }
 
-/*
- * Identify Controller field offsets for Micron-specific fields
- * IPMSR: Interval Power Measurement Sample Rate (2 bytes)
- * MSMT:  Maximum Stop Measurement Time (2 bytes)
- * PMS:   Power Measurement Support - bit 21 of CTRATT
- */
-#define ID_CTRL_RSVD388_OFFSET   388
-#define ID_CTRL_IPMSR_OFFSET     392
-#define ID_CTRL_MSMT_OFFSET      394
-#define CTRATT_PMS_BIT           21
-
 static inline __u16 get_id_ctrl_ipmsr(struct nvme_id_ctrl *ctrl)
 {
-	__u8 *p = &ctrl->rsvd388[ID_CTRL_IPMSR_OFFSET - ID_CTRL_RSVD388_OFFSET];
-
-	return le16_to_cpu(*(__le16 *)p);
+	return le16_to_cpu(ctrl->ipmsr);
 }
 
 static inline __u16 get_id_ctrl_msmt(struct nvme_id_ctrl *ctrl)
 {
-	__u8 *p = &ctrl->rsvd388[ID_CTRL_MSMT_OFFSET - ID_CTRL_RSVD388_OFFSET];
-
-	return le16_to_cpu(*(__le16 *)p);
+	return le16_to_cpu(ctrl->msmt);
 }
 
 static inline bool get_id_ctrl_pms(struct nvme_id_ctrl *ctrl)
 {
-	return (le32_to_cpu(ctrl->ctratt) >> CTRATT_PMS_BIT) & 0x1;
+	return le32_to_cpu(ctrl->ctratt) & NVME_CTRL_CTRATT_PMS;
 }
 
 /* Micron vendor-specific id-ctrl fields display */

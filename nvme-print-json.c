@@ -431,7 +431,12 @@ void json_nvme_id_ctrl(struct nvme_id_ctrl *ctrl,
 	obj_add_int(r, "mptfawr", le16_to_cpu(ctrl->mptfawr));
 	obj_add_uint128(r, "megcap", megcap);
 	obj_add_int(r, "tmpthha", ctrl->tmpthha);
+	obj_add_int(r, "mupa", ctrl->mupa);
 	obj_add_int(r, "cqt", le16_to_cpu(ctrl->cqt));
+	obj_add_int(r, "cdpa", le16_to_cpu(ctrl->cdpa));
+	obj_add_int(r, "mup", le16_to_cpu(ctrl->mup));
+	obj_add_int(r, "ipmsr", le16_to_cpu(ctrl->ipmsr));
+	obj_add_int(r, "msmt", le16_to_cpu(ctrl->msmt));
 	obj_add_int(r, "sqes", ctrl->sqes);
 	obj_add_int(r, "cqes", ctrl->cqes);
 	obj_add_int(r, "maxcmd", le16_to_cpu(ctrl->maxcmd));

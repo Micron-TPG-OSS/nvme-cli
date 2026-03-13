@@ -2427,6 +2427,58 @@ static void stdout_id_ctrl_tmpthha(__u8 tmpthha)
 	printf("\n");
 }
 
+static void stdout_id_ctrl_mupa(__u8 mupa)
+{
+	__u8 rsvd = (mupa & 0xfc) >> 2;
+	__u8 mups = mupa & 0x3;
+
+	static const char * const mups_str[] = {
+		"Reserved",
+		"0.0001 W",
+		"0.01 W",
+		"Reserved"
+	};
+
+	if (rsvd)
+		printf("  [7:2] : %#x\tReserved\n", rsvd);
+	printf("  [1:0] : %#x\tMaximum Unlimited Power Scale (MUPS): %s\n",
+		mups, mups_str[mups]);
+	printf("\n");
+}
+
+static void stdout_id_ctrl_cdpa(__le16 ctrl_cdpa)
+{
+	__u16 cdpa = le16_to_cpu(ctrl_cdpa);
+	__u16 rsvd = (cdpa & 0xff00) >> 8;
+	__u8 rsvd2 = (cdpa & 0xfe) >> 1;
+	__u8 hs3 = cdpa & 0x1;
+
+	if (rsvd)
+		printf(" [15:8] : %#x\tReserved\n", rsvd);
+	if (rsvd2)
+		printf("  [7:1] : %#x\tReserved\n", rsvd2);
+	printf("  [0:0] : %#x\tHMAC-SHA-384 (HS3) %sSupported\n",
+		hs3, hs3 ? "" : "Not ");
+	printf("\n");
+}
+
+static void stdout_id_ctrl_ipmsr(__le16 ctrl_ipmsr)
+{
+	__u16 ipmsr = le16_to_cpu(ctrl_ipmsr);
+	__u8 srs = (ipmsr >> 8) & 0xff;
+	__u8 srv = ipmsr & 0xff;
+
+	static const char * const srs_str[] = {
+		"Not reported", "1 microsecond", "10 microseconds",
+		"100 microseconds", "1 millisecond", "10 milliseconds"
+	};
+
+	printf(" [15:8] : %#x\tSample Rate Scale (SRS): %s\n",
+		srs, srs < 6 ? srs_str[srs] : "Reserved");
+	printf("  [7:0] : %#x\tSample Rate Value (SRV)\n", srv);
+	printf("\n");
+}
+
 static void stdout_id_ctrl_sqes(__u8 sqes)
 {
 	__u8 msqes = (sqes & 0xF0) >> 4;
@@ -3430,7 +3482,18 @@ static void stdout_id_ctrl(struct nvme_id_ctrl *ctrl,
 	printf("tmpthha   : %#x\n", ctrl->tmpthha);
 	if (human)
 		stdout_id_ctrl_tmpthha(ctrl->tmpthha);
+	printf("mupa      : %#x\n", ctrl->mupa);
+	if (human)
+		stdout_id_ctrl_mupa(ctrl->mupa);
 	printf("cqt       : %d\n", le16_to_cpu(ctrl->cqt));
+	printf("cdpa      : %#x\n", le16_to_cpu(ctrl->cdpa));
+	if (human)
+		stdout_id_ctrl_cdpa(ctrl->cdpa);
+	printf("mup       : %d\n", le16_to_cpu(ctrl->mup));
+	printf("ipmsr     : %#x\n", le16_to_cpu(ctrl->ipmsr));
+	if (human)
+		stdout_id_ctrl_ipmsr(ctrl->ipmsr);
+	printf("msmt      : %d\n", le16_to_cpu(ctrl->msmt));
 	printf("sqes      : %#x\n", ctrl->sqes);
 	if (human)
 		stdout_id_ctrl_sqes(ctrl->sqes);

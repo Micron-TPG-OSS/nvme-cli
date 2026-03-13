@@ -1372,12 +1372,28 @@ struct nvme_id_psd {
  * @megcap:    Max Endurance Group Capacity indicates the maximum capacity
  *	       of a single Endurance Group.
  * @tmpthha:   Temperature Threshold Hysteresis Attributes
- * @rsvd385:   Reserved
- * @cqt:       Command Quiesce Time (CQT). his field indicates the expected
+ * @mupa:      Maximum Unlimited Power Attributes (MUPA). This field indicates
+ *	       attributes of the Maximum Unlimited Power field. Bits 1:0 indicate
+ *	       the Maximum Unlimited Power Scale (MUPS): 01b = 0.0001 W,
+ *	       10b = 0.01 W. Bits 7:2 are reserved.
+ * @cqt:       Command Quiesce Time (CQT). This field indicates the expected
  *	       worst-case time in 1 millisecond units for the controller to
  *	       quiesce all outstanding commands after a Keep Alive Timeout or
  *	       other communication loss.
- * @rsvd388:   Reserved
+ * @cdpa:      Configurable Device Personality Attributes (CDPA). This field
+ *	       indicates the Configurable Device Personality feature attributes
+ *	       the controller supports.
+ * @mup:       Maximum Unlimited Power (MUP). This field specifies the maximum
+ *	       power for power state 0 that results from removal of a power limit.
+ * @ipmsr:     Interval Power Measurement Sample Rate (IPMSR). This field
+ *	       indicates the maximum interval between power measurement samples
+ *	       used to collect interval power measurements.
+ * @msmt:      Maximum Stop Measurement Time (MSMT). This field indicates the
+ *	       maximum stop measurement time allowed to be specified in the SMT
+ *	       field for a Set Features command specifying the Power Measurement
+ *	       feature. A value of 0h indicates that a maximum stop measurement
+ *	       time is not reported.
+ * @rsvd396:   Reserved
  * @sqes:      Submission Queue Entry Size, see &enum nvme_id_ctrl_sqes.
  * @cqes:      Completion Queue Entry Size, see &enum nvme_id_ctrl_cqes.
  * @maxcmd:    Maximum Outstanding Commands indicates the maximum number of
@@ -1562,9 +1578,13 @@ struct nvme_id_ctrl {
 	__u8			rsvd362[6];
 	__u8			megcap[16];
 	__u8			tmpthha;
-	__u8			rsvd385;
+	__u8			mupa;
 	__le16			cqt;
-	__u8			rsvd388[124];
+	__le16			cdpa;
+	__le16			mup;
+	__le16			ipmsr;
+	__le16			msmt;
+	__u8			rsvd396[116];
 	__u8			sqes;
 	__u8			cqes;
 	__le16			maxcmd;
