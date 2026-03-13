@@ -345,32 +345,6 @@ int nvme_read_config(struct nvme_global_ctx *ctx, const char *config_file)
 	return err;
 }
 
-int nvme_scan(const char *config_file, struct nvme_global_ctx **ctxp)
-{
-	struct nvme_global_ctx *ctx =
-		nvme_create_global_ctx(NULL, DEFAULT_LOGLEVEL);
-	int ret;
-
-	if (!ctx)
-		return -ENOMEM;
-
-	ret = nvme_scan_topology(ctx, NULL, NULL);
-	if (ret && ret != -ENOENT)
-		goto err;
-	if (config_file) {
-		ret = nvme_read_config(ctx, config_file);
-		if (ret)
-			goto err;
-	}
-
-	*ctxp = ctx;
-	return 0;
-
-err:
-	nvme_free_global_ctx(ctx);
-	return ret;
-}
-
 int nvme_dump_config(struct nvme_global_ctx *ctx, int fd)
 {
 	return json_update_config(ctx, fd);
@@ -1843,7 +1817,7 @@ nvme_ctrl_t nvme_lookup_ctrl(nvme_subsystem_t s, const char *transport,
 static int nvme_ctrl_scan_paths(struct nvme_global_ctx *ctx, struct nvme_ctrl *c)
 {
 	_cleanup_dirents_ struct dirents paths = {};
-	int i;
+	int err, i;
 
 	if (ctx->create_only) {
 		nvme_msg(ctx, LOG_DEBUG,
@@ -1854,8 +1828,11 @@ static int nvme_ctrl_scan_paths(struct nvme_global_ctx *ctx, struct nvme_ctrl *c
 	if (paths.num < 0)
 		return paths.num;
 
-	for (i = 0; i < paths.num; i++)
-		nvme_ctrl_scan_path(ctx, c, paths.ents[i]->d_name);
+	for (i = 0; i < paths.num; i++) {
+		err = nvme_ctrl_scan_path(ctx, c, paths.ents[i]->d_name);
+		if (err)
+			return err;
+	}
 
 	return 0;
 }
@@ -1863,7 +1840,7 @@ static int nvme_ctrl_scan_paths(struct nvme_global_ctx *ctx, struct nvme_ctrl *c
 static int nvme_ctrl_scan_namespaces(struct nvme_global_ctx *ctx, struct nvme_ctrl *c)
 {
 	_cleanup_dirents_ struct dirents namespaces = {};
-	int i;
+	int err, i;
 
 	if (ctx->create_only) {
 		nvme_msg(ctx, LOG_DEBUG, "skipping namespace scan for ctrl %s\n",
@@ -1871,8 +1848,12 @@ static int nvme_ctrl_scan_namespaces(struct nvme_global_ctx *ctx, struct nvme_ct
 		return 0;
 	}
 	namespaces.num = nvme_scan_ctrl_namespaces(c, &namespaces.ents);
-	for (i = 0; i < namespaces.num; i++)
-		nvme_ctrl_scan_namespace(ctx, c, namespaces.ents[i]->d_name);
+	for (i = 0; i < namespaces.num; i++) {
+		err = nvme_ctrl_scan_namespace(ctx, c,
+			namespaces.ents[i]->d_name);
+		if (err)
+			return err;
+	}
 
 	return 0;
 }
@@ -2267,8 +2248,17 @@ int nvme_scan_ctrl(struct nvme_global_ctx *ctx, const char *name,
 	if (ret)
 		return ret;
 
-	nvme_ctrl_scan_paths(ctx, c);
-	nvme_ctrl_scan_namespaces(ctx, c);
+	ret = nvme_ctrl_scan_paths(ctx, c);
+	if (ret) {
+		nvme_free_ctrl(c);
+		return ret;
+	}
+
+	ret = nvme_ctrl_scan_namespaces(ctx, c);
+	if (ret) {
+		nvme_free_ctrl(c);
+		return ret;
+	}
 
 	*cp = c;
 	return 0;
@@ -2299,19 +2289,24 @@ static int nvme_bytes_to_lba(nvme_ns_t n, off_t offset, size_t count,
 	return 0;
 }
 
-struct nvme_transport_handle *nvme_ns_get_transport_handle(nvme_ns_t n)
+int nvme_ns_get_transport_handle(nvme_ns_t n,
+		struct nvme_transport_handle **hdl)
 {
-	if (!n->hdl) {
-		int err;
+	int err;
 
-		err = nvme_open(n->ctx, n->name, &n->hdl);
-		if (err)
-			nvme_msg(n->ctx, LOG_ERR,
-				 "Failed to open ns %s, error %d\n",
-				 n->name, err);
+	if (n->hdl)
+		goto valid;
+
+	err = nvme_open(n->ctx, n->name, &n->hdl);
+	if (err) {
+		nvme_msg(n->ctx, LOG_ERR, "Failed to open ns %s, error %d\n",
+			n->name, err);
+		return err;
 	}
 
-	return n->hdl;
+valid:
+	*hdl = n->hdl;
+	return 0;
 }
 
 void nvme_ns_release_transport_handle(nvme_ns_t n)
@@ -2415,8 +2410,13 @@ void nvme_ns_get_uuid(nvme_ns_t n, unsigned char out[NVME_UUID_LEN])
 
 int nvme_ns_identify(nvme_ns_t n, struct nvme_id_ns *ns)
 {
-	struct nvme_transport_handle *hdl = nvme_ns_get_transport_handle(n);
+	struct nvme_transport_handle *hdl;
 	struct nvme_passthru_cmd cmd;
+	int err;
+
+	err = nvme_ns_get_transport_handle(n, &hdl);
+	if (err)
+		return err;
 
 	nvme_init_identify_ns(&cmd, nvme_ns_get_nsid(n), ns);
 	return nvme_submit_admin_passthru(hdl, &cmd);
@@ -2424,8 +2424,13 @@ int nvme_ns_identify(nvme_ns_t n, struct nvme_id_ns *ns)
 
 int nvme_ns_identify_descs(nvme_ns_t n, struct nvme_ns_id_desc *descs)
 {
-	struct nvme_transport_handle *hdl = nvme_ns_get_transport_handle(n);
+	struct nvme_transport_handle *hdl;
 	struct nvme_passthru_cmd cmd;
+	int err;
+
+	err = nvme_ns_get_transport_handle(n, &hdl);
+	if (err)
+		return err;
 
 	nvme_init_identify_ns_descs_list(&cmd, nvme_ns_get_nsid(n), descs);
 	return nvme_submit_admin_passthru(hdl, &cmd);
@@ -2433,10 +2438,15 @@ int nvme_ns_identify_descs(nvme_ns_t n, struct nvme_ns_id_desc *descs)
 
 int nvme_ns_verify(nvme_ns_t n, off_t offset, size_t count)
 {
-	struct nvme_transport_handle *hdl = nvme_ns_get_transport_handle(n);
+	struct nvme_transport_handle *hdl;
 	struct nvme_passthru_cmd cmd;
 	__u64 slba;
 	__u16 nlb;
+	int err;
+
+	err = nvme_ns_get_transport_handle(n, &hdl);
+	if (err)
+		return err;
 
 	if (nvme_bytes_to_lba(n, offset, count, &slba, &nlb))
 		return -1;
@@ -2449,10 +2459,15 @@ int nvme_ns_verify(nvme_ns_t n, off_t offset, size_t count)
 
 int nvme_ns_write_uncorrectable(nvme_ns_t n, off_t offset, size_t count)
 {
-	struct nvme_transport_handle *hdl = nvme_ns_get_transport_handle(n);
+	struct nvme_transport_handle *hdl;
 	struct nvme_passthru_cmd cmd;
 	__u64 slba;
 	__u16 nlb;
+	int err;
+
+	err = nvme_ns_get_transport_handle(n, &hdl);
+	if (err)
+		return err;
 
 	if (nvme_bytes_to_lba(n, offset, count, &slba, &nlb))
 		return -1;
@@ -2465,10 +2480,15 @@ int nvme_ns_write_uncorrectable(nvme_ns_t n, off_t offset, size_t count)
 
 int nvme_ns_write_zeros(nvme_ns_t n, off_t offset, size_t count)
 {
-	struct nvme_transport_handle *hdl = nvme_ns_get_transport_handle(n);
+	struct nvme_transport_handle *hdl;
 	struct nvme_passthru_cmd cmd;
 	__u64 slba;
 	__u16 nlb;
+	int err;
+
+	err = nvme_ns_get_transport_handle(n, &hdl);
+	if (err)
+		return err;
 
 	if (nvme_bytes_to_lba(n, offset, count, &slba, &nlb))
 		return -1;
@@ -2480,10 +2500,15 @@ int nvme_ns_write_zeros(nvme_ns_t n, off_t offset, size_t count)
 
 int nvme_ns_write(nvme_ns_t n, void *buf, off_t offset, size_t count)
 {
-	struct nvme_transport_handle *hdl = nvme_ns_get_transport_handle(n);
+	struct nvme_transport_handle *hdl;
 	struct nvme_passthru_cmd cmd;
 	__u64 slba;
 	__u16 nlb;
+	int err;
+
+	err = nvme_ns_get_transport_handle(n, &hdl);
+	if (err)
+		return err;
 
 	if (nvme_bytes_to_lba(n, offset, count, &slba, &nlb))
 		return -1;
@@ -2496,10 +2521,15 @@ int nvme_ns_write(nvme_ns_t n, void *buf, off_t offset, size_t count)
 
 int nvme_ns_read(nvme_ns_t n, void *buf, off_t offset, size_t count)
 {
-	struct nvme_transport_handle *hdl = nvme_ns_get_transport_handle(n);
+	struct nvme_transport_handle *hdl;
 	struct nvme_passthru_cmd cmd;
 	__u64 slba;
 	__u16 nlb;
+	int err;
+
+	err = nvme_ns_get_transport_handle(n, &hdl);
+	if (err)
+		return err;
 
 	if (nvme_bytes_to_lba(n, offset, count, &slba, &nlb))
 		return -1;
@@ -2512,10 +2542,15 @@ int nvme_ns_read(nvme_ns_t n, void *buf, off_t offset, size_t count)
 
 int nvme_ns_compare(nvme_ns_t n, void *buf, off_t offset, size_t count)
 {
-	struct nvme_transport_handle *hdl = nvme_ns_get_transport_handle(n);
+	struct nvme_transport_handle *hdl;
 	struct nvme_passthru_cmd cmd;
 	__u64 slba;
 	__u16 nlb;
+	int err;
+
+	err = nvme_ns_get_transport_handle(n, &hdl);
+	if (err)
+		return err;
 
 	if (nvme_bytes_to_lba(n, offset, count, &slba, &nlb))
 		return -1;
@@ -2528,8 +2563,14 @@ int nvme_ns_compare(nvme_ns_t n, void *buf, off_t offset, size_t count)
 
 int nvme_ns_flush(nvme_ns_t n)
 {
-	return nvme_flush(nvme_ns_get_transport_handle(n),
-			  nvme_ns_get_nsid(n));
+	struct nvme_transport_handle *hdl;
+	int err;
+
+	err = nvme_ns_get_transport_handle(n, &hdl);
+	if (err)
+		return err;
+
+	return nvme_flush(hdl, nvme_ns_get_nsid(n));
 }
 
 static int nvme_strtou64(const char *str, void *res)
