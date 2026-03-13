@@ -1799,6 +1799,9 @@ enum nvme_id_ctrl_oaes {
  * @NVME_CTRL_CTRATT_HMBR: HMB Restrict Non-Operational Power State Access
  * @NVME_CTRL_CTRATT_RHII: Reservations and Host Identifier Interaction
  * @NVME_CTRL_CTRATT_FDPS: Flexible Data Placement supported
+ * @NVME_CTRL_CTRATT_PLS: Power Limit Support
+ * @NVME_CTRL_CTRATT_PMS: Power Measure Support
+ * @
  */
 enum nvme_id_ctrl_ctratt {
 	NVME_CTRL_CTRATT_128_ID			= 1 << 0,
@@ -1821,6 +1824,8 @@ enum nvme_id_ctrl_ctratt {
 	NVME_CTRL_CTRATT_HMBR			= 1 << 17,
 	NVME_CTRL_CTRATT_RHII			= 1 << 18,
 	NVME_CTRL_CTRATT_FDPS			= 1 << 19,
+	NVME_CTRL_CTRATT_PLS			= 1 << 20,
+        NVME_CTRL_CTRATT_PMS			= 1 << 21,
 };
 
 /**
