@@ -99,16 +99,19 @@ jobs:
             throw "pacman package install failed"
           }
 
+          # Persist MSYS2 paths via GITHUB_PATH so the runner prepends them
+          # for all subsequent steps. This ensures native Windows processes
+          # (like meson's Python subprocess) find C:\msys64\usr\bin\bash.exe
+          # before WSL's C:\Windows\System32\bash.exe.
+          Add-Content $env:GITHUB_PATH "C:\msys64\ucrt64\bin"
+          Add-Content $env:GITHUB_PATH "C:\msys64\usr\bin"
+
       - name: Build nvme-cli
         shell: pwsh
         run: |
           $bash = "C:\msys64\usr\bin\bash.exe"
           $env:MSYSTEM = "UCRT64"
           $env:CHERE_INVOKING = "1"
-          # Prepend MSYS2 to the Windows PATH so that native Windows processes
-          # spawned by meson (Python) find MSYS2's bash before WSL's bash.exe
-          # in C:\Windows\System32.
-          $env:PATH = "C:\msys64\usr\bin;C:\msys64\ucrt64\bin;" + $env:PATH
 
           & $bash -lc '
           WS="$(cygpath -u "$GITHUB_WORKSPACE")"
