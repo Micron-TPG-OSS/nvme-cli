@@ -118,7 +118,8 @@ if version_tag != ''
     conf.set('GIT_VERSION', '"@0@"'.format(version_tag))
 else
     r = run_command(
-        'scripts/meson-vcs-tag.sh',
+        find_program('python3', 'python'),
+        files('scripts/meson-vcs-tag.py'),
         meson.current_source_dir(),
         meson.project_version(),
         check: true,
