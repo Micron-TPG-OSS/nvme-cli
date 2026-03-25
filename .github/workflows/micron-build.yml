@@ -58,26 +58,63 @@ jobs:
 
   windows-ucrt64:
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
-      - name: Setup MSYS2 UCRT64
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            mingw-w64-ucrt-x86_64-toolchain
-            mingw-w64-ucrt-x86_64-meson
-            mingw-w64-ucrt-x86_64-ninja
-            mingw-w64-ucrt-x86_64-ccache
-            mingw-w64-ucrt-x86_64-pkgconf
-            mingw-w64-ucrt-x86_64-openssl
-            mingw-w64-ucrt-x86_64-python
-      - name: Build nvme-cli
-        shell: msys2 {0}
+
+      - name: Install and bootstrap MSYS2 UCRT64
+        shell: pwsh
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          bash scripts/build.sh -b release -c gcc
+          winget install --id MSYS2.MSYS2 --exact --accept-package-agreements --accept-source-agreements --disable-interactivity
+
+          $bash = "C:\msys64\usr\bin\bash.exe"
+          if (-not (Test-Path $bash)) {
+            throw "MSYS2 bash not found at $bash"
+          }
+
+          # Ensure all bash invocations run in UCRT64 environment.
+          $env:MSYSTEM = "UCRT64"
+          $env:CHERE_INVOKING = "1"
+
+          # Initial sync/update with one retry.
+          & $bash -lc "pacman -Syu --noconfirm"
+          if ($LASTEXITCODE -ne 0) {
+            Start-Sleep -Seconds 5
+            & $bash -lc "pacman -Syu --noconfirm"
+            if ($LASTEXITCODE -ne 0) {
+              throw "pacman -Syu failed after retry"
+            }
+          }
+
+          & $bash -lc "pacman -S --noconfirm --needed \
+            mingw-w64-ucrt-x86_64-toolchain \
+            mingw-w64-ucrt-x86_64-meson \
+            mingw-w64-ucrt-x86_64-ninja \
+            mingw-w64-ucrt-x86_64-ccache \
+            mingw-w64-ucrt-x86_64-pkgconf \
+            mingw-w64-ucrt-x86_64-openssl \
+            mingw-w64-ucrt-x86_64-python"
+          if ($LASTEXITCODE -ne 0) {
+            throw "pacman package install failed"
+          }
+
+      - name: Build nvme-cli
+        shell: pwsh
+        run: |
+          $bash = "C:\msys64\usr\bin\bash.exe"
+          $env:MSYSTEM = "UCRT64"
+          $env:CHERE_INVOKING = "1"
+
+          & $bash -lc '
+            WS="$(cygpath -u "$GITHUB_WORKSPACE")"
+            cd "$WS"
+            git config --global --add safe.directory "$GITHUB_WORKSPACE"
+            bash scripts/build.sh -b release -c gcc
+          '
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows nvme-cli build failed"
+          }
+
       - uses: actions/upload-artifact@v5
         name: upload windows logs
         if: failure()
