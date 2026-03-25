@@ -105,9 +105,12 @@ jobs:
           $bash = "C:\msys64\usr\bin\bash.exe"
           $env:MSYSTEM = "UCRT64"
           $env:CHERE_INVOKING = "1"
+          # Prepend MSYS2 to the Windows PATH so that native Windows processes
+          # spawned by meson (Python) find MSYS2's bash before WSL's bash.exe
+          # in C:\Windows\System32.
+          $env:PATH = "C:\msys64\usr\bin;C:\msys64\ucrt64\bin;" + $env:PATH
 
           & $bash -lc '
-          export PATH="/c/Program Files/Git/cmd:$PATH"
           WS="$(cygpath -u "$GITHUB_WORKSPACE")"
           cd "$WS"
           which git
