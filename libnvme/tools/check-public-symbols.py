@@ -64,7 +64,6 @@ PUB_RE = re.compile(r'^__public\b.*\b([a-z_]\w+)\s*\(', re.MULTILINE)
 pub_syms = {}  # symbol -> Path of the .c file that defines it
 
 for c_path in sorted(SRC_DIR.glob('*.c')):
-    print(f'Checking {c_path.name}...')
     for m in PUB_RE.finditer(c_path.read_text()):
         sym = m.group(1)
         pub_syms[sym] = c_path
