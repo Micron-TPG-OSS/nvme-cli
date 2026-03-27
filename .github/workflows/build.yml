@@ -102,7 +102,6 @@ jobs:
       - uses: msys2/setup-msys2@cafece8e6baf9247cf9b1bf95097b0b983cc558d # v2.31.0
         with:
           msystem: UCRT64
-          release: false
           update: true
           install: >-
             git
@@ -110,9 +109,6 @@ jobs:
             mingw-w64-ucrt-x86_64-meson
             mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-ccache
-            mingw-w64-ucrt-x86_64-pkgconf
-            mingw-w64-ucrt-x86_64-openssl
-            mingw-w64-ucrt-x86_64-python
             mingw-w64-ucrt-x86_64-json-c
 
       - name: Build nvme-cli
