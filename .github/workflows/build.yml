@@ -112,6 +112,7 @@ jobs:
             mingw-w64-ucrt-x86_64-pkgconf
             mingw-w64-ucrt-x86_64-openssl
             mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-json-c
 
       - name: Build nvme-cli
         shell: msys2 {0}
