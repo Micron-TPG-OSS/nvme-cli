@@ -6,7 +6,7 @@
 # Authors: Martin Belanger <Martin.Belanger@dell.com>
 
 python3_prog = find_program('python3', required: false)
-if python3_prog.found()
+if python3_prog.found() and host_system != 'windows'
     test(
         'libnvme - check-public-symbols',
         python3_prog,
