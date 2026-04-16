@@ -32,25 +32,6 @@ jobs:
             const triggeredBy = context.payload.workflow_run.triggering_actor.login;
             const runNumber = context.payload.workflow_run.run_number;
 
-            // Check if an issue already exists for this workflow failure
-            const issues = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: 'workflow-failure',
-              per_page: 100
-            });
-
-            const existingIssue = issues.data.find(issue =>
-              issue.title.includes(workflowName) &&
-              issue.body.includes(commitShort)
-            );
-
-            if (existingIssue) {
-              console.log('Issue already exists for this failure:', existingIssue.html_url);
-              return;
-            }
-
             // Create new issue
             const issue = await github.rest.issues.create({
               owner: context.repo.owner,
