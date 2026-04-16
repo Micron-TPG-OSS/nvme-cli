@@ -1,0 +1,99 @@
+---
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# This file is part of nvme.
+# Workflow to create GitHub issue and notify team on workflow failures
+
+name: Create Issue on Failure
+
+on:
+  workflow_run:
+    workflows:
+      - "Test Notifications"
+    types:
+      - completed
+
+jobs:
+  create-issue:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    permissions:
+      issues: write
+    steps:
+      - name: Create Issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflowName = context.payload.workflow_run.name;
+            const workflowUrl = context.payload.workflow_run.html_url;
+            const branch = context.payload.workflow_run.head_branch;
+            const commit = context.payload.workflow_run.head_sha;
+            const commitShort = commit.substring(0, 7);
+            const triggeredBy = context.payload.workflow_run.triggering_actor.login;
+            const runNumber = context.payload.workflow_run.run_number;
+
+            // Check if an issue already exists for this workflow failure
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'workflow-failure',
+              per_page: 100
+            });
+
+            const existingIssue = issues.data.find(issue =>
+              issue.title.includes(workflowName) &&
+              issue.body.includes(commitShort)
+            );
+
+            if (existingIssue) {
+              console.log('Issue already exists for this failure:', existingIssue.html_url);
+              return;
+            }
+
+            // Create new issue
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Workflow Failed: ${workflowName} (${branch})`,
+              body: `## Workflow Failure Report
+
+            **Workflow:** ${workflowName}
+            **Branch:** ${branch}
+            **Commit:** ${commitShort} (${commit})
+            **Triggered by:** @${triggeredBy}
+            **Run number:** #${runNumber}
+
+            ### Details
+
+            The workflow \`${workflowName}\` has failed. Please investigate and resolve the issue.
+
+            **Workflow Run:** ${workflowUrl}
+            **Commit URL:** https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${commit}
+
+            ### Next Steps
+
+            1. Review the workflow logs at the link above
+            2. Identify the root cause of the failure
+            3. Fix the issue or revert the problematic commit
+            4. Verify the fix by re-running the workflow
+            5. Close this issue once resolved
+
+            ---
+
+            @Micron-TPG-OSS/micron-tpg-spg-tact-team-oss - Please review this workflow failure.
+
+            *This issue was automatically created by the workflow failure notification system.*`,
+              labels: ['workflow-failure', 'automated', 'bug'],
+              assignees: []
+            });
+
+            console.log('Created issue:', issue.data.html_url);
+
+            // Post a comment to explicitly notify the team
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.data.number,
+              body: `🔔 **Team Notification**\n\n@Micron-TPG-OSS/micron-tpg-spg-tact-team-oss - A workflow has failed and requires attention. Please see the details above.`
+            });
