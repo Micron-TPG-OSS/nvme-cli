@@ -41,14 +41,15 @@ headers = [
 
 if want_fabrics
     sources += [
+        'nvme/accessors-fabrics.c',
         'nvme/fabrics.c',
         'nvme/nbft.c',
-        'nvme/accessors-fabrics.c',
     ]
     headers += [
-        'nvme/fabrics.h',
-        'nvme/nbft.h',
         'nvme/accessors-fabrics.h',
+        'nvme/fabrics.h',
+        'nvme/nbft-types.h',
+        'nvme/nbft.h',
     ]
 else
     sources += [
@@ -77,29 +78,24 @@ else
     sources += 'nvme/no-uring.c'
 endif
 
-if host_system != 'windows'
-    if json_c_dep.found()
-        sources += 'nvme/json.c'
-    else
-        sources += 'nvme/no-json.c'
-    endif
+if json_c_dep.found()
+    sources += 'nvme/json.c'
+else
+    sources += 'nvme/no-json.c'
 endif
 
 deps = [
-    config_dep,
     ccan_dep,
+    config_dep,
     json_c_dep,
     keyutils_dep,
+    libdbus_dep,
+    liburing_dep,
     openssl_dep,
 ]
 if host_system == 'windows'
     deps += [
         kernel32_dep
-    ]
-else
-    deps += [
-        libdbus_dep,
-        liburing_dep,
     ]
 endif
 

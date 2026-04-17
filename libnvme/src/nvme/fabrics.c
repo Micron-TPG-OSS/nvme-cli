@@ -44,8 +44,7 @@ const char *nvmf_dev = "/dev/nvme-fabrics";
 
 static inline void free_uri(struct libnvmf_uri **uri)
 {
-	if (*uri)
-		libnvmf_uri_free(*uri);
+	libnvmf_uri_free(*uri);
 }
 #define __cleanup_uri __cleanup(free_uri)
 
@@ -235,6 +234,9 @@ __public int libnvmf_context_create(struct libnvme_global_ctx *ctx,
 
 __public void libnvmf_context_free(struct libnvmf_context *fctx)
 {
+	if (!fctx)
+		return;
+
 	free(fctx->tls_key);
 	free(fctx);
 }
@@ -1514,6 +1516,9 @@ __public int libnvmf_discovery_args_create(struct libnvmf_discovery_args **argsp
 
 __public void libnvmf_discovery_args_free(struct libnvmf_discovery_args *args)
 {
+	if (!args)
+		return;
+
 	free(args);
 }
 
@@ -2602,7 +2607,7 @@ __public int libnvmf_nbft_read_files(struct libnvme_global_ctx *ctx, char *path,
 		struct nbft_file_entry **head)
 {
 	struct nbft_file_entry *entry = NULL;
-	struct nbft_info *nbft;
+	struct libnbft_info *nbft;
 	struct dirent **dent;
 	char filename[PATH_MAX];
 	int i, count, ret;
@@ -2639,6 +2644,9 @@ __public int libnvmf_nbft_read_files(struct libnvme_global_ctx *ctx, char *path,
 
 __public void libnvmf_nbft_free(struct libnvme_global_ctx *ctx, struct nbft_file_entry *head)
 {
+	if (!head)
+		return;
+
 	while (head) {
 		struct nbft_file_entry *next = head->next;
 
@@ -2650,7 +2658,7 @@ __public void libnvmf_nbft_free(struct libnvme_global_ctx *ctx, struct nbft_file
 }
 
 static bool validate_uri(struct libnvme_global_ctx *ctx,
-			 struct nbft_info_discovery *dd,
+			 struct libnbft_discovery *dd,
 			 struct libnvmf_uri *uri)
 {
 	if (!uri) {
@@ -2678,7 +2686,7 @@ static bool validate_uri(struct libnvme_global_ctx *ctx,
 static int nbft_connect(struct libnvme_global_ctx *ctx,
 		struct libnvmf_context *fctx, struct libnvme_host *h,
 		struct nvmf_disc_log_entry *e,
-		struct nbft_info_subsystem_ns *ss)
+		struct libnbft_subsystem_ns *ss)
 {
 	libnvme_ctrl_t c;
 	int saved_log_level;
@@ -2735,7 +2743,7 @@ static int nbft_connect(struct libnvme_global_ctx *ctx,
 }
 
 static int nbft_discovery(struct libnvme_global_ctx *ctx,
-		struct libnvmf_context *fctx, struct nbft_info_discovery *dd,
+		struct libnvmf_context *fctx, struct libnbft_discovery *dd,
 		struct libnvme_host *h, struct libnvme_ctrl *c)
 {
 	struct nvmf_discovery_log *log = NULL;
@@ -2833,9 +2841,9 @@ __public int libnvmf_discovery_nbft(struct libnvme_global_ctx *ctx,
 	const char *hostnqn = NULL, *hostid = NULL, *host_traddr = NULL;
 	char uuid[NVME_UUID_LEN_STRING];
 	struct nbft_file_entry *entry = NULL;
-	struct nbft_info_subsystem_ns **ss;
-	struct nbft_info_hfi *hfi;
-	struct nbft_info_discovery **dd;
+	struct libnbft_subsystem_ns **ss;
+	struct libnbft_hfi *hfi;
+	struct libnbft_discovery **dd;
 	struct libnvme_host *h;
 	int ret, rr, i;
 
