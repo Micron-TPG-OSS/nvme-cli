@@ -249,13 +249,6 @@ __public const char *libnvme_ctrl_get_state(libnvme_ctrl_t c)
 	return "";
 }
 
-__public struct libnvme_fabrics_config *libnvme_ctrl_get_config(libnvme_ctrl_t c)
-{
-	stub_log(__func__);
-	(void)c;
-	return NULL;
-}
-
 __public libnvme_subsystem_t libnvme_ctrl_get_subsystem(libnvme_ctrl_t c)
 {
 	stub_log(__func__);
@@ -274,14 +267,6 @@ __public void libnvme_free_ctrl(struct libnvme_ctrl *c)
 {
 	stub_log(__func__);
 	(void)c;
-}
-
-__public int libnvme_disconnect_ctrl(libnvme_ctrl_t c)
-{
-	stub_log(__func__);
-	(void)c;
-	errno = ENOTSUP;
-	return -1;
 }
 
 __public void libnvme_unlink_ctrl(struct libnvme_ctrl *c)
