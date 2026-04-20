@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <platform/includes.h> /* for libnvme_fd_t */
+#include <nvme/lib-compat.h>
 
 #include <ccan/list/list.h>
 
@@ -378,9 +378,9 @@ bool _libnvme_ctrl_match_config(struct libnvme_ctrl *c,
 
 void *__libnvme_alloc(size_t len);
 
-void *__libnvme_realloc(void *p, size_t len);
-
 void __libnvme_free(void *p);
+
+void *__libnvme_realloc(void *p, size_t len);
 
 void nvme_deconfigure_ctrl(struct libnvme_ctrl *c);
 

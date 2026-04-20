@@ -1786,7 +1786,7 @@ static const char *dctype_str[] = {
  */
 static int nvme_fetch_cntrltype_dctype_from_id(libnvme_ctrl_t c)
 {
-	__cleanup_nvme_free struct nvme_id_ctrl *id = NULL;
+	__cleanup_libnvme_free struct nvme_id_ctrl *id = NULL;
 	int ret;
 
 	id = __libnvme_alloc(sizeof(*id));
@@ -2257,7 +2257,7 @@ static int nvmf_create_discovery_ctrl(struct libnvme_global_ctx *ctx,
 		struct libnvmf_context *fctx, libnvme_host_t h,
 		struct libnvme_ctrl **ctrl)
 {
-	__cleanup_nvme_free struct nvme_id_ctrl *id = NULL;
+	__cleanup_libnvme_free struct nvme_id_ctrl *id = NULL;
 	struct libnvme_ctrl *c;
 	int ret;
 

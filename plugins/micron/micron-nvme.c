@@ -25,6 +25,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <nvme/mkdir.h>
+
 #include <libnvme.h>
 
 #include "common.h"
@@ -65,6 +67,10 @@
 #define min(x, y) ((x) > (y) ? (y) : (x))
 #endif
 #define SensorCount 8
+
+#ifndef NAME_MAX
+#define NAME_MAX 260
+#endif
 
 /* Plugin version major_number.minor_number.patch */
 static const char *__version_major = "2";
@@ -686,7 +692,7 @@ static int micron_selective_download(int argc, char **argv,
 	}
 
 out_free:
-	platform_aligned_free(fw_buf);
+	aligned_free(fw_buf);
 out:
 	close(fw_fd);
 	return err;

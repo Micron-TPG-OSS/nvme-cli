@@ -55,7 +55,7 @@ want_fabrics = get_option('fabrics').disabled() == false and host_system != 'win
 want_mi = get_option('mi').disabled() == false and host_system != 'windows'
 want_json_c = get_option('json-c').disabled() == false and want_fabrics
 want_libkmod = get_option('libkmod').disabled() == false and host_system != 'windows'
-want_tests = get_option('tests') and host_system != 'windows'
+want_tests = get_option('tests')
 want_examples = get_option('examples') and host_system != 'windows'
 want_docs = get_option('docs')
 want_docs_build = get_option('docs-build')
@@ -177,6 +177,7 @@ if host_system == 'windows'
     add_project_arguments(
         [
             '-DHAVE_GLIBC_IOCTL=0',
+            '-D_POSIX_THREAD_SAFE_FUNCTIONS',
         ],
         language : 'c',
     )
@@ -427,6 +428,8 @@ conf.set(
 
 conf.set('NVME_HAVE_SENDFILE', cc.has_function('sendfile'))
 
+conf.set('NVME_HAVE_MMAP', cc.has_function('mmap'))
+
 project_config_file = 'nvme-config.h'
 nvme_config_h = configure_file(output: project_config_file, configuration: conf)
 config_dep = declare_dependency(
@@ -507,7 +510,6 @@ if want_nvme
     subdir('util')      # declares: util_sources
 
     sources = [
-        'libnvme-wrap.c',
         'logging.c',
         'nvme-cmds.c',
         'nvme-models.c',
@@ -523,6 +525,7 @@ if want_nvme
         ]
     else
         sources += [
+            'libnvme-wrap.c',
             'nvme-rpmb.c',
         ]
     endif

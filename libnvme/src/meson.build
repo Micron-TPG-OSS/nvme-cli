@@ -32,15 +32,23 @@ endif
 headers = [
     'nvme/accessors.h',
     'nvme/endian.h',
+    'nvme/fcntl.h',
     'nvme/filters.h',
     'nvme/ioctl.h',
+    'nvme/lib-compat.h',
     'nvme/lib-types.h',
     'nvme/lib.h',
     'nvme/linux.h',
+    'nvme/malloc.h',
+    'nvme/mkdir.h',
     'nvme/nvme-cmds.h',
     'nvme/nvme-types.h',
+    'nvme/signal.h',
+    'nvme/stdio.h',
+    'nvme/stdlib.h',
     'nvme/tree.h',
     'nvme/types.h',
+    'nvme/unistd.h',
     'nvme/util.h',
 ]
 
@@ -191,14 +199,3 @@ if want_mi
         install_mode: mode,
     )
 endif
-
-
-# Install platform abstraction headers
-install_headers([
-        'platform/includes.h',
-        'platform/linux.h',
-        'platform/windows.h',
-    ],
-    subdir: 'platform',
-    install_mode: mode,
-)

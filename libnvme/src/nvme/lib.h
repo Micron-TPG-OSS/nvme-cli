@@ -11,9 +11,10 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+#include <nvme/lib-compat.h>
 #include <nvme/lib-types.h>
-
-#include <platform/includes.h> /* for libnvme_fd_t */
+#include <nvme/stdlib.h>
+#include <nvme/unistd.h>
 
 enum libnvme_log_level {
 	LIBNVME_LOG_ERR	  = 0,

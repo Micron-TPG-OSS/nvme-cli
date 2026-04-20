@@ -19,15 +19,21 @@
 #if defined(HAVE_NETDB) || defined(CONFIG_FABRICS)
 #include <sys/types.h>
 #include <ifaddrs.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #endif
 
+#include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <platform/includes.h>
+#include <nvme/malloc.h>
+#include <nvme/stdlib.h>
 
 #include <ccan/endian/endian.h>
 #include <ccan/minmax/minmax.h>
+
+#include <nvme/unistd.h>
 
 #include <libnvme.h>
 
@@ -40,6 +46,17 @@
 /* The bionic libc implementation doesn't define LINE_MAX */
 #ifndef LINE_MAX
 #define LINE_MAX 2048
+#endif
+
+/* Some error codes aren't defined on all platforms. Use best equivalents. */
+#ifndef EREMOTEIO
+#define EREMOTEIO ENXIO
+#endif
+#ifndef EDQUOT
+#define EDQUOT    ENOSPC
+#endif
+#ifndef ERESTART
+#define ERESTART  EAGAIN
 #endif
 
 /* Source Code Control System, query version of binary with 'what' */
@@ -759,6 +776,47 @@ __public int libnvme_uuid_from_string(const char *str, unsigned char uuid[NVME_U
 
 }
 
+#if defined(_WIN32)
+
+#include <bcrypt.h>
+
+/* Windows-specific UUID generation using BCryptGenRandom */
+static inline int random_uuid(unsigned char *uuid, size_t len)
+{
+	NTSTATUS status;
+
+	status = BCryptGenRandom(NULL, uuid, (ULONG)len,
+				 BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+	if (!BCRYPT_SUCCESS(status))
+		return -EIO;
+
+	return 0;
+}
+
+#else
+
+/* Linux-specific UUID generation using /dev/urandom */
+static inline int random_uuid(unsigned char *uuid, size_t len)
+{
+	int f, ret = 0;
+	ssize_t n;
+
+	f = open("/dev/urandom", O_RDONLY);
+	if (f < 0)
+		return -errno;
+
+	n = read(f, uuid, len);
+	if (n < 0)
+		ret = -errno;
+	else if ((size_t)n != len)
+		ret = -EIO;
+
+	close(f);
+	return ret;
+}
+
+#endif
+
 __public int libnvme_random_uuid(unsigned char uuid[NVME_UUID_LEN])
 {
 	int ret;
@@ -966,6 +1024,11 @@ void *__libnvme_alloc(size_t len)
 	return p;
 }
 
+void __libnvme_free(void *p)
+{
+	aligned_free(p);
+}
+
 void *__libnvme_realloc(void *p, size_t len)
 {
 	size_t old_len = malloc_usable_size(p);
@@ -978,11 +1041,6 @@ void *__libnvme_realloc(void *p, size_t len)
 	}
 
 	return result;
-}
-
-void __libnvme_free(void *p)
-{
-	platform_aligned_free(p);
 }
 
 #ifdef CONFIG_FABRICS

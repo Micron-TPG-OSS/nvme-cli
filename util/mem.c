@@ -1,9 +1,16 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include <stdlib.h>
+#include <unistd.h>
 #include <malloc.h>
 #include <string.h>
 
-#include <platform/includes.h>
+#ifdef NVME_HAVE_MMAP
+#include <sys/mman.h>
+#endif
+
+#include <nvme/malloc.h>
+#include <nvme/stdlib.h>
+#include <nvme/unistd.h>
 
 #include "mem.h"
 
@@ -42,7 +49,7 @@ void *nvme_realloc(void *p, size_t len)
 
 void nvme_free(void *p)
 {
-	platform_aligned_free(p);
+	aligned_free(p);
 }
 
 #ifndef _WIN32

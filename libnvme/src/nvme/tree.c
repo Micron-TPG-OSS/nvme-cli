@@ -2443,7 +2443,7 @@ static int libnvme_ns_init(const char *path, struct libnvme_ns *ns)
 		if (ret)
 			return ret;
 	} else {
-		__cleanup_nvme_free struct nvme_id_ns *id = NULL;
+		__cleanup_libnvme_free struct nvme_id_ns *id = NULL;
 		uint8_t flbas;
 
 		id = __libnvme_alloc(sizeof(*ns));
