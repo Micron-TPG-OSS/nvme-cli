@@ -6,8 +6,10 @@ on:
       # Trigger merge when master is synced to upstream.
       - master
   schedule:
-    # Backup: Run at 4:30 AM UTC (1 hour after sync completes)
-    - cron: '30 4 * * *'
+    # Cron times are in UTC. Mountain Standard Time (MST) is UTC-7, Mountain Daylight Time (MDT) is UTC-6.
+    # This schedule runs at 11:00 AM UTC, which is 4:00 AM MST or 5:00 AM MDT.
+    # Note: GitHub scheduled workflows are not guaranteed to run at exact times and may start 10-30+ minutes late.
+    - cron: '0 11 * * *'
   workflow_dispatch:
 
 jobs:
