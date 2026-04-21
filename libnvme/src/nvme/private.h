@@ -402,8 +402,8 @@ void __libnvme_free_host(struct libnvme_host * h);
 #endif
 
 /*
- * MinGW GCC supports gnu_printf, which validates C99 formats like %zu.
- * Other compilers/toolchains should use the generic printf archetype.
+ * MinGW GCC requires gnu_printf to correctly validates C99 formats like %zu.
+ * Other compilers/toolchains can use the generic printf archetype.
  */
 #if (defined(__MINGW32__) || defined(__MINGW64__)) && defined(__GNUC__)
 #define LIBNVME_PRINTF_ARCHETYPE gnu_printf
