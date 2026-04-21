@@ -28,6 +28,7 @@
 #include <sys/types.h>
 
 #include <nvme/malloc.h>
+#include <nvme/random.h>
 #include <nvme/stdlib.h>
 
 #include <ccan/endian/endian.h>
@@ -776,53 +777,12 @@ __public int libnvme_uuid_from_string(const char *str, unsigned char uuid[NVME_U
 
 }
 
-#if defined(_WIN32)
-
-#include <bcrypt.h>
-
-/* Windows-specific UUID generation using BCryptGenRandom */
-static inline int random_uuid(unsigned char *uuid, size_t len)
-{
-	NTSTATUS status;
-
-	status = BCryptGenRandom(NULL, uuid, (ULONG)len,
-				 BCRYPT_USE_SYSTEM_PREFERRED_RNG);
-	if (!BCRYPT_SUCCESS(status))
-		return -EIO;
-
-	return 0;
-}
-
-#else
-
-/* Linux-specific UUID generation using /dev/urandom */
-static inline int random_uuid(unsigned char *uuid, size_t len)
-{
-	int f, ret = 0;
-	ssize_t n;
-
-	f = open("/dev/urandom", O_RDONLY);
-	if (f < 0)
-		return -errno;
-
-	n = read(f, uuid, len);
-	if (n < 0)
-		ret = -errno;
-	else if ((size_t)n != len)
-		ret = -EIO;
-
-	close(f);
-	return ret;
-}
-
-#endif
-
 __public int libnvme_random_uuid(unsigned char uuid[NVME_UUID_LEN])
 {
 	int ret;
 
 	/* Generate random bytes using platform-specific implementation */
-	ret = random_uuid(uuid, NVME_UUID_LEN);
+	ret = getrandom(uuid, NVME_UUID_LEN, GRND_NONBLOCK);
 	if (ret < 0)
 		return ret;
 
