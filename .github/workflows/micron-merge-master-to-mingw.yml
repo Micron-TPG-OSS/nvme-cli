@@ -27,7 +27,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: mingw
+          ref: jlmunn/mingw
           fetch-depth: 0
           token: ${{ steps.generate-token.outputs.token }}
 
@@ -37,20 +37,20 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Merge master into mingw
+      - name: Merge master into jlmunn/mingw
         run: |
           set -euo pipefail
           git fetch origin master
-          git merge origin/master -m "Auto-merge master into mingw"
+          git merge origin/master -m "Auto-merge master into jlmunn/mingw"
 
       - name: Push changes
         run: |
           set -euo pipefail
-          git push origin mingw
+          git push origin jlmunn/mingw
 
       - name: Notify on merge conflict
         if: failure()
         run: |
           set -euo pipefail
-          echo "::error::Failed to merge master into mingw. Manual intervention required."
+          echo "::error::Failed to merge master into jlmunn/mingw. Manual intervention required."
           exit 1
