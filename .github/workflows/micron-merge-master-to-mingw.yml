@@ -1,15 +1,14 @@
 name: Micron - Merge master to mingw
 
 on:
+  workflow_run:
+    workflows: ["Sync Fork with Upstream"]
+    types:
+      - completed
   push:
     branches:
       # Trigger merge when master is synced to upstream.
       - master
-  schedule:
-    # Cron times are in UTC. Mountain Standard Time (MST) is UTC-7, Mountain Daylight Time (MDT) is UTC-6.
-    # This schedule runs at 11:00 AM UTC, which is 4:00 AM MST or 5:00 AM MDT.
-    # Note: GitHub scheduled workflows are not guaranteed to run at exact times and may start 10-30+ minutes late.
-    - cron: '0 11 * * *'
   workflow_dispatch:
 
 jobs:
@@ -17,19 +16,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Generate token
-        id: generate-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.TACT_SYNC_APP_ID }}
-          private-key: ${{ secrets.TACT_SYNC_APP_PRIVATE_KEY }}
-
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: jlmunn/mingw
           fetch-depth: 0
-          token: ${{ steps.generate-token.outputs.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure Git identity
         run: |
