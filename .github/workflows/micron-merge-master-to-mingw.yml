@@ -10,6 +10,8 @@ on:
 jobs:
   merge:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     concurrency:
       group: merge-master-to-mingw
       cancel-in-progress: false
