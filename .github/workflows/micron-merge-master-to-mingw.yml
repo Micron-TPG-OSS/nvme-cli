@@ -2,7 +2,7 @@ name: Micron - Merge master to mingw
 
 on:
   workflow_run:
-    workflows: ["Micron: Sync master and merge mingw"]
+    workflows: ["Micron - Sync master and merge mingw"]
     types:
       - completed
   workflow_dispatch:
