@@ -1,14 +1,10 @@
-name: Micron - Merge master to mingw
+name: Micron: Merge master to mingw
 
 on:
   workflow_run:
-    workflows: ["Sync Fork with Upstream"]
+    workflows: ["Micron: Sync master and merge mingw"]
     types:
       - completed
-  push:
-    branches:
-      # Trigger merge when master is synced to upstream.
-      - master
   workflow_dispatch:
 
 jobs:
@@ -35,8 +31,8 @@ jobs:
       - name: Merge master into jlmunn/mingw
         run: |
           set -euo pipefail
-          git fetch origin master
-          git merge origin/master -m "Auto-merge master into jlmunn/mingw"
+          git fetch origin jlmunn/master
+          git merge origin/jlmunn/master -m "Auto-merge jlmunn/master into jlmunn/mingw"
 
       - name: Push changes
         run: |

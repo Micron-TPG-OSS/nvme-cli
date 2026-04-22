@@ -1,4 +1,4 @@
-name: Sync Fork with Upstream
+name: Micron: Sync master and merge mingw
 
 on:
   schedule:
@@ -30,7 +30,7 @@ jobs:
           set -euo pipefail
           cd work
           git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-          git remote add upstream https://github.com/linux-nvme/nvme-cli.git
+          git remote add upstream https://github.com/jimmunn/nvme-cli.git
           git remote -v
 
       - name: Fetch and validate upstream master
@@ -47,5 +47,5 @@ jobs:
         run: |
           set -euo pipefail
           cd work
-          git checkout -B master upstream/master
-          git push origin master --force
+          git checkout -B jlmunn/master upstream/master
+          git push origin jlmunn/master --force
