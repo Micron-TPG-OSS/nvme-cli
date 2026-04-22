@@ -166,19 +166,14 @@ LIBNVME_ACCESSORS_3 {
 		libnvme_ns_set_name;
 		libnvme_ns_set_nsid;
 		libnvme_ns_set_sysfs_dir;
-		libnvme_path_get_ana_state;
 		libnvme_path_get_grpid;
 		libnvme_path_get_name;
-		libnvme_path_get_numa_nodes;
 		libnvme_path_get_sysfs_dir;
-		libnvme_path_set_ana_state;
 		libnvme_path_set_grpid;
 		libnvme_path_set_name;
-		libnvme_path_set_numa_nodes;
 		libnvme_path_set_sysfs_dir;
 		libnvme_subsystem_get_application;
 		libnvme_subsystem_get_firmware;
-		libnvme_subsystem_get_iopolicy;
 		libnvme_subsystem_get_model;
 		libnvme_subsystem_get_name;
 		libnvme_subsystem_get_serial;
@@ -186,5 +181,4 @@ LIBNVME_ACCESSORS_3 {
 		libnvme_subsystem_get_subsystype;
 		libnvme_subsystem_get_sysfs_dir;
 		libnvme_subsystem_set_application;
-		libnvme_subsystem_set_iopolicy;
 };
