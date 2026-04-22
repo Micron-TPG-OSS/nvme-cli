@@ -1,4 +1,4 @@
-name: Micron: Merge master to mingw
+name: Micron - Merge master to mingw
 
 on:
   workflow_run:
