@@ -392,38 +392,6 @@ void libnvme_path_set_sysfs_dir(struct libnvme_path *p, const char *sysfs_dir);
 const char *libnvme_path_get_sysfs_dir(const struct libnvme_path *p);
 
 /**
- * libnvme_path_set_ana_state() - Set ana_state.
- * @p: The &struct libnvme_path instance to update.
- * @ana_state: New string; a copy is stored. Pass NULL to clear.
- */
-void libnvme_path_set_ana_state(struct libnvme_path *p, const char *ana_state);
-
-/**
- * libnvme_path_get_ana_state() - Get ana_state.
- * @p: The &struct libnvme_path instance to query.
- *
- * Return: The value of the ana_state field, or NULL if not set.
- */
-const char *libnvme_path_get_ana_state(const struct libnvme_path *p);
-
-/**
- * libnvme_path_set_numa_nodes() - Set numa_nodes.
- * @p: The &struct libnvme_path instance to update.
- * @numa_nodes: New string; a copy is stored. Pass NULL to clear.
- */
-void libnvme_path_set_numa_nodes(
-		struct libnvme_path *p,
-		const char *numa_nodes);
-
-/**
- * libnvme_path_get_numa_nodes() - Get numa_nodes.
- * @p: The &struct libnvme_path instance to query.
- *
- * Return: The value of the numa_nodes field, or NULL if not set.
- */
-const char *libnvme_path_get_numa_nodes(const struct libnvme_path *p);
-
-/**
  * libnvme_path_set_grpid() - Set grpid.
  * @p: The &struct libnvme_path instance to update.
  * @grpid: Value to assign to the grpid field.
@@ -932,23 +900,6 @@ void libnvme_subsystem_set_application(
  */
 const char *libnvme_subsystem_get_application(
 		const struct libnvme_subsystem *p);
-
-/**
- * libnvme_subsystem_set_iopolicy() - Set iopolicy.
- * @p: The &struct libnvme_subsystem instance to update.
- * @iopolicy: New string; a copy is stored. Pass NULL to clear.
- */
-void libnvme_subsystem_set_iopolicy(
-		struct libnvme_subsystem *p,
-		const char *iopolicy);
-
-/**
- * libnvme_subsystem_get_iopolicy() - Get iopolicy.
- * @p: The &struct libnvme_subsystem instance to query.
- *
- * Return: The value of the iopolicy field, or NULL if not set.
- */
-const char *libnvme_subsystem_get_iopolicy(const struct libnvme_subsystem *p);
 
 /****************************************************************************
  * Accessors for: struct libnvme_host

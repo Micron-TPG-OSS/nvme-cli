@@ -107,4 +107,5 @@ int libnvme_get_nsid(struct libnvme_transport_handle *hdl, __u32 *nsid);
  *
  * Return: 0 if the block size was updated or a negative error code otherwise.
  */
-int libnvme_update_block_size(struct libnvme_transport_handle *hdl, int block_size);
+int libnvme_update_block_size(struct libnvme_transport_handle *hdl,
+		int block_size);

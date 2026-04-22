@@ -13,12 +13,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <sys/stat.h>
-
 #ifndef _WIN32
-#include <sys/ioctl.h>
 #include <linux/fs.h>
+
+#include <sys/ioctl.h>
 #endif
+#include <sys/stat.h>
 
 #include <ccan/build_assert/build_assert.h>
 #include <ccan/endian/endian.h>
@@ -198,6 +198,9 @@ out:
 __public int libnvme_submit_io_passthru(struct libnvme_transport_handle *hdl,
 		struct libnvme_passthru_cmd *cmd)
 {
+	if (!cmd->timeout_ms && hdl->timeout)
+		cmd->timeout_ms = hdl->timeout;
+
 	if (hdl->ioctl_io64)
 		return libnvme_submit_passthru64(hdl,
 			LIBNVME_IOCTL_IO64_CMD, cmd);
@@ -207,6 +210,9 @@ __public int libnvme_submit_io_passthru(struct libnvme_transport_handle *hdl,
 __public int libnvme_submit_admin_passthru(struct libnvme_transport_handle *hdl,
 		struct libnvme_passthru_cmd *cmd)
 {
+	if (!cmd->timeout_ms && hdl->timeout)
+		cmd->timeout_ms = hdl->timeout;
+
 	switch (hdl->type) {
 	case LIBNVME_TRANSPORT_HANDLE_TYPE_DIRECT:
 		if (hdl->ioctl_admin64)

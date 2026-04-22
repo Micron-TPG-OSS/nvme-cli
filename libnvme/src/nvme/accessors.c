@@ -291,32 +291,6 @@ __public const char *libnvme_path_get_sysfs_dir(const struct libnvme_path *p)
 	return p->sysfs_dir;
 }
 
-__public void libnvme_path_set_ana_state(
-		struct libnvme_path *p,
-		const char *ana_state)
-{
-	free(p->ana_state);
-	p->ana_state = ana_state ? strdup(ana_state) : NULL;
-}
-
-__public const char *libnvme_path_get_ana_state(const struct libnvme_path *p)
-{
-	return p->ana_state;
-}
-
-__public void libnvme_path_set_numa_nodes(
-		struct libnvme_path *p,
-		const char *numa_nodes)
-{
-	free(p->numa_nodes);
-	p->numa_nodes = numa_nodes ? strdup(numa_nodes) : NULL;
-}
-
-__public const char *libnvme_path_get_numa_nodes(const struct libnvme_path *p)
-{
-	return p->numa_nodes;
-}
-
 __public void libnvme_path_set_grpid(struct libnvme_path *p, int grpid)
 {
 	p->grpid = grpid;
@@ -685,20 +659,6 @@ __public const char *libnvme_subsystem_get_application(
 		const struct libnvme_subsystem *p)
 {
 	return p->application;
-}
-
-__public void libnvme_subsystem_set_iopolicy(
-		struct libnvme_subsystem *p,
-		const char *iopolicy)
-{
-	free(p->iopolicy);
-	p->iopolicy = iopolicy ? strdup(iopolicy) : NULL;
-}
-
-__public const char *libnvme_subsystem_get_iopolicy(
-		const struct libnvme_subsystem *p)
-{
-	return p->iopolicy;
 }
 
 /****************************************************************************
