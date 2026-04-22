@@ -43,9 +43,14 @@ jobs:
             exit 1
           fi
 
-      - name: Sync and push to origin
+      - name: Merge upstream into origin branch
         run: |
           set -euo pipefail
           cd work
-          git checkout -B jlmunn/master upstream/master
-          git push origin jlmunn/master --force
+          # Fetch and checkout our fork's branch
+          git fetch origin jlmunn/master
+          git checkout -B jlmunn/master origin/jlmunn/master
+          # Merge upstream master
+          git merge upstream/master -m "Sync: merge upstream master into jlmunn/master" --no-edit
+          # Push the merged result
+          git push origin jlmunn/master
