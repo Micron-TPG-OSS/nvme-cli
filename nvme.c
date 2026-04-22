@@ -39,13 +39,11 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <linux/fs.h>
-
-#include <sys/ioctl.h>
+#ifdef NVME_HAVE_MMAP
 #include <sys/mman.h>
+#endif
 #include <sys/stat.h>
 #include <sys/types.h>
-
 
 #include <libnvme.h>
 
@@ -257,6 +255,7 @@ struct nvme_args nvme_args = {
 };
 
 static void *mmap_registers(struct libnvme_transport_handle *hdl, bool writable);
+static int munmap_registers(void *addr);
 
 static OPT_VALS(feature_name) = {
 	VAL_BYTE("arbitration", NVME_FEAT_FID_ARBITRATION),
@@ -352,6 +351,19 @@ static int parse_args(int argc, char *argv[], const char *desc,
 	return 0;
 }
 
+static void setup_transport_handle(struct libnvme_global_ctx *ctx,
+		struct libnvme_transport_handle *hdl,
+		struct argconfig_commandline_options *opts)
+{
+	libnvme_transport_handle_set_submit_entry(hdl, nvme_submit_entry);
+	libnvme_transport_handle_set_submit_exit(hdl, nvme_submit_exit);
+	libnvme_transport_handle_set_decide_retry(hdl, nvme_decide_retry);
+	libnvme_set_dry_run(ctx, argconfig_parse_seen(opts, "dry-run"));
+	if (nvme_args.timeout !=  NVME_DEFAULT_IOCTL_TIMEOUT ||
+			argconfig_parse_seen(opts, "timeout"))
+		libnvme_transport_handle_set_timeout(hdl, nvme_args.timeout);
+}
+
 int parse_and_open(struct libnvme_global_ctx **ctx,
 		   struct libnvme_transport_handle **hdl, int argc, char **argv,
 		   const char *desc, struct argconfig_commandline_options *opts)
@@ -378,19 +390,18 @@ int parse_and_open(struct libnvme_global_ctx **ctx,
 		return -ENXIO;
 	}
 
-	libnvme_transport_handle_set_submit_entry(hdl_new, nvme_submit_entry);
-	libnvme_transport_handle_set_submit_exit(hdl_new , nvme_submit_exit);
-	libnvme_transport_handle_set_decide_retry(hdl_new, nvme_decide_retry);
-	libnvme_set_dry_run(ctx_new, argconfig_parse_seen(opts, "dry-run"));
+	setup_transport_handle(ctx_new, hdl_new, opts);
 
 	*ctx = ctx_new;
 	*hdl = hdl_new;
+
 	return 0;
 }
 
 int open_exclusive(struct libnvme_global_ctx **ctx,
 		   struct libnvme_transport_handle **hdl, int argc, char **argv,
-		   int ignore_exclusive)
+		   int ignore_exclusive,
+		   struct argconfig_commandline_options *opts)
 {
 	struct libnvme_transport_handle *hdl_new;
 	struct libnvme_global_ctx *ctx_new;
@@ -404,14 +415,20 @@ int open_exclusive(struct libnvme_global_ctx **ctx,
 	if (!ctx_new)
 		return -ENOMEM;
 
+	libnvme_set_ioctl_probing(ctx_new,
+		!argconfig_parse_seen(opts, "no-ioctl-probing"));
+
 	ret = get_transport_handle(ctx_new, argc, argv, flags, &hdl_new);
 	if (ret) {
 		libnvme_free_global_ctx(ctx_new);
 		return -ENXIO;
 	}
 
+	setup_transport_handle(ctx_new, hdl_new, opts);
+
 	*ctx = ctx_new;
 	*hdl = hdl_new;
+
 	return 0;
 }
 
@@ -1107,7 +1124,7 @@ static int get_effects_log(int argc, char **argv, struct command *acmd, struct p
 
 		if (bar) {
 			cap = mmio_read64(bar + NVME_REG_CAP);
-			munmap(bar, getpagesize());
+			munmap_registers(bar);
 		} else {
 			nvme_init_get_property(&cmd, NVME_REG_CAP);
 			err = libnvme_submit_admin_passthru(hdl, &cmd);
@@ -5802,8 +5819,9 @@ static int nvme_get_properties(struct libnvme_transport_handle *hdl, void **pbar
 
 static void *mmap_registers(struct libnvme_transport_handle *hdl, bool writable)
 {
+	void *membase = NULL;
+#ifdef NVME_HAVE_MMAP
 	char path[512];
-	void *membase;
 	int fd;
 	int prot = PROT_READ;
 
@@ -5832,7 +5850,17 @@ static void *mmap_registers(struct libnvme_transport_handle *hdl, bool writable)
 	}
 
 	close(fd);
+#endif
 	return membase;
+}
+
+static int munmap_registers(void *addr)
+{
+#ifdef NVME_HAVE_MMAP
+	return munmap(addr, getpagesize());
+#else
+	return 0;
+#endif
 }
 
 static int show_registers(int argc, char **argv, struct command *acmd, struct plugin *plugin)
@@ -5886,7 +5914,7 @@ static int show_registers(int argc, char **argv, struct command *acmd, struct pl
 	if (cfg.fabrics)
 		free(bar);
 	else
-		munmap(bar, getpagesize());
+		munmap_registers(bar);
 
 	return 0;
 }
@@ -6171,7 +6199,7 @@ static int get_register(int argc, char **argv, struct command *acmd, struct plug
 	if (fabrics)
 		free(bar);
 	else
-		munmap(bar, getpagesize());
+		munmap_registers(bar);
 
 	return err;
 }
@@ -6455,7 +6483,7 @@ static int set_register(int argc, char **argv, struct command *acmd, struct plug
 		err = set_register_names(hdl, bar, opts, &cfg);
 
 	if (bar)
-		munmap(bar, getpagesize());
+		munmap_registers(bar);
 
 	return err;
 }
@@ -6593,7 +6621,6 @@ static int format_cmd(int argc, char **argv, struct command *acmd, struct plugin
 	__cleanup_free struct nvme_id_ns *ns = NULL;
 	nvme_print_flags_t flags = NORMAL;
 	struct libnvme_passthru_cmd cmd;
-	__u32 timeout_ms = 600000;
 	__u8 prev_lbaf = 0;
 	int block_size;
 	int err, i;
@@ -6624,9 +6651,6 @@ static int format_cmd(int argc, char **argv, struct command *acmd, struct plugin
 		.bs		= 0,
 	};
 
-	if (nvme_args.timeout != NVME_DEFAULT_IOCTL_TIMEOUT)
-		timeout_ms = nvme_args.timeout;
-
 	NVME_ARGS(opts,
 		  OPT_FLAG("ish",         'I', &cfg.ish,          ish),
 		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id_desired),
@@ -6639,11 +6663,14 @@ static int format_cmd(int argc, char **argv, struct command *acmd, struct plugin
 		  OPT_FLAG("force",          0, &cfg.force,        force),
 		  OPT_SUFFIX("block-size", 'b', &cfg.bs,           bs));
 
+	/* set default timeout for format to 60 seconds */
+	nvme_args.timeout = 600000;
+
 	err = parse_args(argc, argv, desc, opts);
 	if (err)
 		return err;
 
-	err = open_exclusive(&ctx, &hdl, argc, argv, cfg.force);
+	err = open_exclusive(&ctx, &hdl, argc, argv, cfg.force, opts);
 	if (err) {
 		if (-err == EBUSY) {
 			fprintf(stderr, "Failed to open %s.\n", basename(argv[optind]));
@@ -6783,7 +6810,6 @@ static int format_cmd(int argc, char **argv, struct command *acmd, struct plugin
 
 	nvme_init_format_nvm(&cmd, cfg.namespace_id, cfg.lbaf, cfg.mset,
 		cfg.pi, cfg.pil, cfg.ses);
-	cmd.timeout_ms = timeout_ms;
 	if (cfg.ish) {
 		if (libnvme_transport_handle_is_mi(hdl))
 			nvme_init_mi_cmd_flags(&cmd, ish);
@@ -6813,19 +6839,12 @@ static int format_cmd(int argc, char **argv, struct command *acmd, struct plugin
 			 * to the given one because blkdev will not
 			 * update by itself without re-opening fd.
 			 */
-			if (ioctl(libnvme_transport_handle_get_fd(hdl), BLKBSZSET,
-				  &block_size) < 0) {
+			err = libnvme_update_block_size(hdl, block_size);
+			if (err < 0) {
 				nvme_show_error(
 				    "failed to set block size to %d",
 				    block_size);
-				return -errno;
-			}
-
-			if (ioctl(libnvme_transport_handle_get_fd(hdl),
-				  BLKRRPART) < 0) {
-				nvme_show_error(
-				    "failed to re-read partition table");
-				return -errno;
+				return err;
 			}
 		}
 	}
@@ -8428,7 +8447,7 @@ static int submit_io(int opcode, char *command, const char *desc, int argc, char
 		err = parse_args(argc, argv, desc, opts);
 		if (err)
 			return err;
-		err = open_exclusive(&ctx, &hdl, argc, argv, cfg.force);
+		err = open_exclusive(&ctx, &hdl, argc, argv, cfg.force, opts);
 		if (err) {
 			if (err == -EBUSY) {
 				fprintf(stderr, "Failed to open %s.\n", basename(argv[optind]));

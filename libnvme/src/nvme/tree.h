@@ -23,6 +23,7 @@
 typedef struct libnvme_ns *libnvme_ns_t;
 typedef struct libnvme_ns_head *libnvme_ns_head_t;
 typedef struct libnvme_path *libnvme_path_t;
+typedef struct libnvme_stat *libnvme_stat_t;
 typedef struct libnvme_ctrl *libnvme_ctrl_t;
 typedef struct libnvme_subsystem *libnvme_subsystem_t;
 typedef struct libnvme_host *libnvme_host_t;
@@ -213,6 +214,14 @@ void libnvme_free_subsystem(struct libnvme_subsystem *s);
  * Return: &libnvme_host_t object from @s
  */
 libnvme_host_t libnvme_subsystem_get_host(libnvme_subsystem_t s);
+
+/**
+ * libnvme_subsystem_get_iopolicy() - Get subsystem iopolicy name
+ * @s:	subsystem
+ *
+ * Return: The iopolicy configured in subsystem @s
+ */
+char *libnvme_subsystem_get_iopolicy(libnvme_subsystem_t s);
 
 /**
  * libnvme_ctrl_first_ns() - Start namespace iterator
@@ -502,6 +511,40 @@ const uint8_t *libnvme_ns_get_nguid(libnvme_ns_t n);
 void libnvme_ns_get_uuid(libnvme_ns_t n, unsigned char out[NVME_UUID_LEN]);
 
 /**
+ * libnvme_ns_get_command_retry_count() - Get command retry count
+ * @n: &libnvme_ns_t object
+ *
+ * Return: Number of times any command issued to namespace @n has to be retried
+ */
+long libnvme_ns_get_command_retry_count(libnvme_ns_t n);
+
+/**
+ * libnvme_ns_get_command_error_count() - Get command error count
+ * @n: &libnvme_ns_t object
+ *
+ * Return: Number of times command issued to namespace @n returns non-zero
+ * status or error
+ */
+long libnvme_ns_get_command_error_count(libnvme_ns_t n);
+
+/**
+ * libnvme_ns_get_requeue_no_usable_path_count() - Get num of I/O requeue count
+ * @n: &libnvme_ns_t object
+ *
+ * Return: Number of I/Os which are re-queued due to the unavalibility of
+ * any usable path (maybe path is currently experiencing transinet link failure)
+ */
+long libnvme_ns_get_requeue_no_usable_path_count(libnvme_ns_t n);
+
+/**
+ * libnvme_ns_get_fail_no_available_path_count() - Get num of I/Os forced to fail
+ * @n: &libnvme_ns_t object
+ *
+ * Return: Number of I/Os which are forced to fail due to no path available
+ */
+long libnvme_ns_get_fail_no_available_path_count(libnvme_ns_t n);
+
+/**
  * libnvme_ns_get_generic_name() - Returns name of generic namespace chardev.
  * @n:	Namespace instance
  *
@@ -661,6 +704,49 @@ int libnvme_ns_identify_descs(libnvme_ns_t n, struct nvme_ns_id_desc *descs);
 int libnvme_path_get_queue_depth(libnvme_path_t p);
 
 /**
+ * libnvme_path_get_ana_state() - ANA state of an nvme_path_t object
+ * @p: &libnvme_path_t object
+ *
+ * Return: ANA state of @p
+ */
+char *libnvme_path_get_ana_state(libnvme_path_t p);
+
+/**
+ * libnvme_path_get_numa_nodes() - Numa nodes of an nvme_path_t object
+ * @p: &libnvme_path_t object
+ *
+ * Return: Numa nodes of @p
+ */
+char *libnvme_path_get_numa_nodes(libnvme_path_t p);
+
+/**
+ * libnvme_path_get_multipath_failover_count() - Get multipath failover count
+ * @p: &libnvme_path_t object
+ *
+ * Return: Number of times I/Os have to be failed over to another active path
+ * from path @p maybe due to any transient error observed on path @p
+ */
+long libnvme_path_get_multipath_failover_count(libnvme_path_t p);
+
+/**
+ * libnvme_path_get_command_retry_count() - Get command retry count
+ * @p: &libnvme_path_t object
+ *
+ * Return: Number of times any command issued to the namespace represented by
+ * path @p has to be retried
+ */
+long libnvme_path_get_command_retry_count(libnvme_path_t p);
+
+/**
+ * libnvme_path_get_command_error_count() - Get command error count
+ * @p: &libnvme_path_t object
+ *
+ * Return: Number of times command issued to the namespace represented by path
+ * @p returns non-zero status or error
+ */
+long libnvme_path_get_command_error_count(libnvme_path_t p);
+
+/**
  * libnvme_path_get_ctrl() - Parent controller of an libnvme_path_t object
  * @p:	&libnvme_path_t object
  *
@@ -675,6 +761,98 @@ libnvme_ctrl_t libnvme_path_get_ctrl(libnvme_path_t p);
  * Return: Parent namespace if present
  */
 libnvme_ns_t libnvme_path_get_ns(libnvme_path_t p);
+
+/**
+ * libnvme_path_reset_stat() - Resets namespace path nvme stat
+ * @p:	&libnvme_path_t object
+ */
+void libnvme_path_reset_stat(libnvme_path_t p);
+
+/**
+ * libnvme_path_update_stat() - Update stat of an nvme_path_t object
+ * @p:		&libnvme_path_t object
+ * @diffstat:	If set to true then getters return the diff stat otherwise
+ *		return the current absolute stat
+ *
+ * Return:	0 on success, -1 on error
+ */
+int libnvme_path_update_stat(libnvme_path_t p, bool diffstat);
+
+/**
+ * libnvme_path_get_read_ios() - Calculate and return read IOs
+ * @p:		&libnvme_path_t object
+ *
+ * Return:	Num of read IOs processed between two stat samples
+ */
+unsigned long libnvme_path_get_read_ios(libnvme_path_t p);
+
+/**
+ * libnvme_path_get_write_ios() - Get write I/Os
+ * @p:		&libnvme_path_t object
+ *
+ * Return:	Num of write I/Os processed between two stat samples
+ */
+unsigned long libnvme_path_get_write_ios(libnvme_path_t p);
+
+/**
+ * libnvme_path_get_read_ticks() - Get read I/O ticks
+ * @p:		&libnvme_path_t object
+ *
+ * Return:	Time, in milliseconds, sepnt processing read I/O requests
+ *		between two stat samples
+ */
+unsigned int libnvme_path_get_read_ticks(libnvme_path_t p);
+
+/**
+ * libnvme_path_get_read_sectors() - Get read I/O sectors
+ * @p:		&libnvme_path_t object
+ *
+ * Return:	Number of sectors read from the device between two stat samples
+ */
+unsigned long long libnvme_path_get_read_sectors(libnvme_path_t p);
+
+/**
+ * libnvme_path_get_write_sectors() - Get write I/O sectors
+ * @p:		&libnvme_path_t object
+ *
+ * Return:	Num of sectors written to the device between two stat samples
+ */
+unsigned long long libnvme_path_get_write_sectors(libnvme_path_t p);
+
+/**
+ * libnvme_path_get_write_ticks() - Get write I/O ticks
+ * @p:		&libnvme_path_t object
+ *
+ * Return:	Time, in milliseconds, sepnt processing write I/O requests
+ *		between two stat samples
+ */
+unsigned int libnvme_path_get_write_ticks(libnvme_path_t p);
+
+/**
+ * libnvme_path_get_stat_interval() - Get interval between two stat samples
+ * @p:		&libnvme_path_t object
+ *
+ * Return:	Interval, in milliseconds between collection of two consecutive
+ *		stat samples
+ */
+double libnvme_path_get_stat_interval(libnvme_path_t p);
+
+/**
+ * libnvme_path_get_io_ticks() - Get I/O ticks
+ * @p:		&libnvme_path_t object
+ *
+ * Return:	Time consumed, in milliseconds, processing I/O requests between
+ *		two stat samples
+ */
+unsigned int libnvme_path_get_io_ticks(libnvme_path_t p);
+
+/**
+ * libnvme_path_get_inflights() - Inflight IOs for nvme_path_t object
+ * @p:		&libnvme_path_t object
+ *
+ * Return:	Inflight number of IOs
+ */
+unsigned int libnvme_path_get_inflights(libnvme_path_t p);
 
 /**
  * libnvme_ctrl_get_transport_handle() - Get associated transport handle
@@ -735,6 +913,124 @@ libnvme_subsystem_t libnvme_ctrl_get_subsystem(libnvme_ctrl_t c);
  * Returns: sysfs directory name of @head
  */
 const char *libnvme_ns_head_get_sysfs_dir(libnvme_ns_head_t head);
+
+/**
+ * libnvme_ns_update_stat() - update the nvme namespace stat
+ * @n:		&libnvme_ns_t object
+ * @diffstat:	If set to true then getters return the diff stat otherwise
+ *		return the current absolute stat
+ *
+ * Returns:	0 on success, -1 on error
+ */
+int libnvme_ns_update_stat(libnvme_ns_t n, bool diffstat);
+
+/**
+ * libnvme_ns_reset_stat() - Resets nvme namespace stat
+ * @n:	&libnvme_ns_t object
+ *
+ */
+void libnvme_ns_reset_stat(libnvme_ns_t n);
+
+/**
+ * libnvme_ns_get_inflights() - Inflight IOs for nvme_ns_t object
+ * @n:		&libnvme_ns_t object
+ *
+ * Return:	Inflight number of IOs
+ */
+unsigned int libnvme_ns_get_inflights(libnvme_ns_t n);
+
+/**
+ * libnvme_ns_get_io_ticks() - Get IO ticks
+ * @n:		&libnvme_ns_t object
+ *
+ * Return:	Time consumed, in milliseconds, processing I/O requests between
+ *		two stat samples
+ */
+unsigned int libnvme_ns_get_io_ticks(libnvme_ns_t n);
+
+/**
+ * libnvme_ns_get_read_ticks() - Get read I/O ticks
+ * @n:		&libnvme_ns_t object
+ *
+ * Return:	Time, in milliseconds, sepnt processing read I/O requests
+ *		between two stat samples
+ */
+unsigned int libnvme_ns_get_read_ticks(libnvme_ns_t n);
+
+/**
+ * libnvme_ns_get_write_ticks() - Get write I/O ticks
+ * @n:		&libnvme_ns_t object
+ *
+ * Return:	Time, in milliseconds, sepnt processing write I/O requests
+ *		between two stat samples
+ */
+unsigned int libnvme_ns_get_write_ticks(libnvme_ns_t n);
+
+/**
+ * libnvme_ns_get_stat_interval() - Get interval between two stat samples
+ * @n:		&libnvme_ns_t object
+ *
+ * Return:	Interval, in milliseconds, between collection of two consecutive
+ *		stat samples
+ */
+double libnvme_ns_get_stat_interval(libnvme_ns_t n);
+
+/**
+ * libnvme_ns_get_read_ios() - Get num of read I/Os
+ * @n:		&libnvme_ns_t object
+ *
+ * Return:	Num of read IOs processed between two stat samples
+ */
+unsigned long libnvme_ns_get_read_ios(libnvme_ns_t n);
+
+/**
+ * libnvme_ns_get_write_ios() - Get num of write I/Os
+ * @n:		&libnvme_ns_t object
+ *
+ * Return:	Num of write IOs processed between two consecutive stat samples
+ */
+unsigned long libnvme_ns_get_write_ios(libnvme_ns_t n);
+
+/**
+ * libnvme_ns_get_read_sectors() - Get num of read sectors
+ * @n:		&libnvme_ns_t object
+ *
+ * Return:	Num of sectors read from the device between two stat samples
+ */
+unsigned long long libnvme_ns_get_read_sectors(libnvme_ns_t n);
+
+/**
+ * libnvme_ns_get_write_sectors() - Get num of write sectors
+ * @n:		&libnvme_ns_t object
+ *
+ * Return:	Num of sectors written to the device between two stat samples
+ */
+unsigned long long libnvme_ns_get_write_sectors(libnvme_ns_t n);
+
+/**
+ * libnvme_ctrl_get_command_error_count() - Get admin command error count
+ * @c: Controller instance
+ *
+ * Return: Number of times admin command issued to controller @c failed or
+ * returned error status
+ */
+long libnvme_ctrl_get_command_error_count(libnvme_ctrl_t c);
+
+/**
+ * libnvme_ctrl_get_reset_count() - Get controller reset count
+ * @c: Controller instance
+ *
+ * Return: Number of timer controller @c is reset
+ */
+long libnvme_ctrl_get_reset_count(libnvme_ctrl_t c);
+
+/**
+ * libnvme_ctrl_get_reconnect_count() - Get controller reconnect count
+ * @c: Controller instance
+ *
+ * Return: Number of times controller has to reconnect to the target
+ */
+long libnvme_ctrl_get_reconnect_count(libnvme_ctrl_t c);
 
 /**
  * libnvme_ctrl_identify() - Issues an 'identify controller' command
