@@ -1,0 +1,56 @@
+name: Micron - Sync master and merge mingw
+
+on:
+  schedule:
+    # Run daily at 12:00 UTC (5 AM MST / 6 AM MDT)
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+    # Allow manual triggering
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: sync-master-to-upstream
+      cancel-in-progress: false
+    steps:
+      - name: Prepare workspace and configure Git
+        run: |
+          set -euo pipefail
+          rm -rf work
+          mkdir -p work && cd work
+          git init
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add remotes
+        run: |
+          set -euo pipefail
+          cd work
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git remote add upstream https://github.com/jimmunn/nvme-cli.git
+          git remote -v
+
+      - name: Fetch and validate upstream master
+        run: |
+          set -euo pipefail
+          cd work
+          git fetch upstream master
+          if ! git show-ref --verify --quiet "refs/remotes/upstream/master"; then
+            echo "::error::Branch 'master' does not exist in upstream repository"
+            exit 1
+          fi
+
+      - name: Merge upstream into origin branch
+        run: |
+          set -euo pipefail
+          cd work
+          # Fetch and checkout our fork's branch
+          git fetch origin jlmunn/master
+          git checkout -B jlmunn/master origin/jlmunn/master
+          # Merge upstream master
+          git merge upstream/master -m "Sync: merge upstream master into jlmunn/master" --no-edit
+          # Push the merged result
+          git push origin jlmunn/master
