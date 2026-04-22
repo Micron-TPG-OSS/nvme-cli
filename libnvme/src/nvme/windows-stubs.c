@@ -242,6 +242,20 @@ __public libnvme_ns_t libnvme_path_get_ns(libnvme_path_t p)
 	return NULL;
 }
 
+__public char* libnvme_path_get_ana_state(libnvme_path_t p)
+{
+	stub_log(__func__);
+	(void)p;
+	return NULL;
+}
+
+__public char *libnvme_path_get_numa_nodes(libnvme_path_t p)
+{
+	stub_log(__func__);
+	(void)p;
+	return NULL;
+}
+
 __public const char *libnvme_ctrl_get_state(libnvme_ctrl_t c)
 {
 	stub_log(__func__);
@@ -310,6 +324,13 @@ __public libnvme_ns_t libnvme_subsystem_next_ns(libnvme_subsystem_t s, libnvme_n
 	stub_log(__func__);
 	(void)s;
 	(void)n;
+	return NULL;
+}
+
+__public char *libnvme_subsystem_get_iopolicy(libnvme_subsystem_t s)
+{
+	stub_log(__func__);
+	(void)s;
 	return NULL;
 }
 
