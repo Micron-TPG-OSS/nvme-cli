@@ -4,8 +4,12 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/types.h>
+
+#ifdef CONFIG_FABRICS
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#endif
+
 #include <ccan/compiler/compiler.h>
 
 #include <libnvme.h>
@@ -5632,16 +5636,22 @@ static void json_host_discovery_log(struct nvme_host_discover_log *log)
 
 static void obj_add_traddr(struct json_object *o, const char *k, __u8 adrfam, __u8 *traddr)
 {
-	int af = AF_INET;
-	socklen_t size = INET_ADDRSTRLEN;
 	char dst[INET6_ADDRSTRLEN];
+	socklen_t size;
+	int af;
 
-	if (adrfam == NVMF_ADDR_FAMILY_IP6) {
+	if (adrfam == NVMF_ADDR_FAMILY_IP4) {
+		af = AF_INET;
+		size = INET_ADDRSTRLEN;
+	} else if (adrfam == NVMF_ADDR_FAMILY_IP6) {
 		af = AF_INET6;
 		size = INET6_ADDRSTRLEN;
+	} else {
+		obj_add_str(o, k, "<invalid>");
+		return;
 	}
 
-	if (inet_ntop(af, libnvmf_adrfam_str(adrfam), dst, size))
+	if (inet_ntop(af, traddr, dst, size))
 		obj_add_str(o, k, dst);
 }
 
