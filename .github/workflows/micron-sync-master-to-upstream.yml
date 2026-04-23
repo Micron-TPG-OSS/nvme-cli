@@ -1,9 +1,9 @@
 name: Micron - Sync master and merge mingw
 
 on:
-  schedule:
-    # Run daily at 12:00 UTC (5 AM MST / 6 AM MDT)
-    - cron: '0 12 * * *'
+  # schedule:
+  #   # Run daily at 12:00 UTC (5 AM MST / 6 AM MDT)
+  #   - cron: '0 12 * * *'
   workflow_dispatch:
     # Allow manual triggering
 
