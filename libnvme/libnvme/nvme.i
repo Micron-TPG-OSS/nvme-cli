@@ -1368,13 +1368,13 @@ struct libnvme_ns {
 		PyObject *output;
 		int ret;
 
-		ret = libnvme_read_nbft(ctx, &nbft, filename);
+		ret = libnvmf_read_nbft(ctx, &nbft, filename);
 		if (ret) {
 			Py_RETURN_NONE;
 		}
 
 		output = nbft_to_pydict(nbft);
-		libnvme_free_nbft(ctx, nbft);
+		libnvmf_free_nbft(ctx, nbft);
 		return output;
 	}
 %};
