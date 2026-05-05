@@ -4,7 +4,7 @@
 # This file is part of nvme.
 # Combined workflow to sync upstream master and merge into mingw
 
-name: Sync and Merge
+name: Micron - Sync and Merge
 
 on:
   schedule:

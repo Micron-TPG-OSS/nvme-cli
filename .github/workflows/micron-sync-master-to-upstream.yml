@@ -1,4 +1,4 @@
-name: Micron - Sync master and merge mingw
+name: Micron - Sync master
 
 on:
   # schedule:
