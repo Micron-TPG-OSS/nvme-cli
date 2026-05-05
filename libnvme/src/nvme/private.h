@@ -15,6 +15,8 @@
 #include "nvme/nvme-types.h"
 #include "nvme/lib-types.h"
 
+#include <nvme/tree.h>
+
 const char *libnvme_subsys_sysfs_dir(void);
 const char *libnvme_ctrl_sysfs_dir(void);
 const char *libnvme_ns_sysfs_dir(void);
@@ -150,6 +152,9 @@ struct libnvme_transport_handle {
 	bool (*decide_retry)(struct libnvme_transport_handle *hdl,
 			struct libnvme_passthru_cmd *cmd, int err);
 
+	/* global command timeout */
+	__u32 timeout;
+
 	/* direct */
 	int fd;
 	struct stat stat;
@@ -167,19 +172,55 @@ struct libnvme_transport_handle {
 	struct libnvme_log *log;
 };
 
-struct libnvme_path { // !generate-accessors
+enum libnvme_stat_group {
+	READ = 0,
+	WRITE,
+	DISCARD,
+	FLUSH,
+
+	NR_STAT_GROUPS
+};
+
+struct libnvme_stat {
+	struct {
+		unsigned long ios;
+		unsigned long merges;
+		unsigned long long sectors;
+		unsigned int ticks;	/* in milliseconds */
+	} group[NR_STAT_GROUPS];
+
+	unsigned int inflights;
+	unsigned int io_ticks;		/* in milliseconds */
+	unsigned int tot_ticks;		/* in milliseconds */
+
+	double ts_ms;			/* timestamp when the stat is updated */
+};
+
+struct libnvme_path {		// !generate-accessors:read=generated,write=none
 	struct list_node entry;
 	struct list_node nentry;
+
+	/* Double-buffered gendisk I/O stats: stat[curr_idx] is the latest
+	 * snapshot, stat[!curr_idx] the previous one. curr_idx toggles on
+	 * each update_stat() call; diffstat selects raw vs. delta for getters.
+	 * Managed exclusively by the stat subsystem — do not access directly.
+	 */
+	struct libnvme_stat stat[2];
+	unsigned int curr_idx;	       // !access:read=none
+	bool diffstat;		       // !access:read=none
 
 	struct libnvme_ctrl *c;
 	struct libnvme_ns *n;
 
-	char *name;
-	char *sysfs_dir;
-	char *ana_state;
-	char *numa_nodes;
-	int grpid;
-	int queue_depth; // !accessors:none
+	char *name;		       // !access:write=generated
+	char *sysfs_dir;	       // !access:write=generated
+	char *ana_state;	       // !access:read=custom
+	char *numa_nodes;	       // !access:read=custom
+	int grpid;		       // !access:write=generated
+	int queue_depth;	       // !access:read=custom
+	long multipath_failover_count; // !access:read=custom
+	long command_retry_count;      // !access:read=custom
+	long command_error_count;      // !access:read=custom
 };
 
 struct libnvme_ns_head {
@@ -189,7 +230,7 @@ struct libnvme_ns_head {
 	char *sysfs_dir;
 };
 
-struct libnvme_ns { // !generate-accessors
+struct libnvme_ns {  // !generate-accessors:read=generated,write=none !generate-python:alias=Namespace
 	struct list_node entry;
 
 	struct libnvme_subsystem *s;
@@ -197,25 +238,40 @@ struct libnvme_ns { // !generate-accessors
 	struct libnvme_ns_head *head;
 
 	struct libnvme_global_ctx *ctx;
-	struct libnvme_transport_handle *hdl;
-	__u32 nsid;
-	char *name;
-	char *generic_name; // !accessors:none
-	char *sysfs_dir;
 
-	int lba_shift;
-	int lba_size;
-	int meta_size;
-	uint64_t lba_count;
-	uint64_t lba_util;
+	/* Double-buffered gendisk I/O stats: stat[curr_idx] is the latest
+	 * snapshot, stat[!curr_idx] the previous one. curr_idx toggles on
+	 * each update_stat() call; diffstat selects raw vs. delta for getters.
+	 * Managed exclusively by the stat subsystem — do not access directly.
+	 */
+	struct libnvme_stat stat[2];
+	unsigned int curr_idx;		     // !access:read=none
+	bool diffstat;			     // !access:read=none
+
+	struct libnvme_transport_handle *hdl;
+	__u32 nsid;			     // !access:write=generated
+	char *name;
+	char *generic_name;
+	char *sysfs_dir;		     // !access:write=generated
+
+	int lba_shift;			     // !access:write=generated
+	int lba_size;			     // !access:write=generated
+	int meta_size;			     // !access:write=generated
+	uint64_t lba_count;		     // !access:write=generated
+	uint64_t lba_util;		     // !access:write=generated
 
 	uint8_t eui64[8];
 	uint8_t nguid[16];
-	unsigned char uuid[NVME_UUID_LEN];
+	unsigned char uuid[NVME_UUID_LEN];   // !access:read=none
 	enum nvme_csi csi;
+
+	long command_retry_count;	     // !access:read=custom
+	long command_error_count;	     // !access:read=custom
+	long requeue_no_usable_path_count;   // !access:read=custom
+	long fail_no_available_path_count;   // !access:read=custom
 };
 
-struct libnvme_ctrl { // !generate-accessors
+struct libnvme_ctrl {  // !generate-accessors:read=generated,write=none !generate-python:alias=Ctrl
 	struct list_node entry;
 	struct list_head paths;
 	struct list_head namespaces;
@@ -223,67 +279,74 @@ struct libnvme_ctrl { // !generate-accessors
 
 	struct libnvme_global_ctx *ctx;
 	struct libnvme_transport_handle *hdl;
-	char *name; // !accessors:readonly
-	char *sysfs_dir; // !accessors:readonly
-	char *address; // !accessors:none
-	char *firmware; // !accessors:readonly
-	char *model; // !accessors:readonly
-	char *state; // !accessors:none
-	char *numa_node; // !accessors:readonly
-	char *queue_count; // !accessors:readonly
-	char *serial; // !accessors:readonly
-	char *sqsize; // !accessors:readonly
-	char *transport; // !accessors:readonly
-	char *subsysnqn; // !accessors:readonly
-	char *traddr; // !accessors:readonly
-	char *trsvcid; // !accessors:readonly
-	char *dhchap_host_key;
-	char *dhchap_ctrl_key;
-	char *keyring;
-	char *tls_key_identity;
-	char *tls_key;
-	char *cntrltype; // !accessors:readonly
-	char *cntlid; // !accessors:readonly
-	char *dctype; // !accessors:readonly
-	char *phy_slot; // !accessors:readonly
-	char *host_traddr; // !accessors:readonly
-	char *host_iface; // !accessors:readonly
-	bool discovery_ctrl;
-	bool unique_discovery_ctrl;
-	bool discovered;
-	bool persistent;
+	char *name;
+	char *sysfs_dir;
+	char *address;
+	char *firmware;
+	char *model;
+	char *state;			// !access:read=custom
+	char *numa_node;
+	char *queue_count;
+	char *serial;
+	char *sqsize;
+	char *transport;
+	char *subsysnqn;
+	char *traddr;
+	char *trsvcid;
+	char *dhchap_host_key;		// !access:write=generated
+	char *dhchap_ctrl_key;		// !access:write=generated
+	char *keyring;			// !access:write=generated
+	char *tls_key_identity;		// !access:write=generated
+	char *tls_key;			// !access:write=generated
+	char *cntrltype;
+	char *cntlid;
+	char *dctype;
+	char *phy_slot;
+	char *host_traddr;
+	char *host_iface;
+	bool discovery_ctrl;		// !access:write=generated
+	bool unique_discovery_ctrl;	// !access:write=generated
+	bool discovered;		// !access:write=generated
+	bool persistent;		// !access:write=generated
+	long command_error_count;	// !access:read=custom
+	long reset_count;		// !access:read=custom
+	long reconnect_count;		// !access:read=custom
 	struct libnvme_fabrics_config cfg;
 };
 
-struct libnvme_subsystem { // !generate-accessors
+struct libnvme_subsystem {  // !generate-accessors:read=generated,write=none !generate-python:alias=Subsystem
 	struct list_node entry;
 	struct list_head ctrls;
 	struct list_head namespaces;
 	struct libnvme_host *h;
 
-	char *name; // !accessors:readonly
-	char *sysfs_dir; // !accessors:readonly
-	char *subsysnqn; // !accessors:readonly
-	char *model; // !accessors:readonly
-	char *serial; // !accessors:readonly
-	char *firmware; // !accessors:readonly
-	char *subsystype; // !accessors:readonly
-	char *application;
-	char *iopolicy;
+	char *name;
+	char *sysfs_dir;
+	char *subsysnqn;
+	char *model;
+	char *serial;
+	char *firmware;
+	char *subsystype;
+	char *application;		// !access:write=generated
+	char *iopolicy;			// !access:read=custom
 };
 
-struct libnvme_host { // !generate-accessors
+struct libnvme_host {  // !generate-accessors:read=generated,write=none !generate-python:alias=Host
 	struct list_node entry;
 	struct list_head subsystems;
 	struct libnvme_global_ctx *ctx;
 
-	char *hostnqn; // !accessors:readonly
-	char *hostid; // !accessors:readonly
-	char *dhchap_host_key;
-	char *hostsymname;
-	bool pdc_enabled; // !accessors:none
-	bool pdc_enabled_valid; /* set if pdc_enabled doesn't have an undefined
-				 * value */
+	char *hostnqn;
+	char *hostid;
+	char *dhchap_host_key;		// !access:write=generated
+	char *hostsymname;		// !access:write=generated
+
+	/* pdc_enabled and pdc_enabled_valid work together. pdc_enabled_valid,
+	 * when true, indicates that pdc_enabled has been explicitly defined.
+	 * pdc_enabled_valid is internal meta-data for pdc_enabled.
+	 */
+	bool pdc_enabled;		// !access:read=none,write=custom
+	bool pdc_enabled_valid;		// !access:read=none
 };
 
 struct libnvme_fabric_options { // !generate-accessors
@@ -325,7 +388,7 @@ enum libnvme_io_uring_state {
 	LIBNVME_IO_URING_STATE_AVAILABLE,
 };
 
-struct libnvme_global_ctx {
+struct libnvme_global_ctx { // !generate-python:alias=GlobalCtx
 	char *config_file;
 	char *application;
 	struct list_head endpoints; /* MI endpoints */
@@ -337,7 +400,7 @@ struct libnvme_global_ctx {
 	bool dry_run;
 #ifdef CONFIG_FABRICS
 	struct libnvme_fabric_options *options;
-	struct ifaddrs *ifaddrs_cache; /* init with libnvme_getifaddrs() */
+	struct ifaddrs *ifaddrs_cache; /* init with libnvmf_getifaddrs() */
 #endif
 
 	enum libnvme_io_uring_state uring_state;
@@ -418,20 +481,6 @@ static inline char *xstrdup(const char *s)
 }
 
 /**
- * libnvme_getifaddrs - Cached wrapper around getifaddrs()
- * @ctx: pointer to the global context
- *
- * On the first call, this function invokes the POSIX getifaddrs()
- * and caches the result in the global context. Subsequent calls
- * return the cached data. The caller must NOT call freeifaddrs()
- * on the returned data. The cache will be freed when the global
- * context is freed.
- *
- * Return: Pointer to I/F data, NULL on error (with errno set).
- */
-const struct ifaddrs *libnvme_getifaddrs(struct libnvme_global_ctx *ctx);
-
-/**
  * libnvme_ipaddrs_eq - Check if 2 IP addresses are equal.
  * @addr1: IP address (can be IPv4 or IPv6)
  * @addr2: IP address (can be IPv4 or IPv6)
@@ -440,6 +489,7 @@ const struct ifaddrs *libnvme_getifaddrs(struct libnvme_global_ctx *ctx);
  */
 bool libnvme_ipaddrs_eq(const char *addr1, const char *addr2);
 
+#if defined(HAVE_NETDB) || defined(CONFIG_FABRICS)
 /**
  * libnvme_iface_matching_addr - Get interface matching @addr
  * @iface_list: Interface list returned by getifaddrs()
@@ -469,6 +519,7 @@ const char *libnvme_iface_matching_addr(const struct ifaddrs *iface_list,
  */
 bool libnvme_iface_primary_addr_matches(const struct ifaddrs *iface_list,
 		const char *iface, const char *addr);
+#endif /* HAVE_NETDB || CONFIG_FABRICS */
 
 int hostname2traddr(struct libnvme_global_ctx *ctx, const char *traddr,
 		char **hostname);
@@ -551,38 +602,6 @@ char *kv_keymatch(const char *kv, const char *key);
  * usage: int x = round_up(13, sizeof(__u32)); // 13 -> 16
  */
 #define round_up(val, mult)     ((((val)-1) | __round_mask((val), (mult)))+1)
-
-/**
- * nvmf_exat_len() - Return length rounded up by 4
- * @val_len: Value length
- *
- * Return the size in bytes, rounded to a multiple of 4 (e.g., size of
- * __u32), of the buffer needed to hold the exat value of size
- * @val_len.
- *
- * Return: Length rounded up by 4
- */
-static inline __u16 nvmf_exat_len(size_t val_len)
-{
-	return (__u16)round_up(val_len, sizeof(__u32));
-}
-
-/**
- * nvmf_exat_size - Return min aligned size to hold value
- * @val_len: This is the length of the data to be copied to the "exatval"
- *           field of a "struct nvmf_ext_attr".
- *
- * Return the size of the "struct nvmf_ext_attr" needed to hold
- * a value of size @val_len.
- *
- * Return: The size in bytes, rounded to a multiple of 4 (i.e. size of
- * __u32), of the "struct nvmf_ext_attr" required to hold a string of
- * length @val_len.
- */
-static inline __u16 nvmf_exat_size(size_t val_len)
-{
-	return (__u16)(sizeof(struct nvmf_ext_attr) + nvmf_exat_len(val_len));
-}
 
 /**
  * libnvme_ns_get_transport_handle() - Get associated transport handle

@@ -44,6 +44,7 @@ if want_fabrics
         'nvme/accessors-fabrics.c',
         'nvme/fabrics.c',
         'nvme/nbft.c',
+        'nvme/util-fabrics.c',
     ]
     headers += [
         'nvme/accessors-fabrics.h',
@@ -78,7 +79,7 @@ else
     sources += 'nvme/no-uring.c'
 endif
 
-if json_c_dep.found()
+if json_c_dep.found() and want_fabrics
     sources += 'nvme/json.c'
 else
     sources += 'nvme/no-json.c'

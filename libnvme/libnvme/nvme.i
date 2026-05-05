@@ -1,105 +1,560 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 /*
  * This file is part of libnvme.
- * Copyright (c) 2021 SUSE Software Solutions
  *
+ * Copyright (c) 2021 SUSE Software Solutions
  * Authors: Hannes Reinecke <hare@suse.de>
+ *
+ * Copyright (c) 2026, Dell Technologies Inc. or its subsidiaries.
+ * Authors: Martin Belanger <Martin.Belanger@dell.com>
  */
 %begin %{
 /* WORKAROUND: The top-level meson.build defines the macro "fallthrough", which
                clashes with the same macro defined in Python.h.
  */
 #undef fallthrough
+
+#include <Python.h>
+
+/* WORKAROUND: Py_NewRef() was introduced in Python 3.10. SWIG >= 4.1 generates
+               calls to it in its runtime boilerplate, which breaks older
+               distributions (e.g. SLES 15.6/15.7 with Python 3.6).
+ */
+#if PY_VERSION_HEX < 0x030a0000
+static inline PyObject *Py_NewRef(PyObject *obj)
+{
+	Py_INCREF(obj);
+	return obj;
+}
+#endif
 %}
 
-%module(docstring="Python bindings for libnvme") nvme
+%define MODULE_DOCSTRING
+"Python bindings for libnvme — the Linux NVMe management library.\n"
+"\n"
+"Classes\n"
+"-------\n"
+"GlobalCtx     Root context; owns the device tree and configuration.\n"
+"Host          Host (initiator) identity — NQN, host ID, credentials.\n"
+"Subsystem     An NVMe subsystem visible to a host.\n"
+"Ctrl          An NVMe or NVMe-oF controller; connect, discover, disconnect.\n"
+"Namespace     A namespace within a subsystem or controller.\n"
+"\n"
+"Scan attached NVMe devices::\n"
+"\n"
+"    import nvme\n"
+"    ctx = nvme.GlobalCtx()\n"
+"    for host in ctx.hosts():\n"
+"        for sub in host.subsystems():\n"
+"            for ctrl in sub.controllers():\n"
+"                print(ctrl.name, ctrl.transport)\n"
+"\n"
+"Discover NVMe-oF controllers at a remote target::\n"
+"\n"
+"    with nvme.Ctrl(ctx, {\n"
+"        'subsysnqn': nvme.NVME_DISC_SUBSYS_NAME,\n"
+"        'transport': 'tcp',\n"
+"        'traddr':    '192.168.1.100',\n"
+"        'trsvcid':   '8009',\n"
+"    }) as c:\n"
+"        c.connect(host)\n"
+"        log = c.discover()\n"
+"\n"
+"All classes support the context manager protocol (the ``with`` statement).\n"
+"read_hostnqn() and read_hostid() return the system-wide host NQN and ID.\n"
+%enddef
+%module(docstring=MODULE_DOCSTRING) nvme
 %feature("autodoc", "1");
 
 %include "exception.i"
 
 %allowexception;
 
-%rename(global_ctx)      libnvme_global_ctx;
-%rename(host)            libnvme_host;
-%rename(ctrl)            libnvme_ctrl;
-%rename(subsystem)       libnvme_subsystem;
-%rename(ns)              libnvme_ns;
-%rename(fabrics_context) libnvmf_context;
-
-%{
-	#include <ccan/list/list.h>
-	#include <ccan/endian/endian.h>
-	#include <libnvme.h>
-	#include "nvme/private.h"
-	#include "nvme/private-fabrics.h"
-
-	static int connect_err = 0;
-	static int discover_err = 0;
-
-	static void PyDict_SetItemStringDecRef(PyObject * p, const char *key, PyObject *val) {
-		PyDict_SetItemString(p, key, val); /* Does NOT steal reference to val .. */
-		Py_XDECREF(val);                   /* .. therefore decrement ref. count. */
-	}
-	PyObject *read_hostnqn() {
-		char * val = libnvme_read_hostnqn();
-		PyObject * obj = val ? PyUnicode_FromString(val) : Py_NewRef(Py_None);
-		free(val);
-		return obj;
-	}
-	PyObject *read_hostid() {
-		char * val = libnvme_read_hostid();
-		PyObject * obj = val ? PyUnicode_FromString(val) : Py_NewRef(Py_None);
-		free(val);
-		return obj;
-	}
-%}
 PyObject *read_hostnqn();
 PyObject *read_hostid();
 
-%exception libnvme_ctrl::connect {
-	connect_err = 0;
-	$action  /* $action sets connect_err to non-zero value on failure */
-	if (connect_err) {
-		const char *errstr = libnvme_errno_to_string(-connect_err);
-		if (errstr) {
-			SWIG_exception(SWIG_RuntimeError, errstr);
-		} else {
-			SWIG_exception(SWIG_RuntimeError, "Connect failed");
-		}
-	}
+/*******************************************************************************
+ * This is the single C implementation block. All pure C code — headers,
+ * #defines, static helpers, and callback implementations — belongs here.
+ * Do not introduce additional %{...%} blocks elsewhere in this file.
+ * SWIG-specific directives (%typemap, %extend, %exception, %include)
+ * follow this block.
+ ******************************************************************************/
+%{
+#include <ccan/list/list.h>
+#include <ccan/endian/endian.h>
+#include <libnvme.h>
+#include "nvme/private.h"
+#include "nvme/private-fabrics.h"
+
+#define STR_OR_NONE(str) (!(str) ? "None" : str)
+
+static int connect_err = 0;
+static int discover_err = 0;
+
+static void PyDict_SetItemStringDecRef(PyObject * p, const char *key, PyObject *val) {
+	PyDict_SetItemString(p, key, val); /* Does NOT steal reference to val .. */
+	Py_XDECREF(val);                   /* .. therefore decrement ref. count. */
+}
+PyObject *read_hostnqn() {
+	char * val = libnvme_read_hostnqn();
+	PyObject * obj = val ? PyUnicode_FromString(val) : Py_NewRef(Py_None);
+	free(val);
+	return obj;
+}
+PyObject *read_hostid() {
+	char * val = libnvme_read_hostid();
+	PyObject * obj = val ? PyUnicode_FromString(val) : Py_NewRef(Py_None);
+	free(val);
+	return obj;
 }
 
-%exception libnvme_ctrl::disconnect {
-	connect_err = 0;
-	errno = 0;
-	$action  /* $action sets connect_err to non-zero value on failure */
-	if (connect_err == 1) {
-		SWIG_exception(SWIG_AttributeError, "No controller connection");
-	} else if (connect_err) {
-		const char *errstr = libnvme_errno_to_string(-connect_err);
-		if (errstr) {
-			SWIG_exception(SWIG_RuntimeError, errstr);
-		} else {
-			SWIG_exception(SWIG_RuntimeError, "Disconnect failed");
-		}
-	}
+static const char *dict_get_str(PyObject *dict, const char *key)
+{
+	PyObject *val = PyDict_GetItemString(dict, key);
+
+	if (!val || val == Py_None)
+		return NULL;
+	return PyUnicode_AsUTF8(val);
 }
 
-%exception libnvme_ctrl::discover {
-	discover_err = 0;
-	$action  /* $action sets discover_err to non-zero value on failure */
-	if (discover_err == 1) {
-		SWIG_exception(SWIG_AttributeError, "No controller connection");
-	} else if (discover_err) {
-		const char *errstr = libnvme_errno_to_string(-discover_err);
-		if (errstr) {
-			SWIG_exception(SWIG_RuntimeError, errstr);
-		} else {
-			SWIG_exception(SWIG_RuntimeError, "Discover failed");
-		}
+static int set_fctx_from_dict(struct libnvmf_context *fctx, PyObject *dict)
+{
+	struct libnvme_fabrics_config *cfg;
+	const char *subsysnqn, *transport;
+	const char *hostnqn = NULL, *hostid = NULL;
+	const char *hostkey = NULL, *ctrlkey = NULL;
+	const char *keyring = NULL, *tls_key = NULL, *tls_key_identity = NULL;
+	bool persistent = false;
+	bool has_persistent = false;
+	Py_ssize_t pos = 0;
+	PyObject *key, *value;
+
+	subsysnqn = dict_get_str(dict, "subsysnqn");
+	transport = dict_get_str(dict, "transport");
+
+	if (!subsysnqn || !transport) {
+		PyErr_SetString(PyExc_KeyError,
+				"'subsysnqn' and 'transport' are required");
+		return -1;
 	}
+
+	libnvmf_context_set_connection(fctx, subsysnqn, transport,
+				       dict_get_str(dict, "traddr"),
+				       dict_get_str(dict, "trsvcid"),
+				       dict_get_str(dict, "host_traddr"),
+				       dict_get_str(dict, "host_iface"));
+
+	cfg = libnvmf_context_get_fabrics_config(fctx);
+
+	while (PyDict_Next(dict, &pos, &key, &value)) {
+		/* Already consumed above via dict_get_str() */
+		if (!PyUnicode_CompareWithASCIIString(key, "subsysnqn") ||
+		    !PyUnicode_CompareWithASCIIString(key, "transport") ||
+		    !PyUnicode_CompareWithASCIIString(key, "traddr") ||
+		    !PyUnicode_CompareWithASCIIString(key, "trsvcid") ||
+		    !PyUnicode_CompareWithASCIIString(key, "host_traddr") ||
+		    !PyUnicode_CompareWithASCIIString(key, "host_iface"))
+			continue;
+		if (!PyUnicode_CompareWithASCIIString(key, "queue_size")) {
+			cfg->queue_size = PyLong_AsLong(value);
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "nr_io_queues")) {
+			cfg->nr_io_queues = PyLong_AsLong(value);
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "reconnect_delay")) {
+			cfg->reconnect_delay = PyLong_AsLong(value);
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "ctrl_loss_tmo")) {
+			cfg->ctrl_loss_tmo = PyLong_AsLong(value);
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "fast_io_fail_tmo")) {
+			cfg->fast_io_fail_tmo = PyLong_AsLong(value);
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "keep_alive_tmo")) {
+			cfg->keep_alive_tmo = PyLong_AsLong(value);
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "nr_write_queues")) {
+			cfg->nr_write_queues = PyLong_AsLong(value);
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "nr_poll_queues")) {
+			cfg->nr_poll_queues = PyLong_AsLong(value);
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "tos")) {
+			cfg->tos = PyLong_AsLong(value);
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "keyring_id")) {
+			cfg->keyring_id = PyLong_AsLong(value);
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "tls_key_id")) {
+			cfg->tls_key_id = PyLong_AsLong(value);
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "tls_configured_key_id")) {
+			cfg->tls_configured_key_id = PyLong_AsLong(value);
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "duplicate_connect")) {
+			cfg->duplicate_connect = PyObject_IsTrue(value) ? true : false;
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "disable_sqflow")) {
+			cfg->disable_sqflow = PyObject_IsTrue(value) ? true : false;
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "hdr_digest")) {
+			cfg->hdr_digest = PyObject_IsTrue(value) ? true : false;
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "data_digest")) {
+			cfg->data_digest = PyObject_IsTrue(value) ? true : false;
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "tls")) {
+			cfg->tls = PyObject_IsTrue(value) ? true : false;
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "concat")) {
+			cfg->concat = PyObject_IsTrue(value) ? true : false;
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "hostnqn")) {
+			hostnqn = (value != Py_None) ? PyUnicode_AsUTF8(value) : NULL;
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "hostid")) {
+			hostid = (value != Py_None) ? PyUnicode_AsUTF8(value) : NULL;
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "hostkey")) {
+			hostkey = (value != Py_None) ? PyUnicode_AsUTF8(value) : NULL;
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "ctrlkey")) {
+			ctrlkey = (value != Py_None) ? PyUnicode_AsUTF8(value) : NULL;
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "keyring")) {
+			keyring = (value != Py_None) ? PyUnicode_AsUTF8(value) : NULL;
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "tls_key")) {
+			tls_key = (value != Py_None) ? PyUnicode_AsUTF8(value) : NULL;
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "tls_key_identity")) {
+			tls_key_identity = (value != Py_None) ? PyUnicode_AsUTF8(value) : NULL;
+			continue;
+		}
+		if (!PyUnicode_CompareWithASCIIString(key, "persistent")) {
+			persistent = PyObject_IsTrue(value) ? true : false;
+			has_persistent = true;
+			continue;
+		}
+		PyErr_Format(PyExc_KeyError, "unknown ctrl config key: '%U'", key);
+		return -1;
+	}
+
+	if (hostnqn || hostid)
+		libnvmf_context_set_hostnqn(fctx, hostnqn, hostid);
+	if (hostkey || ctrlkey || keyring || tls_key || tls_key_identity)
+		libnvmf_context_set_crypto(fctx, hostkey, ctrlkey,
+					   keyring, tls_key,
+					   tls_key_identity);
+	if (has_persistent)
+		libnvmf_context_set_persistent(fctx, persistent);
+
+	return 0;
 }
 
+/******
+NBFT
+******/
+static PyObject *ssns_to_dict(struct libnbft_subsystem_ns *ss)
+{
+	unsigned int i;
+	PyObject *output = PyDict_New();
+	PyObject *hfis = PyList_New(ss->num_hfis);
+
+	for (i = 0; i < ss->num_hfis; i++)
+		PyList_SetItem(hfis, i, PyLong_FromLong(ss->hfis[i]->index - 1)); /* steals ref. to object - no need to decref */
+
+	PyDict_SetItemStringDecRef(output, "hfi_indexes", hfis);
+
+	PyDict_SetItemStringDecRef(output, "trtype", PyUnicode_FromString(ss->transport));
+	PyDict_SetItemStringDecRef(output, "traddr", PyUnicode_FromString(ss->traddr));
+	PyDict_SetItemStringDecRef(output, "trsvcid", PyUnicode_FromString(ss->trsvcid));
+	PyDict_SetItemStringDecRef(output, "subsys_port_id", PyLong_FromLong(ss->subsys_port_id));
+	PyDict_SetItemStringDecRef(output, "nsid", PyLong_FromLong(ss->nsid));
+
+	{
+		PyObject *nid;
+		switch (ss->nid_type) {
+		case LIBNBFT_NID_TYPE_EUI64:
+			PyDict_SetItemStringDecRef(output, "nid_type", PyUnicode_FromString("eui64"));
+			nid = PyUnicode_FromFormat("%02x%02x%02x%02x%02x%02x%02x%02x",
+						   ss->nid[0], ss->nid[1], ss->nid[2], ss->nid[3],
+						   ss->nid[4], ss->nid[5], ss->nid[6], ss->nid[7]);
+			break;
+
+		case LIBNBFT_NID_TYPE_NGUID:
+			PyDict_SetItemStringDecRef(output, "nid_type", PyUnicode_FromString("nguid"));
+			nid = PyUnicode_FromFormat("%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+						   ss->nid[0], ss->nid[1], ss->nid[2], ss->nid[3],
+						   ss->nid[4], ss->nid[5], ss->nid[6], ss->nid[7],
+						   ss->nid[8], ss->nid[9], ss->nid[10], ss->nid[11],
+						   ss->nid[12], ss->nid[13], ss->nid[14], ss->nid[15]);
+			break;
+
+		case LIBNBFT_NID_TYPE_NS_UUID:
+		{
+			char uuid_str[NVME_UUID_LEN_STRING];
+			PyDict_SetItemStringDecRef(output, "nid_type", PyUnicode_FromString("uuid"));
+			libnvme_uuid_to_string(ss->nid, uuid_str);
+			nid = PyUnicode_FromString(uuid_str);
+			break;
+		}
+
+		default:
+			nid = NULL;
+			break;
+		}
+		if (nid)
+			PyDict_SetItemStringDecRef(output, "nid", nid);
+	}
+
+	if (ss->subsys_nqn)
+		PyDict_SetItemStringDecRef(output, "subsys_nqn", PyUnicode_FromString(ss->subsys_nqn));
+
+	PyDict_SetItemStringDecRef(output, "controller_id", PyLong_FromLong(ss->controller_id));
+	PyDict_SetItemStringDecRef(output, "asqsz", PyLong_FromLong(ss->asqsz));
+
+	if (ss->dhcp_root_path_string)
+		PyDict_SetItemStringDecRef(output, "dhcp_root_path_string", PyUnicode_FromString(ss->dhcp_root_path_string));
+
+	PyDict_SetItemStringDecRef(output, "pdu_header_digest_required", PyBool_FromLong(ss->pdu_header_digest_required));
+	PyDict_SetItemStringDecRef(output, "data_digest_required", PyBool_FromLong(ss->data_digest_required));
+
+	return output;
+}
+
+static PyObject *hfi_to_dict(struct libnbft_hfi *hfi)
+{
+	PyObject *output = PyDict_New();
+
+	PyDict_SetItemStringDecRef(output, "trtype", PyUnicode_FromString(hfi->transport));
+
+	if (!strcmp(hfi->transport, "tcp")) {
+		PyDict_SetItemStringDecRef(output, "pcidev",
+					   PyUnicode_FromFormat("%x:%x:%x.%x",
+								((hfi->tcp_info.pci_sbdf & 0xffff0000) >> 16),
+								((hfi->tcp_info.pci_sbdf & 0x0000ff00) >> 8),
+								((hfi->tcp_info.pci_sbdf & 0x000000f8) >> 3),
+								((hfi->tcp_info.pci_sbdf & 0x00000007) >> 0)));
+
+		PyDict_SetItemStringDecRef(output, "mac_addr",
+					   PyUnicode_FromFormat("%02x:%02x:%02x:%02x:%02x:%02x",
+								hfi->tcp_info.mac_addr[0],
+								hfi->tcp_info.mac_addr[1],
+								hfi->tcp_info.mac_addr[2],
+								hfi->tcp_info.mac_addr[3],
+								hfi->tcp_info.mac_addr[4],
+								hfi->tcp_info.mac_addr[5]));
+
+		PyDict_SetItemStringDecRef(output, "vlan", PyLong_FromLong(hfi->tcp_info.vlan));
+		PyDict_SetItemStringDecRef(output, "ip_origin", PyLong_FromLong(hfi->tcp_info.ip_origin));
+		PyDict_SetItemStringDecRef(output, "ipaddr", PyUnicode_FromString(hfi->tcp_info.ipaddr));
+		PyDict_SetItemStringDecRef(output, "subnet_mask_prefix", PyLong_FromLong(hfi->tcp_info.subnet_mask_prefix));
+		PyDict_SetItemStringDecRef(output, "gateway_ipaddr", PyUnicode_FromString(hfi->tcp_info.gateway_ipaddr));
+		PyDict_SetItemStringDecRef(output, "route_metric", PyLong_FromLong(hfi->tcp_info.route_metric));
+		PyDict_SetItemStringDecRef(output, "primary_dns_ipaddr", PyUnicode_FromString(hfi->tcp_info.primary_dns_ipaddr));
+		PyDict_SetItemStringDecRef(output, "secondary_dns_ipaddr", PyUnicode_FromString(hfi->tcp_info.secondary_dns_ipaddr));
+		PyDict_SetItemStringDecRef(output, "dhcp_server_ipaddr", PyUnicode_FromString(hfi->tcp_info.dhcp_server_ipaddr));
+
+		if (hfi->tcp_info.host_name)
+			PyDict_SetItemStringDecRef(output, "host_name", PyUnicode_FromString(hfi->tcp_info.host_name));
+
+		PyDict_SetItemStringDecRef(output, "this_hfi_is_default_route", PyBool_FromLong(hfi->tcp_info.this_hfi_is_default_route));
+		PyDict_SetItemStringDecRef(output, "dhcp_override", PyBool_FromLong(hfi->tcp_info.dhcp_override));
+	}
+
+	return output;
+}
+
+static PyObject *discovery_to_dict(struct libnbft_discovery *disc)
+{
+	PyObject *output = PyDict_New();
+
+	if (disc->security)
+		PyDict_SetItemStringDecRef(output, "security_index", PyLong_FromLong(disc->security->index));
+	if (disc->hfi)
+		PyDict_SetItemStringDecRef(output, "hfi_index", PyLong_FromLong(disc->hfi->index - 1));
+	if (disc->uri)
+		PyDict_SetItemStringDecRef(output, "uri", PyUnicode_FromString(disc->uri));
+	if (disc->nqn)
+		PyDict_SetItemStringDecRef(output, "nqn", PyUnicode_FromString(disc->nqn));
+
+	return output;
+}
+
+static PyObject *nbft_to_pydict(struct libnbft_info *nbft)
+{
+	PyObject *val;
+	PyObject *output = PyDict_New();
+
+	{
+		PyObject *host = PyDict_New();
+
+		if (nbft->host.nqn)
+			PyDict_SetItemStringDecRef(host, "nqn", PyUnicode_FromString(nbft->host.nqn));
+		if (nbft->host.id) {
+			char uuid_str[NVME_UUID_LEN_STRING];
+			libnvme_uuid_to_string((unsigned char *)nbft->host.id, uuid_str);
+			PyDict_SetItemStringDecRef(host, "id", PyUnicode_FromString(uuid_str));
+		}
+
+		PyDict_SetItemStringDecRef(host, "host_id_configured", PyBool_FromLong(nbft->host.host_id_configured));
+		PyDict_SetItemStringDecRef(host, "host_nqn_configured", PyBool_FromLong(nbft->host.host_nqn_configured));
+
+		val = PyUnicode_FromString(nbft->host.primary == LIBNBFT_PRIMARY_ADMIN_HOST_FLAG_NOT_INDICATED ? "not indicated" :
+					   nbft->host.primary == LIBNBFT_PRIMARY_ADMIN_HOST_FLAG_UNSELECTED ? "unselected" :
+					   nbft->host.primary == LIBNBFT_PRIMARY_ADMIN_HOST_FLAG_SELECTED ? "selected" : "reserved");
+		PyDict_SetItemStringDecRef(host, "primary_admin_host_flag", val);
+
+		PyDict_SetItemStringDecRef(output, "host", host);
+	}
+
+	{
+		size_t ss_num = 0;
+		struct libnbft_subsystem_ns **ss;
+		PyObject *subsystem;
+
+		/* First, let's find how many entries there are */
+		for (ss = nbft->subsystem_ns_list; ss && *ss; ss++)
+			ss_num++;
+
+		/* Now, let's fill the list using "(*ss)->index - 1"
+		   as the index for writing to the list */
+		subsystem = PyList_New(ss_num);
+		for (ss = nbft->subsystem_ns_list; ss && *ss; ss++)
+			PyList_SetItem(subsystem, (*ss)->index - 1, ssns_to_dict(*ss)); /* steals ref. to object - no need to decref */
+
+		PyDict_SetItemStringDecRef(output, "subsystem", subsystem);
+	}
+
+	{
+		size_t hfi_num = 0;
+		struct libnbft_hfi **hfi;
+		PyObject *hfis;
+
+		/* First, let's find how many entries there are */
+		for (hfi = nbft->hfi_list; hfi && *hfi; hfi++)
+			hfi_num++;
+
+		/* Now, let's fill the list using "(*hfi)->index - 1"
+		   as the index for writing to the list */
+		hfis = PyList_New(hfi_num);
+		for (hfi = nbft->hfi_list; hfi && *hfi; hfi++)
+			PyList_SetItem(hfis, (*hfi)->index-1, hfi_to_dict(*hfi)); /* steals ref. to object - no need to decref */
+
+		PyDict_SetItemStringDecRef(output, "hfi", hfis);
+	}
+
+	{
+		size_t disc_num = 0;
+		struct libnbft_discovery **disc;
+		PyObject *discovery;
+
+		/* First, let's find how many entries there are */
+		for (disc = nbft->discovery_list; disc && *disc; disc++)
+			disc_num++;
+
+		/* Now, let's fill the list using "(*disc)->index - 1"
+		   as the index for writing to the list */
+		discovery = PyList_New(disc_num);
+		for (disc = nbft->discovery_list; disc && *disc; disc++)
+			PyList_SetItem(discovery, (*disc)->index - 1, discovery_to_dict(*disc)); /* steals ref. to object - no need to decref */
+
+		PyDict_SetItemStringDecRef(output, "discovery", discovery);
+	}
+
+	/* Security profiles are currently not implemented. */
+
+	return output;
+}
+
+PyObject *nbft_get(struct libnvme_global_ctx *ctx, const char * filename)
+{
+	struct libnbft_info *nbft;
+	PyObject *output;
+	int ret;
+
+	ret = libnvme_read_nbft(ctx, &nbft, filename);
+	if (ret) {
+		Py_RETURN_NONE;
+	}
+
+	output = nbft_to_pydict(nbft);
+	libnvme_free_nbft(ctx, nbft);
+	return output;
+}
+%} /* --------- end C implementation block --------- */
+
+//##############################################################################
+
+/* All typemaps must be defined before the %include statements below so that
+ * they are in scope when SWIG processes the struct and method declarations.
+ */
+
+/* Override SWIG's default char * struct-member setter.  SWIG's built-in
+ * uses memcpy(malloc(...)) which leaks the old value and triggers
+ * -Wdiscarded-qualifiers for const char *.  Use free + strdup instead.
+ */
+%typemap(memberin) char * {
+	free($1);
+	$1 = $input ? strdup($input) : NULL;
+}
+%typemap(memberin) const char * {
+	free((char *)$1);
+	$1 = $input ? strdup($input) : NULL;
+}
+
+/* Convert a Python dict to a struct libnvmf_context * automatically.
+ * arg1 is the libnvme_global_ctx * (first argument of the enclosing function).
+ * The context is created here and freed by %typemap(freearg) after the call.
+ */
+%typemap(in) struct libnvmf_context * (struct libnvmf_context *temp = NULL) {
+	if (!PyDict_Check($input)) {
+		PyErr_SetString(PyExc_TypeError,
+				"expected a dict for fabrics context argument");
+		SWIG_fail;
+	}
+	if (libnvmf_context_create(arg1, NULL, NULL, NULL, NULL, &temp)) {
+		PyErr_SetString(PyExc_RuntimeError,
+				"failed to create fabrics context");
+		SWIG_fail;
+	}
+	if (set_fctx_from_dict(temp, $input)) {
+		libnvmf_context_free(temp);
+		temp = NULL;
+		SWIG_fail;
+	}
+	$1 = temp;
+}
+
+%typemap(freearg) struct libnvmf_context * {
+	libnvmf_context_free($1);
+}
 
 %typemap(out) uint8_t [8] {
 	$result = PyBytes_FromStringAndSize((char *)$1, 8);
@@ -287,10 +742,79 @@ PyObject *read_hostid();
 	$result = obj;
 };
 
+// These %include statements must be located after the main %{...%} block and
+// all %typemap directives above, so that typemaps are in scope when SWIG
+// processes the struct and method declarations in the included files.
+%include "nvme-manual-bridges.i"
+%include "accessors.i"
+%include "accessors-fabrics.i"
+
+%exception libnvme_ctrl::connect {
+	connect_err = 0;
+	$action  /* $action sets connect_err to non-zero value on failure */
+	if (connect_err) {
+		const char *errstr = libnvme_errno_to_string(-connect_err);
+		if (errstr) {
+			SWIG_exception(SWIG_RuntimeError, errstr);
+		} else {
+			SWIG_exception(SWIG_RuntimeError, "Connect failed");
+		}
+	}
+}
+
+%exception libnvme_ctrl::disconnect {
+	connect_err = 0;
+	errno = 0;
+	$action  /* $action sets connect_err to non-zero value on failure */
+	if (connect_err == 1) {
+		SWIG_exception(SWIG_AttributeError, "No controller connection");
+	} else if (connect_err) {
+		const char *errstr = libnvme_errno_to_string(-connect_err);
+		if (errstr) {
+			SWIG_exception(SWIG_RuntimeError, errstr);
+		} else {
+			SWIG_exception(SWIG_RuntimeError, "Disconnect failed");
+		}
+	}
+}
+
+%exception libnvme_ctrl::discover {
+	discover_err = 0;
+	$action  /* $action sets discover_err to non-zero value on failure */
+	if (discover_err == 1) {
+		SWIG_exception(SWIG_AttributeError, "No controller connection");
+	} else if (discover_err) {
+		const char *errstr = libnvme_errno_to_string(-discover_err);
+		if (errstr) {
+			SWIG_exception(SWIG_RuntimeError, errstr);
+		} else {
+			SWIG_exception(SWIG_RuntimeError, "Discover failed");
+		}
+	}
+}
+
 #include "tree.h"
 #include "fabrics.h"
-#define STR_OR_NONE(str) (!(str) ? "None" : str)
 
+%feature("autodoc", "Read an NBFT binary table from disk.\n"
+		"\n"
+		"Args:\n"
+		"    filename: Path to the NBFT binary file.\n"
+		"\n"
+		"Returns:\n"
+		"    A dict containing the NBFT data, or None on failure.") nbft_get;
+PyObject *nbft_get(struct libnvme_global_ctx *ctx, const char * filename);
+
+%rename(_libnvme_first_host)        libnvme_first_host;
+%rename(_libnvme_next_host)         libnvme_next_host;
+%rename(_libnvme_first_subsystem)   libnvme_first_subsystem;
+%rename(_libnvme_next_subsystem)    libnvme_next_subsystem;
+%rename(_libnvme_subsystem_first_ctrl) libnvme_subsystem_first_ctrl;
+%rename(_libnvme_subsystem_next_ctrl)  libnvme_subsystem_next_ctrl;
+%rename(_libnvme_subsystem_first_ns)   libnvme_subsystem_first_ns;
+%rename(_libnvme_subsystem_next_ns)    libnvme_subsystem_next_ns;
+%rename(_libnvme_ctrl_first_ns)     libnvme_ctrl_first_ns;
+%rename(_libnvme_ctrl_next_ns)      libnvme_ctrl_next_ns;
 struct libnvme_host * libnvme_first_host(struct libnvme_global_ctx * ctx);
 struct libnvme_host * libnvme_next_host(struct libnvme_global_ctx *ctx, struct libnvme_host * h);
 struct libnvme_subsystem * libnvme_first_subsystem(struct libnvme_host * h);
@@ -302,245 +826,16 @@ struct libnvme_ns * libnvme_subsystem_next_ns(struct libnvme_subsystem * s, stru
 struct libnvme_ns * libnvme_ctrl_first_ns(struct libnvme_ctrl * c);
 struct libnvme_ns * libnvme_ctrl_next_ns(struct libnvme_ctrl * c, struct libnvme_ns * n);
 
-struct libnvme_global_ctx {
-	%immutable config_file;
-	%immutable application;
-	char *config_file;
-	char *application;
-};
-
-struct libnvme_host {
-	%immutable hostnqn;
-	%immutable hostid;
-	%immutable hostsymname;
-	char *hostnqn;
-	char *hostid;
-	char *hostsymname;
-	%extend {
-		char *dhchap_host_key;
-	}
-};
-
-struct libnvme_subsystem {
-	%immutable sysfs_dir;
-	%immutable subsysnqn;
-	%immutable model;
-	%immutable serial;
-	%immutable firmware;
-	%immutable subsystype;
-	%immutable iopolicy;
-	char *subsysnqn;
-	char *model;
-	char *serial;
-	char *firmware;
-	char *subsystype;
-
-	%extend {
-		const char *sysfs_dir;
-		const char *application;
-		const char *iopolicy;
-	}
-};
-
-struct libnvme_ctrl {
-	%immutable name;
-	%immutable subsystem;
-	%immutable state;
-	%immutable sysfs_dir;
-	%immutable address;
-	%immutable firmware;
-	%immutable model;
-	%immutable numa_node;
-	%immutable queue_count;
-	%immutable serial;
-	%immutable sqsize;
-	%immutable transport;
-	%immutable subsysnqn;
-	%immutable traddr;
-	%immutable trsvcid;
-	%immutable cntrltype;
-	%immutable cntlid;
-	%immutable dctype;
-	%immutable phy_slot;
-	%immutable discovered;
-
-	const char *cntrltype;  // Do not put in %extend because there's no getter method in libnvme.map
-	const char *dctype;     // Do not put in %extend because there's no getter method in libnvme.map
-	const bool discovered;  // Do not put in %extend because there's no getter method in libnvme.map
-
-	%extend {
-		/**
-		 * By putting these attributes in an %extend block, we're
-		 * forcing SWIG to invoke getter/setter methods instead of
-		 * accessing the members directly.
-		 *
-		 * For example, SWIG will generate code like this:
-		 *    name = libnvme_ctrl_name_get(ctrl)
-		 *
-		 * instead of that:
-		 *    name = ctrl->name
-		 */
-		const char *name;
-		const char *state;
-		const char *sysfs_dir;
-		const char *address;
-		const char *firmware;
-		const char *model;
-		const char *numa_node;
-		const char *queue_count;
-		const char *serial;
-		const char *sqsize;
-		const char *transport;
-		const char *subsysnqn;
-		const char *traddr;
-		const char *trsvcid;
-		const char *cntlid;
-		const char *phy_slot;
-
-		bool unique_discovery_ctrl;
-		bool discovery_ctrl;
-		bool persistent;
-
-		char *keyring;
-		char *tls_key_identity;
-		char *tls_key;
-
-		char *dhchap_host_key;
-		char *dhchap_ctrl_key;
-
-		/**
-		 * We are remapping the following member(s) of the C code's
-		 * libnvme_ctrl_t to different name(s) in Python. Here's the
-		 * mapping:
-		 *
-		 * C code                 Python (SWIG)
-		 * =====================  =====================
-		 * ctrl->s                ctrl->subsystem
-		 */
-		struct libnvme_subsystem *subsystem; // Maps to "s" in the C code
-	}
-};
-
-struct libnvme_ns {
-	%immutable nsid;
-	%immutable eui64;
-	%immutable nguid;
-	%immutable uuid;
-	unsigned int nsid;
-	uint8_t eui64[8];
-	uint8_t nguid[16];
-	uint8_t uuid[16];
-};
-
-/*
- * %rename directives give the %extend methods Python-friendly names while
- * using distinct C-level names (fctx_*) that do not collide with the public
- * libnvmf_context_* API declarations in fabrics.h.  Without this, SWIG would
- * emit SWIGINTERN libnvmf_context_set_hostnqn() which clashes with the
- * non-static extern of the same name.
- */
-%rename(set_hostnqn)        libnvmf_context::fctx_set_hostnqn;
-%rename(set_connection)     libnvmf_context::fctx_set_connection;
-%rename(set_persistent)     libnvmf_context::fctx_set_persistent;
-%rename(set_device)         libnvmf_context::fctx_set_device;
-
-struct libnvmf_context {};
-
-%extend libnvmf_context {
-	libnvmf_context(struct libnvme_global_ctx *ctx) {
-		struct libnvmf_context *fctx;
-		int err;
-
-		err = libnvmf_context_create(ctx, NULL, NULL, NULL, NULL, &fctx);
-		if (err)
-			return NULL;
-
-		return fctx;
-	}
-	~libnvmf_context() {
-		libnvmf_context_free($self);
-	}
-	int fctx_set_hostnqn(const char *hostnqn, const char *hostid = NULL) {
-		return libnvmf_context_set_hostnqn($self, hostnqn, hostid);
-	}
-	int fctx_set_connection(const char *subsysnqn, const char *transport,
-				const char *traddr = NULL, const char *trsvcid = NULL,
-				const char *host_traddr = NULL,
-				const char *host_iface = NULL) {
-		return libnvmf_context_set_connection($self, subsysnqn, transport,
-					      traddr, trsvcid,
-					      host_traddr, host_iface);
-	}
-	int fctx_set_persistent(bool persistent) {
-		return libnvmf_context_set_persistent($self, persistent);
-	}
-	int fctx_set_device(const char *device) {
-		return libnvmf_context_set_device($self, device);
-	}
-	void fctx_set_fabrics_config(PyObject *dict) {
-		Py_ssize_t pos = 0;
-		PyObject *key, *value;
-
-		if (!PyDict_Check(dict)) {
-			PyErr_SetString(PyExc_TypeError,
-					"set_fabrics_config: argument must be a dict");
-			return;
-		}
-
-		while (PyDict_Next(dict, &pos, &key, &value)) {
-			if (!PyUnicode_CompareWithASCIIString(key, "nr_io_queues")) {
-				$self->cfg.nr_io_queues = PyLong_AsLong(value);
-				continue;
-			}
-			if (!PyUnicode_CompareWithASCIIString(key, "reconnect_delay")) {
-				$self->cfg.reconnect_delay = PyLong_AsLong(value);
-				continue;
-			}
-			if (!PyUnicode_CompareWithASCIIString(key, "ctrl_loss_tmo")) {
-				$self->cfg.ctrl_loss_tmo = PyLong_AsLong(value);
-				continue;
-			}
-			if (!PyUnicode_CompareWithASCIIString(key, "keep_alive_tmo")) {
-				$self->cfg.keep_alive_tmo = PyLong_AsLong(value);
-				continue;
-			}
-			if (!PyUnicode_CompareWithASCIIString(key, "nr_write_queues")) {
-				$self->cfg.nr_write_queues = PyLong_AsLong(value);
-				continue;
-			}
-			if (!PyUnicode_CompareWithASCIIString(key, "nr_poll_queues")) {
-				$self->cfg.nr_poll_queues = PyLong_AsLong(value);
-				continue;
-			}
-			if (!PyUnicode_CompareWithASCIIString(key, "tos")) {
-				$self->cfg.tos = PyLong_AsLong(value);
-				continue;
-			}
-			if (!PyUnicode_CompareWithASCIIString(key, "duplicate_connect")) {
-				$self->cfg.duplicate_connect =
-					PyObject_IsTrue(value) ? true : false;
-				continue;
-			}
-			if (!PyUnicode_CompareWithASCIIString(key, "disable_sqflow")) {
-				$self->cfg.disable_sqflow =
-					PyObject_IsTrue(value) ? true : false;
-				continue;
-			}
-			if (!PyUnicode_CompareWithASCIIString(key, "hdr_digest")) {
-				$self->cfg.hdr_digest =
-					PyObject_IsTrue(value) ? true : false;
-				continue;
-			}
-			if (!PyUnicode_CompareWithASCIIString(key, "data_digest")) {
-				$self->cfg.data_digest =
-					PyObject_IsTrue(value) ? true : false;
-				continue;
-			}
-		}
-	}
-};
-
 %extend libnvme_global_ctx {
+	%feature("autodoc", "__init__(self, config_file=None)\n"
+		"\n"
+		"Create the root context for the libnvme device tree.\n"
+		"\n"
+		"Scans the NVMe topology and loads configuration on creation.\n"
+		"Supports use as a context manager (``with GlobalCtx() as ctx:``).\n"
+		"\n"
+		"Args:\n"
+		"    config_file: Path to a JSON config file, or None for defaults.") libnvme_global_ctx;
 	libnvme_global_ctx(const char *config_file = NULL) {
 		struct libnvme_global_ctx *ctx;
 
@@ -562,6 +857,10 @@ struct libnvmf_context {};
 	struct libnvme_global_ctx* __exit__(PyObject *type, PyObject *value, PyObject *traceback) {
 		return $self;
 	}
+	%feature("autodoc", "Set the libnvme logging verbosity.\n"
+		"\n"
+		"Args:\n"
+		"    level: One of 'debug', 'info', 'warning', or 'err'.") log_level;
 	void log_level(const char *level) {
 		int log_level = LIBNVME_DEFAULT_LOGLEVEL;
 		if (!strcmp(level, "debug")) log_level = LIBNVME_LOG_DEBUG;
@@ -572,12 +871,13 @@ struct libnvmf_context {};
 	}
 	%pythoncode %{
 	def hosts(self):
-	    """Iterator over all host objects"""
-	    h = libnvme_first_host(self)
+	    """Yield each Host in this context."""
+	    h = _libnvme_first_host(self)
 	    while h:
 	        yield h
-	        h = libnvme_next_host(self, h)
+	        h = _libnvme_next_host(self, h)
 	%}
+	%feature("autodoc", "Rescan the NVMe topology and update the device tree.") refresh_topology;
 	void refresh_topology() {
 		libnvme_refresh_topology($self);
 	}
@@ -587,14 +887,6 @@ struct libnvmf_context {};
 }
 
 
-%define SET_SYMNAME_DOCSTRING
-"@brief Set or Clear Host's Symbolic Name
-
-@param hostsymname: A symbolic name, or None to clear the symbolic name.
-@type hostsymname: str|None
-
-@return: None"
-%enddef
 
 %pythonappend libnvme_host::libnvme_host(struct libnvme_global_ctx *ctx,
 				   const char *hostnqn,
@@ -603,18 +895,32 @@ struct libnvmf_context {};
 				   const char *hostsymname) {
 	self.__parent = ctx  # Keep a reference to parent to ensure garbage collection happens in the right order}
 %extend libnvme_host {
+	%feature("autodoc", "__init__(self, ctx, hostnqn=None, hostid=None, hostkey=None, hostsymname=None)\n"
+		"\n"
+		"Create a host (initiator) identity object.\n"
+		"\n"
+		"Supports use as a context manager (``with Host(ctx) as h:``).\n"
+		"\n"
+		"Args:\n"
+		"    ctx:         Global context.\n"
+		"    hostnqn:     Host NQN. Defaults to the system-wide value.\n"
+		"    hostid:      Host UUID. Defaults to the system-wide value.\n"
+		"    hostkey:     DH-HMAC-CHAP host key.\n"
+		"    hostsymname: Symbolic host name.") libnvme_host;
 	libnvme_host(struct libnvme_global_ctx *ctx,
-		  const char *hostnqn = NULL,
-		  const char *hostid = NULL,
-		  const char *hostkey = NULL,
-		  const char *hostsymname = NULL) {
+		     const char *hostnqn = NULL,
+		     const char *hostid = NULL,
+		     const char *hostkey = NULL,
+		     const char *hostsymname = NULL) {
 		libnvme_host_t h;
+
 		if (libnvme_get_host(ctx, hostnqn, hostid, &h))
 			return NULL;
 		if (hostsymname)
 			libnvme_host_set_hostsymname(h, hostsymname);
 		if (hostkey)
 			libnvme_host_set_dhchap_host_key(h, hostkey);
+
 		return h;
 	}
 	~libnvme_host() {
@@ -626,32 +932,19 @@ struct libnvmf_context {};
 	struct libnvme_host* __exit__(PyObject *type, PyObject *value, PyObject *traceback) {
 		return $self;
 	}
-	%feature("autodoc", SET_SYMNAME_DOCSTRING) set_symname;
-	void set_symname(const char *hostsymname) {
-		libnvme_host_set_hostsymname($self, hostsymname);
-	}
-
 	PyObject* __str__() {
-		return PyUnicode_FromFormat("nvme.host(%s,%s)", STR_OR_NONE($self->hostnqn), STR_OR_NONE($self->hostid));
+		return PyUnicode_FromFormat("nvme.Host(%s,%s)", STR_OR_NONE($self->hostnqn), STR_OR_NONE($self->hostid));
 	}
 	%pythoncode %{
 	def subsystems(self):
-	    """Iterator over all subsystem objects"""
-	    s = libnvme_first_subsystem(self)
+	    """Yield each Subsystem under this host."""
+	    s = _libnvme_first_subsystem(self)
 	    while s:
 	        yield s
-	        s = libnvme_next_subsystem(self, s)
+	        s = _libnvme_next_subsystem(self, s)
 	%}
 }
 
-%{
-	const char *libnvme_host_dhchap_host_key_get(struct libnvme_host *h) {
-		return libnvme_host_get_dhchap_host_key(h);
-	}
-	void libnvme_host_dhchap_host_key_set(struct libnvme_host *h, char *key) {
-		libnvme_host_set_dhchap_host_key(h, key);
-	}
-%};
 
 %pythonappend libnvme_subsystem::libnvme_subsystem(struct libnvme_global_ctx *ctx,
 					     struct libnvme_host *host,
@@ -659,10 +952,19 @@ struct libnvmf_context {};
 					     const char *name) {
     self.__parent = host  # Keep a reference to parent to ensure garbage collection happens in the right order}
 %extend libnvme_subsystem {
+	%feature("autodoc", "__init__(self, ctx, host, subsysnqn, name=None)\n"
+		"\n"
+		"Look up or create a subsystem entry under the given host.\n"
+		"\n"
+		"Args:\n"
+		"    ctx:       Global context.\n"
+		"    host:      Parent Host object.\n"
+		"    subsysnqn: Subsystem NQN.\n"
+		"    name:      Optional subsystem device name.") libnvme_subsystem;
 	libnvme_subsystem(struct libnvme_global_ctx *ctx,
-		       struct libnvme_host *host,
-		       const char *subsysnqn,
-		       const char *name = NULL) {
+			  struct libnvme_host *host,
+			  const char *subsysnqn,
+			  const char *name = NULL) {
 		struct libnvme_subsystem *s;
 
 		if (libnvme_get_subsystem(ctx, host, name, subsysnqn, &s))
@@ -680,62 +982,122 @@ struct libnvmf_context {};
 		return $self;
 	}
 	PyObject *__str__() {
-		return PyUnicode_FromFormat("nvme.subsystem(%s,%s)", STR_OR_NONE($self->name), STR_OR_NONE($self->subsysnqn));
+		return PyUnicode_FromFormat("nvme.Subsystem(%s,%s)", STR_OR_NONE($self->name), STR_OR_NONE($self->subsysnqn));
 	}
 	%pythoncode %{
 	def controllers(self):
-	    """Iterator over all controller objects"""
-	    c = libnvme_subsystem_first_ctrl(self)
+	    """Yield each Ctrl under this subsystem."""
+	    c = _libnvme_subsystem_first_ctrl(self)
 	    while c:
 	        yield c
-	        c = libnvme_subsystem_next_ctrl(self, c)
+	        c = _libnvme_subsystem_next_ctrl(self, c)
 	%}
 	%pythoncode %{
 	def namespaces(self):
-	    """Iterator over all namespace objects"""
-	    ns = libnvme_subsystem_first_ns(self)
+	    """Yield each Namespace under this subsystem."""
+	    ns = _libnvme_subsystem_first_ns(self)
 	    while ns:
 	        yield ns
-	        ns = libnvme_subsystem_next_ns(self, ns)
+	        ns = _libnvme_subsystem_next_ns(self, ns)
 	%}
-	%immutable name;
-	const char *name;
 	%immutable host;
 	struct libnvme_host *host;
 }
 
-%{
-	const char *libnvme_subsystem_name_get(struct libnvme_subsystem *s) {
-		return libnvme_subsystem_get_name(s);
-	}
-	struct libnvme_host *libnvme_subsystem_host_get(struct libnvme_subsystem *s) {
-		return libnvme_subsystem_get_host(s);
-	}
-	const char *libnvme_subsystem_sysfs_dir_get(struct libnvme_subsystem *s) {
-		return libnvme_subsystem_get_sysfs_dir(s);
-	}
-	const char *libnvme_subsystem_iopolicy_get(struct libnvme_subsystem *s) {
-		return libnvme_subsystem_get_iopolicy(s);
-	}
-	const char *libnvme_subsystem_application_get(struct libnvme_subsystem *s) {
-		return libnvme_subsystem_get_application(s);
-	}
-	void libnvme_subsystem_application_set(struct libnvme_subsystem *s, const char *a) {
-		libnvme_subsystem_set_application(s, a);
-	}
-%};
 
-%pythonappend libnvme_ctrl::connect(struct libnvme_host *h,
-				 struct libnvmf_context *fctx) {
+%pythonappend libnvme_ctrl::connect(struct libnvme_host *h) {
     self.__host = h  # Keep a reference to parent to ensure ctrl obj gets GCed before host}
-%pythonappend libnvme_ctrl::init(struct libnvme_host *h, int instance) {
+%pythonappend libnvme_ctrl::load_from_device(struct libnvme_host *h, int instance) {
     self.__host = h  # Keep a reference to parent to ensure ctrl obj gets GCed before host}
 %extend libnvme_ctrl {
-	libnvme_ctrl(struct libnvme_global_ctx *ctx,
-		  struct libnvmf_context *fctx) {
+	%feature("autodoc", "__init__(self, ctx, cfg)\n"
+		"\n"
+		"Create a new NVMe-oF controller object.\n"
+		"\n"
+		"``cfg`` is a flat dict — all keys are at the top level, no nesting.\n"
+		"An unknown key raises KeyError immediately.\n"
+		"\n"
+		"  cfg keys:\n"
+		"\n"
+		"    Required:\n"
+		"      subsysnqn (str)  -- Subsystem NQN\n"
+		"      transport (str)  -- Transport type: 'tcp', 'rdma', 'loop', 'fc'\n"
+		"\n"
+		"    Connection (optional):\n"
+		"      traddr (str)       -- Transport address\n"
+		"      trsvcid (str)      -- Service ID (port number)\n"
+		"      host_traddr (str)  -- Host transport address\n"
+		"      host_iface (str)   -- Host network interface\n"
+		"\n"
+		"    Fabrics config (optional):\n"
+		"      queue_size (int)             -- IO queue entries\n"
+		"      nr_io_queues (int)           -- Number of IO queues\n"
+		"      reconnect_delay (int)        -- Reconnect interval in seconds\n"
+		"      ctrl_loss_tmo (int)          -- Controller loss timeout in seconds\n"
+		"      fast_io_fail_tmo (int)       -- Fast I/O fail timeout in seconds\n"
+		"      keep_alive_tmo (int)         -- Keep-alive timeout in seconds\n"
+		"      nr_write_queues (int)        -- Queues reserved for writes only\n"
+		"      nr_poll_queues (int)         -- Queues reserved for polling\n"
+		"      tos (int)                    -- Type of service\n"
+		"      keyring_id (int)             -- Keyring ID for key lookup\n"
+		"      tls_key_id (int)             -- TLS PSK key ID\n"
+		"      tls_configured_key_id (int)  -- TLS PSK key ID for connect command\n"
+		"      duplicate_connect (bool)     -- Allow duplicate connections\n"
+		"      disable_sqflow (bool)        -- Disable SQ flow control\n"
+		"      hdr_digest (bool)            -- Header digest (TCP only)\n"
+		"      data_digest (bool)           -- Data digest (TCP only)\n"
+		"      tls (bool)                   -- Enable TLS (TCP only)\n"
+		"      concat (bool)                -- Secure concatenation (TCP only)\n"
+		"\n"
+		"    Host identity (optional):\n"
+		"      hostnqn (str)  -- Host NQN, overrides the system-wide default\n"
+		"      hostid (str)   -- Host ID, overrides the system-wide default\n"
+		"\n"
+		"    Authentication and TLS (optional):\n"
+		"      hostkey (str)           -- Host DH-HMAC-CHAP key\n"
+		"      ctrlkey (str)           -- Controller DH-HMAC-CHAP key\n"
+		"      keyring (str)           -- Keyring identifier\n"
+		"      tls_key (str)           -- TLS key, or 'pin:<value>' for PIN-derived key\n"
+		"      tls_key_identity (str)  -- TLS key identity string\n"
+		"\n"
+		"    Persistence (optional):\n"
+		"      persistent (bool)  -- Keep connection alive after process exit\n"
+		"\n"
+		"  Examples::\n"
+		"\n"
+		"    import nvme\n"
+		"\n"
+		"    ctx = nvme.GlobalCtx()\n"
+		"\n"
+		"    # Discover controllers at a remote target\n"
+		"    with nvme.Ctrl(ctx, {\n"
+		"        'subsysnqn': 'nqn.2014-08.org.nvmexpress.discovery',\n"
+		"        'transport': 'tcp',\n"
+		"        'traddr':    '192.168.1.100',\n"
+		"        'trsvcid':   '8009',\n"
+		"    }) as c:\n"
+		"        log = c.discover()\n"
+		"\n"
+		"    # Connect to a subsystem with TLS and header digest\n"
+		"    host = nvme.Host(ctx)\n"
+		"    with nvme.Ctrl(ctx, {\n"
+		"        'subsysnqn':  'nqn.2019-08.org.nvmexpress:uuid:...',\n"
+		"        'transport':  'tcp',\n"
+		"        'traddr':     '192.168.1.100',\n"
+		"        'trsvcid':    '4420',\n"
+		"        'hdr_digest': True,\n"
+		"        'tls':        True,\n"
+		"    }) as c:\n"
+		"        c.connect(host)\n"
+	) libnvme_ctrl;
+	libnvme_ctrl(struct libnvme_global_ctx *ctx, struct libnvmf_context *fctx) {
 		struct libnvme_ctrl *c;
-		if (libnvmf_create_ctrl(ctx, fctx, &c))
+
+		if (libnvmf_create_ctrl(ctx, fctx, &c)) {
+			PyErr_SetString(PyExc_RuntimeError,
+					"failed to create ctrl");
 			return NULL;
+		}
 		return c;
 	}
 	~libnvme_ctrl() {
@@ -750,19 +1112,34 @@ struct libnvmf_context {};
 		return $self;
 	}
 
-	bool init(struct libnvme_host *h, int instance) {
+	%feature("autodoc", "Bind this controller object to an existing kernel NVMe device.\n"
+		"\n"
+		"Associates the object with the kernel device identified by\n"
+		"``instance`` (e.g. 0 for /dev/nvme0).\n"
+		"\n"
+		"Args:\n"
+		"    h:        Host object.\n"
+		"    instance: Kernel device instance number.\n"
+		"\n"
+		"Returns:\n"
+		"    True on success, False on failure.") load_from_device;
+	bool load_from_device(struct libnvme_host *h, int instance) {
 		return libnvme_init_ctrl(h, $self, instance) == 0;
 	}
 
+	%feature("autodoc", "Connect this controller to an NVMe-oF target.\n"
+		"\n"
+		"Establishes the kernel connection. This call may block while\n"
+		"performing network operations. Other Python threads continue\n"
+		"to run during this time.\n"
+		"\n"
+		"Args:\n"
+		"    h: Host object to associate with the connection.\n"
+		"\n"
+		"Raises:\n"
+		"    RuntimeError: Connection failed.") connect;
 	void connect(struct libnvme_host *h) {
 		int ret;
-		const char *dev;
-
-		dev = libnvme_ctrl_get_name($self);
-		if (dev && $self->cfg.duplicate_connect) {
-			connect_err = -ENVME_CONNECT_ALREADY;
-			return;
-		}
 
 		Py_BEGIN_ALLOW_THREADS  /* Release Python GIL */
 		ret = libnvmf_add_ctrl(h, $self);
@@ -773,12 +1150,15 @@ struct libnvmf_context {};
 			return;
 		}
 	}
-	bool connected() {
-		return libnvme_ctrl_get_name($self) != NULL;
-	}
+	%feature("autodoc", "Rescan this controller and refresh its namespace list.") rescan;
 	void rescan() {
 		libnvme_rescan_ctrl($self);
 	}
+	%feature("autodoc", "Disconnect this controller from the NVMe-oF target.\n"
+		"\n"
+		"Raises:\n"
+		"    AttributeError: Controller is not currently connected.\n"
+		"    RuntimeError: Disconnect failed.") disconnect;
 	void disconnect() {
 		int ret;
 		const char *dev;
@@ -795,13 +1175,28 @@ struct libnvmf_context {};
 			connect_err = 2;
 	}
 
-	%feature("autodoc", "@return: True if controller supports explicit registration. False otherwise.") is_registration_supported;
-	bool is_registration_supported() {
+	bool _registration_supported() {
 		return libnvmf_is_registration_supported($self);
 	}
+	bool _connected() {
+		return libnvme_ctrl_get_name($self) != NULL;
+	}
+	%pythoncode %{
+	@property
+	def connected(self):
+		"""True if this controller is currently connected."""
+		return self._connected()
+	@property
+	def registration_supported(self):
+		"""True if this controller supports explicit host registration."""
+		return self._registration_supported()
+	%}
 
-	%feature("autodoc", "@return None on success or Error string on error.") registration_ctlr;
-	PyObject *registration_ctlr(enum nvmf_dim_tas tas) {
+	%feature("autodoc", "Register this controller with the NVMe-oF DIM service.\n"
+		"\n"
+		"Returns:\n"
+		"    None on success, or an error string describing the failure.") registration_control;
+	PyObject *registration_control(enum nvmf_dim_tas tas) {
 		__u32 result;
 		int   status;
 
@@ -809,17 +1204,35 @@ struct libnvmf_context {};
 		    status = libnvmf_register_ctrl($self, NVMF_DIM_TAS_REGISTER, &result);
 		Py_END_ALLOW_THREADS    /* Reacquire Python GIL */
 
-			if (status != NVME_SC_SUCCESS) {
-				/* On error, return an error message */
-				return (status < 0) ?
-				       PyUnicode_FromFormat("Status:0x%04x - %s", status, libnvme_status_to_string(status, false)) :
-				       PyUnicode_FromFormat("Result:0x%04x, Status:0x%04x - %s", result, status, libnvme_status_to_string(status, false));
-			}
+		if (status != NVME_SC_SUCCESS) {
+			/* On error, return an error message */
+			return (status < 0) ?
+			    PyUnicode_FromFormat("Status:0x%04x - %s", status, libnvme_status_to_string(status, false)) :
+			    PyUnicode_FromFormat("Result:0x%04x, Status:0x%04x - %s", result, status, libnvme_status_to_string(status, false));
+		}
 
 		/* On success, return None */
 		Py_RETURN_NONE;
 	}
 
+	%feature("autodoc", "Retrieve the discovery log page from a connected discovery controller.\n"
+		"\n"
+		"This call may block while performing network operations.\n"
+		"Other Python threads continue to run during this time.\n"
+		"\n"
+		"Args:\n"
+		"    lsp:         Log Specific Parameter (default 0).\n"
+		"    max_retries: Maximum number of retries (default 6).\n"
+		"\n"
+		"Returns:\n"
+		"    A list of discovery log entries. Each entry is a dictionary\n"
+		"    describing a reachable controller or referral, with keys such\n"
+		"    as ``trtype``, ``traddr``, ``trsvcid``, ``subnqn``, and\n"
+		"    ``subtype``.\n"
+		"\n"
+		"Raises:\n"
+		"    AttributeError: Controller is not connected.\n"
+		"    RuntimeError: Discovery failed.") discover;
 	%newobject discover;
 	struct nvmf_discovery_log *discover(int lsp = 0, int max_retries = 6) {
 		struct nvmf_discovery_log *logp = NULL;
@@ -843,7 +1256,14 @@ struct libnvmf_context {};
 		return logp;
 	}
 
-	%feature("autodoc", "@return: List of supported log pages") supported_log_pages;
+	%feature("autodoc", "Fetch the Supported Log Pages log.\n"
+		"\n"
+		"Args:\n"
+		"    rae: Retain Asynchronous Events (default True).\n"
+		"\n"
+		"Returns:\n"
+		"    A list of integers, one per Log Identifier, encoding its\n"
+		"    supported features. Returns None if the command fails.") supported_log_pages;
 	PyObject *supported_log_pages(bool rae = true) {
 		struct nvme_supported_log_pages log;
 		struct libnvme_passthru_cmd cmd;
@@ -870,159 +1290,32 @@ struct libnvmf_context {};
 
 	PyObject* __str__() {
 		return $self->address ?
-		       PyUnicode_FromFormat("libnvme_ctrl(transport=%s,%s)", STR_OR_NONE($self->transport), STR_OR_NONE($self->address)) :
-		       PyUnicode_FromFormat("libnvme_ctrl(transport=%s)", STR_OR_NONE($self->transport));
+		       PyUnicode_FromFormat("nvme.Ctrl(transport=%s,%s)", STR_OR_NONE($self->transport), STR_OR_NONE($self->address)) :
+		       PyUnicode_FromFormat("nvme.Ctrl(transport=%s)", STR_OR_NONE($self->transport));
 	}
 
 	%pythoncode %{
 	def namespaces(self):
-	    """Iterator over all namespace objects"""
-	    ns = libnvme_ctrl_first_ns(self)
+	    """Yield each Namespace under this controller."""
+	    ns = _libnvme_ctrl_first_ns(self)
 	    while ns:
 	        yield ns
-	        ns = libnvme_ctrl_next_ns(self, ns)
+	        ns = _libnvme_ctrl_next_ns(self, ns)
 	%}
 }
 
-%{
-	/**********************************************************************
-	 * SWIG automatically generates getter and setter methods using
-	 * the syntax: [class]_[member]_[get|set]. These need to be mapped
-	 * to the matching methods in libnvme (i.e. those that are defined
-	 * publicly in libnvme.map). Typically, we get the following mapping:
-	 *
-	 * SWIG                       libnvme.map
-	 * ======================     =======================
-	 * libnvme_ctrl_[member]_get  -> libnvme_ctrl_get_[member]
-	 * libnvme_ctrl_[member]_set  -> libnvme_ctrl_set_[member]
-	 *
-	 */
-
-	const char *libnvme_ctrl_name_get(struct libnvme_ctrl *c) {
-		return libnvme_ctrl_get_name(c);
-	}
-	struct libnvme_subsystem *libnvme_ctrl_subsystem_get(struct libnvme_ctrl *c) {
-		return libnvme_ctrl_get_subsystem(c);
-	}
-	const char *libnvme_ctrl_state_get(struct libnvme_ctrl *c) {
-		return libnvme_ctrl_get_state(c);
-	}
-	const char *libnvme_ctrl_dhchap_ctrl_key_get(struct libnvme_ctrl *c) {
-		return libnvme_ctrl_get_dhchap_ctrl_key(c);
-	}
-	void libnvme_ctrl_dhchap_ctrl_key_set(struct libnvme_ctrl *c, const char *key) {
-		libnvme_ctrl_set_dhchap_ctrl_key(c, key);
-	}
-	const char *libnvme_ctrl_dhchap_host_key_get(struct libnvme_ctrl *c) {
-		return libnvme_ctrl_get_dhchap_host_key(c);
-	}
-	void libnvme_ctrl_dhchap_host_key_set(struct libnvme_ctrl *c, const char *key) {
-		libnvme_ctrl_set_dhchap_host_key(c, key);
-	}
-
-	const char *libnvme_ctrl_cntlid_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_cntlid(c);
-	}
-
-	bool libnvme_ctrl_persistent_get(struct libnvme_ctrl *c) {
-		return libnvme_ctrl_get_persistent(c);
-	}
-	void libnvme_ctrl_persistent_set(struct libnvme_ctrl *c, bool persistent) {
-		libnvme_ctrl_set_persistent(c, persistent);
-	}
-
-	const char *libnvme_ctrl_phy_slot_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_phy_slot(c);
-	}
-
-	const char *libnvme_ctrl_trsvcid_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_trsvcid(c);
-	}
-
-	const char *libnvme_ctrl_traddr_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_traddr(c);
-	}
-
-	const char *libnvme_ctrl_subsysnqn_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_subsysnqn(c);
-	}
-
-	const char *libnvme_ctrl_transport_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_transport(c);
-	}
-
-	const char *libnvme_ctrl_sqsize_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_sqsize(c);
-	}
-
-	const char *libnvme_ctrl_serial_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_serial(c);
-	}
-
-	const char *libnvme_ctrl_queue_count_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_queue_count(c);
-	}
-
-	const char *libnvme_ctrl_numa_node_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_numa_node(c);
-	}
-
-	const char *libnvme_ctrl_model_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_model(c);
-	}
-
-	const char *libnvme_ctrl_firmware_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_firmware(c);
-	}
-
-	const char *libnvme_ctrl_address_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_traddr(c);
-	}
-
-	const char *libnvme_ctrl_sysfs_dir_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_sysfs_dir(c);
-	}
-
-	bool libnvme_ctrl_discovery_ctrl_get(struct libnvme_ctrl *c) {
-		return libnvme_ctrl_get_discovery_ctrl(c);
-	}
-	void libnvme_ctrl_discovery_ctrl_set(struct libnvme_ctrl *c, bool discovery) {
-		libnvme_ctrl_set_discovery_ctrl(c, discovery);
-	}
-
-	bool libnvme_ctrl_unique_discovery_ctrl_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_unique_discovery_ctrl(c);
-	}
-	void libnvme_ctrl_unique_discovery_ctrl_set(libnvme_ctrl_t c, bool unique) {
-		libnvme_ctrl_set_unique_discovery_ctrl(c, unique);
-	}
-
-	const char *libnvme_ctrl_keyring_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_keyring(c);
-	}
-	void libnvme_ctrl_keyring_set(libnvme_ctrl_t c, const char *keyring) {
-		libnvme_ctrl_set_keyring(c, keyring);
-	}
-
-	const char *libnvme_ctrl_tls_key_identity_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_tls_key_identity(c);
-	}
-	void libnvme_ctrl_tls_key_identity_set(libnvme_ctrl_t c, const char *identity) {
-		libnvme_ctrl_set_tls_key_identity(c, identity);
-	}
-
-	const char *libnvme_ctrl_tls_key_get(libnvme_ctrl_t c) {
-		return libnvme_ctrl_get_tls_key(c);
-	}
-	void libnvme_ctrl_tls_key_set(libnvme_ctrl_t c, const char *key) {
-		libnvme_ctrl_set_tls_key(c, key);
-	}
-%}
 
 %pythonappend libnvme_ns::libnvme_ns(struct libnvme_subsystem *s,
 			       unsigned int nsid) {
     self.__parent = s  # Keep a reference to parent to ensure garbage collection happens in the right order}
 %extend libnvme_ns {
+	%feature("autodoc", "__init__(self, subsystem, nsid)\n"
+		"\n"
+		"Look up a namespace by ID within a subsystem.\n"
+		"\n"
+		"Args:\n"
+		"    subsystem: Parent Subsystem object.\n"
+		"    nsid:      Namespace identifier.") libnvme_ns;
 	libnvme_ns(struct libnvme_subsystem *s,
 		unsigned int nsid) {
 		return libnvme_subsystem_lookup_namespace(s, nsid);
@@ -1037,255 +1330,10 @@ struct libnvmf_context {};
 		return $self;
 	}
 	PyObject *__str__() {
-		return PyUnicode_FromFormat("nvme.ns(%u)", $self->nsid);
+		return PyUnicode_FromFormat("nvme.Namespace(%u)", $self->nsid);
 	}
-	%immutable name;
-	const char *name;
 }
 
-%{
-	const char *libnvme_ns_name_get(struct libnvme_ns *n) {
-		return libnvme_ns_get_name(n);
-	}
-%};
-
-/******
-  NBFT
- ******/
-%{
-	static PyObject *ssns_to_dict(struct libnbft_subsystem_ns *ss)
-	{
-		unsigned int i;
-		PyObject *output = PyDict_New();
-		PyObject *hfis = PyList_New(ss->num_hfis);
-
-		for (i = 0; i < ss->num_hfis; i++)
-			PyList_SetItem(hfis, i, PyLong_FromLong(ss->hfis[i]->index - 1)); /* steals ref. to object - no need to decref */
-
-		PyDict_SetItemStringDecRef(output, "hfi_indexes", hfis);
-
-		PyDict_SetItemStringDecRef(output, "trtype", PyUnicode_FromString(ss->transport));
-		PyDict_SetItemStringDecRef(output, "traddr", PyUnicode_FromString(ss->traddr));
-		PyDict_SetItemStringDecRef(output, "trsvcid", PyUnicode_FromString(ss->trsvcid));
-		PyDict_SetItemStringDecRef(output, "subsys_port_id", PyLong_FromLong(ss->subsys_port_id));
-		PyDict_SetItemStringDecRef(output, "nsid", PyLong_FromLong(ss->nsid));
-
-		{
-			PyObject *nid;
-			switch (ss->nid_type) {
-			case LIBNBFT_NID_TYPE_EUI64:
-				PyDict_SetItemStringDecRef(output, "nid_type", PyUnicode_FromString("eui64"));
-				nid = PyUnicode_FromFormat("%02x%02x%02x%02x%02x%02x%02x%02x",
-							   ss->nid[0], ss->nid[1], ss->nid[2], ss->nid[3],
-							   ss->nid[4], ss->nid[5], ss->nid[6], ss->nid[7]);
-				break;
-
-			case LIBNBFT_NID_TYPE_NGUID:
-				PyDict_SetItemStringDecRef(output, "nid_type", PyUnicode_FromString("nguid"));
-				nid = PyUnicode_FromFormat("%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-							   ss->nid[0], ss->nid[1], ss->nid[2], ss->nid[3],
-							   ss->nid[4], ss->nid[5], ss->nid[6], ss->nid[7],
-							   ss->nid[8], ss->nid[9], ss->nid[10], ss->nid[11],
-							   ss->nid[12], ss->nid[13], ss->nid[14], ss->nid[15]);
-				break;
-
-			case LIBNBFT_NID_TYPE_NS_UUID:
-			{
-				char uuid_str[NVME_UUID_LEN_STRING];
-				PyDict_SetItemStringDecRef(output, "nid_type", PyUnicode_FromString("uuid"));
-				libnvme_uuid_to_string(ss->nid, uuid_str);
-				nid = PyUnicode_FromString(uuid_str);
-				break;
-			}
-
-			default:
-				nid = NULL;
-				break;
-			}
-			if (nid)
-				PyDict_SetItemStringDecRef(output, "nid", nid);
-		}
-
-		if (ss->subsys_nqn)
-			PyDict_SetItemStringDecRef(output, "subsys_nqn", PyUnicode_FromString(ss->subsys_nqn));
-
-		PyDict_SetItemStringDecRef(output, "controller_id", PyLong_FromLong(ss->controller_id));
-		PyDict_SetItemStringDecRef(output, "asqsz", PyLong_FromLong(ss->asqsz));
-
-		if (ss->dhcp_root_path_string)
-			PyDict_SetItemStringDecRef(output, "dhcp_root_path_string", PyUnicode_FromString(ss->dhcp_root_path_string));
-
-		PyDict_SetItemStringDecRef(output, "pdu_header_digest_required", PyBool_FromLong(ss->pdu_header_digest_required));
-		PyDict_SetItemStringDecRef(output, "data_digest_required", PyBool_FromLong(ss->data_digest_required));
-
-		return output;
-	}
-
-	static PyObject *hfi_to_dict(struct libnbft_hfi *hfi)
-	{
-		PyObject *output = PyDict_New();
-
-		PyDict_SetItemStringDecRef(output, "trtype", PyUnicode_FromString(hfi->transport));
-
-		if (!strcmp(hfi->transport, "tcp")) {
-			PyDict_SetItemStringDecRef(output, "pcidev",
-						   PyUnicode_FromFormat("%x:%x:%x.%x",
-									((hfi->tcp_info.pci_sbdf & 0xffff0000) >> 16),
-									((hfi->tcp_info.pci_sbdf & 0x0000ff00) >> 8),
-									((hfi->tcp_info.pci_sbdf & 0x000000f8) >> 3),
-									((hfi->tcp_info.pci_sbdf & 0x00000007) >> 0)));
-
-			PyDict_SetItemStringDecRef(output, "mac_addr",
-						   PyUnicode_FromFormat("%02x:%02x:%02x:%02x:%02x:%02x",
-									hfi->tcp_info.mac_addr[0],
-									hfi->tcp_info.mac_addr[1],
-									hfi->tcp_info.mac_addr[2],
-									hfi->tcp_info.mac_addr[3],
-									hfi->tcp_info.mac_addr[4],
-									hfi->tcp_info.mac_addr[5]));
-
-			PyDict_SetItemStringDecRef(output, "vlan", PyLong_FromLong(hfi->tcp_info.vlan));
-			PyDict_SetItemStringDecRef(output, "ip_origin", PyLong_FromLong(hfi->tcp_info.ip_origin));
-			PyDict_SetItemStringDecRef(output, "ipaddr", PyUnicode_FromString(hfi->tcp_info.ipaddr));
-			PyDict_SetItemStringDecRef(output, "subnet_mask_prefix", PyLong_FromLong(hfi->tcp_info.subnet_mask_prefix));
-			PyDict_SetItemStringDecRef(output, "gateway_ipaddr", PyUnicode_FromString(hfi->tcp_info.gateway_ipaddr));
-			PyDict_SetItemStringDecRef(output, "route_metric", PyLong_FromLong(hfi->tcp_info.route_metric));
-			PyDict_SetItemStringDecRef(output, "primary_dns_ipaddr", PyUnicode_FromString(hfi->tcp_info.primary_dns_ipaddr));
-			PyDict_SetItemStringDecRef(output, "secondary_dns_ipaddr", PyUnicode_FromString(hfi->tcp_info.secondary_dns_ipaddr));
-			PyDict_SetItemStringDecRef(output, "dhcp_server_ipaddr", PyUnicode_FromString(hfi->tcp_info.dhcp_server_ipaddr));
-
-			if (hfi->tcp_info.host_name)
-				PyDict_SetItemStringDecRef(output, "host_name", PyUnicode_FromString(hfi->tcp_info.host_name));
-
-			PyDict_SetItemStringDecRef(output, "this_hfi_is_default_route", PyBool_FromLong(hfi->tcp_info.this_hfi_is_default_route));
-			PyDict_SetItemStringDecRef(output, "dhcp_override", PyBool_FromLong(hfi->tcp_info.dhcp_override));
-		}
-
-		return output;
-	}
-
-	static PyObject *discovery_to_dict(struct libnbft_discovery *disc)
-	{
-		PyObject *output = PyDict_New();
-
-		if (disc->security)
-			PyDict_SetItemStringDecRef(output, "security_index", PyLong_FromLong(disc->security->index));
-		if (disc->hfi)
-			PyDict_SetItemStringDecRef(output, "hfi_index", PyLong_FromLong(disc->hfi->index - 1));
-		if (disc->uri)
-			PyDict_SetItemStringDecRef(output, "uri", PyUnicode_FromString(disc->uri));
-		if (disc->nqn)
-			PyDict_SetItemStringDecRef(output, "nqn", PyUnicode_FromString(disc->nqn));
-
-		return output;
-	}
-
-	static PyObject *nbft_to_pydict(struct libnbft_info *nbft)
-	{
-		PyObject *val;
-		PyObject *output = PyDict_New();
-
-		{
-			PyObject *host = PyDict_New();
-
-			if (nbft->host.nqn)
-				PyDict_SetItemStringDecRef(host, "nqn", PyUnicode_FromString(nbft->host.nqn));
-			if (nbft->host.id) {
-				char uuid_str[NVME_UUID_LEN_STRING];
-				libnvme_uuid_to_string((unsigned char *)nbft->host.id, uuid_str);
-				PyDict_SetItemStringDecRef(host, "id", PyUnicode_FromString(uuid_str));
-			}
-
-			PyDict_SetItemStringDecRef(host, "host_id_configured", PyBool_FromLong(nbft->host.host_id_configured));
-			PyDict_SetItemStringDecRef(host, "host_nqn_configured", PyBool_FromLong(nbft->host.host_nqn_configured));
-
-			val = PyUnicode_FromString(nbft->host.primary == LIBNBFT_PRIMARY_ADMIN_HOST_FLAG_NOT_INDICATED ? "not indicated" :
-						   nbft->host.primary == LIBNBFT_PRIMARY_ADMIN_HOST_FLAG_UNSELECTED ? "unselected" :
-						   nbft->host.primary == LIBNBFT_PRIMARY_ADMIN_HOST_FLAG_SELECTED ? "selected" : "reserved");
-			PyDict_SetItemStringDecRef(host, "primary_admin_host_flag", val);
-
-			PyDict_SetItemStringDecRef(output, "host", host);
-		}
-
-		{
-			size_t ss_num = 0;
-			struct libnbft_subsystem_ns **ss;
-			PyObject *subsystem;
-
-			/* First, let's find how many entries there are */
-			for (ss = nbft->subsystem_ns_list; ss && *ss; ss++)
-				ss_num++;
-
-			/* Now, let's fill the list using "(*ss)->index - 1"
-			   as the index for writing to the list */
-			subsystem = PyList_New(ss_num);
-			for (ss = nbft->subsystem_ns_list; ss && *ss; ss++)
-				PyList_SetItem(subsystem, (*ss)->index - 1, ssns_to_dict(*ss)); /* steals ref. to object - no need to decref */
-
-			PyDict_SetItemStringDecRef(output, "subsystem", subsystem);
-		}
-
-		{
-			size_t hfi_num = 0;
-			struct libnbft_hfi **hfi;
-			PyObject *hfis;
-
-			/* First, let's find how many entries there are */
-			for (hfi = nbft->hfi_list; hfi && *hfi; hfi++)
-				hfi_num++;
-
-			/* Now, let's fill the list using "(*hfi)->index - 1"
-			   as the index for writing to the list */
-			hfis = PyList_New(hfi_num);
-			for (hfi = nbft->hfi_list; hfi && *hfi; hfi++)
-				PyList_SetItem(hfis, (*hfi)->index-1, hfi_to_dict(*hfi)); /* steals ref. to object - no need to decref */
-
-			PyDict_SetItemStringDecRef(output, "hfi", hfis);
-		}
-
-		{
-			size_t disc_num = 0;
-			struct libnbft_discovery **disc;
-			PyObject *discovery;
-
-			/* First, let's find how many entries there are */
-			for (disc = nbft->discovery_list; disc && *disc; disc++)
-				disc_num++;
-
-			/* Now, let's fill the list using "(*disc)->index - 1"
-			   as the index for writing to the list */
-			discovery = PyList_New(disc_num);
-			for (disc = nbft->discovery_list; disc && *disc; disc++)
-				PyList_SetItem(discovery, (*disc)->index - 1, discovery_to_dict(*disc)); /* steals ref. to object - no need to decref */
-
-			PyDict_SetItemStringDecRef(output, "discovery", discovery);
-		}
-
-		/* Security profiles are currently not implemented. */
-
-		return output;
-	}
-
-	PyObject *nbft_get(struct libnvme_global_ctx *ctx, const char * filename)
-	{
-		struct libnbft_info *nbft;
-		PyObject *output;
-		int ret;
-
-		ret = libnvme_read_nbft(ctx, &nbft, filename);
-		if (ret) {
-			Py_RETURN_NONE;
-		}
-
-		output = nbft_to_pydict(nbft);
-		libnvme_free_nbft(ctx, nbft);
-		return output;
-	}
-%};
-
-%feature("autodoc", "@return an NBFT table as a dict on success, None otherwise.\n"
-		    "@param filename: file to read") nbft_get;
-PyObject *nbft_get(struct libnvme_global_ctx *ctx, const char * filename);
 
 // We want to swig all the #define and enum from nvme-types.h, but none of the structs.
 #pragma SWIG nowarn=503             // Supress warnings about unnamed struct

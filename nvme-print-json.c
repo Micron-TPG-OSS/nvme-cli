@@ -4,8 +4,12 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/types.h>
+
+#ifdef CONFIG_FABRICS
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#endif
+
 #include <ccan/compiler/compiler.h>
 
 #include <libnvme.h>
@@ -4174,7 +4178,8 @@ static void json_feature_show_fields_power_meas(struct json_object *r,
 	obj_add_uint(r, "Stop Measurement Time (SMT)", smt);
 }
 
-static void json_feature_show(enum nvme_features_id fid, int sel, unsigned int result)
+static void json_feature_show(enum nvme_features_id fid, int sel,
+			      unsigned int result, void *buf, __u32 data_len)
 {
 	struct json_object *r;
 	char json_str[STR_LEN];
@@ -4188,6 +4193,11 @@ static void json_feature_show(enum nvme_features_id fid, int sel, unsigned int r
 	obj_add_str(r, nvme_select_to_string(sel), json_str);
 
 	obj_print(r);
+
+	if (NVME_CHECK(sel, GET_FEATURES_SEL, SUPPORTED))
+		json_select_result(fid, result);
+	else
+		json_feature_show_fields(fid, result, buf);
 }
 
 static void json_feature_show_fields(enum nvme_features_id fid, unsigned int result,
@@ -5632,16 +5642,22 @@ static void json_host_discovery_log(struct nvme_host_discover_log *log)
 
 static void obj_add_traddr(struct json_object *o, const char *k, __u8 adrfam, __u8 *traddr)
 {
-	int af = AF_INET;
-	socklen_t size = INET_ADDRSTRLEN;
 	char dst[INET6_ADDRSTRLEN];
+	socklen_t size;
+	int af;
 
-	if (adrfam == NVMF_ADDR_FAMILY_IP6) {
+	if (adrfam == NVMF_ADDR_FAMILY_IP4) {
+		af = AF_INET;
+		size = INET_ADDRSTRLEN;
+	} else if (adrfam == NVMF_ADDR_FAMILY_IP6) {
 		af = AF_INET6;
 		size = INET6_ADDRSTRLEN;
+	} else {
+		obj_add_str(o, k, "<invalid>");
+		return;
 	}
 
-	if (inet_ntop(af, libnvmf_adrfam_str(adrfam), dst, size))
+	if (inet_ntop(af, traddr, dst, size))
 		obj_add_str(o, k, dst);
 }
 

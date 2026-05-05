@@ -5,23 +5,19 @@
 import gc
 from libnvme import nvme
 
-ctx = nvme.global_ctx()
+ctx = nvme.GlobalCtx()
 ctx.log_level('debug')
 print(f'ctx: {ctx}')
 
-host = nvme.host(ctx)
+host = nvme.Host(ctx)
 print(f'host: {host}')
-
-fctx = nvme.fabrics_context(ctx)
-fctx.set_connection(
-    subsysnqn=nvme.NVME_DISC_SUBSYS_NAME,
-    transport='loop',
-)
-print(f'fctx: {fctx}')
 
 ctrls = []
 for i in range(10):
-    ctrl = nvme.ctrl(ctx, fctx)
+    ctrl = nvme.Ctrl(ctx, {
+        'subsysnqn': nvme.NVME_DISC_SUBSYS_NAME,
+        'transport': 'loop',
+    })
     ctrls.append(ctrl)
     print(f'ctrl {i}: {ctrl}')
 

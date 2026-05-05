@@ -6,6 +6,10 @@
 # Authors: Martin Belanger <Martin.Belanger@dell.com>
 #
 if want_python
+    if not cc.has_header_symbol('Python.h', 'Py_NewRef', dependencies: py3_dep)
+        warning('Python < 3.10 detected: Py_NewRef compatibility shim will be used')
+    endif
+
     r = run_command(swig, ['-version'], check: true)  # Returns: "\nSWIG Version 4.1.1\n\nCompiled with ..."
     swig_version = r.stdout().split('\n')[1].split()[2].strip()
     if swig_version.version_compare('<4.1.0')
@@ -19,6 +23,11 @@ if want_python
         input:   ['nvme.i'],
         output:  ['nvme.py', 'nvme_wrap.c'],
         command: swig_cmd,
+        depend_files: [
+            'accessors.i',
+            'accessors-fabrics.i',
+            'nvme-manual-bridges.i',
+        ],
         install: true,
         install_dir: [python3.get_install_dir(pure: false, subdir: 'libnvme'), false],
     )
@@ -80,6 +89,7 @@ if want_python
         [ 'sigsegv-during-gc', [ files('tests/gc.py'), ] ],
         [ 'read-nbft-file', [ files('tests/test-nbft.py'), '--filename', join_paths(meson.current_source_dir(), 'tests', 'NBFT') ] ],
         [ 'object-properties-and-errors', [ files('tests/test-objects.py'), ] ],
+        [ 'setattr-guards', [ files('tests/test-setattr.py'), ] ],
     ]
     foreach test: py_tests
         description = test[0]

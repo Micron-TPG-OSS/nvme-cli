@@ -54,7 +54,7 @@ want_nvme = get_option('nvme').disabled() == false
 want_libnvme = get_option('libnvme').disabled() == false
 want_fabrics = get_option('fabrics').disabled() == false and host_system != 'windows'
 want_mi = get_option('mi').disabled() == false and host_system != 'windows'
-want_json_c = get_option('json-c').disabled() == false and want_fabrics
+want_json_c = get_option('json-c').disabled() == false
 want_libkmod = get_option('libkmod').disabled() == false and host_system != 'windows'
 want_tests = get_option('tests') and host_system != 'windows'
 want_examples = get_option('examples') and host_system != 'windows'
@@ -415,6 +415,8 @@ conf.set(
 )
 
 conf.set('NVME_HAVE_SENDFILE', cc.has_function('sendfile'))
+
+conf.set('NVME_HAVE_MMAP', cc.has_function('mmap'))
 
 project_config_file = 'nvme-config.h'
 nvme_config_h = configure_file(output: project_config_file, configuration: conf)

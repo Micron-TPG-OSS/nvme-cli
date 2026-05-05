@@ -22,8 +22,10 @@
 
 # Generated source files go to src/nvme/ (alongside the library sources).
 # The generated version script goes to src/ (alongside the other .ld files).
+# The generated SWIG include goes to libnvme/ (alongside nvme.i).
 libnvme_src = libnvme_srcroot / 'src'
 libnvme_src_nvme = libnvme_src / 'nvme'
+libnvme_swig_dir = libnvme_srcroot / 'libnvme'
 
 _py3 = find_program('python3', required: true)
 
@@ -36,6 +38,7 @@ _tgt_common = run_target(
         libnvme_src_nvme / 'accessors.h',
         libnvme_src_nvme / 'accessors.c',
         libnvme_src / 'accessors.ld',
+        '--swig-out', libnvme_swig_dir / 'accessors.i',
         libnvme_src_nvme / 'private.h',
     ],
 )
@@ -49,6 +52,7 @@ _tgt_fabrics = run_target(
         libnvme_src_nvme / 'accessors-fabrics.h',
         libnvme_src_nvme / 'accessors-fabrics.c',
         libnvme_src / 'accessors-fabrics.ld',
+        '--swig-out', libnvme_swig_dir / 'accessors-fabrics.i',
         libnvme_src_nvme / 'private-fabrics.h',
     ],
 )
