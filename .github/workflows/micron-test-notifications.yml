@@ -4,7 +4,7 @@
 # Test workflow to evaluate notification mechanisms
 # This workflow intentionally fails to trigger notifications
 
-name: Test Notifications
+name: Micron - Test Notifications
 
 on:
   workflow_dispatch:

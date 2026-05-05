@@ -4,12 +4,12 @@
 # This file is part of nvme.
 # Workflow to send MS Teams notification on workflow failures
 
-name: Notify Teams on Failure
+name: Micron - Notify Teams on Failure
 
 on:
   workflow_run:
     workflows:
-      - "Test Notifications"
+      - "Micron - Test Notifications"
     types:
       - completed
 
