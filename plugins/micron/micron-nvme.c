@@ -112,10 +112,6 @@ enum eDriveModel {
 
 #define MICRON_VENDOR_ID 0x1344
 
-static char *fvendorid1 = "/sys/class/nvme/nvme%d/device/vendor";
-static char *fvendorid2 = "/sys/class/misc/nvme%d/device/vendor";	// not used by anyone else
-static char *fdeviceid1 = "/sys/class/nvme/nvme%d/device/device";
-static char *fdeviceid2 = "/sys/class/misc/nvme%d/device/device";	// not used by anyone else
 static unsigned short vendor_id;
 static unsigned short device_id;
 
@@ -174,42 +170,54 @@ static int ReadSysFile(const char *file, unsigned short *id)
 	return ret;
 }
 
-#if defined(_WIN32)
-static int get_pci_ids(
-	struct libnvme_global_ctx *ctx, struct libnvme_transport_handle *hdl,
-	unsigned short *vid, unsigned short *did)
+char *get_ctrl_sysfs_dir(
+	struct libnvme_global_ctx *ctx,
+	struct libnvme_transport_handle *hdl)
 {
 	libnvme_ctrl_t c = NULL;
 	__cleanup_free char* ctrl_name = NULL;
-	const char* ctrl_sysfs_path;
+	char *sysfs_dir = NULL;
 	const char *name = libnvme_transport_handle_get_name(hdl);
+
 	if (libnvme_transport_handle_is_ns(hdl))
 		ctrl_name = strndup(name, 5);
 	else
 		ctrl_name = strdup(name);
 
-	int ret = libnvme_scan_ctrl(ctx, ctrl_name, &c);
-	if (!ret) {
-		const char *p;
-		unsigned int val;
+	if (libnvme_scan_ctrl(ctx, ctrl_name, &c) == 0)
+		sysfs_dir = strdup(libnvme_ctrl_get_sysfs_dir(c));
 
-		ctrl_sysfs_path = libnvme_ctrl_get_sysfs_dir(c);
-
-		p = strstr(ctrl_sysfs_path, "ven_");
-		if (p && sscanf(p, "ven_%x", &val) == 1)
-			*vid = (unsigned short)val;
-		else
-			*vid = 0;
-
-		p = strstr(ctrl_sysfs_path, "dev_");
-		if (p && sscanf(p, "dev_%x", &val) == 1)
-			*did = (unsigned short)val;
-		else
-			*did = 0;
-	} else {
-		return -EINVAL;
-	}
 	libnvme_free_ctrl(c);
+	return sysfs_dir;
+}
+#if defined(_WIN32)
+static int get_pci_ids(
+	struct libnvme_global_ctx *ctx, struct libnvme_transport_handle *hdl,
+	unsigned short *vid, unsigned short *did)
+{
+	const char *p;
+	unsigned int val;
+
+	__cleanup_free char* ctrl_sysfs_dir = get_ctrl_sysfs_dir(ctx, hdl);
+
+	*vid = 0;
+	*did = 0;
+
+	if (!ctrl_sysfs_dir)
+		return -EINVAL;
+
+	p = strstr(ctrl_sysfs_dir, "ven_");
+	if (p && sscanf(p, "ven_%x", &val) == 1)
+		*vid = (unsigned short)val;
+	else
+		return -EINVAL;
+
+	p = strstr(ctrl_sysfs_dir, "dev_");
+	if (p && sscanf(p, "dev_%x", &val) == 1)
+		*did = (unsigned short)val;
+	else
+		return -EINVAL;
+
 	return 0;
 }
 #else
@@ -217,36 +225,21 @@ static int get_pci_ids(
 	struct libnvme_global_ctx *ctx, struct libnvme_transport_handle *hdl,
 	unsigned short *vid, unsigned short *did)
 {
-	char *vid_path[512], *did_path[512];
-	libnvme_ctrl_t c = NULL;
-	libnvme_ns_t n = NULL;
-	const char *name;
-	int ret;
+	char id_path[512];
+	__cleanup_free char* ctrl_sysfs_dir = get_ctrl_sysfs_dir(ctx, hdl);
 
-	name = libnvme_transport_handle_get_name(hdl);
-	ret = libnvme_scan_ctrl(ctx, name, &c);
-	if (!ret) {
-		snprintf(vid_path, sizeof(vid_path), "%s/device/vendor",
-			libnvme_ctrl_get_sysfs_dir(c));
-		ReadSysFile(vid_path, vid);
-		snprintf(did_path, sizeof(did_path), "%s/device/device",
-			libnvme_ctrl_get_sysfs_dir(c));
-		ReadSysFile(did_path, did);
-		libnvme_free_ctrl(c);
+	if (ctrl_sysfs_dir) {
+		snprintf(id_path, sizeof(id_path), "%s/device/vendor",
+			ctrl_sysfs_dir);
+		ReadSysFile(id_path, vid);
+
+		snprintf(id_path, sizeof(id_path), "%s/device/device",
+			ctrl_sysfs_dir);
+		ReadSysFile(id_path, did);
 	} else {
-		ret = libnvme_scan_namespace(ctx, name, &n);
-		if (!ret) {
-			fprintf(stderr, "Unable to find %s\n", name);
-			return ret;
-		}
-
-		snprintf(vid_path, sizeof(vid_path), "%s/device/device/vendor",
-			libnvme_ns_get_sysfs_dir(n));
-		ReadSysFile(vid_path, vid);
-		snprintf(did_path, sizeof(did_path), "%s/device/device/device",
-			libnvme_ns_get_sysfs_dir(n));
-		ReadSysFile(did_path, did);
-		libnvme_free_ns(n);
+		fprintf(stderr, "Unable to find sysfs dir for %s\n",
+			libnvme_transport_handle_get_name(hdl));
+		return -EINVAL;
 	}
 
 	return 0;
