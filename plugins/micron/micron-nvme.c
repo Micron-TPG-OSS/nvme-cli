@@ -113,9 +113,9 @@ enum eDriveModel {
 #define MICRON_VENDOR_ID 0x1344
 
 static char *fvendorid1 = "/sys/class/nvme/nvme%d/device/vendor";
-static char *fvendorid2 = "/sys/class/misc/nvme%d/device/vendor";
+static char *fvendorid2 = "/sys/class/misc/nvme%d/device/vendor";	// not used by anyone else
 static char *fdeviceid1 = "/sys/class/nvme/nvme%d/device/device";
-static char *fdeviceid2 = "/sys/class/misc/nvme%d/device/device";
+static char *fdeviceid2 = "/sys/class/misc/nvme%d/device/device";	// not used by anyone else
 static unsigned short vendor_id;
 static unsigned short device_id;
 
@@ -174,21 +174,93 @@ static int ReadSysFile(const char *file, unsigned short *id)
 	return ret;
 }
 
-static enum eDriveModel GetDriveModel(int idx)
+#if defined(_WIN32)
+static int get_pci_ids(
+	struct libnvme_global_ctx *ctx, struct libnvme_transport_handle *hdl,
+	unsigned short *vid, unsigned short *did)
+{
+	libnvme_ctrl_t c = NULL;
+	__cleanup_free char* ctrl_name = NULL;
+	const char* ctrl_sysfs_path;
+	const char *name = libnvme_transport_handle_get_name(hdl);
+	if (libnvme_transport_handle_is_ns(hdl))
+		ctrl_name = strndup(name, 5);
+	else
+		ctrl_name = strdup(name);
+
+	int ret = libnvme_scan_ctrl(ctx, ctrl_name, &c);
+	if (!ret) {
+		const char *p;
+		unsigned int val;
+
+		ctrl_sysfs_path = libnvme_ctrl_get_sysfs_dir(c);
+
+		p = strstr(ctrl_sysfs_path, "ven_");
+		if (p && sscanf(p, "ven_%x", &val) == 1)
+			*vid = (unsigned short)val;
+		else
+			*vid = 0;
+
+		p = strstr(ctrl_sysfs_path, "dev_");
+		if (p && sscanf(p, "dev_%x", &val) == 1)
+			*did = (unsigned short)val;
+		else
+			*did = 0;
+	} else {
+		return -EINVAL;
+	}
+	libnvme_free_ctrl(c);
+	return 0;
+}
+#else
+static int get_pci_ids(
+	struct libnvme_global_ctx *ctx, struct libnvme_transport_handle *hdl,
+	unsigned short *vid, unsigned short *did)
+{
+	char *vid_path[512], *did_path[512];
+	libnvme_ctrl_t c = NULL;
+	libnvme_ns_t n = NULL;
+	const char *name;
+	int ret;
+
+	name = libnvme_transport_handle_get_name(hdl);
+	ret = libnvme_scan_ctrl(ctx, name, &c);
+	if (!ret) {
+		snprintf(vid_path, sizeof(vid_path), "%s/device/vendor",
+			libnvme_ctrl_get_sysfs_dir(c));
+		ReadSysFile(vid_path, vid);
+		snprintf(did_path, sizeof(did_path), "%s/device/device",
+			libnvme_ctrl_get_sysfs_dir(c));
+		ReadSysFile(did_path, did);
+		libnvme_free_ctrl(c);
+	} else {
+		ret = libnvme_scan_namespace(ctx, name, &n);
+		if (!ret) {
+			fprintf(stderr, "Unable to find %s\n", name);
+			return ret;
+		}
+
+		snprintf(vid_path, sizeof(vid_path), "%s/device/device/vendor",
+			libnvme_ns_get_sysfs_dir(n));
+		ReadSysFile(vid_path, vid);
+		snprintf(did_path, sizeof(did_path), "%s/device/device/device",
+			libnvme_ns_get_sysfs_dir(n));
+		ReadSysFile(did_path, did);
+		libnvme_free_ns(n);
+	}
+
+	return 0;
+}
+#endif
+
+static enum eDriveModel GetDriveModel(
+	struct libnvme_global_ctx *ctx,
+	struct libnvme_transport_handle *hdl)
 {
 	enum eDriveModel eModel = UNKNOWN_MODEL;
-	char path[512];
 
-	sprintf(path, fvendorid1, idx);
-	if (ReadSysFile(path, &vendor_id) < 0) {
-		sprintf(path, fvendorid2, idx);
-		ReadSysFile(path, &vendor_id);
-	}
-	sprintf(path, fdeviceid1, idx);
-	if (ReadSysFile(path, &device_id) < 0) {
-		sprintf(path, fdeviceid2, idx);
-		ReadSysFile(path, &device_id);
-	}
+	get_pci_ids(ctx, hdl, &vendor_id, &device_id);
+	
 	if (vendor_id == MICRON_VENDOR_ID) {
 		switch (device_id) {
 		case 0x5196:
@@ -558,7 +630,6 @@ static int micron_parse_options(struct libnvme_global_ctx **ctx,
 				struct argconfig_commandline_options *opts,
 				enum eDriveModel *modelp)
 {
-	int idx;
 	int err = parse_and_open(ctx, hdl, argc, argv, desc, opts);
 
 	if (err) {
@@ -566,11 +637,8 @@ static int micron_parse_options(struct libnvme_global_ctx **ctx,
 		return -1;
 	}
 
-	if (modelp) {
-		if (sscanf(argv[optind], "/dev/nvme%d", &idx) != 1)
-			idx = 0;
-		*modelp = GetDriveModel(idx);
-	}
+	if (modelp)
+		*modelp = GetDriveModel(*ctx, *hdl);
 
 	return 0;
 }
@@ -867,29 +935,29 @@ static int micron_temp_stats(int argc, char **argv, struct command *acmd,
 }
 
 struct pcie_error_counters {
-		__u16 receiver_error;
-		__u16 bad_tlp;
-		__u16 bad_dllp;
-		__u16 replay_num_rollover;
-		__u16 replay_timer_timeout;
-		__u16 advisory_non_fatal_error;
-		__u16 DLPES;
-		__u16 poisoned_tlp;
-		__u16 FCPC;
-		__u16 completion_timeout;
-		__u16 completion_abort;
-		__u16 unexpected_completion;
-		__u16 receiver_overflow;
-		__u16 malformed_tlp;
-		__u16 ecrc_error;
-		__u16 unsupported_request_error;
-	} pcie_error_counters = { 0 };
+	__u16 receiver_error;
+	__u16 bad_tlp;
+	__u16 bad_dllp;
+	__u16 replay_num_rollover;
+	__u16 replay_timer_timeout;
+	__u16 advisory_non_fatal_error;
+	__u16 DLPES;
+	__u16 poisoned_tlp;
+	__u16 FCPC;
+	__u16 completion_timeout;
+	__u16 completion_abort;
+	__u16 unexpected_completion;
+	__u16 receiver_overflow;
+	__u16 malformed_tlp;
+	__u16 ecrc_error;
+	__u16 unsupported_request_error;
+} pcie_error_counters = { 0 };
 
-	struct {
-		const char *err;
-		int  bit;
-		int  val;
-	} pcie_correctable_errors[] = {
+struct {
+	const char *err;
+	int  bit;
+	int  val;
+} pcie_correctable_errors[] = {
 		{ (char *)"Unsupported Request Error Status (URES)", 20,
 		offsetof(struct pcie_error_counters, unsupported_request_error)},
 		{ (char *)"ECRC Error Status (ECRCES)", 19,
@@ -927,10 +995,11 @@ struct pcie_error_counters {
 	};
 
 
+// This won't work on Windows.  It doesn't even work on my Ubuntu system.
 static int micron_pcie_stats(int argc, char **argv,
 				 struct command *command, struct plugin *plugin)
 {
-	int  i, err = 0, bus = 0, domain = 0, device = 0, function = 0, ctrlIdx;
+	int  i, err = 0, bus = 0, domain = 0, device = 0, function = 0;
 	char strTempFile[1024], strTempFile2[1024], cmdbuf[1024];
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
@@ -975,9 +1044,7 @@ static int micron_pcie_stats(int argc, char **argv,
 	}
 
 	/* pull log details based on the model name */
-	if (sscanf(argv[optind], "/dev/nvme%d", &ctrlIdx) != 1)
-		ctrlIdx = 0;
-	eModel = GetDriveModel(ctrlIdx);
+	eModel = GetDriveModel(ctx, hdl);
 	if (eModel == UNKNOWN_MODEL) {
 		printf("Unsupported drive model for vs-pcie-stats command\n");
 		goto out;
@@ -1000,6 +1067,8 @@ static int micron_pcie_stats(int argc, char **argv,
 		}
 	}
 
+	// This isn't going to work on Windows, and it isn't very flexible on
+	// Linux either.  It only supports /dev/nvme* devices.
 	if (strstr(argv[optind], "/dev/nvme") && strstr(argv[optind], "n1")) {
 		devicename = strrchr(argv[optind], '/');
 	} else if (strstr(argv[optind], "/dev/nvme")) {
@@ -1168,6 +1237,7 @@ static int micron_clear_pcie_correctable_errors(int argc, char **argv,
 		}
 	}
 
+	// This part is not supported on Windows. Even on Linux, this only supports /dev/nvme* and only n1. WTH?
 	if (strstr(argv[optind], "/dev/nvme") && strstr(argv[optind], "n1")) {
 		devicename = strrchr(argv[optind], '/');
 	} else if (strstr(argv[optind], "/dev/nvme")) {
@@ -1834,7 +1904,7 @@ static int micron_nand_stats(int argc, char **argv,
 	struct nvme_id_ctrl ctrl;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
-	int err, ctrlIdx;
+	int err;
 	__u8 nsze;
 	bool has_d0_log = true;
 	bool has_fb_log = false;
@@ -1867,9 +1937,7 @@ static int micron_nand_stats(int argc, char **argv,
 	}
 
 	/* pull log details based on the model name */
-	if (sscanf(argv[optind], "/dev/nvme%d", &ctrlIdx) != 1)
-		ctrlIdx = 0;
-	eModel = GetDriveModel(ctrlIdx);
+	eModel = GetDriveModel(ctx, hdl);
 	if (eModel == UNKNOWN_MODEL) {
 		printf("Unsupported drive model for vs-nand-stats command\n");
 		err = -1;
@@ -1979,7 +2047,7 @@ static int micron_smart_ext_log(int argc, char **argv,
 	const char *desc = "Retrieve extended SMART logs for the given device ";
 	unsigned int extSmartLog[E1_log_size/sizeof(int)] = { 0 };
 	enum eDriveModel eModel = UNKNOWN_MODEL;
-	int err = 0, ctrlIdx = 0;
+	int err = 0;
 	__u8 log_id;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
@@ -2002,9 +2070,7 @@ static int micron_smart_ext_log(int argc, char **argv,
 	if (!strcmp(cfg.fmt, "normal"))
 		is_json = false;
 
-	if (sscanf(argv[optind], "/dev/nvme%d", &ctrlIdx) != 1)
-		ctrlIdx = 0;
-	eModel = GetDriveModel(ctrlIdx);
+	eModel = GetDriveModel(ctx, hdl);
 	if (eModel == M51CX || eModel == M51BY || eModel == M51CY || eModel == M6003 ||
 								eModel == M6004) {
 		log_id = 0xE1;
@@ -2033,7 +2099,7 @@ static int micron_work_load_log(int argc, char **argv, struct command *acmd, str
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 
-	int err = 0, ctrlIdx = 0;
+	int err = 0;
 	bool is_json = true;
 	struct format {
 		char *fmt;
@@ -2053,10 +2119,7 @@ static int micron_work_load_log(int argc, char **argv, struct command *acmd, str
 	if (strcmp(cfg.fmt, "normal") == 0)
 		is_json = false;
 
-	err = sscanf(argv[optind], "/dev/nvme%d", &ctrlIdx);
-	if (err)
-		ctrlIdx = 0;
-	eModel = GetDriveModel(ctrlIdx);
+	eModel = GetDriveModel(ctx, hdl);
 	if (eModel == M6001 || eModel == M6004 || eModel == M6003) {
 		err =  nvme_get_log_simple(hdl, 0xC5,
 		micronWorkLoadLog, C5_MicronWorkLoad_log_size);
@@ -2080,7 +2143,7 @@ static int micron_vendor_telemetry_log(int argc, char **argv,
 	const char *desc = "Retrieve Vendor Telemetry logs for the given device ";
 	unsigned int vendorTelemetryLog[C6_log_size/sizeof(int)] = { 0 };
 	enum eDriveModel eModel = UNKNOWN_MODEL;
-	int err = 0, ctrlIdx = 0;
+	int err = 0;
 	bool is_json = true;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
@@ -2103,11 +2166,7 @@ static int micron_vendor_telemetry_log(int argc, char **argv,
 	if (strcmp(cfg.fmt, "normal") == 0)
 		is_json = false;
 
-	err = sscanf(argv[optind], "/dev/nvme%d", &ctrlIdx);
-	if (err)
-		ctrlIdx = 0;
-
-	eModel = GetDriveModel(ctrlIdx);
+	eModel = GetDriveModel(ctx, hdl);
 	if (eModel == M6001 || eModel == M6004 || eModel == M6003) {
 		err =  nvme_get_log_simple(hdl, 0xC6, vendorTelemetryLog, C6_log_size);
 		if (!err)
@@ -3602,7 +3661,7 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 				struct plugin *plugin)
 {
 	int err = -EINVAL;
-	int ctrlIdx, telemetry_option = 0;
+	int telemetry_option = 0;
 	char strOSDirName[1024];
 	char strCtrlDirName[1024];
 	char strMainDirName[256];
@@ -3732,9 +3791,7 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 	}
 
 	/* pull log details based on the model name */
-	if (sscanf(argv[optind], "/dev/nvme%d", &ctrlIdx) != 1)
-		ctrlIdx = 0;
-	eModel = GetDriveModel(ctrlIdx);
+	eModel = GetDriveModel(ctx, hdl);
 	if (eModel == UNKNOWN_MODEL) {
 		printf("Unsupported drive model for vs-internal-log collection\n");
 		goto out;
@@ -3781,7 +3838,7 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 	GetTimestampInfo(strOSDirName);
 	GetCtrlIDDInfo(strCtrlDirName, &ctrl);
 	GetOSConfig(strOSDirName);
-	GetDriveInfo(strOSDirName, ctrlIdx, &ctrl);
+	GetDriveInfo(strOSDirName, 0, &ctrl);	// TODO: fix GetDriveInfo controller index handling.
 
 	for (int i = 1; i <= ctrl.nn; i++)
 		GetNSIDDInfo(hdl, strCtrlDirName, i);
