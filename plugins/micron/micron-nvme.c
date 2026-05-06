@@ -149,27 +149,6 @@ static void WriteData(__u8 *data, __u32 len, const char *dir, const char *file, 
 	}
 }
 
-static int ReadSysFile(const char *file, unsigned short *id)
-{
-	int ret = 0;
-	char idstr[32] = { '\0' };
-	int fd = open(file, O_RDONLY);
-
-	if (fd < 0) {
-		perror(file);
-		return fd;
-	}
-
-	ret = read(fd, idstr, sizeof(idstr));
-	close(fd);
-	if (ret < 0)
-		perror("read");
-	else
-		*id = strtol(idstr, NULL, 16);
-
-	return ret;
-}
-
 char *get_ctrl_sysfs_dir(
 	struct libnvme_global_ctx *ctx,
 	struct libnvme_transport_handle *hdl)
@@ -190,6 +169,7 @@ char *get_ctrl_sysfs_dir(
 	libnvme_free_ctrl(c);
 	return sysfs_dir;
 }
+
 #if defined(_WIN32)
 static int get_pci_ids(
 	struct libnvme_global_ctx *ctx, struct libnvme_transport_handle *hdl,
@@ -221,6 +201,27 @@ static int get_pci_ids(
 	return 0;
 }
 #else
+static int ReadSysFile(const char *file, unsigned short *id)
+{
+	int ret = 0;
+	char idstr[32] = { '\0' };
+	int fd = open(file, O_RDONLY);
+
+	if (fd < 0) {
+		perror(file);
+		return fd;
+	}
+
+	ret = read(fd, idstr, sizeof(idstr));
+	close(fd);
+	if (ret < 0)
+		perror("read");
+	else
+		*id = strtol(idstr, NULL, 16);
+
+	return ret;
+}
+
 static int get_pci_ids(
 	struct libnvme_global_ctx *ctx, struct libnvme_transport_handle *hdl,
 	unsigned short *vid, unsigned short *did)
