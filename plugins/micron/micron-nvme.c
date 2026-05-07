@@ -1061,7 +1061,7 @@ static int micron_pcie_stats(int argc, char **argv,
 		}
 	}
 
-	// This isn't going to work on Windows, and it isn't very flexible on
+	// bgoing: This isn't going to work on Windows, and it isn't very flexible on
 	// Linux either.  It only supports /dev/nvme* devices.
 	if (strstr(argv[optind], "/dev/nvme") && strstr(argv[optind], "n1")) {
 		devicename = strrchr(argv[optind], '/');
@@ -1231,7 +1231,7 @@ static int micron_clear_pcie_correctable_errors(int argc, char **argv,
 		}
 	}
 
-	// This part is not supported on Windows. Even on Linux, this only supports /dev/nvme* and only n1. WTH?
+	// bgoing: This part is not supported on Windows. Even on Linux, this only supports /dev/nvme* and only n1. WTH?
 	if (strstr(argv[optind], "/dev/nvme") && strstr(argv[optind], "n1")) {
 		devicename = strrchr(argv[optind], '/');
 	} else if (strstr(argv[optind], "/dev/nvme")) {
@@ -2354,16 +2354,16 @@ static void GetOSConfig(const char *strOSDirName)
 	struct {
 		char *strcmdHeader;
 		char *strCommand;
-	} cmdArray[] = {
-		{ (char *)"SYSTEM INFORMATION", (char *)"uname -a >> %s" }//,
-		// { (char *)"LINUX KERNEL MODULE INFORMATION", (char *)"lsmod >> %s" },			// nope
-		// { (char *)"LINUX SYSTEM MEMORY INFORMATION", (char *)"cat /proc/meminfo >> %s" },
-		// { (char *)"SYSTEM INTERRUPT INFORMATION", (char *)"cat /proc/interrupts >> %s" },	// nope
-		// { (char *)"CPU INFORMATION", (char *)"cat /proc/cpuinfo >> %s" },
-		// { (char *)"IO MEMORY MAP INFORMATION", (char *)"cat /proc/iomem >> %s" },		// nope
-		// { (char *)"MAJOR NUMBER AND DEVICE GROUP", (char *)"cat /proc/devices >> %s" },
-		// { (char *)"KERNEL DMESG", (char *)"dmesg >> %s" },					// nope
-		// { (char *)"/VAR/LOG/MESSAGES", (char *)"cat /var/log/messages >> %s" }			// nope
+	} cmdArray[] = {	// bgoing: Get Windows info. Different for mingw vs powershell.
+		{ (char *)"SYSTEM INFORMATION", (char *)"uname -a >> %s" },
+		{ (char *)"LINUX KERNEL MODULE INFORMATION", (char *)"lsmod >> %s" },			// fails
+		{ (char *)"LINUX SYSTEM MEMORY INFORMATION", (char *)"cat /proc/meminfo >> %s" },
+		{ (char *)"SYSTEM INTERRUPT INFORMATION", (char *)"cat /proc/interrupts >> %s" },	// fails
+		{ (char *)"CPU INFORMATION", (char *)"cat /proc/cpuinfo >> %s" },
+		{ (char *)"IO MEMORY MAP INFORMATION", (char *)"cat /proc/iomem >> %s" },		// fails
+		{ (char *)"MAJOR NUMBER AND DEVICE GROUP", (char *)"cat /proc/devices >> %s" },
+		{ (char *)"KERNEL DMESG", (char *)"dmesg >> %s" },					// fails
+		{ (char *)"/VAR/LOG/MESSAGES", (char *)"cat /var/log/messages >> %s" }			// fails
 	};
 
 	sprintf(strFileName, "%s/%s", strOSDirName, "os_config.txt");
@@ -2393,7 +2393,6 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 
 	__u8 *buffer = (unsigned char *)nvme_alloc(bs);
 
-	printf("Retrieving telemetry log header for 0x%X\n", type);
 	if (!buffer)
 		return -1;
 	if (ctrl_init)
@@ -2423,19 +2422,15 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 	}
 
 	*logSize = data_area[da] * bs;
-	printf("Telemetry log size for 0x%X is %d bytes\n", type, *logSize);
 	offset = bs;
 	err = 0;
 	buffer = (unsigned char *)nvme_realloc(buffer, (size_t)(*logSize));
-	printf("Retrieving telemetry log data for 0x%X\n", type);
 	if (buffer) {
-		printf("Retrieving telemetry log data for 0x%X, offset %d\n", type, offset);
 		if (ctrl_init)
 			err = nvme_get_log_telemetry_ctrl(hdl, true, 0, buffer + offset, *logSize - offset);
 		else
 			err = nvme_get_log_telemetry_host(hdl, 0, buffer + offset, *logSize - offset);
 	}
-	printf("Completed retrieval of telemetry log data for 0x%X\n", type);
 
 	if (!err && buffer) {
 		*data = buffer;
@@ -2461,7 +2456,6 @@ static int GetTelemetryData(struct libnvme_transport_handle *hdl, const char *di
 	};
 
 	for (i = 0; i < (int)(ARRAY_SIZE(tmap)); i++) {
-		printf("Retrieving telemetry log 0x%X\n", tmap[i].log);
 		err = micron_telemetry_log(hdl, tmap[i].log, &buffer, &logSize, 0);
 		if (!err && logSize > 0 && buffer) {
 			sprintf(msg, "telemetry log: 0x%X", tmap[i].log);
@@ -3835,35 +3829,28 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 	GetTimestampInfo(strOSDirName);
 	GetCtrlIDDInfo(strCtrlDirName, &ctrl);
 	GetOSConfig(strOSDirName);
-	GetDriveInfo(strOSDirName, 0, &ctrl);	// TODO: fix GetDriveInfo controller index handling.
-printf("Collected drive information\n");
+	GetDriveInfo(strOSDirName, 0, &ctrl);	// bgoing: fix GetDriveInfo controller index handling.
 	for (int i = 1; i <= ctrl.nn; i++)
 		GetNSIDDInfo(hdl, strCtrlDirName, i);
-printf("Collected namespace information\n");
 	GetSmartlogData(hdl, strCtrlDirName);
 	GetErrorlogData(hdl, ctrl.elpe, strCtrlDirName);
 	GetGenericLogs(hdl, strCtrlDirName);
-printf("Collected SMART, error and generic logs\n");
 	/* pull if telemetry log data is supported */
 	if ((ctrl.lpa & 0x8) == 0x8) {
 		if (eModel == M51BY) {
-			printf("Fetching enhanced telemetry host logs\n");
 			err = GetOcpEnhancedTelemetryLog(hdl, strCtrlDirName,
 								NVME_LOG_LID_TELEMETRY_HOST);
 			if (err != 0)
 				printf("Failed to fetch the host telemetry log");
 
-			printf("Fetching enhanced telemetry controller logs\n");
 			err = GetOcpEnhancedTelemetryLog(hdl, strCtrlDirName,
 								NVME_LOG_LID_TELEMETRY_CTRL);
 			if (err != 0)
 				printf("Failed to fetch the controller telemetry log");
 		} else {
-			printf("Fetching telemetry logs\n");
 			GetTelemetryData(hdl, strCtrlDirName);
 		}
 	}
-printf("Collected telemetry logs\n");
 	GetFeatureSettings(hdl, strCtrlDirName);
 
 	if (eModel != M5410 && eModel != M5407) {
