@@ -2429,14 +2429,11 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 	buffer = (unsigned char *)nvme_realloc(buffer, (size_t)(*logSize));
 	printf("Retrieving telemetry log data for 0x%X\n", type);
 	if (buffer) {
-		while (!err && offset != *logSize) {
-			printf("Retrieving telemetry log data for 0x%X, offset %d\n", type, offset);
-			if (ctrl_init)
-				err = nvme_get_log_telemetry_ctrl(hdl, true, 0, buffer + offset, *logSize);
-			else
-				err = nvme_get_log_telemetry_host(hdl, 0, buffer + offset, *logSize);
-			offset += bs;
-		}
+		printf("Retrieving telemetry log data for 0x%X, offset %d\n", type, offset);
+		if (ctrl_init)
+			err = nvme_get_log_telemetry_ctrl(hdl, true, 0, buffer + offset, *logSize - offset);
+		else
+			err = nvme_get_log_telemetry_host(hdl, 0, buffer + offset, *logSize - offset);
 	}
 	printf("Completed retrieval of telemetry log data for 0x%X\n", type);
 
@@ -2470,7 +2467,7 @@ static int GetTelemetryData(struct libnvme_transport_handle *hdl, const char *di
 			sprintf(msg, "telemetry log: 0x%X", tmap[i].log);
 			WriteData(buffer, logSize, dir, tmap[i].file, msg);
 		}
-		free(buffer);
+		nvme_free(buffer);
 		buffer = NULL;
 		logSize = 0;
 	}
