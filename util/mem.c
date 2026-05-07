@@ -4,6 +4,8 @@
 #include <malloc.h>
 #include <string.h>
 
+#include <stdio.h> // TODO: remove this after debugging
+
 #ifdef NVME_HAVE_MMAP
 #include <sys/mman.h>
 #endif
@@ -33,17 +35,22 @@ void *nvme_alloc(size_t len)
 
 void *nvme_realloc(void *p, size_t len)
 {
-	size_t old_len = malloc_usable_size(p);
+	printf("Reallocating memory to %zu bytes\n", len);
+	size_t old_len = p ? malloc_usable_size(p) : 0;
+	printf("Reallocating memory from %zu to %zu bytes\n", old_len, len);
 
 	void *result = nvme_alloc(len);
 	if (!result)
 		return NULL;
 
+	printf("Copying data from old memory to new memory\n");
 	if (p) {
 		memcpy(result, p, min(old_len, len));
+		printf("Freeing old memory\n");
 		nvme_free(p);
 	}
 
+	printf("Reallocation complete. Returning %p\n", result);
 	return result;
 }
 

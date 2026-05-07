@@ -159,7 +159,7 @@ char *get_ctrl_sysfs_dir(
 	const char *name = libnvme_transport_handle_get_name(hdl);
 
 	if (libnvme_transport_handle_is_ns(hdl))
-		ctrl_name = strndup(name, 5);
+		ctrl_name = strndup(name, 5);	// look for first n after nvme to find size instead? Index could be 10+
 	else
 		ctrl_name = strdup(name);
 
@@ -2355,20 +2355,20 @@ static void GetOSConfig(const char *strOSDirName)
 		char *strcmdHeader;
 		char *strCommand;
 	} cmdArray[] = {
-		{ (char *)"SYSTEM INFORMATION", (char *)"uname -a >> %s" },
-		{ (char *)"LINUX KERNEL MODULE INFORMATION", (char *)"lsmod >> %s" },
-		{ (char *)"LINUX SYSTEM MEMORY INFORMATION", (char *)"cat /proc/meminfo >> %s" },
-		{ (char *)"SYSTEM INTERRUPT INFORMATION", (char *)"cat /proc/interrupts >> %s" },
-		{ (char *)"CPU INFORMATION", (char *)"cat /proc/cpuinfo >> %s" },
-		{ (char *)"IO MEMORY MAP INFORMATION", (char *)"cat /proc/iomem >> %s" },
-		{ (char *)"MAJOR NUMBER AND DEVICE GROUP", (char *)"cat /proc/devices >> %s" },
-		{ (char *)"KERNEL DMESG", (char *)"dmesg >> %s" },
-		{ (char *)"/VAR/LOG/MESSAGES", (char *)"cat /var/log/messages >> %s" }
+		{ (char *)"SYSTEM INFORMATION", (char *)"uname -a >> %s" }//,
+		// { (char *)"LINUX KERNEL MODULE INFORMATION", (char *)"lsmod >> %s" },			// nope
+		// { (char *)"LINUX SYSTEM MEMORY INFORMATION", (char *)"cat /proc/meminfo >> %s" },
+		// { (char *)"SYSTEM INTERRUPT INFORMATION", (char *)"cat /proc/interrupts >> %s" },	// nope
+		// { (char *)"CPU INFORMATION", (char *)"cat /proc/cpuinfo >> %s" },
+		// { (char *)"IO MEMORY MAP INFORMATION", (char *)"cat /proc/iomem >> %s" },		// nope
+		// { (char *)"MAJOR NUMBER AND DEVICE GROUP", (char *)"cat /proc/devices >> %s" },
+		// { (char *)"KERNEL DMESG", (char *)"dmesg >> %s" },					// nope
+		// { (char *)"/VAR/LOG/MESSAGES", (char *)"cat /var/log/messages >> %s" }			// nope
 	};
 
 	sprintf(strFileName, "%s/%s", strOSDirName, "os_config.txt");
 
-	for (i = 0; i < 7; i++) {
+	for (i = 0; i < (int)(ARRAY_SIZE(cmdArray)); i++) {
 		fpOSConfig = fopen(strFileName, "a+");
 		if (fpOSConfig) {
 			fprintf(fpOSConfig,
@@ -2391,8 +2391,9 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 	unsigned short data_area[5] = { 0 };
 	unsigned char  ctrl_init = (type == 0x8);
 
-	__u8 *buffer = (unsigned char *)calloc(bs, 1);
+	__u8 *buffer = (unsigned char *)nvme_alloc(bs);
 
+	printf("Retrieving telemetry log header for 0x%X\n", type);
 	if (!buffer)
 		return -1;
 	if (ctrl_init)
@@ -2422,11 +2423,14 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 	}
 
 	*logSize = data_area[da] * bs;
+	printf("Telemetry log size for 0x%X is %d bytes\n", type, *logSize);
 	offset = bs;
 	err = 0;
-	buffer = (unsigned char *)realloc(buffer, (size_t)(*logSize));
+	buffer = (unsigned char *)nvme_realloc(buffer, (size_t)(*logSize));
+	printf("Retrieving telemetry log data for 0x%X\n", type);
 	if (buffer) {
 		while (!err && offset != *logSize) {
+			printf("Retrieving telemetry log data for 0x%X, offset %d\n", type, offset);
 			if (ctrl_init)
 				err = nvme_get_log_telemetry_ctrl(hdl, true, 0, buffer + offset, *logSize);
 			else
@@ -2434,12 +2438,13 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 			offset += bs;
 		}
 	}
+	printf("Completed retrieval of telemetry log data for 0x%X\n", type);
 
 	if (!err && buffer) {
 		*data = buffer;
 	} else {
 		fprintf(stderr, "Failed to get telemetry data for 0x%x\n", type);
-		free(buffer);
+		nvme_free(buffer);
 	}
 
 	return err;
@@ -2459,6 +2464,7 @@ static int GetTelemetryData(struct libnvme_transport_handle *hdl, const char *di
 	};
 
 	for (i = 0; i < (int)(ARRAY_SIZE(tmap)); i++) {
+		printf("Retrieving telemetry log 0x%X\n", tmap[i].log);
 		err = micron_telemetry_log(hdl, tmap[i].log, &buffer, &logSize, 0);
 		if (!err && logSize > 0 && buffer) {
 			sprintf(msg, "telemetry log: 0x%X", tmap[i].log);
@@ -3833,29 +3839,34 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 	GetCtrlIDDInfo(strCtrlDirName, &ctrl);
 	GetOSConfig(strOSDirName);
 	GetDriveInfo(strOSDirName, 0, &ctrl);	// TODO: fix GetDriveInfo controller index handling.
-
+printf("Collected drive information\n");
 	for (int i = 1; i <= ctrl.nn; i++)
 		GetNSIDDInfo(hdl, strCtrlDirName, i);
-
+printf("Collected namespace information\n");
 	GetSmartlogData(hdl, strCtrlDirName);
 	GetErrorlogData(hdl, ctrl.elpe, strCtrlDirName);
 	GetGenericLogs(hdl, strCtrlDirName);
+printf("Collected SMART, error and generic logs\n");
 	/* pull if telemetry log data is supported */
 	if ((ctrl.lpa & 0x8) == 0x8) {
 		if (eModel == M51BY) {
+			printf("Fetching enhanced telemetry host logs\n");
 			err = GetOcpEnhancedTelemetryLog(hdl, strCtrlDirName,
 								NVME_LOG_LID_TELEMETRY_HOST);
 			if (err != 0)
 				printf("Failed to fetch the host telemetry log");
 
+			printf("Fetching enhanced telemetry controller logs\n");
 			err = GetOcpEnhancedTelemetryLog(hdl, strCtrlDirName,
 								NVME_LOG_LID_TELEMETRY_CTRL);
 			if (err != 0)
 				printf("Failed to fetch the controller telemetry log");
 		} else {
+			printf("Fetching telemetry logs\n");
 			GetTelemetryData(hdl, strCtrlDirName);
 		}
 	}
+printf("Collected telemetry logs\n");
 	GetFeatureSettings(hdl, strCtrlDirName);
 
 	if (eModel != M5410 && eModel != M5407) {
