@@ -1060,8 +1060,11 @@ static int micron_pcie_stats(int argc, char **argv,
 		}
 	}
 
-	// bgoing: This isn't going to work on Windows, and it isn't very flexible on
-	// Linux either.  It only supports /dev/nvme* devices.
+	#if defined(_WIN32)
+		printf("Unsupported on Windows for this device.\n");
+		goto out;
+	#endif
+
 	if (strstr(argv[optind], "/dev/nvme") && strstr(argv[optind], "n1")) {
 		devicename = strrchr(argv[optind], '/');
 	} else if (strstr(argv[optind], "/dev/nvme")) {
@@ -1230,7 +1233,11 @@ static int micron_clear_pcie_correctable_errors(int argc, char **argv,
 		}
 	}
 
-	// bgoing: This part is not supported on Windows. Even on Linux, this only supports /dev/nvme* and only n1. WTH?
+	#if defined(_WIN32)
+		printf("Unsupported on Windows for this device.\n");
+		goto out;
+	#endif
+
 	if (strstr(argv[optind], "/dev/nvme") && strstr(argv[optind], "n1")) {
 		devicename = strrchr(argv[optind], '/');
 	} else if (strstr(argv[optind], "/dev/nvme")) {
@@ -2343,6 +2350,136 @@ static void GetNSIDDInfo(struct libnvme_transport_handle *hdl, const char *dir, 
 	}
 }
 
+#if defined(_WIN32)
+#include <windows.h>
+
+static void write_section_header(FILE *fp, const char *header)
+{
+	fprintf(fp, "\n\n\n\n%s\n-----------------------------------------------\n",
+		header);
+}
+
+static void GetOSConfig(const char *strOSDirName)
+{
+	FILE *fp = NULL;
+	char strFileName[4096];
+	OSVERSIONINFOEXA osvi;
+	SYSTEM_INFO si;
+	MEMORYSTATUSEX memstat;
+	DWORD bufSize;
+	char compName[256] = { 0 };
+	HKEY hKey;
+	LONG rc;
+
+	sprintf(strFileName, "%s/%s", strOSDirName, "os_config.txt");
+	fp = fopen(strFileName, "w+");
+	if (!fp) {
+		fprintf(stderr, "Failed to create %s\n", strFileName);
+		return;
+	}
+
+	/* System Information */
+	write_section_header(fp, "SYSTEM INFORMATION");
+
+	memset(&osvi, 0, sizeof(osvi));
+	osvi.dwOSVersionInfoSize = sizeof(osvi);
+	/*
+	 * GetVersionExA is deprecated but available everywhere.
+	 * It returns capped values on newer Windows unless the
+	 * application is manifested, which is acceptable here.
+	 */
+	if (GetVersionExA((OSVERSIONINFOA *)&osvi)) {
+		fprintf(fp, "Windows Version   : %lu.%lu Build %lu",
+			osvi.dwMajorVersion, osvi.dwMinorVersion,
+			osvi.dwBuildNumber);
+		if (osvi.szCSDVersion[0])
+			fprintf(fp, " %s", osvi.szCSDVersion);
+		fprintf(fp, "\n");
+	}
+
+	bufSize = sizeof(compName);
+	if (GetComputerNameExA(ComputerNameDnsFullyQualified,
+			       compName, &bufSize))
+		fprintf(fp, "Computer Name     : %s\n", compName);
+
+	GetNativeSystemInfo(&si);
+	fprintf(fp, "Processor Arch    : ");
+	switch (si.wProcessorArchitecture) {
+	case PROCESSOR_ARCHITECTURE_AMD64:
+		fprintf(fp, "x64 (AMD64)\n");
+		break;
+	case PROCESSOR_ARCHITECTURE_ARM64:
+		fprintf(fp, "ARM64\n");
+		break;
+	case PROCESSOR_ARCHITECTURE_INTEL:
+		fprintf(fp, "x86\n");
+		break;
+	default:
+		fprintf(fp, "Unknown (%u)\n", si.wProcessorArchitecture);
+		break;
+	}
+	fprintf(fp, "Number of Processors : %lu\n", si.dwNumberOfProcessors);
+	fprintf(fp, "Page Size         : %lu\n", si.dwPageSize);
+
+	/* Memory Information */
+	write_section_header(fp, "SYSTEM MEMORY INFORMATION");
+
+	memstat.dwLength = sizeof(memstat);
+	if (GlobalMemoryStatusEx(&memstat)) {
+		fprintf(fp, "Memory Load       : %lu%%\n", memstat.dwMemoryLoad);
+		fprintf(fp, "Total Physical    : %llu MB\n",
+			memstat.ullTotalPhys / (1024 * 1024));
+		fprintf(fp, "Available Physical: %llu MB\n",
+			memstat.ullAvailPhys / (1024 * 1024));
+		fprintf(fp, "Total Page File   : %llu MB\n",
+			memstat.ullTotalPageFile / (1024 * 1024));
+		fprintf(fp, "Available Page File: %llu MB\n",
+			memstat.ullAvailPageFile / (1024 * 1024));
+		fprintf(fp, "Total Virtual     : %llu MB\n",
+			memstat.ullTotalVirtual / (1024 * 1024));
+		fprintf(fp, "Available Virtual : %llu MB\n",
+			memstat.ullAvailVirtual / (1024 * 1024));
+	}
+
+	/* CPU Information from registry */
+	write_section_header(fp, "CPU INFORMATION");
+
+	rc = RegOpenKeyExA(
+		HKEY_LOCAL_MACHINE,
+		"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+		0, KEY_READ, &hKey);
+	if (rc == ERROR_SUCCESS) {
+		char cpuName[256] = { 0 };
+		char cpuVendor[64] = { 0 };
+		DWORD cpuMHz = 0;
+		DWORD dataSize;
+
+		dataSize = sizeof(cpuName);
+		if (RegQueryValueExA(hKey, "ProcessorNameString", NULL,
+				     NULL, (LPBYTE)cpuName,
+				     &dataSize) == ERROR_SUCCESS)
+			fprintf(fp, "Processor         : %s\n", cpuName);
+
+		dataSize = sizeof(cpuVendor);
+		if (RegQueryValueExA(hKey, "VendorIdentifier", NULL,
+				     NULL, (LPBYTE)cpuVendor,
+				     &dataSize) == ERROR_SUCCESS)
+			fprintf(fp, "Vendor            : %s\n", cpuVendor);
+
+		dataSize = sizeof(cpuMHz);
+		if (RegQueryValueExA(hKey, "~MHz", NULL, NULL,
+				     (LPBYTE)&cpuMHz,
+				     &dataSize) == ERROR_SUCCESS)
+			fprintf(fp, "Speed             : %lu MHz\n", cpuMHz);
+
+		RegCloseKey(hKey);
+	}
+	fprintf(fp, "Logical Processors: %lu\n", si.dwNumberOfProcessors);
+
+	fclose(fp);
+}
+
+#else
 static void GetOSConfig(const char *strOSDirName)
 {
 	FILE *fpOSConfig = NULL;
@@ -2353,16 +2490,16 @@ static void GetOSConfig(const char *strOSDirName)
 	struct {
 		char *strcmdHeader;
 		char *strCommand;
-	} cmdArray[] = {	// bgoing: Get Windows info. Different for mingw vs powershell.
+	} cmdArray[] = {
 		{ (char *)"SYSTEM INFORMATION", (char *)"uname -a >> %s" },
-		{ (char *)"LINUX KERNEL MODULE INFORMATION", (char *)"lsmod >> %s" },			// fails
+		{ (char *)"LINUX KERNEL MODULE INFORMATION", (char *)"lsmod >> %s" },
 		{ (char *)"LINUX SYSTEM MEMORY INFORMATION", (char *)"cat /proc/meminfo >> %s" },
-		{ (char *)"SYSTEM INTERRUPT INFORMATION", (char *)"cat /proc/interrupts >> %s" },	// fails
+		{ (char *)"SYSTEM INTERRUPT INFORMATION", (char *)"cat /proc/interrupts >> %s" },
 		{ (char *)"CPU INFORMATION", (char *)"cat /proc/cpuinfo >> %s" },
-		{ (char *)"IO MEMORY MAP INFORMATION", (char *)"cat /proc/iomem >> %s" },		// fails
+		{ (char *)"IO MEMORY MAP INFORMATION", (char *)"cat /proc/iomem >> %s" },
 		{ (char *)"MAJOR NUMBER AND DEVICE GROUP", (char *)"cat /proc/devices >> %s" },
-		{ (char *)"KERNEL DMESG", (char *)"dmesg >> %s" },					// fails
-		{ (char *)"/VAR/LOG/MESSAGES", (char *)"cat /var/log/messages >> %s" }			// fails
+		{ (char *)"KERNEL DMESG", (char *)"dmesg >> %s" },
+		{ (char *)"/VAR/LOG/MESSAGES", (char *)"cat /var/log/messages >> %s" }
 	};
 
 	sprintf(strFileName, "%s/%s", strOSDirName, "os_config.txt");
@@ -2382,6 +2519,7 @@ static void GetOSConfig(const char *strOSDirName)
 			fprintf(stderr, "Failed to send \"%s\"\n", strBuffer);
 	}
 }
+#endif
 
 static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type, __u8 **data,
 				int *logSize, int da)
@@ -3651,7 +3789,7 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 				struct plugin *plugin)
 {
 	int err = -EINVAL;
-	int telemetry_option = 0;
+	int ctrlIdx, telemetry_option = 0;
 	char strOSDirName[1024];
 	char strCtrlDirName[1024];
 	char strMainDirName[256];
@@ -3828,7 +3966,9 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 	GetTimestampInfo(strOSDirName);
 	GetCtrlIDDInfo(strCtrlDirName, &ctrl);
 	GetOSConfig(strOSDirName);
-	GetDriveInfo(strOSDirName, 0, &ctrl);	// bgoing: fix GetDriveInfo controller index handling.
+	if (sscanf(libnvme_transport_handle_get_name(hdl), "nvme%d", &ctrlIdx) != 1)
+		ctrlIdx = 0;	
+	GetDriveInfo(strOSDirName, ctrlIdx, &ctrl);
 	for (int i = 1; i <= ctrl.nn; i++)
 		GetNSIDDInfo(hdl, strCtrlDirName, i);
 	GetSmartlogData(hdl, strCtrlDirName);
