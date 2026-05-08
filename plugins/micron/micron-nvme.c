@@ -577,14 +577,14 @@ static int NVMEResetLog(struct libnvme_transport_handle *hdl, unsigned char ucLo
 	unsigned int *pBuffer = NULL;
 	int err = 0;
 
-	pBuffer = (unsigned int *)calloc(1, nBufferSize);
+	pBuffer = (unsigned int *)nvme_alloc(nBufferSize);
 	if (!pBuffer)
 		return err;
 
 	while (!err && llMaxSize > 0) {
 		err = NVMEGetLogPage(hdl, ucLogID, (unsigned char *)pBuffer, nBufferSize, 0);
 		if (err) {
-			free(pBuffer);
+			nvme_free(pBuffer);
 			return err;
 		}
 
@@ -594,7 +594,7 @@ static int NVMEResetLog(struct libnvme_transport_handle *hdl, unsigned char ucLo
 		llMaxSize = llMaxSize - nBufferSize;
 	}
 
-	free(pBuffer);
+	nvme_free(pBuffer);
 	return err;
 }
 
@@ -604,10 +604,9 @@ static int GetCommonLogPage(struct libnvme_transport_handle *hdl, unsigned char 
 	unsigned char *pTempPtr = NULL;
 	int err = 0;
 
-	pTempPtr = (unsigned char *)malloc(nBuffSize);
+	pTempPtr = (unsigned char *)nvme_alloc(nBuffSize);
 	if (!pTempPtr)
 		goto exit_status;
-	memset(pTempPtr, 0, nBuffSize);
 	err = nvme_get_log_simple(hdl, ucLogID, pTempPtr, nBuffSize);
 	*pBuffer = pTempPtr;
 
@@ -2270,7 +2269,7 @@ static void GetErrorlogData(struct libnvme_transport_handle *hdl, int entries, c
 {
 	int logSize = entries * sizeof(struct nvme_error_log_page);
 	struct nvme_error_log_page *error_log =
-				(struct nvme_error_log_page *)calloc(1, logSize);
+				(struct nvme_error_log_page *)nvme_alloc(logSize);
 
 	if (!error_log)
 		return;
@@ -2279,7 +2278,7 @@ static void GetErrorlogData(struct libnvme_transport_handle *hdl, int entries, c
 		WriteData((__u8 *)error_log, logSize, dir,
 			  "error_information_log.bin", "error log");
 
-	free(error_log);
+	nvme_free(error_log);
 }
 
 static void GetGenericLogs(struct libnvme_transport_handle *hdl, const char *dir)
@@ -2401,7 +2400,7 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 		err = nvme_get_log_telemetry_host(hdl, 0, buffer, bs);
 	if (err) {
 		fprintf(stderr, "Failed to get telemetry log header for 0x%X\n", type);
-		free(buffer);
+		nvme_free(buffer);
 		return err;
 	}
 
@@ -2416,7 +2415,7 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 
 	if (!data_area[da]) {
 		fprintf(stderr, "Requested telemetry data for 0x%X is empty\n", type);
-		free(buffer);
+		nvme_free(buffer);
 		buffer = NULL;
 		return -1;
 	}
@@ -3464,7 +3463,7 @@ static int get_common_log(struct libnvme_transport_handle *hdl, uint8_t id, uint
 	 * yet reached its max size
 	 */
 	if (hdr.log_size == sizeof(hdr)) {
-		buffer = (uint8_t *)malloc(sizeof(hdr));
+		buffer = (uint8_t *)nvme_alloc(sizeof(hdr));
 		if (!buffer) {
 			fprintf(stderr, "malloc of %zu bytes failed for log: 0x%X\n",
 				sizeof(hdr), id);
@@ -3472,7 +3471,7 @@ static int get_common_log(struct libnvme_transport_handle *hdl, uint8_t id, uint
 		}
 		memcpy(buffer, (uint8_t *)&hdr, sizeof(hdr));
 	} else if (hdr.log_size < hdr.max_size) {
-		buffer = (uint8_t *)malloc(sizeof(hdr) + hdr.log_size);
+		buffer = (uint8_t *)nvme_alloc(sizeof(hdr) + hdr.log_size);
 		if (!buffer) {
 			fprintf(stderr, "malloc of %zu bytes failed for log: 0x%X\n",
 				hdr.log_size + sizeof(hdr), id);
@@ -3490,7 +3489,7 @@ static int get_common_log(struct libnvme_transport_handle *hdl, uint8_t id, uint
 		 * hdr.log_size > hdr.max_size; also ignore over-written log data; we
 		 * also ignore collisions for now
 		 */
-		buffer = (uint8_t *)malloc(hdr.max_size + sizeof(hdr));
+		buffer = (uint8_t *)nvme_alloc(hdr.max_size + sizeof(hdr));
 		if (!buffer) {
 			fprintf(stderr, "malloc of %zu bytes failed for log: 0x%X\n",
 				hdr.max_size + sizeof(hdr), id);
@@ -3505,7 +3504,7 @@ static int get_common_log(struct libnvme_transport_handle *hdl, uint8_t id, uint
 			ret = nvme_get_log_lpo(hdl, id, hdr.write_pointer, chunk, first,
 						   buffer + sizeof(hdr));
 			if (ret) {
-				free(buffer);
+				nvme_free(buffer);
 				fprintf(stderr, "failed to get log: 0x%X\n", id);
 				return ret;
 			}
@@ -3516,7 +3515,7 @@ static int get_common_log(struct libnvme_transport_handle *hdl, uint8_t id, uint
 						   buffer + sizeof(hdr) + first);
 			if (ret) {
 				fprintf(stderr, "failed to get log: 0x%X\n", id);
-				free(buffer);
+				nvme_free(buffer);
 				return ret;
 			}
 			log_size += second;
@@ -3551,7 +3550,7 @@ static int GetOcpEnhancedTelemetryLog(struct libnvme_transport_handle *hdl, cons
 		printf("Failed to set ETDAS, Data Area 4 won't be avialable >>> ");
 
 	/* Read Telemetry header information */
-	pTelemetryDataHeader = (unsigned char *)calloc(512, sizeof(unsigned char));
+	pTelemetryDataHeader = (unsigned char *)nvme_alloc(512);
 
 	if (!pTelemetryDataHeader) {
 		printf("Unable to allocate buffer of size 0x%X bytes for telemetry header", 512);
@@ -3588,7 +3587,7 @@ static int GetOcpEnhancedTelemetryLog(struct libnvme_transport_handle *hdl, cons
 			continue;
 		}
 
-		pTelemetryBuffer = (unsigned char *)calloc(nallocSize, 1);
+		pTelemetryBuffer = (unsigned char *)nvme_alloc(nallocSize);
 		if (!pTelemetryBuffer) {
 			printf(
 				"Unable to allocate buffer of size 0x%X bytes for Data Area %d"
@@ -3605,7 +3604,7 @@ static int GetOcpEnhancedTelemetryLog(struct libnvme_transport_handle *hdl, cons
 				"Failed to fetch telemetry data of size : %u from offset : %u!\n"
 				, nallocSize, nOffset
 			);
-			free(pTelemetryBuffer);
+			nvme_free(pTelemetryBuffer);
 			pTelemetryBuffer = NULL;
 			nOffset += nallocSize;
 			continue;
@@ -3638,11 +3637,11 @@ static int GetOcpEnhancedTelemetryLog(struct libnvme_transport_handle *hdl, cons
 			}
 		}
 
-		free(pTelemetryBuffer);
+		nvme_free(pTelemetryBuffer);
 		pTelemetryBuffer = NULL;
 	}
 	// free mem of header, all areas
-	free(pTelemetryDataHeader);
+	nvme_free(pTelemetryDataHeader);
 
 	return err;
 }
@@ -3805,7 +3804,7 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 		if (!err && logSize > 0 && buffer) {
 			sprintf(msg, "telemetry log: 0x%X", cfg.log);
 			WriteData(buffer, logSize, dir, cfg.package, msg);
-			free(buffer);
+			nvme_free(buffer);
 		}
 		goto out;
 	}
@@ -3879,7 +3878,7 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 			if (err == 0) {
 				bSize =  stWllHdr.uiLength;
 				if (bSize > 0) {
-					dataBuffer = (unsigned char *)calloc(bSize, 1);
+					dataBuffer = (unsigned char *)nvme_alloc(bSize);
 					if (!dataBuffer) {
 						printf(
 							" Memory allocation failed for log id : 0x%02X\n"
@@ -3951,7 +3950,7 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 				if (bSize % (16 * 1024))
 					bSize += (16 * 1024) - (bSize % (16 * 1024));
 			}
-			dataBuffer = (unsigned char *)malloc(bSize);
+			dataBuffer = (unsigned char *)nvme_alloc(bSize);
 			if (bSize && dataBuffer) {
 				memset(dataBuffer, 0, bSize);
 				if (eModel == M5410 || eModel == M5407)
@@ -3974,7 +3973,7 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 
 		default:
 			bSize = aVendorLogs[i].nLogSize;
-			dataBuffer = (unsigned char *)malloc(bSize);
+			dataBuffer = (unsigned char *)nvme_alloc(bSize);
 			if (!dataBuffer)
 				break;
 			memset(dataBuffer, 0, bSize);
@@ -3999,7 +3998,7 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 			WriteData(dataBuffer, bSize, strCtrlDirName, aVendorLogs[i].strFileName, msg);
 		}
 
-		free(dataBuffer);
+		nvme_free(dataBuffer);
 		dataBuffer = NULL;
 	}
 
