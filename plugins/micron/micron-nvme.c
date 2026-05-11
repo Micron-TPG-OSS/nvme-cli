@@ -1930,12 +1930,6 @@ static int micron_nand_stats(int argc, char **argv,
 	if (!strcmp(cfg.fmt, "normal"))
 		is_json = false;
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
-	if (err) {
-		printf("Error %d retrieving controller identification data\n", err);
-		goto out;
-	}
-
 	/* pull log details based on the model name */
 	eModel = GetDriveModel(ctx, hdl);
 	if (eModel == UNKNOWN_MODEL) {
@@ -1973,17 +1967,16 @@ static int micron_nand_stats(int argc, char **argv,
 	nsze = (ctrl.vs[987] == 0x12);
 	if (!nsze && nsze_from_oacs)
 		nsze = ((ctrl.oacs >> 3) & 0x1);
-	err = 0;
 	if (has_fb_log) {
 		__u8 spec = (eModel == M5410) ? 0 : 1;	/* FB spec version */
 
 		print_nand_stats_fb((__u8 *)logFB, (__u8 *)extSmartLog, nsze, is_json, spec);
+		err = 0;
 	} else if (has_d0_log) {
 		print_nand_stats_d0((__u8 *)extSmartLog, nsze, is_json);
 		err = 0;
 	} else {
 		printf("Unable to retrieve extended smart log for the drive\n");
-		err = -ENOTTY;
 	}
 out:
 	if (err > 0)
@@ -2698,7 +2691,7 @@ static int micron_drive_info(int argc, char **argv, struct command *acmd,
 		return -1;
 	}
 
-	if (strcmp(cfg.fmt, "normal") || strcmp(cfg.fmt, "json")) {
+	if (strcmp(cfg.fmt, "normal") && strcmp(cfg.fmt, "json")) {
 		fprintf(stderr, "Invalid output format\n");
 		return -1;
 	}
@@ -3024,7 +3017,7 @@ static int micron_fw_activation_history(int argc, char **argv, struct command *a
 
 	err = nvme_get_log_simple(hdl, 0xC2, logC2, C2_log_size);
 	if (err) {
-		fprintf(stderr, "Failed to retrieve fw activation history log, error: %x\n", err);
+		nvme_show_err(err, "Failed to retrieve fw activation history log");
 		goto out;
 	}
 
@@ -3247,8 +3240,7 @@ static int micron_latency_stats_logs(int argc, char **argv, struct command *acmd
 	memset(&log, 0, sizeof(log));
 	err = nvme_get_log_simple(hdl, 0xD1, &log, sizeof(log));
 	if (err) {
-		if (err < 0)
-			printf("Unable to retrieve latency stats log the drive\n");
+		nvme_show_err(err, "Unable to retrieve latency stats log for the drive");
 		return err;
 	}
 	/* print header and each log entry */
@@ -3332,8 +3324,7 @@ static int micron_latency_stats_info(int argc, char **argv, struct command *acmd
 	memset(&log, 0, sizeof(log));
 	err = nvme_get_log_simple(hdl, 0xD0, &log, sizeof(log));
 	if (err) {
-		if (err < 0)
-			printf("Unable to retrieve latency stats log the drive\n");
+		nvme_show_err(err, "Unable to retrieve latency stats log for the drive");
 		return err;
 	}
 	printf("Micron IO %s Command Latency Statistics\n"
@@ -3398,8 +3389,7 @@ static int micron_ocp_smart_health_logs(int argc, char **argv, struct command *a
 		if (!err)
 			err = nvme_get_log_simple(hdl, 0xFB, logFB, FB_log_size);
 		if (err) {
-			if (err < 0)
-				printf("Unable to retrieve smart log 0xFB for the drive\n");
+			nvme_show_err(err, "Unable to retrieve smart log 0xFB for the drive");
 			goto out;
 		}
 
@@ -3421,11 +3411,9 @@ static int micron_ocp_smart_health_logs(int argc, char **argv, struct command *a
 	err = nvme_get_log_simple(hdl, 0xC0, logC0, C0_log_size);
 	if (!err)
 		print_smart_cloud_health_log((__u8 *)logC0, is_json, eModel);
-	else if (err < 0)
-		printf("Unable to retrieve extended smart log 0xC0 for the drive\n");
+	else
+		nvme_show_err(err, "Unable to retrieve extended smart log 0xC0 for the drive");
 out:
-	if (err > 0)
-		nvme_show_status(err);
 	return err;
 }
 
@@ -3456,7 +3444,7 @@ static int micron_clr_fw_activation_history(int argc, char **argv,
 	if (!err)
 		err = (int)result;
 	else
-		printf("Failed to clear fw activation history, error = 0x%x\n", err);
+		nvme_show_err(err, "Failed to clear fw activation history");
 
 	return err;
 }
@@ -4247,7 +4235,7 @@ static int micron_cloud_boot_SSD_version(int argc, char **argv,
 			goto out;
 		}
 	} else {
-		printf("Error %d retrieving controller identification data\n", err);
+		nvme_show_err(err, "Error retrieving controller identification data");
 		goto out;
 	}
 
@@ -4260,8 +4248,8 @@ static int micron_cloud_boot_SSD_version(int argc, char **argv,
 
 		printf("HyperScale Boot Version Spec.%x.%x\n", le16_to_cpu(major)
 				, le16_to_cpu(minor));
-	} else if (err < 0) {
-		printf("Error %d retrieving extended smart log 0xC0 for the drive\n", err);
+	} else {
+		nvme_show_err(err, "Error retrieving extended smart log 0xC0 for the drive");
 		goto out;
 	}
 out:
@@ -4384,7 +4372,7 @@ static int micron_cloud_log(int argc, char **argv, struct command *acmd,
 	if (err == 0)
 		print_hyperscale_cloud_health_log((__u8 *)logC0, is_json);
 	else if (err < 0)
-		printf("Unable to retrieve extended smart log 0xC0 for the drive\n");
+		nvme_show_err(err, "Unable to retrieve extended smart log 0xC0 for the drive");
 
 out:
 	if (err > 0)
