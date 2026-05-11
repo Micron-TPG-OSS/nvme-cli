@@ -23,14 +23,8 @@
 
 #include "compiler-attributes.h"
 
-/* Definitions not yet included in mingw's winerror.h */
-#define STG_E_FIRMWARE_SLOT_INVALID      _HRESULT_TYPEDEF_(0x80030208L)
-#define STG_E_FIRMWARE_IMAGE_INVALID     _HRESULT_TYPEDEF_(0x80030209L)
-
-static int get_last_error_as_errno(void)
+static int get_errno(DWORD error)
 {
-	DWORD error = GetLastError();
-
 	/* Convert Windows error to errno */
 	switch (error) {
 	case ERROR_INVALID_PARAMETER:
@@ -44,10 +38,6 @@ static int get_last_error_as_errno(void)
 		return -ENOMEM;
 	case ERROR_IO_DEVICE:
 		return -EIO;
-	case STG_E_FIRMWARE_IMAGE_INVALID:
-		return -EILSEQ;
-	case STG_E_FIRMWARE_SLOT_INVALID:
-		return -EINVAL;
 	default:
 		return -EIO;
 	}
@@ -79,6 +69,13 @@ static int get_errno_from_storage_protocol_status(DWORD status)
 	default:
 		return -EIO;
 	}
+}
+
+static int create_nvme_status_code(int status_code, int status_code_type,
+				   bool retry)
+{
+	return (status_code_type << NVME_SCT_SHIFT) | status_code |
+		(retry ? 0 : NVME_SC_DNR);
 }
 
 static bool get_is_win_pe(void)
@@ -122,7 +119,7 @@ __public int libnvme_rescan_ns(struct libnvme_transport_handle *hdl)
 	 */
 	if (!DeviceIoControl(hdl->fd, IOCTL_DISK_UPDATE_PROPERTIES,
 			NULL, 0, NULL, 0, NULL, NULL)) {
-		errno = get_last_error_as_errno();
+		errno = get_errno(GetLastError());
 		return -errno;
 	}
 	return 0;
@@ -156,7 +153,7 @@ __public int libnvme_update_block_size(struct libnvme_transport_handle *hdl,
 	/* Invalidate cached partition table and re-enumerate the device. */
 	if (!DeviceIoControl(hdl->fd, IOCTL_DISK_UPDATE_PROPERTIES,
 			NULL, 0, NULL, 0, NULL, NULL)) {
-		errno = get_last_error_as_errno();
+		errno = get_errno(GetLastError());
 		return -errno;
 	}
 	return 0;
@@ -271,7 +268,7 @@ static int submit_storage_protocol_command(
 			err = get_errno_from_storage_protocol_status(
 				protocol_command->ReturnStatus);
 		else
-			err = get_last_error_as_errno();
+			err = get_errno(GetLastError());
 	} while (hdl->decide_retry(hdl, cmd, err));
 
 	if (err) {
@@ -360,7 +357,7 @@ static int submit_io_flush(struct libnvme_transport_handle *hdl,
 			break;
 
 		if (!result)
-			err = get_last_error_as_errno();
+			err = get_errno(GetLastError());
 		else
 			err = -EIO;
 	} while (hdl->decide_retry(hdl, cmd, err));
@@ -513,7 +510,7 @@ static int submit_io_write(struct libnvme_transport_handle *hdl,
 			break;
 
 		if (!result)
-			err = get_last_error_as_errno();
+			err = get_errno(GetLastError());
 		else
 			err = -EIO;
 	} while (hdl->decide_retry(hdl, cmd, err));
@@ -594,7 +591,7 @@ static int submit_io_read(struct libnvme_transport_handle *hdl,
 			break;
 
 		if (!result)
-			err = get_last_error_as_errno();
+			err = get_errno(GetLastError());
 		else
 			err = -EIO;
 	} while (hdl->decide_retry(hdl, cmd, err));
@@ -624,6 +621,19 @@ out:
 /*
  * Windows-specific admin command implementations.
  */
+
+static int get_log_page_status(DWORD error)
+{
+	if (!error)
+		return 0;
+	
+	/* Translate error codes to NVMe status codes where possible. */
+	if (error == ERROR_INVALID_FUNCTION)
+		return create_nvme_status_code(NVME_SC_INVALID_LOG_PAGE,
+					NVME_SCT_CMD_SPECIFIC, false);
+
+	return get_errno(error);
+}
 
 static int submit_admin_get_log_page(struct libnvme_transport_handle *hdl,
 		struct libnvme_passthru_cmd *cmd)
@@ -717,7 +727,7 @@ static int submit_admin_get_log_page(struct libnvme_transport_handle *hdl,
 					NULL);
 		if (result)
 			break;
-		err = get_last_error_as_errno();
+		err = get_log_page_status(GetLastError());
 	} while (hdl->decide_retry(hdl, cmd, err));
 
 	if (err) {
@@ -821,7 +831,7 @@ static int submit_admin_identify(struct libnvme_transport_handle *hdl,
 					NULL);
 		if (result)
 			break;
-		err = get_last_error_as_errno();
+		err = get_errno(GetLastError());
 	} while (hdl->decide_retry(hdl, cmd, err));
 
 	if (err) {
@@ -928,7 +938,7 @@ static int submit_admin_set_features(struct libnvme_transport_handle *hdl,
 					NULL);
 		if (result)
 			break;
-		err = get_last_error_as_errno();
+		err = get_errno(GetLastError());
 	} while (hdl->decide_retry(hdl, cmd, err));
 
 	if (err) {
@@ -948,6 +958,28 @@ out:
 	return err;
 }
 
+/*
+ * Default data length for Get Features requests. The Windows StorNVMe driver
+ * rejects Get Features requests with ProtocolDataLength=0 for some vendor-
+ * specific feature IDs (returning ERROR_INVALID_FUNCTION). Providing a
+ * non-zero data length satisfies the driver even for features that don't
+ * return data in the buffer.
+ */
+#define GET_FEATURES_DEF_DATA_LEN 4096
+
+static int get_features_status(DWORD error)
+{
+	if (!error)
+		return 0;
+	
+	/* Translate error codes to NVMe status codes where possible. */
+	if (error == ERROR_IO_DEVICE)
+		return create_nvme_status_code(NVME_SC_INVALID_FIELD,
+					NVME_SCT_GENERIC, false);
+
+	return get_errno(error);
+}
+
 static int submit_admin_get_features(struct libnvme_transport_handle *hdl,
 		struct libnvme_passthru_cmd *cmd)
 {
@@ -959,6 +991,7 @@ static int submit_admin_get_features(struct libnvme_transport_handle *hdl,
 	PUCHAR buffer = NULL;
 	void *user_data = NULL;
 	int err = 0;
+	ULONG query_data_len;
 
 	user_data = hdl->submit_entry(hdl, cmd);
 	if (hdl->ctx->dry_run)
@@ -969,8 +1002,15 @@ static int submit_admin_get_features(struct libnvme_transport_handle *hdl,
 		goto out;
 	}
 
+	/*
+	 * Use a default data length to work around StorNVMe rejecting
+	 * requests with ProtocolDataLength=0 for some feature IDs.
+	 */
+	query_data_len = cmd->data_len > 0 ?
+			cmd->data_len : GET_FEATURES_DEF_DATA_LEN;
+
 	buffer_len = FIELD_OFFSET(STORAGE_PROPERTY_QUERY, AdditionalParameters) +
-		sizeof(STORAGE_PROTOCOL_SPECIFIC_DATA) + cmd->data_len;
+		sizeof(STORAGE_PROTOCOL_SPECIFIC_DATA) + query_data_len;
 
 	buffer = (PUCHAR)malloc(buffer_len);
 	if (!buffer) {
@@ -1000,9 +1040,8 @@ static int submit_admin_get_features(struct libnvme_transport_handle *hdl,
 	protocol_data->ProtocolDataRequestSubValue3 = cmd->cdw13;
 	protocol_data->ProtocolDataRequestSubValue4 = cmd->cdw14;
 
-	protocol_data->ProtocolDataLength = cmd->data_len;
-	protocol_data->ProtocolDataOffset = cmd->data_len == 0 ?
-			0 : sizeof(STORAGE_PROTOCOL_SPECIFIC_DATA);
+	protocol_data->ProtocolDataLength = query_data_len;
+	protocol_data->ProtocolDataOffset = sizeof(STORAGE_PROTOCOL_SPECIFIC_DATA);
 
 	do {
 		err = 0;
@@ -1016,7 +1055,7 @@ static int submit_admin_get_features(struct libnvme_transport_handle *hdl,
 					NULL);
 		if (result)
 			break;
-		err = get_last_error_as_errno();
+		err = get_features_status(GetLastError());
 	} while (hdl->decide_retry(hdl, cmd, err));
 
 	if (err) {
@@ -1085,6 +1124,32 @@ typedef struct _STORAGE_HW_FIRMWARE_DOWNLOAD {
 } STORAGE_HW_FIRMWARE_DOWNLOAD, *PSTORAGE_HW_FIRMWARE_DOWNLOAD;
 
 #endif
+
+/* Definitions for values not yet included in mingw's winerror.h */
+#ifndef STG_E_FIRMWARE_SLOT_INVALID
+#define STG_E_FIRMWARE_SLOT_INVALID      _HRESULT_TYPEDEF_(0x80030208L)
+#endif
+#ifndef STG_E_FIRMWARE_IMAGE_INVALID
+#define STG_E_FIRMWARE_IMAGE_INVALID     _HRESULT_TYPEDEF_(0x80030209L)
+#endif
+
+static int get_firmware_command_status(DWORD error)
+{
+	if (!error)
+		return 0;
+	
+	/* Translate error codes to NVMe status codes where possible. */
+	switch(error) {
+	case STG_E_FIRMWARE_IMAGE_INVALID:
+		return create_nvme_status_code(NVME_SC_FIRMWARE_IMAGE,
+					NVME_SCT_CMD_SPECIFIC, false);
+	case STG_E_FIRMWARE_SLOT_INVALID:
+		return create_nvme_status_code(NVME_SC_FIRMWARE_SLOT,
+					NVME_SCT_CMD_SPECIFIC, false);
+	default:
+		return get_errno(error);
+	}
+}
 
 static int submit_admin_fw_commit(struct libnvme_transport_handle *hdl,
 		struct libnvme_passthru_cmd *cmd)
@@ -1161,7 +1226,7 @@ static int submit_admin_fw_commit(struct libnvme_transport_handle *hdl,
 					NULL);
 		if (result)
 			break;
-		err = get_last_error_as_errno();
+		err = get_firmware_command_status(GetLastError());
 	} while (hdl->decide_retry(hdl, cmd, err));
 
 	if (err)
@@ -1258,7 +1323,7 @@ static int submit_admin_fw_download(struct libnvme_transport_handle *hdl,
 					NULL);
 		if (result)
 			break;
-		err = get_last_error_as_errno();
+		err = get_firmware_command_status(GetLastError());
 	} while (hdl->decide_retry(hdl, cmd, err));
 
 	if (err)
@@ -1358,7 +1423,7 @@ static int submit_admin_format_nvm_user_data_erase(
 			break;
 
 		if (!result)
-			err = get_last_error_as_errno();
+			err = get_errno(GetLastError());
 		else
 			err = -EIO;
 	} while (hdl->decide_retry(hdl, cmd, err));
@@ -1413,7 +1478,7 @@ static int submit_admin_format_nvm_crypto_erase(
 				NULL);
 		if (result)
 			break;
-		err = get_last_error_as_errno();
+		err = get_errno(GetLastError());
 	} while (hdl->decide_retry(hdl, cmd, err));
 
 	cmd->result = 0;
@@ -1462,7 +1527,8 @@ static int submit_admin_format_nvm(struct libnvme_transport_handle *hdl,
 	case NVME_FORMAT_SES_CRYPTO_ERASE:
 		return submit_admin_format_nvm_crypto_erase(hdl, cmd);
 	default:
-		return NVME_SC_INVALID_FIELD;
+		return create_nvme_status_code(NVME_SC_INVALID_FIELD,
+					NVME_SCT_GENERIC, false);
 	}
 }
 
@@ -1564,7 +1630,7 @@ static int submit_admin_security_send_receive(
 			break;
 
 		if (!result)
-			err = get_last_error_as_errno();
+			err = get_errno(GetLastError());
 		else
 			err = -EIO;
 	} while (hdl->decide_retry(hdl, cmd, err));
