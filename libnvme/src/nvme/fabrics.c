@@ -1228,6 +1228,9 @@ __public int libnvmf_disconnect_ctrl(libnvme_ctrl_t c)
 static void nvmf_update_tls_concat(struct nvmf_disc_log_entry *e,
 		libnvme_ctrl_t c, libnvme_host_t h)
 {
+	if (!e)
+		return;
+
 	if (e->trtype != NVMF_TRTYPE_TCP ||
 	    e->tsas.tcp.sectype == NVMF_TCP_SECTYPE_NONE)
 		return;
@@ -1710,7 +1713,7 @@ static int nvmf_dim(libnvme_ctrl_t c, enum nvmf_dim_tas tas, __u8 trtype,
 	nvmf_fill_die(die, c->s->h, tel, trtype, adrfam, reg_addr, tsas);
 
 	nvme_init_dim_send(&cmd, tas, dim, tdl);
-	return libnvme_submit_admin_passthru(hdl, &cmd);
+	return libnvme_exec_admin_passthru(hdl, &cmd);
 }
 
 /**
