@@ -626,7 +626,7 @@ static int get_log_page_status(DWORD error)
 {
 	if (!error)
 		return 0;
-	
+
 	/* Translate error codes to NVMe status codes where possible. */
 	if (error == ERROR_INVALID_FUNCTION)
 		return create_nvme_status_code(NVME_SC_INVALID_LOG_PAGE,
@@ -971,7 +971,7 @@ static int get_features_status(DWORD error)
 {
 	if (!error)
 		return 0;
-	
+
 	/* Translate error codes to NVMe status codes where possible. */
 	if (error == ERROR_IO_DEVICE)
 		return create_nvme_status_code(NVME_SC_INVALID_FIELD,
@@ -1137,9 +1137,9 @@ static int get_firmware_command_status(DWORD error)
 {
 	if (!error)
 		return 0;
-	
+
 	/* Translate error codes to NVMe status codes where possible. */
-	switch(error) {
+	switch (error) {
 	case STG_E_FIRMWARE_IMAGE_INVALID:
 		return create_nvme_status_code(NVME_SC_FIRMWARE_IMAGE,
 					NVME_SCT_CMD_SPECIFIC, false);
