@@ -156,17 +156,24 @@ char *get_ctrl_sysfs_dir(
 	libnvme_ctrl_t c = NULL;
 	__cleanup_free char* ctrl_name = NULL;
 	char *sysfs_dir = NULL;
+	const char *p;
 	const char *name = libnvme_transport_handle_get_name(hdl);
 
-	if (libnvme_transport_handle_is_ns(hdl))
-		ctrl_name = strndup(name, 5);	// look for first n after nvme to find size instead? Index could be 10+
-	else
+	if (libnvme_transport_handle_is_ctrl(hdl))
+	{
 		ctrl_name = strdup(name);
+	}
+	else
+	{
+		p = strchr(name + 4, 'n');
+		ctrl_name = p ? strndup(name, p - name) : strdup(name);
+	}
 
-	if (libnvme_scan_ctrl(ctx, ctrl_name, &c) == 0)
+	if (libnvme_scan_ctrl(ctx, ctrl_name, &c) == 0) {
 		sysfs_dir = strdup(libnvme_ctrl_get_sysfs_dir(c));
+		libnvme_free_ctrl(c);
+	}
 
-	libnvme_free_ctrl(c);
 	return sysfs_dir;
 }
 
