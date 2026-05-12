@@ -23,23 +23,24 @@
 
 #include "compiler-attributes.h"
 
-static int get_errno(DWORD error)
+static int get_errno_from_error(DWORD error)
 {
 	/* Convert Windows error to errno */
 	switch (error) {
 	case ERROR_INVALID_PARAMETER:
-		return -EINVAL;
+		return EINVAL;
 	case ERROR_CALL_NOT_IMPLEMENTED:
+		return ENOSYS;
 	case ERROR_INVALID_FUNCTION:
 	case ERROR_NOT_SUPPORTED:
-		return -ENOTSUP;
+		return ENOTSUP;
 	case ERROR_INSUFFICIENT_BUFFER:
 	case ERROR_NO_SYSTEM_RESOURCES:
-		return -ENOMEM;
+		return ENOMEM;
 	case ERROR_IO_DEVICE:
-		return -EIO;
+		return EIO;
 	default:
-		return -EIO;
+		return EIO;
 	}
 }
 
@@ -49,25 +50,25 @@ static int get_errno_from_storage_protocol_status(DWORD status)
 	case STORAGE_PROTOCOL_STATUS_SUCCESS:
 		return 0;
 	case STORAGE_PROTOCOL_STATUS_PENDING:
-		return -EAGAIN;
+		return EAGAIN;
 	case STORAGE_PROTOCOL_STATUS_ERROR:
-		return -EIO;
+		return EIO;
 	case STORAGE_PROTOCOL_STATUS_INVALID_REQUEST:
-		return -EINVAL;
+		return EINVAL;
 	case STORAGE_PROTOCOL_STATUS_NO_DEVICE:
-		return -ENODEV;
+		return ENODEV;
 	case STORAGE_PROTOCOL_STATUS_BUSY:
-		return -EBUSY;
+		return EBUSY;
 	case STORAGE_PROTOCOL_STATUS_DATA_OVERRUN:
-		return -E2BIG;
+		return E2BIG;
 	case STORAGE_PROTOCOL_STATUS_INSUFFICIENT_RESOURCES:
-		return -ENOMEM;
+		return ENOMEM;
 	case STORAGE_PROTOCOL_STATUS_THROTTLED_REQUEST:
-		return -EIO;
+		return EIO;
 	case STORAGE_PROTOCOL_STATUS_NOT_SUPPORTED:
-		return -ENOTSUP;
+		return ENOTSUP;
 	default:
-		return -EIO;
+		return EIO;
 	}
 }
 
@@ -119,7 +120,7 @@ __public int libnvme_rescan_ns(struct libnvme_transport_handle *hdl)
 	 */
 	if (!DeviceIoControl(hdl->fd, IOCTL_DISK_UPDATE_PROPERTIES,
 			NULL, 0, NULL, 0, NULL, NULL)) {
-		errno = get_errno(GetLastError());
+		errno = get_errno_from_error(GetLastError());
 		return -errno;
 	}
 	return 0;
@@ -153,7 +154,7 @@ __public int libnvme_update_block_size(struct libnvme_transport_handle *hdl,
 	/* Invalidate cached partition table and re-enumerate the device. */
 	if (!DeviceIoControl(hdl->fd, IOCTL_DISK_UPDATE_PROPERTIES,
 			NULL, 0, NULL, 0, NULL, NULL)) {
-		errno = get_errno(GetLastError());
+		errno = get_errno_from_error(GetLastError());
 		return -errno;
 	}
 	return 0;
@@ -261,14 +262,14 @@ static int submit_storage_protocol_command(
 					&returned_len,
 					NULL);
 		if (result && (protocol_command->ReturnStatus == STORAGE_PROTOCOL_STATUS_SUCCESS ||
-			       protocol_command->ReturnStatus == STORAGE_PROTOCOL_STATUS_PENDING))
+				   protocol_command->ReturnStatus == STORAGE_PROTOCOL_STATUS_PENDING))
 			break;
 
 		if (protocol_command->ReturnStatus != STORAGE_PROTOCOL_STATUS_SUCCESS)
-			err = get_errno_from_storage_protocol_status(
+			err = -get_errno_from_storage_protocol_status(
 				protocol_command->ReturnStatus);
 		else
-			err = get_errno(GetLastError());
+			err = -get_errno_from_error(GetLastError());
 	} while (hdl->decide_retry(hdl, cmd, err));
 
 	if (err) {
@@ -357,7 +358,7 @@ static int submit_io_flush(struct libnvme_transport_handle *hdl,
 			break;
 
 		if (!result)
-			err = get_errno(GetLastError());
+			err = -get_errno_from_error(GetLastError());
 		else
 			err = -EIO;
 	} while (hdl->decide_retry(hdl, cmd, err));
@@ -510,7 +511,7 @@ static int submit_io_write(struct libnvme_transport_handle *hdl,
 			break;
 
 		if (!result)
-			err = get_errno(GetLastError());
+			err = -get_errno_from_error(GetLastError());
 		else
 			err = -EIO;
 	} while (hdl->decide_retry(hdl, cmd, err));
@@ -591,7 +592,7 @@ static int submit_io_read(struct libnvme_transport_handle *hdl,
 			break;
 
 		if (!result)
-			err = get_errno(GetLastError());
+			err = -get_errno_from_error(GetLastError());
 		else
 			err = -EIO;
 	} while (hdl->decide_retry(hdl, cmd, err));
@@ -632,7 +633,7 @@ static int get_log_page_status(DWORD error)
 		return create_nvme_status_code(NVME_SC_INVALID_LOG_PAGE,
 					NVME_SCT_CMD_SPECIFIC, false);
 
-	return get_errno(error);
+	return -get_errno_from_error(error);
 }
 
 static int submit_admin_get_log_page(struct libnvme_transport_handle *hdl,
@@ -831,7 +832,7 @@ static int submit_admin_identify(struct libnvme_transport_handle *hdl,
 					NULL);
 		if (result)
 			break;
-		err = get_errno(GetLastError());
+		err = -get_errno_from_error(GetLastError());
 	} while (hdl->decide_retry(hdl, cmd, err));
 
 	if (err) {
@@ -938,7 +939,7 @@ static int submit_admin_set_features(struct libnvme_transport_handle *hdl,
 					NULL);
 		if (result)
 			break;
-		err = get_errno(GetLastError());
+		err = -get_errno_from_error(GetLastError());
 	} while (hdl->decide_retry(hdl, cmd, err));
 
 	if (err) {
@@ -977,7 +978,7 @@ static int get_features_status(DWORD error)
 		return create_nvme_status_code(NVME_SC_INVALID_FIELD,
 					NVME_SCT_GENERIC, false);
 
-	return get_errno(error);
+	return -get_errno_from_error(error);
 }
 
 static int submit_admin_get_features(struct libnvme_transport_handle *hdl,
@@ -1147,7 +1148,7 @@ static int get_firmware_command_status(DWORD error)
 		return create_nvme_status_code(NVME_SC_FIRMWARE_SLOT,
 					NVME_SCT_CMD_SPECIFIC, false);
 	default:
-		return get_errno(error);
+		return -get_errno_from_error(error);
 	}
 }
 
@@ -1423,7 +1424,7 @@ static int submit_admin_format_nvm_user_data_erase(
 			break;
 
 		if (!result)
-			err = get_errno(GetLastError());
+			err = -get_errno_from_error(GetLastError());
 		else
 			err = -EIO;
 	} while (hdl->decide_retry(hdl, cmd, err));
@@ -1478,7 +1479,7 @@ static int submit_admin_format_nvm_crypto_erase(
 				NULL);
 		if (result)
 			break;
-		err = get_errno(GetLastError());
+		err = -get_errno_from_error(GetLastError());
 	} while (hdl->decide_retry(hdl, cmd, err));
 
 	cmd->result = 0;
@@ -1630,7 +1631,7 @@ static int submit_admin_security_send_receive(
 			break;
 
 		if (!result)
-			err = get_errno(GetLastError());
+			err = -get_errno_from_error(GetLastError());
 		else
 			err = -EIO;
 	} while (hdl->decide_retry(hdl, cmd, err));
