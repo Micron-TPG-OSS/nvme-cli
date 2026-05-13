@@ -22,7 +22,6 @@ headers = [
     'nvme/fcntl.h',
     'nvme/filters.h',
     'nvme/ioctl.h',
-    'nvme/lib-compat.h',
     'nvme/lib-types.h',
     'nvme/lib.h',
     'nvme/linux.h',

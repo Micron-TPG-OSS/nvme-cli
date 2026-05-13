@@ -11,7 +11,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#include <nvme/lib-compat.h>
 #include <nvme/lib-types.h>
 #include <nvme/unistd.h>
 
