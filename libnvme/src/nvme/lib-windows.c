@@ -78,7 +78,7 @@ static int __libnvme_transport_handle_open_direct(struct libnvme_transport_handl
 	return 0;
 }
 
-__public int libnvme_open(struct libnvme_global_ctx *ctx, const char *name,
+__libnvme_public int libnvme_open(struct libnvme_global_ctx *ctx, const char *name,
 	      struct libnvme_transport_handle **hdlp)
 {
 	struct libnvme_transport_handle *hdl;
@@ -157,7 +157,7 @@ __public int libnvme_open(struct libnvme_global_ctx *ctx, const char *name,
 	return 0;
 }
 
-__public void libnvme_close(struct libnvme_transport_handle *hdl)
+__libnvme_public void libnvme_close(struct libnvme_transport_handle *hdl)
 {
 	bool is_test_fd;
 
