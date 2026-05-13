@@ -311,7 +311,7 @@ int libnvme_ns_init(const char *path, struct libnvme_ns *ns)
 	uint8_t flbas;
 	int ret;
 
-	id = __libnvme_alloc(sizeof(*id));
+	id = libnvme_alloc(sizeof(*id));
 	if (!id)
 		return -ENOMEM;
 
