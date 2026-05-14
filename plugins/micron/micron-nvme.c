@@ -995,7 +995,6 @@ struct {
 	};
 
 
-// This won't work on Windows.  It doesn't even work on my Ubuntu system.
 static int micron_pcie_stats(int argc, char **argv,
 				 struct command *command, struct plugin *plugin)
 {
