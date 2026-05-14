@@ -17,7 +17,7 @@
 
 #include <stdio.h>
 #include <signal.h>
-// #include <sys/select.h>
+#include <sys/select.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
