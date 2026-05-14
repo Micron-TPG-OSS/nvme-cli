@@ -10,10 +10,13 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#if defined(HAVE_NETDB) || defined(CONFIG_FABRICS)
+#include <ifaddrs.h>
+#endif
+
 #include <ccan/list/list.h>
 
 #include "nvme/nvme-types.h"
-#include "nvme/lib-compat.h"
 #include "nvme/lib-types.h"
 
 #include <nvme/tree.h>
@@ -140,6 +143,12 @@ enum libnvme_transport_handle_type {
 	LIBNVME_TRANSPORT_HANDLE_TYPE_MI,
 };
 
+enum ioctl_state {
+	IOCTL_STATE_UNKNOWN = 0,
+	IOCTL_STATE_IOCTL32 = 1,
+	IOCTL_STATE_IOCTL64 = 2,
+};
+
 struct libnvme_transport_handle {
 	struct libnvme_global_ctx *ctx;
 	enum libnvme_transport_handle_type type;
@@ -159,8 +168,8 @@ struct libnvme_transport_handle {
 	/* direct */
 	libnvme_fd_t fd;
 	struct stat stat;
-	bool ioctl_admin64;
-	bool ioctl_io64;
+	enum ioctl_state ioctl_admin_state;
+	enum ioctl_state ioctl_io_state;
 	bool uring_enabled;
 
 #ifdef CONFIG_MI
@@ -437,12 +446,6 @@ int _libnvme_create_ctrl(struct libnvme_global_ctx *ctx,
 		struct libnvme_ctrl **cp);
 bool _libnvme_ctrl_match_config(struct libnvme_ctrl *c,
 		struct libnvmf_context *fctx);
-
-void *__libnvme_alloc(size_t len);
-
-void __libnvme_free(void *p);
-
-void *__libnvme_realloc(void *p, size_t len);
 
 void nvme_deconfigure_ctrl(struct libnvme_ctrl *c);
 

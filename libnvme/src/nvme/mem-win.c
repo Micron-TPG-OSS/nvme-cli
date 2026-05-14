@@ -1,26 +1,70 @@
-// SPDX-License-Identifier: LGPL-2.1-or-later
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 /*
  * This file is part of libnvme.
- * Copyright (c) 2025 Micron Technology, Inc.
+ * Copyright (c) 2026 Micron Technology, Inc.
  *
  * Authors: Brandon Capener <bcapener@micron.com>
  */
 
-#include <malloc.h>
 #include <string.h>
+#include <malloc.h>
 
 #include <memoryapi.h>
+#include <sysinfoapi.h>
 
-#include <nvme/stdlib.h>
-#include <nvme/unistd.h>
-
+#include "compiler-attributes.h"
 #include "mem.h"
-#include "common.h"
+#include "private.h"
 
-#define ROUND_UP(N, S) ((((N) + (S) - 1) / (S)) * (S))
 #define HUGE_MIN 0x80000 /* policy threshold when large pages unavailable */
 
-void *nvme_alloc_huge(size_t len, struct nvme_mem_huge *mh)
+static int getpagesize(void)
+{
+	SYSTEM_INFO si;
+
+	GetSystemInfo(&si);
+	return si.dwPageSize;
+}
+
+__libnvme_public void *libnvme_alloc(size_t len)
+{
+	size_t _len = round_up(len, 0x1000);
+	void *p;
+
+	p = _aligned_malloc(_len, getpagesize());
+	if (!p)
+		return NULL;
+
+	memset(p, 0, _len);
+	return p;
+}
+
+__libnvme_public void *libnvme_realloc(void *p, size_t len)
+{
+	size_t old_len;
+	void *result;
+
+	if (!p)
+		return libnvme_alloc(len);
+
+	old_len = _aligned_msize(p, getpagesize(), 0);
+	result = libnvme_alloc(len);
+
+	if (result) {
+		memcpy(result, p, min(old_len, len));
+		_aligned_free(p);
+	}
+
+	return result;
+}
+
+__libnvme_public void libnvme_free(void *p)
+{
+	_aligned_free(p);
+}
+
+__libnvme_public void *libnvme_alloc_huge(size_t len,
+		struct libnvme_mem_huge *mh)
 {
 	SIZE_T large_min = GetLargePageMinimum(); /* 0 if unsupported/unavailable */
 	SIZE_T huge_min = large_min ? large_min : HUGE_MIN;
@@ -29,16 +73,16 @@ void *nvme_alloc_huge(size_t len, struct nvme_mem_huge *mh)
 
 	memset(mh, 0, sizeof(*mh));
 
-	len = ROUND_UP(len, page_size);
+	len = round_up(len, page_size);
 
 	/*
 	 * For smaller allocations, use regular allocator.
 	 */
 	if (len < huge_min) {
-		mh->p = nvme_alloc(len);
+		mh->p = libnvme_alloc(len);
 		if (!mh->p)
 			return NULL;
-		mh->posix_memalign = true;
+		mh->libnvme_alloc = true;
 		mh->len = len;
 		return mh->p;
 	}
@@ -48,14 +92,14 @@ void *nvme_alloc_huge(size_t len, struct nvme_mem_huge *mh)
 	 * Requires SeLockMemoryPrivilege and size multiple of large_min.
 	 */
 	if (large_min) {
-		SIZE_T lp_len = ROUND_UP(len, large_min);
+		SIZE_T lp_len = round_up(len, large_min);
 
 		mh->p = VirtualAlloc(NULL, lp_len,
 					 MEM_COMMIT | MEM_RESERVE | MEM_LARGE_PAGES,
 					 PAGE_READWRITE);
 		if (mh->p != NULL) {
 			mh->len = lp_len;
-			mh->posix_memalign = false;
+			mh->libnvme_alloc = false;
 			return mh->p;
 		}
 	}
@@ -66,7 +110,7 @@ void *nvme_alloc_huge(size_t len, struct nvme_mem_huge *mh)
 	mh->p = VirtualAlloc(NULL, len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 	if (mh->p != NULL) {
 		mh->len = len;
-		mh->posix_memalign = false;
+		mh->libnvme_alloc = false;
 		return mh->p;
 	}
 
@@ -75,23 +119,24 @@ void *nvme_alloc_huge(size_t len, struct nvme_mem_huge *mh)
 	 * Prefer large page size if known, otherwise page size.
 	 */
 	align = large_min ? large_min : page_size;
-	len = ROUND_UP(len, align);
-	if (posix_memalign(&mh->p, align, len))
+	len = round_up(len, align);
+	mh->p = _aligned_malloc(len, align);
+	if (mh->p == NULL)
 		return NULL;
 
-	mh->posix_memalign = true;
+	mh->libnvme_alloc = true;
 	mh->len = len;
 	memset(mh->p, 0, mh->len);
 	return mh->p;
 }
 
-void nvme_free_huge(struct nvme_mem_huge *mh)
+__libnvme_public void libnvme_free_huge(struct libnvme_mem_huge *mh)
 {
 	if (!mh || mh->len == 0)
 		return;
 
-	if (mh->posix_memalign)
-		nvme_free(mh->p);
+	if (mh->libnvme_alloc)
+		_aligned_free(mh->p);
 	else
 		VirtualFree(mh->p, 0, MEM_RELEASE);
 

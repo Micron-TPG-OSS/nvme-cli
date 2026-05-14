@@ -4,17 +4,18 @@ util_sources = [
     'util/argconfig.c',
     'util/base64.c',
     'util/crc32.c',
-    'util/mem.c',
     'util/sighdl.c',
     'util/suffix.c',
     'util/types.c',
     'util/utils.c',
-    'util/table.c'
+    'util/table.c',
 ]
 
 if host_system == 'windows'
+    util_sources += []
+else
     util_sources += [
-        'util/mem-windows.c',
+        'util/dashboard.c',
     ]
 endif
 
