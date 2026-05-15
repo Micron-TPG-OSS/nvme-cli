@@ -33,7 +33,7 @@ __libnvme_public void *libnvme_alloc(size_t len)
 
 __libnvme_public void *libnvme_realloc(void *p, size_t len)
 {
-	size_t old_len = p ? malloc_usable_size(p) : 0;
+	size_t old_len = malloc_usable_size(p);
 
 	void *result = libnvme_alloc(len);
 

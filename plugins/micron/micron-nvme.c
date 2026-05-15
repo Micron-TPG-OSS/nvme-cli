@@ -3954,10 +3954,12 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 	GetCtrlIDDInfo(strCtrlDirName, &ctrl);
 	GetOSConfig(strOSDirName);
 	if (sscanf(libnvme_transport_handle_get_name(hdl), "nvme%d", &ctrlIdx) != 1)
-		ctrlIdx = 0;	
+		ctrlIdx = 0;
 	GetDriveInfo(strOSDirName, ctrlIdx, &ctrl);
+
 	for (int i = 1; i <= ctrl.nn; i++)
 		GetNSIDDInfo(hdl, strCtrlDirName, i);
+
 	GetSmartlogData(hdl, strCtrlDirName);
 	GetErrorlogData(hdl, ctrl.elpe, strCtrlDirName);
 	GetGenericLogs(hdl, strCtrlDirName);
@@ -4234,7 +4236,7 @@ static int micron_cloud_boot_SSD_version(int argc, char **argv,
 			goto out;
 		}
 	} else {
-		nvme_show_err(err, "Error retrieving controller identification data");
+		printf("Error %d retrieving controller identification data\n", err);
 		goto out;
 	}
 
