@@ -579,7 +579,7 @@ static int NVMEGetLogPage(struct libnvme_transport_handle *hdl, unsigned char uc
 static int NVMEResetLog(struct libnvme_transport_handle *hdl, unsigned char ucLogID, int nBufferSize,
 			long long llMaxSize)
 {
-	unsigned int *pBuffer = NULL;
+	__cleanup_libnvme_free unsigned int *pBuffer = NULL;
 	int err = 0;
 
 	pBuffer = (unsigned int *)libnvme_alloc(nBufferSize);
@@ -588,10 +588,8 @@ static int NVMEResetLog(struct libnvme_transport_handle *hdl, unsigned char ucLo
 
 	while (!err && llMaxSize > 0) {
 		err = NVMEGetLogPage(hdl, ucLogID, (unsigned char *)pBuffer, nBufferSize, 0);
-		if (err) {
-			libnvme_free(pBuffer);
+		if (err)
 			return err;
-		}
 
 		if (pBuffer[0] == 0xdeadbeef)
 			break;
@@ -599,7 +597,6 @@ static int NVMEResetLog(struct libnvme_transport_handle *hdl, unsigned char ucLo
 		llMaxSize = llMaxSize - nBufferSize;
 	}
 
-	libnvme_free(pBuffer);
 	return err;
 }
 
@@ -1939,13 +1936,12 @@ static int micron_nand_stats(int argc, char **argv,
 	eModel = GetDriveModel(ctx, hdl);
 	if (eModel == UNKNOWN_MODEL) {
 		printf("Unsupported drive model for vs-nand-stats command\n");
-		err = -1;
-		goto out;
+		return -1;
 	}
 
 	err = nvme_identify_ctrl(hdl, &ctrl);
 	if (err) {
-		fprintf(stderr, "ERROR : identify_ctrl() failed with 0x%x\n", err);
+		nvme_show_err(err, "ERROR : identify_ctrl() failed");
 		return -1;
 	}
 
@@ -1955,13 +1951,13 @@ static int micron_nand_stats(int argc, char **argv,
 			print_hyperscale_nand_stats((__u8 *)logC0, is_json);
 			goto out;
 		} else if (err < 0) {
-			printf("Unable to retrieve extended smart log 0xC0 for the drive\n");
+			nvme_show_err(err, "Unable to retrieve extended smart log 0xC0 for the drive");
 			return -1;
 		}
 	}
 
 	err = nvme_get_log_simple(hdl, 0xD0, extSmartLog, D0_log_size);
-	has_d0_log = (err == 0);
+	has_d0_log = !err;
 
 	/* should check for firmware version if this log is supported or not */
 	if (eModel != M5407 && eModel != M5410) {
@@ -1972,6 +1968,7 @@ static int micron_nand_stats(int argc, char **argv,
 	nsze = (ctrl.vs[987] == 0x12);
 	if (!nsze && nsze_from_oacs)
 		nsze = ((ctrl.oacs >> 3) & 0x1);
+
 	if (has_fb_log) {
 		__u8 spec = (eModel == M5410) ? 0 : 1;	/* FB spec version */
 
@@ -1980,12 +1977,10 @@ static int micron_nand_stats(int argc, char **argv,
 	} else if (has_d0_log) {
 		print_nand_stats_d0((__u8 *)extSmartLog, nsze, is_json);
 		err = 0;
-	} else {
-		printf("Unable to retrieve extended smart log for the drive\n");
 	}
 out:
-	if (err > 0)
-		nvme_show_status(err);
+	if (err)
+		nvme_show_err(err, "Unable to retrieve extended smart log for the drive");
 
 	return err;
 }
@@ -2273,7 +2268,7 @@ static void GetSmartlogData(struct libnvme_transport_handle *hdl, const char *di
 static void GetErrorlogData(struct libnvme_transport_handle *hdl, int entries, const char *dir)
 {
 	int logSize = entries * sizeof(struct nvme_error_log_page);
-	struct nvme_error_log_page *error_log =
+	__cleanup_libnvme_free struct nvme_error_log_page *error_log =
 				(struct nvme_error_log_page *)libnvme_alloc(logSize);
 
 	if (!error_log)
@@ -2282,8 +2277,6 @@ static void GetErrorlogData(struct libnvme_transport_handle *hdl, int entries, c
 	if (!nvme_get_log_error(hdl, NVME_NSID_ALL, entries, error_log))
 		WriteData((__u8 *)error_log, logSize, dir,
 			  "error_information_log.bin", "error log");
-
-	libnvme_free(error_log);
 }
 
 static void GetGenericLogs(struct libnvme_transport_handle *hdl, const char *dir)
@@ -2573,7 +2566,7 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 	if (!err && buffer) {
 		*data = buffer;
 	} else {
-		fprintf(stderr, "Failed to get telemetry data for 0x%x\n", type);
+		nvme_show_err(err, "Failed to get telemetry data for 0x%x\n", type);
 		libnvme_free(buffer);
 	}
 
@@ -2735,8 +2728,8 @@ static int micron_drive_info(int argc, char **argv, struct command *acmd,
 			dinfo.bs_ver_major  = *((__u16 *)(logC0+300));
 			dinfo.bs_ver_minor  = *((__u16 *)(logC0+302));
 			dinfo.ownership_status = *((__u32 *)(logC0+312));
-		} else if (err < 0) {
-			printf("Unable to retrieve extended smart log 0xC0 for the drive\n");
+		} else {
+			nvme_show_err(err, "Unable to retrieve extended smart log 0xC0 for the drive");
 			return -1;
 		}
 	}
@@ -3663,10 +3656,10 @@ static int get_common_log(struct libnvme_transport_handle *hdl, uint8_t id, uint
 static int GetOcpEnhancedTelemetryLog(struct libnvme_transport_handle *hdl, const char *dir, int nLogID)
 {
 	int err = 0;
-	unsigned char *pTelemetryDataHeader = 0;
+	__cleanup_libnvme_free unsigned char *pTelemetryDataHeader = NULL;
 	unsigned int nallocSize = 0;
 	unsigned int nOffset = 0;
-	unsigned char *pTelemetryBuffer = 0;
+	unsigned char *pTelemetryBuffer = NULL;
 	unsigned int usAreaLastBlock[4] = {0};
 	bool bTeleheaderWrite = true;
 	/* Enable ETDAS */
@@ -3774,8 +3767,6 @@ static int GetOcpEnhancedTelemetryLog(struct libnvme_transport_handle *hdl, cons
 		libnvme_free(pTelemetryBuffer);
 		pTelemetryBuffer = NULL;
 	}
-	// free mem of header, all areas
-	libnvme_free(pTelemetryDataHeader);
 
 	return err;
 }
@@ -4379,8 +4370,8 @@ static int micron_cloud_log(int argc, char **argv, struct command *acmd,
 	err = nvme_get_log_simple(hdl, 0xC0, logC0, C0_log_size);
 	if (err == 0)
 		print_hyperscale_cloud_health_log((__u8 *)logC0, is_json);
-	else if (err < 0)
-		nvme_show_err(err, "Unable to retrieve extended smart log 0xC0 for the drive");
+	else
+		printf("Unable to retrieve extended smart log 0xC0 for the drive\n");
 
 out:
 	if (err > 0)
