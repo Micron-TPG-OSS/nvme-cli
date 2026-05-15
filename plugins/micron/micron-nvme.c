@@ -2561,10 +2561,13 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 	err = 0;
 	buffer = (unsigned char *)libnvme_realloc(buffer, (size_t)(*logSize));
 	if (buffer) {
-		if (ctrl_init)
-			err = nvme_get_log_telemetry_ctrl(hdl, true, 0, buffer + offset, *logSize - offset);
-		else
-			err = nvme_get_log_telemetry_host(hdl, 0, buffer + offset, *logSize - offset);
+		while (!err && offset != *logSize) {
+			if (ctrl_init)
+				err = nvme_get_log_telemetry_ctrl(hdl, true, offset, buffer + offset, bs);
+			else
+				err = nvme_get_log_telemetry_host(hdl, offset, buffer + offset, bs);
+			offset += bs;
+		}
 	}
 
 	if (!err && buffer) {
