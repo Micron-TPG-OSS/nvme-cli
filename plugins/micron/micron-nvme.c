@@ -3912,6 +3912,9 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 		goto out;
 	}
 
+	if (sscanf(libnvme_transport_handle_get_name(hdl), "nvme%d", &ctrlIdx) != 1)
+		ctrlIdx = 0;
+
 	err = nvme_identify_ctrl(hdl, &ctrl);
 	if (err)
 		goto out;
@@ -3953,8 +3956,6 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 	GetTimestampInfo(strOSDirName);
 	GetCtrlIDDInfo(strCtrlDirName, &ctrl);
 	GetOSConfig(strOSDirName);
-	if (sscanf(libnvme_transport_handle_get_name(hdl), "nvme%d", &ctrlIdx) != 1)
-		ctrlIdx = 0;
 	GetDriveInfo(strOSDirName, ctrlIdx, &ctrl);
 
 	for (int i = 1; i <= ctrl.nn; i++)
