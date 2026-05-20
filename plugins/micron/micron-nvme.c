@@ -133,6 +133,38 @@ static void WriteData(__u8 *data, __u32 len, const char *dir, const char *file, 
 	}
 }
 
+char *get_ctrl_name(struct libnvme_transport_handle *hdl)
+{
+	const char *name = libnvme_transport_handle_get_name(hdl);
+	char *ctrl_name = NULL;
+
+	if (libnvme_transport_handle_is_ctrl(hdl)) {
+		ctrl_name = strdup(name);
+	}
+	else {
+		const char *p = strchr(name + 4, 'n');
+		ctrl_name = p ? strndup(name, p - name) : strdup(name);
+	}
+
+	return ctrl_name;
+}
+
+char *get_ns_name(struct libnvme_transport_handle *hdl)
+{
+	const char *name = libnvme_transport_handle_get_name(hdl);
+	char *ns_name = NULL;
+
+	if (libnvme_transport_handle_is_ns(hdl)) {
+		ns_name = strdup(name);
+	}
+	else {
+		if (asprintf(&ns_name, "%sn1", name) < 0)
+			return NULL;
+	}
+
+	return ns_name;
+}
+
 char *get_ctrl_sysfs_dir(
 	struct libnvme_global_ctx *ctx,
 	struct libnvme_transport_handle *hdl)
@@ -140,19 +172,8 @@ char *get_ctrl_sysfs_dir(
 	libnvme_ctrl_t c = NULL;
 	__cleanup_free char* ctrl_name = NULL;
 	char *sysfs_dir = NULL;
-	const char *p;
-	const char *name = libnvme_transport_handle_get_name(hdl);
 
-	if (libnvme_transport_handle_is_ctrl(hdl))
-	{
-		ctrl_name = strdup(name);
-	}
-	else
-	{
-		p = strchr(name + 4, 'n');
-		ctrl_name = p ? strndup(name, p - name) : strdup(name);
-	}
-
+	ctrl_name = get_ctrl_name(hdl);
 	if (libnvme_scan_ctrl(ctx, ctrl_name, &c) == 0) {
 		sysfs_dir = strdup(libnvme_ctrl_get_sysfs_dir(c));
 		libnvme_free_ctrl(c);
@@ -978,33 +999,28 @@ struct {
 
 
 #if defined(_WIN32)
-static int get_pcie_aer_errors(char **argv, __u32 *correctable_errors,
-			       __u32 *uncorrectable_errors)
+static int get_pcie_aer_errors(struct libnvme_transport_handle *hdl,
+	__u32 *correctable_errors, __u32 *uncorrectable_errors)
 {
 	printf("sysfs not supported on the current platform\n");
 	return -ENOTSUP;
 }
 #else
-static int get_pcie_aer_errors(char **argv, __u32 *correctable_errors,
-			       __u32 *uncorrectable_errors)
+static int get_pcie_aer_errors(struct libnvme_transport_handle *hdl,
+	__u32 *correctable_errors, __u32 *uncorrectable_errors)
 {
 	int bus = 0, domain = 0, device = 0, function = 0;
 	char strTempFile[1024], strTempFile2[1024], cmdbuf[1024];
 	char buf[8] = { 0 };
 	char *businfo = NULL;
-	char *devicename = NULL;
+	__cleanup_free char *devicename = NULL;
 	char tdevice[NAME_MAX] = { 0 };
 	ssize_t sLinkSize = 0;
 	FILE *fp;
 	char *res;
 
-	if (strstr(argv[optind], "/dev/nvme") && strstr(argv[optind], "n1")) {
-		devicename = strrchr(argv[optind], '/');
-	} else if (strstr(argv[optind], "/dev/nvme")) {
-		devicename = strrchr(argv[optind], '/');
-		sprintf(tdevice, "%s%s", devicename, "n1");
-		devicename = tdevice;
-	} else {
+	devicename = get_ns_name(hdl);
+	if (strstr(devicename, "nvme")) {
 		printf("Invalid device specified!\n");
 		return -EINVAL;
 	}
@@ -1126,8 +1142,8 @@ static int micron_pcie_stats(int argc, char **argv,
 		}
 	}
 
-	err = get_pcie_aer_errors(argv, &correctable_errors,
-				  &uncorrectable_errors);
+	err = get_pcie_aer_errors(hdl, &correctable_errors,
+					&uncorrectable_errors);
 	if (err)
 		goto out;
 print_stats:
@@ -1184,13 +1200,13 @@ out:
 }
 
 #if defined(_WIN32)
-static int clear_pcie_correctable_errors_sysfs(char **argv)
+static int clear_pcie_correctable_errors_sysfs(struct libnvme_transport_handle *hdl)
 {
 	printf("sysfs not supported on the current platform\n");
 	return -ENOTSUP;
 }
 #else
-static int clear_pcie_correctable_errors_sysfs(char **argv)
+static int clear_pcie_correctable_errors_sysfs(struct libnvme_transport_handle *hdl)
 {
 	int err, bus = 0, domain = 0, device = 0, function = 0;
 	char strTempFile[1024], strTempFile2[1024], cmdbuf[1024];
@@ -1202,13 +1218,8 @@ static int clear_pcie_correctable_errors_sysfs(char **argv)
 	FILE *fp;
 	char *res;
 
-	if (strstr(argv[optind], "/dev/nvme") && strstr(argv[optind], "n1")) {
-		devicename = strrchr(argv[optind], '/');
-	} else if (strstr(argv[optind], "/dev/nvme")) {
-		devicename = strrchr(argv[optind], '/');
-		sprintf(tdevice, "%s%s", devicename, "n1");
-		devicename = tdevice;
-	} else {
+	devicename = get_ns_name(hdl);
+	if (strstr(devicename, "nvme")) {
 		printf("Invalid device specified!\n");
 		return -EINVAL;
 	}
@@ -1311,7 +1322,7 @@ static int micron_clear_pcie_correctable_errors(int argc, char **argv,
 	}
 
 	/* clear status bits using sysfs interface */
-	err = clear_pcie_correctable_errors_sysfs(argv);
+	err = clear_pcie_correctable_errors_sysfs(hdl);
 
 	return err;
 }
