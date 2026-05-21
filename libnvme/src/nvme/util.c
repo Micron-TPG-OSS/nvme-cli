@@ -783,16 +783,16 @@ static int random_bytes(void *buf, size_t buflen)
 		return -EIO;
 #else
 	__cleanup_fd int fd = -1;
-	ssize_t result;
+	ssize_t n;
 
 	fd = open("/dev/urandom", O_RDONLY);
 	if (fd < 0)
 		return -errno;
 
-	result = read(fd, buf, buflen);
-	if (result < 0)
+	n = read(fd, buf, buflen);
+	if (n < 0)
 		return -errno;
-	else if ((size_t)result != buflen)
+	else if ((size_t)n != buflen)
 		return -EIO;
 #endif
 	return 0;
