@@ -7,7 +7,7 @@
  */
 #pragma once
 
-#if defined(HAVE_NETDB) || defined(CONFIG_FABRICS)
+#if defined(NVME_HAVE_NETDB) || defined(CONFIG_FABRICS)
 #include <ifaddrs.h>
 #endif
 
@@ -111,7 +111,7 @@ struct libnvmf_uri { // !generate-accessors
  * libnvmf_exat_len() - Return length rounded up by 4
  * @val_len: Value length
  *
- * Return the size in bytes, rounded to a multiple of 4 (e.g., size of
+ * Calculate the size in bytes, rounded to a multiple of 4 (e.g., size of
  * __u32), of the buffer needed to hold the exat value of size
  * @val_len.
  *
@@ -127,7 +127,7 @@ static inline __u16 libnvmf_exat_len(size_t val_len)
  * @val_len: This is the length of the data to be copied to the "exatval"
  *           field of a "struct nvmf_ext_attr".
  *
- * Return the size of the "struct nvmf_ext_attr" needed to hold
+ * Calculate the size of the "struct nvmf_ext_attr" needed to hold
  * a value of size @val_len.
  *
  * Return: The size in bytes, rounded to a multiple of 4 (i.e. size of
@@ -139,7 +139,7 @@ static inline __u16 libnvmf_exat_size(size_t val_len)
 	return (__u16)(sizeof(struct nvmf_ext_attr) + libnvmf_exat_len(val_len));
 }
 
-#if defined(HAVE_NETDB) || defined(CONFIG_FABRICS)
+#if defined(NVME_HAVE_NETDB) || defined(CONFIG_FABRICS)
 /**
  * libnvmf_getifaddrs - Cached wrapper around getifaddrs()
  * @ctx: pointer to the global context
@@ -150,10 +150,10 @@ static inline __u16 libnvmf_exat_size(size_t val_len)
  * on the returned data. The cache will be freed when the global
  * context is freed.
  *
- * Return: Pointer to I/F data, NULL on error (with errno set).
+ * Return: Pointer to I/F data, NULL on error.
  */
 const struct ifaddrs *libnvmf_getifaddrs(struct libnvme_global_ctx *ctx);
-#endif /* HAVE_NETDB || CONFIG_FABRICS */
+#endif /* NVME_HAVE_NETDB || CONFIG_FABRICS */
 
 /**
  * struct candidate_args - Parameters used to match an existing controller
@@ -174,7 +174,7 @@ struct candidate_args {
 	const char *subsysnqn;
 	const char *host_traddr;
 	const char *host_iface;
-#if defined(HAVE_NETDB) || defined(CONFIG_FABRICS)
+#if defined(NVME_HAVE_NETDB) || defined(CONFIG_FABRICS)
 	const struct ifaddrs *iface_list;
 #endif
 	bool (*addreq)(const char *, const char *);

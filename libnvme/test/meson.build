@@ -173,7 +173,7 @@ if want_fabrics
     test('libnvme - fabrics', test_fabrics)
 endif
 
-if conf.get('HAVE_NETDB')
+if conf.get('NVME_HAVE_NETDB')
     mock_ifaddrs = library(
         'mock-ifaddrs',
         ['mock-ifaddrs.c', ],
@@ -251,7 +251,6 @@ foreach hdr : [
     'linux',
     'mi',
     'nbft',
-    'nbft-types',
     'nvme-cmds',
     'nvme-cmds-base',
     'nvme-cmds-fabrics',
@@ -262,6 +261,8 @@ foreach hdr : [
     'nvme-types-base',
     'nvme-types-fabrics',
     'nvme-types-mi',
+    'nvme-types-nbft',
+    'nvme-types-nvm',
     'nvme-types-zns',
     'tree',
     'util',

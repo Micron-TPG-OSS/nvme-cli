@@ -11,7 +11,7 @@
 #include <sys/types.h>
 #include <string.h>
 
-#if defined(HAVE_NETDB) || defined(CONFIG_FABRICS)
+#if defined(NVME_HAVE_NETDB) || defined(CONFIG_FABRICS)
 #include <ifaddrs.h>
 #endif
 
@@ -545,7 +545,7 @@ static inline bool streqcase0(const char *s1, const char *s2)
  */
 bool libnvme_ipaddrs_eq(const char *addr1, const char *addr2);
 
-#if defined(HAVE_NETDB) || defined(CONFIG_FABRICS)
+#if defined(NVME_HAVE_NETDB) || defined(CONFIG_FABRICS)
 /**
  * libnvme_iface_matching_addr - Get interface matching @addr
  * @iface_list: Interface list returned by getifaddrs()
@@ -575,7 +575,7 @@ const char *libnvme_iface_matching_addr(const struct ifaddrs *iface_list,
  */
 bool libnvme_iface_primary_addr_matches(const struct ifaddrs *iface_list,
 		const char *iface, const char *addr);
-#endif /* HAVE_NETDB || CONFIG_FABRICS */
+#endif /* NVME_HAVE_NETDB || CONFIG_FABRICS */
 
 int hostname2traddr(struct libnvme_global_ctx *ctx, const char *traddr,
 		char **hostname);
@@ -643,7 +643,7 @@ char *kv_keymatch(const char *kv, const char *key);
  * remain cached until the ns object is deleted or
  * libnvme_ns_release_transport_handle() is called.
  *
- * Return: On success 0, else error code.
+ * Return: 0 on success, negative error code otherwise.
  */
 int libnvme_ns_get_transport_handle(struct libnvme_ns *n,
 		struct libnvme_transport_handle **hdl);
@@ -669,7 +669,7 @@ void libnvme_ns_release_transport_handle(struct libnvme_ns *n);
  * so the & data_len parameter must be less than 4097.
  *
  * Return: The nvme command status if a response was received (see
- * &enum nvme_status_field) or -1 with errno set otherwise.
+ * &enum nvme_status_field) or negative error code otherwise.
  */
 int libnvme_mi_admin_admin_passthru(struct libnvme_transport_handle *hdl,
 		struct libnvme_passthru_cmd *cmd);

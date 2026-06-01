@@ -221,7 +221,7 @@ const char *nvme_pel_event_to_string(int type)
 {
 	static char str[STR_LEN];
 
-	sprintf(str, "%s(%#x)", pel_event_to_string(type), type);
+	snprintf(str, sizeof(str), "%s(%#x)", pel_event_to_string(type), type);
 
 	return str;
 }
@@ -904,9 +904,9 @@ const char *nvme_degrees_string(long t)
 	long val = kelvin_to_celsius(t);
 
 	if (nvme_is_output_format_json())
-		sprintf(str, "%ld %s", val, "Celsius");
+		snprintf(str, sizeof(str), "%ld %s", val, "Celsius");
 	else
-		sprintf(str, "%ld °%s", val, "C");
+		snprintf(str, sizeof(str), "%ld °%s", val, "C");
 
 	return str;
 }
@@ -1033,7 +1033,7 @@ const char *nvme_feature_to_string(enum nvme_features_id feature)
 	case NVME_FEAT_FID_NS_METADATA:		return "Namespace Metadata";
 	case NVME_FEAT_FID_SW_PROGRESS:		return "Software Progress";
 	case NVME_FEAT_FID_HOST_ID:		return "Host Identifier";
-	case NVME_FEAT_FID_RESV_MASK:		return "Reservation Notification Mask";
+	case NVME_FEAT_FID_RESV_NF_MASK:	return "Reservation Notification Mask";
 	case NVME_FEAT_FID_RESV_PERSIST:	return "Reservation Persistence";
 	case NVME_FEAT_FID_WRITE_PROTECT:	return "Namespace Write Protect";
 	case NVME_FEAT_FID_BP_WRITE_PROTECT:	return "Boot Partition Write Protection Config";
@@ -1137,7 +1137,7 @@ void nvme_show_select_result(enum nvme_features_id fid, __u64 result)
 const char *nvme_feature_lba_type_to_string(__u8 type)
 {
 	switch (type) {
-	case 0:	return "Reserved";
+	case 0:	return "General Purpose";
 	case 1:	return "Filesystem";
 	case 2:	return "RAID";
 	case 3:	return "Cache";
