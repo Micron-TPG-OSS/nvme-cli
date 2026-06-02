@@ -35,6 +35,7 @@ else
         'nvme/linux.c',
         'nvme/mem-linux.c',
         'nvme/sysfs.c',
+        'nvme/tree-linux.c',
     ]
 endif
 headers = [
