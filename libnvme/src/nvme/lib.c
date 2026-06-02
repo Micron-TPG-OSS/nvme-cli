@@ -17,7 +17,9 @@
 #include <ifaddrs.h>
 #endif
 
+#ifndef _WIN32
 #include <sys/ioctl.h>
+#endif
 
 #include <libnvme.h>
 
@@ -149,6 +151,7 @@ __libnvme_public void libnvme_transport_handle_set_timeout(
 	hdl->timeout = timeout_ms;
 }
 
+#ifndef _WIN32
 static int __nvme_transport_handle_open_direct(
 		struct libnvme_transport_handle *hdl, const char *devname)
 {
@@ -200,6 +203,7 @@ void __libnvme_transport_handle_close_direct(
 	close(hdl->fd);
 	free(hdl);
 }
+#endif /* !_WIN32 */
 
 struct libnvme_transport_handle *__libnvme_create_transport_handle(
 		struct libnvme_global_ctx *ctx)
@@ -218,6 +222,7 @@ struct libnvme_transport_handle *__libnvme_create_transport_handle(
 	return hdl;
 }
 
+#ifndef _WIN32
 __libnvme_public int libnvme_open(
 		struct libnvme_global_ctx *ctx, const char *name,
 		struct libnvme_transport_handle **hdlp)
@@ -280,6 +285,7 @@ __libnvme_public void libnvme_close(struct libnvme_transport_handle *hdl)
 		break;
 	}
 }
+#endif /* !_WIN32 */
 
 __libnvme_public libnvme_fd_t libnvme_transport_handle_get_fd(
 		struct libnvme_transport_handle *hdl)
