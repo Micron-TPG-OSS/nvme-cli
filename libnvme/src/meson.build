@@ -31,6 +31,7 @@ else
         'nvme/crypto.c',
         'nvme/filters.c',
         'nvme/ioctl-linux.c',
+        'nvme/lib-linux.c',
         'nvme/linux.c',
         'nvme/mem-linux.c',
         'nvme/sysfs.c',
