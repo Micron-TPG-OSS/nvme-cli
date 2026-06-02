@@ -196,6 +196,9 @@ nvme_list_opts () {
 		opts+=" --lsp -s --output-file= -f \
 			--output-format= -o"
 			;;
+		"power-measurement-log")
+		opts+=" --raw-binary -b --output-format= -o"
+			;;
 		"media-unit-stat-log")
 		opts+=" --dom-id= -d --output-format= -o \
 			--raw-binary -b"
@@ -1292,6 +1295,56 @@ plugin_fdp_opts () {
 	return 0
 }
 
+plugin_feat_opts () {
+	local opts=""
+	local compargs=""
+
+	local nonopt_args=0
+	for (( i=0; i < ${#words[@]}-1; i++ )); do
+		if [[ ${words[i]} != -* ]]; then
+			let nonopt_args+=1
+		fi
+	done
+
+	if [ $nonopt_args -eq 3 ]; then
+		opts="/dev/nvme* "
+	fi
+
+	opts+=" "
+
+	case "$1" in
+		"power-mgmt"|"perf-characteristics"|"hctm"|"timestamp"| \
+		"temp-thresh"|"arbitration"|"volatile-wc"|"err-recovery"| \
+		"num-queues"|"host-behavior-support")
+		opts+=" --uuid-index= -u --save -s --sel= -S \
+			--output-format= -o"
+			;;
+		"power-limit")
+		opts+=" --plv= -p --pls= -l --uuid-index= -u \
+			--save -s --sel= -S --output-format= -o"
+			;;
+		"power-thresh")
+		opts+=" --ptv= -p --pts= -t --pmts= -m --ept= -e \
+			--uuid-index= -u --save -s --sel= -S \
+			--output-format= -o"
+			;;
+		"power-meas")
+		opts+=" --act= --pmts= --smt= --uuid-index= -u \
+			--save -s --sel= -S --output-format= -o"
+			;;
+		"version")
+		opts+=$NO_OPTS
+			;;
+		"help")
+		opts+=$NO_OPTS
+			;;
+	esac
+
+	COMPREPLY+=( $( compgen $compargs -W "$opts" -- $cur ) )
+
+	return 0
+}
+
 plugin_transcend_opts () {
 	local opts=""
 	local compargs=""
@@ -1733,6 +1786,10 @@ _nvme_subcmds () {
 			vs-drive-info cloud-SSDplugin-version market-log \
 			smart-log-add temp-stats workload-tracker version help"
 		[fdp]="feature version help"
+		[feat]="power-mgmt perf-characteristics hctm timestamp \
+			temp-thresh arbitration volatile-wc power-limit \
+			power-thresh power-meas err-recovery num-queues \
+			host-behavior-support version help"
 		[transcend]="healthvalue badblock"
 		[dapustor]="smart-log-add"
 		[zns]="id-ctrl id-ns zone-mgmt-recv \
@@ -1777,6 +1834,7 @@ _nvme_subcmds () {
 		[sfx]="plugin_sfx_opts"
 		[solidigm]="plugin_solidigm_opts"
 		[fdp]="plugin_fdp_opts"
+		[feat]="plugin_feat_opts"
 		[transcend]="plugin_transcend_opts"
 		[dapustor]="plugin_dapustor_opts"
 		[zns]="plugin_zns_opts"
@@ -1798,7 +1856,7 @@ _nvme_subcmds () {
 		error-log effects-log endurance-log \
 		predictable-lat-log pred-lat-event-agg-log \
 		persistent-event-log endurance-agg-log \
-		lba-status-log resv-notif-log get-feature \
+		lba-status-log resv-notif-log power-measurement-log get-feature \
 		device-self-test self-test-log set-feature \
 		set-property get-property format fw-commit \
 		fw-download admin-passthru io-passthru \

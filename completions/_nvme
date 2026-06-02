@@ -84,6 +84,7 @@ _nvme () {
 	'ns-rescan:rescan the NVMe namespaces'
 	'show-regs:show the controller registers; require admin character device'
 	'boot-part-log:retrieve boot partition log'
+	'power-measurement-log:retrieve power measurement log'
 	'fid-support-effects-log:retrieve fid support and effects log'
 	'supported-log-pages:retrieve support log pages details'
 	'lockdown:submit a lockdown command'
@@ -122,6 +123,7 @@ _nvme () {
 	'ocp:OCP cloud SSD extensions'
 	'solidigm:Solidigm plug-in extensions'
 	'fdp:FDP plug-in extensions'
+	'feat:NVMe feature extensions'
 	'micron:Micron plug-in extensions'
 	'mangoboost:MangoBoost plug-in extensions'
 	'dapustor:DapuStor plug-in extensions'
@@ -671,6 +673,88 @@ _nvme () {
 				)
 				_arguments '*:: :->subcmds'
 				_describe -t commands "nvme fdp feature options" _feature
+				;;
+			(*)
+				_files
+				;;
+			esac
+			;;
+		(feat)
+			case ${words[2]} in
+			(power-mgmt|perf-characteristics|hctm|timestamp|temp-thresh|arbitration|volatile-wc|err-recovery|num-queues|host-behavior-support)
+				local _feat_common
+				_feat_common=(
+				--uuid-index=':UUID index'
+				-u':alias for --uuid-index'
+				--save':Save the attribute'
+				-s':alias for --save'
+				--sel=':Select [0-3]: current/default/saved/supported'
+				-S':alias for --sel'
+				--output-format=':Output format: normal|json|binary'
+				-o':alias for --output-format'
+				)
+				_arguments '*:: :->subcmds'
+				_describe -t commands "nvme feat ${words[2]} options" _feat_common
+				;;
+			(power-limit)
+				local _power_limit
+				_power_limit=(
+				--plv=':Power limit value'
+				-p':alias for --plv'
+				--pls=':Power limit scale'
+				-l':alias for --pls'
+				--uuid-index=':UUID index'
+				-u':alias for --uuid-index'
+				--save':Save the attribute'
+				-s':alias for --save'
+				--sel=':Select [0-3]: current/default/saved/supported'
+				-S':alias for --sel'
+				--output-format=':Output format: normal|json|binary'
+				-o':alias for --output-format'
+				)
+				_arguments '*:: :->subcmds'
+				_describe -t commands "nvme feat power-limit options" _power_limit
+				;;
+			(power-thresh)
+				local _power_thresh
+				_power_thresh=(
+				--ptv=':Power threshold value'
+				-p':alias for --ptv'
+				--pts=':Power threshold scale'
+				-t':alias for --pts'
+				--pmts=':Power measurement type select'
+				-m':alias for --pmts'
+				--ept=':Enable power threshold'
+				-e':alias for --ept'
+				--uuid-index=':UUID index'
+				-u':alias for --uuid-index'
+				--save':Save the attribute'
+				-s':alias for --save'
+				--sel=':Select [0-3]: current/default/saved/supported'
+				-S':alias for --sel'
+				--output-format=':Output format: normal|json|binary'
+				-o':alias for --output-format'
+				)
+				_arguments '*:: :->subcmds'
+				_describe -t commands "nvme feat power-thresh options" _power_thresh
+				;;
+			(power-meas)
+				local _power_meas
+				_power_meas=(
+				--act=':Action [0-1]: stop|start'
+				--pmts=':Power measurement type select'
+				--smt=':Stop measurement time'
+				--uuid-index=':UUID index'
+				-u':alias for --uuid-index'
+				--save':Save the attribute'
+				-s':alias for --save'
+				--sel=':Select [0-3]: current/default/saved/supported'
+				-S':alias for --sel'
+				--output-format=':Output format: normal|json|binary'
+				-o':alias for --output-format'
+				)
+				_arguments '*:: :->subcmds'
+				_describe -t commands "nvme feat power-meas options" _power_meas
 				;;
 			(*)
 				_files
@@ -1349,6 +1433,18 @@ _nvme () {
 			)
 			_arguments '*:: :->subcmds'
 			_describe -t commands "nvme boot-part-log options" _bootpartlog
+			;;
+		(power-measurement-log)
+			local _powermeaslog
+			_powermeaslog=(
+			/dev/nvme':supply a device to use (required)'
+			--raw-binary':output in binary format'
+			-b':alias for --raw-binary'
+			--output-format=':Output format: normal|json|binary'
+			-o':alias for --output-format'
+			)
+			_arguments '*:: :->subcmds'
+			_describe -t commands "nvme power-measurement-log options" _powermeaslog
 			;;
 		(get-feature)
 			local _getf
@@ -2932,6 +3028,28 @@ _nvme () {
 			)
 			_arguments '*:: :->subcmds'
 			_describe -t commands "nvme fdp options" _fdp
+			;;
+		(feat)
+			local _feat
+			_feat=(
+			power-mgmt':Get and set power management feature'
+			perf-characteristics':Get and set perf characteristics feature'
+			hctm':Get and set host controlled thermal management feature'
+			timestamp':Get and set timestamp feature'
+			temp-thresh':Get and set temperature threshold feature'
+			arbitration':Get and set arbitration feature'
+			volatile-wc':Get and set volatile write cache feature'
+			power-limit':Get and set power limit feature'
+			power-thresh':Get and set power threshold feature'
+			power-meas':Get and set power measurement feature'
+			err-recovery':Get and set error recovery feature'
+			num-queues':Get and set number of queues feature'
+			host-behavior-support':Get and set host behavior support feature'
+			version':Shows the plug-in version'
+			help':Display this help'
+			)
+			_arguments '*:: :->subcmds'
+			_describe -t commands "nvme feat options" _feat
 			;;
 		(micron)
 			local micron
