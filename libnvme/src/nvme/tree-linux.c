@@ -218,6 +218,8 @@ static int libnvme_ctrl_lookup_phy_slot(struct libnvme_global_ctx *ctx,
 	return -ENOENT;
 }
 
+#define FREE_CTRL_ATTR(a) \
+	do { free(a); (a) = NULL; } while (0)
 int libnvme_reconfigure_ctrl(struct libnvme_global_ctx *ctx,
 		libnvme_ctrl_t c, const char *path, const char *name)
 {
