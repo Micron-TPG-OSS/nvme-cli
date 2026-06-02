@@ -44,21 +44,7 @@ static int libnvme_ctrl_scan_namespace(struct libnvme_global_ctx *ctx,
 static int libnvme_ctrl_scan_path(struct libnvme_global_ctx *ctx,
 		struct libnvme_ctrl *c, char *name);
 
-struct dirents {
-	struct dirent **ents;
-	int num;
-};
-
-static void cleanup_dirents(struct dirents *ents)
-{
-	while (ents->num > 0)
-		free(ents->ents[--ents->num]);
-	free(ents->ents);
-}
-
-#define __cleanup_dirents __cleanup(cleanup_dirents)
-
-static char *nvme_hostid_from_hostnqn(const char *hostnqn)
+char *libnvme_hostid_from_hostnqn(const char *hostnqn)
 {
 	const char *uuid;
 
@@ -534,7 +520,7 @@ static int libnvme_create_host(struct libnvme_global_ctx *ctx,
 	if (hostid)
 		h->hostid = strdup(hostid);
 	else
-		h->hostid = nvme_hostid_from_hostnqn(hostnqn);
+		h->hostid = libnvme_hostid_from_hostnqn(hostnqn);
 	list_head_init(&h->subsystems);
 	list_node_init(&h->entry);
 	h->ctx = ctx;

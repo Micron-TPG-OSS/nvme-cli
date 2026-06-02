@@ -9,6 +9,22 @@
 
 #include <nvme/tree.h>
 
+struct dirents {
+	struct dirent **ents;
+	int num;
+};
+
+static inline void cleanup_dirents(struct dirents *ents)
+{
+	while (ents->num > 0)
+		free(ents->ents[--ents->num]);
+	free(ents->ents);
+}
+
+#define __cleanup_dirents __cleanup(cleanup_dirents)
+
+char *libnvme_hostid_from_hostnqn(const char *hostnqn);
+
 int libnvme_ctrl_alloc(struct libnvme_global_ctx *ctx, libnvme_subsystem_t s,
 		const char *path, const char *name, libnvme_ctrl_t *cp);
 
