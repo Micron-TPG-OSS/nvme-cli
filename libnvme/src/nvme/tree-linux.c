@@ -685,13 +685,60 @@ int __libnvme_scan_namespace(struct libnvme_global_ctx *ctx,
 int libnvme_get_ctrl_transport(const char *path, const char *name,
 		char **transport, char **traddr, char **addr)
 {
-	/** Fill in this function from code from libnvme_ctrl_alloc()
-	 * before pushing to upstream.
-	 */
-	(void)path;
-	(void)name;
-	(void)transport;
-	(void)traddr;
-	(void)addr;
+	char *a = NULL, *e = NULL;
+
+	transport = libnvme_get_attr(path, "transport");
+	if (!transport)
+		return -ENXIO;
+
+	/* Parse 'address' string into components */
+	addr = libnvme_get_attr(path, "address");
+	if (!addr) {
+		__cleanup_free char *rpath = NULL;
+		char *p = NULL, *_a = NULL;
+
+		/* loop transport might not have an address */
+		if (!strcmp(transport, "loop"))
+			goto skip_address;
+
+		/* Older kernel don't support pcie transport addresses */
+		if (strcmp(transport, "pcie") &&
+		    strcmp(transport, "apple-nvme"))
+			return -ENXIO;
+		/* Figure out the PCI address from the attribute path */
+		rpath = realpath(path, NULL);
+		if (!rpath)
+			return -ENOMEM;
+		a = strtok_r(rpath, "/", &e);
+		while(a && strlen(a)) {
+		    if (_a)
+			p = _a;
+		    _a = a;
+		    if (!strncmp(a, "nvme", 4))
+			break;
+		    a = strtok_r(NULL, "/", &e);
+		}
+		if (p)
+			addr = strdup(p);
+	} else if (!strcmp(transport, "pcie") ||
+		   !strcmp(transport, "apple-nvme")) {
+		/* The 'address' string is the transport address */
+		traddr = addr;
+	} else {
+		address = strdup(addr);
+		a = strtok_r(address, ",", &e);
+		while (a && strlen(a)) {
+			if (!strncmp(a, "traddr=", 7))
+				traddr = a + 7;
+			else if (!strncmp(a, "trsvcid=", 8))
+				trsvcid = a + 8;
+			else if (!strncmp(a, "host_traddr=", 12))
+				host_traddr = a + 12;
+			else if (!strncmp(a, "host_iface=", 11))
+				host_iface = a + 11;
+			a = strtok_r(NULL, ",", &e);
+		}
+	}
+skip_address:
 	return 0;
 }
