@@ -680,21 +680,123 @@ _nvme () {
 			esac
 			;;
 		(feat)
-			case ${words[2]} in
-			(power-mgmt|perf-characteristics|hctm|timestamp|temp-thresh|arbitration|volatile-wc|err-recovery|num-queues|host-behavior-support)
-				local _feat_common
-				_feat_common=(
-				--uuid-index=':UUID index'
-				-u':alias for --uuid-index'
+			# Common options for all feat commands (from FEAT_ARGS macro and globals)
+			local _feat_common
+			_feat_common=(
+				# FEAT_ARGS options
 				--save':Save the attribute'
 				-s':alias for --save'
 				--sel=':Select [0-3]: current/default/saved/supported'
 				-S':alias for --sel'
-				--output-format=':Output format: normal|json|binary'
+				# Global options (from NVME_ARGS)
+				--output-format=':Output format: normal|json|binary|tabular'
 				-o':alias for --output-format'
+				--verbose':Increase output verbosity'
+				-v':alias for --verbose'
+				--timeout=':Timeout value, in milliseconds'
+				--dry-run':Show command instead of executing'
+				--no-retries':Disable retry logic on errors'
+				--no-ioctl-probing':Disable 64-bit IOCTL support probing'
+				--output-format-version=':Output format version: 1|2'
+			)
+			case ${words[2]} in
+			(power-mgmt)
+				local _power_mgmt
+				_power_mgmt=(
+				--ps=':Power state'
+				-p':alias for --ps'
+				--wh=':Workload hint'
+				-w':alias for --wh'
+				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
-				_describe -t commands "nvme feat ${words[2]} options" _feat_common
+				_describe -t commands "nvme feat power-mgmt options" _power_mgmt
+				;;
+			(perf-characteristics)
+				local _perf_characteristics
+				_perf_characteristics=(
+				--namespace-id=':Optional namespace attached to controller'
+				-n':alias for --namespace-id'
+				--attri=':Attribute index'
+				-a':alias for --attri'
+				--rvspa':Revert vendor specific performance attribute'
+				-r':alias for --rvspa'
+				--r4karl=':Random 4 KiB average read latency'
+				-R':alias for --r4karl'
+				--paid=':Performance attribute identifier'
+				-p':alias for --paid'
+				--attrl=':Attribute length'
+				-A':alias for --attrl'
+				--vs-data=':Vendor specific data'
+				-V':alias for --vs-data'
+				${_feat_common[@]}
+				)
+				_arguments '*:: :->subcmds'
+				_describe -t commands "nvme feat perf-characteristics options" _perf_characteristics
+				;;
+			(hctm)
+				local _hctm
+				_hctm=(
+				--tmt1=':Thermal management temperature 1'
+				-t':alias for --tmt1'
+				--tmt2=':Thermal management temperature 2'
+				-T':alias for --tmt2'
+				${_feat_common[@]}
+				)
+				_arguments '*:: :->subcmds'
+				_describe -t commands "nvme feat hctm options" _hctm
+				;;
+			(timestamp)
+				local _timestamp
+				_timestamp=(
+				--tstmp=':Timestamp'
+				-t':alias for --tstmp'
+				${_feat_common[@]}
+				)
+				_arguments '*:: :->subcmds'
+				_describe -t commands "nvme feat timestamp options" _timestamp
+				;;
+			(temp-thresh)
+				local _temp_thresh
+				_temp_thresh=(
+				--tmpth=':Temperature threshold'
+				-T':alias for --tmpth'
+				--tmpsel=':Threshold temperature select'
+				-m':alias for --tmpsel'
+				--thsel=':Threshold type select'
+				-H':alias for --thsel'
+				--tmpthh=':Temperature threshold hysteresis'
+				-M':alias for --tmpthh'
+				${_feat_common[@]}
+				)
+				_arguments '*:: :->subcmds'
+				_describe -t commands "nvme feat temp-thresh options" _temp_thresh
+				;;
+			(arbitration)
+				local _arbitration
+				_arbitration=(
+				--ab=':Arbitration burst'
+				-a':alias for --ab'
+				--lpw=':Low priority weight'
+				-l':alias for --lpw'
+				--mpw=':Medium priority weight'
+				-m':alias for --mpw'
+				--hpw=':High priority weight'
+				-H':alias for --hpw'
+				${_feat_common[@]}
+				)
+				_arguments '*:: :->subcmds'
+				_describe -t commands "nvme feat arbitration options" _arbitration
+				;;
+			(volatile-wc)
+				local _volatile_wc
+				_volatile_wc=(
+				--wce':Volatile write cache enable'
+				-w':alias for --wce'
+				${_feat_common[@]}
+				)
+				_arguments '*:: :->subcmds'
+				_describe -t commands "nvme feat volatile-wc options" _volatile_wc
 				;;
 			(power-limit)
 				local _power_limit
@@ -705,12 +807,7 @@ _nvme () {
 				-l':alias for --pls'
 				--uuid-index=':UUID index'
 				-u':alias for --uuid-index'
-				--save':Save the attribute'
-				-s':alias for --save'
-				--sel=':Select [0-3]: current/default/saved/supported'
-				-S':alias for --sel'
-				--output-format=':Output format: normal|json|binary'
-				-o':alias for --output-format'
+				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
 				_describe -t commands "nvme feat power-limit options" _power_limit
@@ -728,12 +825,7 @@ _nvme () {
 				-e':alias for --ept'
 				--uuid-index=':UUID index'
 				-u':alias for --uuid-index'
-				--save':Save the attribute'
-				-s':alias for --save'
-				--sel=':Select [0-3]: current/default/saved/supported'
-				-S':alias for --sel'
-				--output-format=':Output format: normal|json|binary'
-				-o':alias for --output-format'
+				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
 				_describe -t commands "nvme feat power-thresh options" _power_thresh
@@ -746,15 +838,54 @@ _nvme () {
 				--smt=':Stop measurement time'
 				--uuid-index=':UUID index'
 				-u':alias for --uuid-index'
-				--save':Save the attribute'
-				-s':alias for --save'
-				--sel=':Select [0-3]: current/default/saved/supported'
-				-S':alias for --sel'
-				--output-format=':Output format: normal|json|binary'
-				-o':alias for --output-format'
+				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
 				_describe -t commands "nvme feat power-meas options" _power_meas
+				;;
+			(err-recovery)
+				local _err_recovery
+				_err_recovery=(
+				--nsid=':Identifier of desired namespace'
+				-n':alias for --nsid'
+				--tler=':Time limited error recovery'
+				-t':alias for --tler'
+				--dulbe':Deallocated or unwritten logical block error enable'
+				-d':alias for --dulbe'
+				${_feat_common[@]}
+				)
+				_arguments '*:: :->subcmds'
+				_describe -t commands "nvme feat err-recovery options" _err_recovery
+				;;
+			(num-queues)
+				local _num_queues
+				_num_queues=(
+				--nsqr=':Number of I/O submission queues requested'
+				-n':alias for --nsqr'
+				--ncqr=':Number of I/O completion queues requested'
+				-c':alias for --ncqr'
+				${_feat_common[@]}
+				)
+				_arguments '*:: :->subcmds'
+				_describe -t commands "nvme feat num-queues options" _num_queues
+				;;
+			(host-behavior-support)
+				local _host_behavior_support
+				_host_behavior_support=(
+				--acre=':Advanced Command Retry Enable (0 or 1)'
+				-a':alias for --acre'
+				--etdas=':Extended Telemetry Data Area 4 Supported (0 or 1)'
+				-e':alias for --etdas'
+				--lbafee=':LBA Format Extension Enable (0 or 1)'
+				-l':alias for --lbafee'
+				--hdisns=':Host Dispersed Namespace Support (0 or 1)'
+				-H':alias for --hdisns'
+				--cdfe=':Copy Descriptor Formats Enable bitmask'
+				-c':alias for --cdfe'
+				${_feat_common[@]}
+				)
+				_arguments '*:: :->subcmds'
+				_describe -t commands "nvme feat host-behavior-support options" _host_behavior_support
 				;;
 			(*)
 				_files

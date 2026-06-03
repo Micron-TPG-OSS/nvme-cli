@@ -1298,6 +1298,9 @@ plugin_fdp_opts () {
 plugin_feat_opts () {
 	local opts=""
 	local compargs=""
+	local vals=""
+	local opt=""
+	local val=""
 
 	local nonopt_args=0
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
@@ -1311,36 +1314,104 @@ plugin_feat_opts () {
 	fi
 
 	opts+=" "
+	vals+=" "
 
+	# Detect if we're completing an option value
+	if [[ $cur != -* ]] && [[ $cur != "" ]] && [[ $prev == "=" ]] && [[ ${words[$cword-2]} == --* ]]; then
+		opt+="${words[$cword-2]}"
+		val+="$cur"
+	elif [[ $cur == "" ]] && [[ $prev != "=" ]] || [[ $cur == "=" ]] && [[ $prev == --* ]]; then
+		opt+="$prev"
+	elif [[ $cur != "=" ]] && [[ $prev != --* ]] && [[ $prev != "=" ]]; then
+		opt+="$prev"
+		val+="$cur"
+	else
+		opt+="$cur"
+	fi
+
+	# Common options for all feat commands (from FEAT_ARGS macro and globals)
 	case "$1" in
-		"power-mgmt"|"perf-characteristics"|"hctm"|"timestamp"| \
-		"temp-thresh"|"arbitration"|"volatile-wc"|"err-recovery"| \
-		"num-queues"|"host-behavior-support")
-		opts+=" --uuid-index= -u --save -s --sel= -S \
-			--output-format= -o"
-			;;
-		"power-limit")
-		opts+=" --plv= -p --pls= -l --uuid-index= -u \
-			--save -s --sel= -S --output-format= -o"
-			;;
-		"power-thresh")
-		opts+=" --ptv= -p --pts= -t --pmts= -m --ept= -e \
-			--uuid-index= -u --save -s --sel= -S \
-			--output-format= -o"
-			;;
-		"power-meas")
-		opts+=" --act= --pmts= --smt= --uuid-index= -u \
-			--save -s --sel= -S --output-format= -o"
-			;;
-		"version")
+		"version"|"help")
 		opts+=$NO_OPTS
 			;;
-		"help")
-		opts+=$NO_OPTS
+		*)
+		# FEAT_ARGS options
+		opts+=" --save -s --sel= -S"
+		# Global options (from NVME_ARGS)
+		opts+=" --output-format= -o --verbose -v --timeout="
+		opts+=" --dry-run --no-retries --no-ioctl-probing"
+		opts+=" --output-format-version="
+		# Value completions for common options
+		case $opt in
+			--output-format|-o)
+			vals+=" normal json binary tabular"
+				;;
+			--sel|-S)
+			vals+=" 0 1 2 3"
+				;;
+			--output-format-version)
+			vals+=" 1 2"
+				;;
+		esac
 			;;
 	esac
 
-	COMPREPLY+=( $( compgen $compargs -W "$opts" -- $cur ) )
+	# Command-specific options
+	case "$1" in
+		"power-mgmt")
+		opts+=" --ps= -p --wh= -w"
+			;;
+		"perf-characteristics")
+		opts+=" --namespace-id= -n --attri= -a --rvspa -r \
+			--r4karl= -R --paid= -p --attrl= -A --vs-data= -V"
+			;;
+		"hctm")
+		opts+=" --tmt1= -t --tmt2= -T"
+			;;
+		"timestamp")
+		opts+=" --tstmp= -t"
+			;;
+		"temp-thresh")
+		opts+=" --tmpth= -T --tmpsel= -m --thsel= -H --tmpthh= -M"
+			;;
+		"arbitration")
+		opts+=" --ab= -a --lpw= -l --mpw= -m --hpw= -H"
+			;;
+		"volatile-wc")
+		opts+=" --wce -w"
+			;;
+		"power-limit")
+		opts+=" --plv= -p --pls= -l --uuid-index= -u"
+			;;
+		"power-thresh")
+		opts+=" --ptv= -p --pts= -t --pmts= -m --ept= -e \
+			--uuid-index= -u"
+			;;
+		"power-meas")
+		opts+=" --act= --pmts= --smt= --uuid-index= -u"
+		case $opt in
+			--act)
+			vals+=" 0 1"
+				;;
+		esac
+			;;
+		"err-recovery")
+		opts+=" --nsid= -n --tler= -t --dulbe -d"
+			;;
+		"num-queues")
+		opts+=" --nsqr= -n --ncqr= -c"
+			;;
+		"host-behavior-support")
+		opts+=" --acre= -a --etdas= -e --lbafee= -l --hdisns= -H \
+			--cdfe= -c"
+			;;
+	esac
+
+	if [[ $vals == " " ]]; then
+		COMPREPLY+=( $( compgen $compargs -W "$opts" -- $cur ) )
+	else
+		COMPREPLY+=( $( compgen $compargs -W "$vals" -- $val ) )
+	fi
 
 	return 0
 }
