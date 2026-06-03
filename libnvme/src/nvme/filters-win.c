@@ -17,15 +17,12 @@
 
 __libnvme_public int libnvme_scan_subsystems(struct dirent ***subsys)
 {
-	(void)subsys;
 	return 0;
 }
 
 __libnvme_public int libnvme_scan_subsystem_namespaces(libnvme_subsystem_t s,
 		struct dirent ***ns)
 {
-	(void)s;
-	(void)ns;
 	return 0;
 }
 
@@ -78,8 +75,6 @@ enomem:
 __libnvme_public int libnvme_scan_ctrl_namespace_paths(libnvme_ctrl_t c,
 		struct dirent ***paths)
 {
-	(void)c;
-	(void)paths;
 	return 0;
 }
 
@@ -143,7 +138,5 @@ enomem:
 __libnvme_public int libnvme_scan_ns_head_paths(libnvme_ns_head_t head,
 		struct dirent ***paths)
 {
-	(void)head;
-	(void)paths;
 	return 0;
 }
