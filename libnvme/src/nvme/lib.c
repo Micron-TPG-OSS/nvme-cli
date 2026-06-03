@@ -94,7 +94,6 @@ __libnvme_public void libnvme_free_global_ctx(struct libnvme_global_ctx *ctx)
 #endif
 	free(ctx->config_file);
 	free(ctx->application);
-	libnvme_close_uring(ctx);
 	free(ctx);
 }
 
@@ -199,4 +198,3 @@ __libnvme_public bool libnvme_transport_handle_is_mi(
 {
 	return hdl->type == LIBNVME_TRANSPORT_HANDLE_TYPE_MI;
 }
-

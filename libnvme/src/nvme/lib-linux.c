@@ -66,6 +66,7 @@ static int __nvme_transport_handle_open_direct(
 void __libnvme_transport_handle_close_direct(
 		struct libnvme_transport_handle *hdl)
 {
+	libnvme_close_uring(hdl);
 	close(hdl->fd);
 	free(hdl);
 }
