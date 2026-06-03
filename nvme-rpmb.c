@@ -23,11 +23,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
+#if !defined(_WIN32)
 #include <linux/if_alg.h>
 #include <linux/socket.h>
 
 #include <sys/socket.h>
+#endif
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -64,6 +65,7 @@ unsigned char *create_hash(const char *algo,
 			   unsigned char *key,
 			   int keylen)
 {
+#if !defined(_WIN32)
 	int error, infd, outfd = -1;
 	unsigned char *hash = NULL;
 	struct sockaddr_alg provider_sa = {
@@ -131,6 +133,9 @@ out_close_infd:
 	close(infd);
 
 	return hash;
+#else
+	return NULL;
+#endif
 }
 
 /* Function that computes hmac-sha256 hash of given data and key pair. Returns

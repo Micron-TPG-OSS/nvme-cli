@@ -535,31 +535,32 @@ if want_nvme
     subdir('plugins')   # declares: plugin_sources
     subdir('util')      # declares: util_sources
 
-    sources = []
+    sources = [
+        'logging.c',
+        'nvme-cmds.c',
+        'nvme-models.c',
+        'nvme-print-binary.c',
+        'nvme-print-stdout.c',
+        'nvme-print.c',
+        'nvme-rpmb.c',
+        'nvme.c',
+        'plugin.c',
+    ]
     if host_system == 'windows'
         sources += [
-            'nvme-dummy.c', # Dummy source file for Windows port bring up.
+            'no-nvme-print-stdout-top.c',
         ]
     else
         sources += [
             'libnvme-wrap.c',
-            'logging.c',
-            'nvme-cmds.c',
-            'nvme-models.c',
-            'nvme-print-binary.c',
-            'nvme-print-stdout.c',
-            'nvme-print.c',
-            'nvme-rpmb.c',
-            'nvme.c',
-            'plugin.c',
             'nvme-print-stdout-top.c',
         ]
+    endif
 
-        if json_c_dep.found()
-            sources += [
-                'nvme-print-json.c',
-            ]
-        endif
+    if json_c_dep.found()
+        sources += [
+            'nvme-print-json.c',
+        ]
     endif
 
     if want_fabrics
