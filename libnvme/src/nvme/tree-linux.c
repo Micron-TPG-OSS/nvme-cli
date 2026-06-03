@@ -683,59 +683,65 @@ int __libnvme_scan_namespace(struct libnvme_global_ctx *ctx,
 }
 
 int libnvme_get_ctrl_transport(const char *path, const char *name,
-		char **transport, char **traddr, char **addr)
+		char **transport, char **traddr, char **addr, char **trsvcid,
+		char **host_traddr, char **host_iface)
 {
 	char *a = NULL, *e = NULL;
 
-	transport = libnvme_get_attr(path, "transport");
-	if (!transport)
+	*transport = libnvme_get_attr(path, "transport");
+	if (!*transport)
 		return -ENXIO;
 
 	/* Parse 'address' string into components */
-	addr = libnvme_get_attr(path, "address");
-	if (!addr) {
+	*addr = libnvme_get_attr(path, "address");
+	if (!*addr) {
 		__cleanup_free char *rpath = NULL;
 		char *p = NULL, *_a = NULL;
 
 		/* loop transport might not have an address */
-		if (!strcmp(transport, "loop"))
+		if (!strcmp(*transport, "loop"))
 			goto skip_address;
 
-		/* Older kernel don't support pcie transport addresses */
-		if (strcmp(transport, "pcie") &&
-		    strcmp(transport, "apple-nvme"))
+		/* Older kernels don't support pcie transport addresses */
+		if (strcmp(*transport, "pcie") &&
+		    strcmp(*transport, "apple-nvme"))
 			return -ENXIO;
 		/* Figure out the PCI address from the attribute path */
 		rpath = realpath(path, NULL);
 		if (!rpath)
 			return -ENOMEM;
 		a = strtok_r(rpath, "/", &e);
-		while(a && strlen(a)) {
-		    if (_a)
-			p = _a;
-		    _a = a;
-		    if (!strncmp(a, "nvme", 4))
-			break;
-		    a = strtok_r(NULL, "/", &e);
+		while (a && strlen(a)) {
+			if (_a)
+				p = _a;
+			_a = a;
+			if (!strncmp(a, "nvme", 4))
+				break;
+			a = strtok_r(NULL, "/", &e);
 		}
 		if (p)
-			addr = strdup(p);
-	} else if (!strcmp(transport, "pcie") ||
-		   !strcmp(transport, "apple-nvme")) {
+			*addr = strdup(p);
+	} else if (!strcmp(*transport, "pcie") ||
+		   !strcmp(*transport, "apple-nvme")) {
 		/* The 'address' string is the transport address */
-		traddr = addr;
+		*traddr = strdup(*addr);
+		if (!*traddr)
+			return -ENOMEM;
 	} else {
-		address = strdup(addr);
+		__cleanup_free char *address = strdup(*addr);
+		if (!address)
+			return -ENOMEM;
+
 		a = strtok_r(address, ",", &e);
 		while (a && strlen(a)) {
 			if (!strncmp(a, "traddr=", 7))
-				traddr = a + 7;
+				*traddr = strdup(a + 7);
 			else if (!strncmp(a, "trsvcid=", 8))
-				trsvcid = a + 8;
+				*trsvcid = strdup(a + 8);
 			else if (!strncmp(a, "host_traddr=", 12))
-				host_traddr = a + 12;
+				*host_traddr = strdup(a + 12);
 			else if (!strncmp(a, "host_iface=", 11))
-				host_iface = a + 11;
+				*host_iface = strdup(a + 11);
 			a = strtok_r(NULL, ",", &e);
 		}
 	}

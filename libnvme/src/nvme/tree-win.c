@@ -157,33 +157,45 @@ __libnvme_public const char *libnvme_ctrl_get_state(libnvme_ctrl_t c)
 
 __libnvme_public int libnvme_init_ctrl(libnvme_host_t h, libnvme_ctrl_t c, int instance)
 {
-	(void)h;
-	(void)c;
-	(void)instance;
 	return -ENOTSUP;
 }
 
 int libnvme_get_ctrl_transport(const char *path, const char *name,
-		char **transport, char **traddr, char **addr)
+		char **transport, char **traddr, char **addr, char **trsvcid,
+		char **host_traddr, char **host_iface)
 {
 	const struct ctrl_map_entry *ctrl_entry;
 	int ret;
+
+	*trsvcid = NULL;
+	*host_traddr = NULL;
+	*host_iface = NULL;
+
+	ctrl_entry = libnvme_ctrl_map_lookup(name);
+	if (!ctrl_entry) {
+		return -ENODEV;
+	}
 
 	*transport = strdup("pcie");
 	if (!*transport)
 		return -ENOMEM;
 
-	ctrl_entry = libnvme_ctrl_map_lookup(name);
-
 	ret = libnvme_ctrl_map_entry_get_pci_address(ctrl_entry, addr);
 	if (ret || !*addr) {
-		free(*transport);
-		*transport = NULL;
-		return -ENXIO;
+		ret = -ENXIO;
+		goto free_transport;
 	}
 
-	*traddr = *addr;
+	*traddr = strdup(*addr);
+	if (!*traddr) {
+		ret = -ENOMEM;
+		goto free_transport;
+	}
 	return 0;
+free_transport:
+	free(*transport);
+	*transport = NULL;
+	return ret;
 }
 
 static libnvme_subsystem_t libnvme_lookup_subsystem_windows(libnvme_host_t h,
@@ -270,36 +282,26 @@ __libnvme_public int libnvme_scan_ctrl(struct libnvme_global_ctx *ctx, const cha
 
 __libnvme_public char *libnvme_get_subsys_attr(libnvme_subsystem_t s, const char *attr)
 {
-	(void)s;
-	(void)attr;
 	return NULL;
 }
 
 __libnvme_public char *libnvme_get_path_attr(libnvme_path_t p, const char *attr)
 {
-	(void)p;
-	(void)attr;
 	return NULL;
 }
 
 __libnvme_public char *libnvme_get_attr(const char *dir, const char *attr)
 {
-	(void)dir;
-	(void)attr;
 	return NULL;
 }
 
 __libnvme_public char *libnvme_get_ctrl_attr(libnvme_ctrl_t c, const char *attr)
 {
-	(void)c;
-	(void)attr;
 	return NULL;
 }
 
 __libnvme_public char *libnvme_get_ns_attr(libnvme_ns_t n, const char *attr)
 {
-	(void)n;
-	(void)attr;
 	return NULL;
 }
 

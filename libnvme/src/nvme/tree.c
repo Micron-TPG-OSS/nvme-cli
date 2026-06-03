@@ -1564,13 +1564,14 @@ int libnvme_ctrl_scan_namespaces(struct libnvme_global_ctx *ctx,
 int libnvme_ctrl_alloc(struct libnvme_global_ctx *ctx, libnvme_subsystem_t s,
 		const char *path, const char *name, libnvme_ctrl_t *cp)
 {
-	__cleanup_free char *addr = NULL, *address = NULL, *transport = NULL;
-	char *host_traddr = NULL, *host_iface = NULL;
-	char *traddr = NULL, *trsvcid = NULL;
+	__cleanup_free char *addr = NULL, *transport = NULL;
+	__cleanup_free char *host_traddr = NULL, *host_iface = NULL;
+	__cleanup_free char *traddr = NULL, *trsvcid = NULL;
 	libnvme_ctrl_t c, p;
 	int ret;
 
-	ret = libnvme_get_ctrl_transport(path, name, &transport, &traddr, &addr);
+	ret = libnvme_get_ctrl_transport(path, name, &transport, &traddr, &addr,
+					 &trsvcid, &host_traddr, &host_iface);
 	if (ret)
 		return ret;
 
