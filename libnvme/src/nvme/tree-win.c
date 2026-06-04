@@ -29,8 +29,6 @@
 #include "compiler-attributes.h"
 
 
-#define FREE_CTRL_ATTR(a) \
-	do { free(a); (a) = NULL; } while (0)
 int libnvme_reconfigure_ctrl(struct libnvme_global_ctx *ctx,
 		libnvme_ctrl_t c, const char *path, const char *name)
 {
@@ -155,7 +153,8 @@ __libnvme_public const char *libnvme_ctrl_get_state(libnvme_ctrl_t c)
 	return c->state;
 }
 
-__libnvme_public int libnvme_init_ctrl(libnvme_host_t h, libnvme_ctrl_t c, int instance)
+__libnvme_public int libnvme_init_ctrl(libnvme_host_t h, libnvme_ctrl_t c,
+				       int instance)
 {
 	return -ENOTSUP;
 }
@@ -166,15 +165,18 @@ int libnvme_get_ctrl_transport(const char *path, const char *name,
 {
 	const struct ctrl_map_entry *ctrl_entry;
 	int ret;
+	(void)path;
 
+	*transport = NULL;
+	*traddr = NULL;
+	*addr = NULL;
 	*trsvcid = NULL;
 	*host_traddr = NULL;
 	*host_iface = NULL;
 
 	ctrl_entry = libnvme_ctrl_map_lookup(name);
-	if (!ctrl_entry) {
+	if (!ctrl_entry)
 		return -ENODEV;
-	}
 
 	*transport = strdup("pcie");
 	if (!*transport)
@@ -195,6 +197,8 @@ int libnvme_get_ctrl_transport(const char *path, const char *name,
 free_transport:
 	free(*transport);
 	*transport = NULL;
+	free(*addr);
+	*addr = NULL;
 	return ret;
 }
 
@@ -232,11 +236,9 @@ static libnvme_subsystem_t libnvme_lookup_subsystem_windows(libnvme_host_t h,
 	return s;
 }
 
-__libnvme_public int libnvme_scan_ctrl(struct libnvme_global_ctx *ctx, const char *name,
-			       libnvme_ctrl_t *cp)
+__libnvme_public int libnvme_scan_ctrl(struct libnvme_global_ctx *ctx,
+				       const char *name, libnvme_ctrl_t *cp)
 {
-	__cleanup_free char *subsysnqn = NULL, *subsysname = NULL;
-	__cleanup_free char *hostnqn = NULL, *hostid = NULL;
 	__cleanup_free char *path = NULL;
 	const struct ctrl_map_entry *ctrl_entry;
 	libnvme_host_t h;
@@ -252,7 +254,7 @@ __libnvme_public int libnvme_scan_ctrl(struct libnvme_global_ctx *ctx, const cha
 	if (ret)
 		return ret;
 
-	ret = libnvme_get_host(ctx, hostnqn, hostid, &h);
+	ret = libnvme_get_host(ctx, NULL, NULL, &h);
 	if (ret)
 		return ret;
 
@@ -280,7 +282,8 @@ __libnvme_public int libnvme_scan_ctrl(struct libnvme_global_ctx *ctx, const cha
 	return 0;
 }
 
-__libnvme_public char *libnvme_get_subsys_attr(libnvme_subsystem_t s, const char *attr)
+__libnvme_public char *libnvme_get_subsys_attr(libnvme_subsystem_t s,
+					       const char *attr)
 {
 	return NULL;
 }
@@ -402,7 +405,12 @@ int libnvme_ns_open(struct libnvme_global_ctx *ctx, const char *sys_path,
 		ret = -ENOMEM;
 		goto free_ns;
 	}
+
 	n->generic_name = strdup(name);
+	if (!n->generic_name) {
+		ret = -ENOMEM;
+		goto free_ns;
+	}
 
 	ret = libnvme_ns_init(NULL, n);
 	if (ret)
@@ -417,6 +425,7 @@ int libnvme_ns_open(struct libnvme_global_ctx *ctx, const char *sys_path,
 
 free_ns:
 	free(n->name);
+	free(n->generic_name);
 	free(head);
 	free(n);
 	return ret;

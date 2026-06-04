@@ -321,7 +321,7 @@ int libnvme_ctrl_map_init(void)
 	hdev = SetupDiGetClassDevsW(&GUID_DEVINTERFACE_STORAGEPORT, NULL, NULL,
 				    DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
 	if (hdev == INVALID_HANDLE_VALUE)
-		return 0;
+		return -ENODEV;
 
 	for (index = 0;; index++) {
 		struct nvme_id_ctrl id_ctrl;
@@ -342,7 +342,6 @@ int libnvme_ctrl_map_init(void)
 				FILE_SHARE_READ | FILE_SHARE_WRITE |
 				FILE_SHARE_DELETE,
 				NULL, OPEN_EXISTING, 0, NULL);
-
 		if (h == INVALID_HANDLE_VALUE)
 			goto next_entry;
 

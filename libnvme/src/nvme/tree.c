@@ -1364,8 +1364,6 @@ __libnvme_public libnvme_path_t libnvme_ctrl_next_path(libnvme_ctrl_t c,
 	return p ? list_next(&c->paths, p, entry) : NULL;
 }
 
-#define FREE_CTRL_ATTR(a) \
-	do { free(a); (a) = NULL; } while (0)
 void nvme_deconfigure_ctrl(libnvme_ctrl_t c)
 {
 	libnvme_ctrl_release_transport_handle(c);

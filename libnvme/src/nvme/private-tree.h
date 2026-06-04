@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include "cleanup.h"
 #include <nvme/tree.h>
 
 struct dirents {
@@ -22,6 +23,9 @@ static inline void cleanup_dirents(struct dirents *ents)
 }
 
 #define __cleanup_dirents __cleanup(cleanup_dirents)
+
+#define FREE_CTRL_ATTR(a) \
+	do { free(a); (a) = NULL; } while (0)
 
 char *libnvme_hostid_from_hostnqn(const char *hostnqn);
 
