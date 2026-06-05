@@ -4,6 +4,62 @@
 # (unfortunately, bash won't let me add descriptions to cmds)
 # Kelly Kaoudis kelly.n.kaoudis at intel.com, Aug. 2015
 
+# Helper function to detect if we're completing an option's value.
+# Uses: $cur, $prev, $words, $cword (from _init_completion)
+# Sets: $opt (the option name), $val (partial value), $completing_value (0 or 1)
+#
+# Call this after declaring: local opt="" val="" completing_value=0
+_nvme_detect_value_completion() {
+	completing_value=0
+	opt=""
+	val=""
+
+	if [[ $cur == --*= ]]; then
+		# Form: --option=<TAB> (= not split, cur contains whole --option=)
+		opt="${cur%=}"
+		completing_value=1
+	# Uncomment the following condition if using "_init_completion -n =" to
+	# prevent bash from splitting on "=". This handles --option=val<TAB> when
+	# the whole thing is a single word.
+	#elif [[ $cur == --*=* ]]; then
+	#	# Form: --option=val<TAB> (= not split, typing value)
+	#	opt="${cur%%=*}"
+	#	val="${cur#*=}"
+	#	completing_value=1
+	elif [[ $cur == "=" ]] && [[ $prev == --* ]]; then
+		# Form: --option=<TAB> (= is the current word, bash split it)
+		opt="$prev"
+		completing_value=1
+	elif [[ $cur != -* ]] && [[ $cur != "" ]] && [[ $prev == "=" ]] && [[ ${words[$cword-2]} == --* ]]; then
+		# Form: --option=val<TAB> (= was split, typing value)
+		opt="${words[$cword-2]}"
+		val="$cur"
+		completing_value=1
+	elif [[ $cur != -* ]] && [[ $cur != "" ]] && [[ $prev == --* ]]; then
+		# Form: --option val<TAB> (space-separated, typing value)
+		opt="$prev"
+		val="$cur"
+		completing_value=1
+	elif [[ $cur == "" ]] && [[ $prev == --* ]]; then
+		# Form: --option <TAB> (space-separated, waiting for value)
+		opt="$prev"
+		completing_value=1
+	elif [[ $cur == "" ]] && [[ $prev == "=" ]]; then
+		# Form: --option=<TAB> (= was split, empty string after)
+		opt="${words[$cword-2]}"
+		completing_value=1
+	elif [[ $cur == "" ]] && [[ $prev == -? ]]; then
+		# Form: -o <TAB> (short option, waiting for value)
+		opt="$prev"
+		completing_value=1
+	elif [[ $cur != -* ]] && [[ $cur != "" ]] && [[ $prev == -? ]]; then
+		# Form: -o val<TAB> (short option, typing value)
+		opt="$prev"
+		val="$cur"
+		completing_value=1
+	fi
+}
+
 nvme_list_opts () {
 	local opts=""
 	local compargs=""
@@ -197,7 +253,8 @@ nvme_list_opts () {
 			--output-format= -o"
 			;;
 		"power-measurement-log")
-		opts+=" --raw-binary -b --output-format= -o"
+		opts+=" --raw-binary -b --output-format= -o \
+			--verbose -v --timeout="
 			;;
 		"media-unit-stat-log")
 		opts+=" --dom-id= -d --output-format= -o \
@@ -1302,14 +1359,29 @@ plugin_feat_opts () {
 	local opt=""
 	local val=""
 
+	# NOTE: Value completion for --option=value form has a known limitation.
+	# When user types "--sel=<TAB>", bash splits on "=" (due to COMP_WORDBREAKS),
+	# causing completed values to appear as "--sel= 0" instead of "--sel=0".
+	# The space-separated form "--sel <TAB>" works correctly.
+	#
+	# To fix this globally, change _init_completion to "_init_completion -n ="
+	# in _nvme_subcmds(), then uncomment the commented-out condition in
+	# _nvme_detect_value_completion().
+
+	# Count non-option arguments and check if device already present
+	# Offer device completion if: >= 3 non-option args AND no device yet
 	local nonopt_args=0
+	local has_device=0
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]]; then
+		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			let nonopt_args+=1
+			if [[ ${words[i]} == /dev/* ]]; then
+				has_device=1
+			fi
 		fi
 	done
 
-	if [ $nonopt_args -eq 3 ]; then
+	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]]; then
 		opts="/dev/nvme* "
 	fi
 
@@ -1317,17 +1389,8 @@ plugin_feat_opts () {
 	vals+=" "
 
 	# Detect if we're completing an option value
-	if [[ $cur != -* ]] && [[ $cur != "" ]] && [[ $prev == "=" ]] && [[ ${words[$cword-2]} == --* ]]; then
-		opt+="${words[$cword-2]}"
-		val+="$cur"
-	elif [[ $cur == "" ]] && [[ $prev != "=" ]] || [[ $cur == "=" ]] && [[ $prev == --* ]]; then
-		opt+="$prev"
-	elif [[ $cur != "=" ]] && [[ $prev != --* ]] && [[ $prev != "=" ]]; then
-		opt+="$prev"
-		val+="$cur"
-	else
-		opt+="$cur"
-	fi
+	local completing_value=0
+	_nvme_detect_value_completion
 
 	# Common options for all feat commands (from FEAT_ARGS macro and globals)
 	case "$1" in
@@ -1341,18 +1404,20 @@ plugin_feat_opts () {
 		opts+=" --output-format= -o --verbose -v --timeout="
 		opts+=" --dry-run --no-retries --no-ioctl-probing"
 		opts+=" --output-format-version="
-		# Value completions for common options
-		case $opt in
-			--output-format|-o)
-			vals+=" normal json binary tabular"
-				;;
-			--sel|-S)
-			vals+=" 0 1 2 3"
-				;;
-			--output-format-version)
-			vals+=" 1 2"
-				;;
-		esac
+		# Value completions only when in value position
+		if [[ $completing_value -eq 1 ]]; then
+			case $opt in
+				--output-format|-o)
+				vals+=" normal json binary tabular"
+					;;
+				--sel|-S)
+				vals+=" 0 1 2 3"
+					;;
+				--output-format-version)
+				vals+=" 1 2"
+					;;
+			esac
+		fi
 			;;
 	esac
 
