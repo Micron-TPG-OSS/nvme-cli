@@ -131,6 +131,30 @@ _nvme () {
 	'json:dump output in json format'
 	)
 
+	# Helper function for value completion
+	# Usage: _nvme_complete_option_value "long|short" value1 value2 ...
+	# Checks both --option=value and --option value forms
+	_nvme_complete_option_value() {
+		local -a opts=("${(s:|:)1}")
+		shift
+		local -a values=("$@")
+
+		local opt
+		for opt in "${opts[@]}"; do
+			# Check --option=value form (zsh keeps = attached)
+			if [[ ${words[CURRENT]} == ${opt}=* ]]; then
+				_values '' "${values[@]}"
+				return 0
+			fi
+			# Check --option value form (space-separated)
+			if [[ ${words[CURRENT-1]} == ${opt} ]]; then
+				_values '' "${values[@]}"
+				return 0
+			fi
+		done
+		return 1
+	}
+
 	local expl
 
 	_arguments '*:: :->subcmds' && return 0
@@ -680,6 +704,12 @@ _nvme () {
 			esac
 			;;
 		(feat)
+			# Value completion for options that take enumerated values
+			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
+			_nvme_complete_option_value "--sel|-S" 0 1 2 3 && return
+			_nvme_complete_option_value "--output-format-version" 1 2 && return
+			_nvme_complete_option_value "--act" 0 1 && return
+
 			# Common options for all feat commands (from FEAT_ARGS macro and globals)
 			local _feat_common
 			_feat_common=(
@@ -891,6 +921,24 @@ _nvme () {
 				_files
 				;;
 			esac
+
+			# Device path completion: offer /dev/nvme* when at device position
+			# Count non-option arguments and check if device already present
+			# Offer device completion if: >= 3 non-option args AND no device yet
+			local _nonopt_args=0
+			local _has_device=0
+			local _i
+			for ((_i=1; _i < CURRENT; _i++)); do
+				if [[ ${words[_i]} != -* ]] && [[ ${words[_i]} != "=" ]]; then
+					((_nonopt_args++))
+					if [[ ${words[_i]} == /dev/* ]]; then
+						_has_device=1
+					fi
+				fi
+			done
+			if [[ $_nonopt_args -ge 3 ]] && [[ $_has_device -eq 0 ]]; then
+				_files -g '/dev/nvme*'
+			fi
 			;;
 		(dapustor)
 			case ${words[2]} in
@@ -1573,6 +1621,9 @@ _nvme () {
 			-b':alias for --raw-binary'
 			--output-format=':Output format: normal|json|binary'
 			-o':alias for --output-format'
+			--verbose':Increase output verbosity'
+			-v':alias for --verbose'
+			--timeout=':Timeout value, in milliseconds'
 			)
 			_arguments '*:: :->subcmds'
 			_describe -t commands "nvme power-measurement-log options" _powermeaslog
