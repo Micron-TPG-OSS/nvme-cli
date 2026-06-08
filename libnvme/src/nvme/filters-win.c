@@ -15,13 +15,15 @@
 #include "private-ctrl-map.h"
 #include "compiler-attributes.h"
 
-__libnvme_public int libnvme_scan_subsystems(struct dirent ***subsys)
+__libnvme_public int libnvme_scan_subsystems(
+	__libnvme_unused struct dirent ***subsys)
 {
 	return 0;
 }
 
-__libnvme_public int libnvme_scan_subsystem_namespaces(libnvme_subsystem_t s,
-		struct dirent ***ns)
+__libnvme_public int libnvme_scan_subsystem_namespaces(
+	__libnvme_unused libnvme_subsystem_t s,
+	__libnvme_unused struct dirent ***ns)
 {
 	return 0;
 }
@@ -72,8 +74,9 @@ enomem:
 	return -ENOMEM;
 }
 
-__libnvme_public int libnvme_scan_ctrl_namespace_paths(libnvme_ctrl_t c,
-		struct dirent ***paths)
+__libnvme_public int libnvme_scan_ctrl_namespace_paths(
+	__libnvme_unused libnvme_ctrl_t c,
+	__libnvme_unused struct dirent ***paths)
 {
 	return 0;
 }
@@ -135,8 +138,9 @@ enomem:
 	return -ENOMEM;
 }
 
-__libnvme_public int libnvme_scan_ns_head_paths(libnvme_ns_head_t head,
-		struct dirent ***paths)
+__libnvme_public int libnvme_scan_ns_head_paths(
+	__libnvme_unused libnvme_ns_head_t head,
+	__libnvme_unused struct dirent ***paths)
 {
 	return 0;
 }
