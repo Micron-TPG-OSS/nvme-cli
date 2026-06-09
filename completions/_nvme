@@ -723,11 +723,10 @@ _nvme () {
 			esac
 			;;
 		(feat)
-			# Value completion for options that take enumerated values
+			# Value completion for options that take enumerated values (common to all feat subcommands)
 			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
 			_nvme_complete_option_value "--sel|-S" 0 1 2 3 && return
 			_nvme_complete_option_value "--output-format-version" 1 2 && return
-			_nvme_complete_option_value "--act" 0 1 && return
 
 			# Common options for all feat commands (from FEAT_ARGS macro and globals)
 			local _feat_common
@@ -760,6 +759,7 @@ _nvme () {
 				)
 				_arguments '*:: :->subcmds'
 				_nvme_describe "nvme feat power-mgmt options" _power_mgmt
+				compadd -- /dev/nvme*(N)
 				;;
 			(perf-characteristics)
 				local _perf_characteristics
@@ -782,6 +782,7 @@ _nvme () {
 				)
 				_arguments '*:: :->subcmds'
 				_nvme_describe "nvme feat perf-characteristics options" _perf_characteristics
+				compadd -- /dev/nvme*(N)
 				;;
 			(hctm)
 				local _hctm
@@ -794,6 +795,7 @@ _nvme () {
 				)
 				_arguments '*:: :->subcmds'
 				_nvme_describe "nvme feat hctm options" _hctm
+				compadd -- /dev/nvme*(N)
 				;;
 			(timestamp)
 				local _timestamp
@@ -804,6 +806,7 @@ _nvme () {
 				)
 				_arguments '*:: :->subcmds'
 				_nvme_describe "nvme feat timestamp options" _timestamp
+				compadd -- /dev/nvme*(N)
 				;;
 			(temp-thresh)
 				local _temp_thresh
@@ -820,6 +823,7 @@ _nvme () {
 				)
 				_arguments '*:: :->subcmds'
 				_nvme_describe "nvme feat temp-thresh options" _temp_thresh
+				compadd -- /dev/nvme*(N)
 				;;
 			(arbitration)
 				local _arbitration
@@ -836,6 +840,7 @@ _nvme () {
 				)
 				_arguments '*:: :->subcmds'
 				_nvme_describe "nvme feat arbitration options" _arbitration
+				compadd -- /dev/nvme*(N)
 				;;
 			(volatile-wc)
 				local _volatile_wc
@@ -846,6 +851,7 @@ _nvme () {
 				)
 				_arguments '*:: :->subcmds'
 				_nvme_describe "nvme feat volatile-wc options" _volatile_wc
+				compadd -- /dev/nvme*(N)
 				;;
 			(power-limit)
 				local _power_limit
@@ -860,6 +866,7 @@ _nvme () {
 				)
 				_arguments '*:: :->subcmds'
 				_nvme_describe "nvme feat power-limit options" _power_limit
+				compadd -- /dev/nvme*(N)
 				;;
 			(power-thresh)
 				local _power_thresh
@@ -878,8 +885,11 @@ _nvme () {
 				)
 				_arguments '*:: :->subcmds'
 				_nvme_describe "nvme feat power-thresh options" _power_thresh
+				compadd -- /dev/nvme*(N)
 				;;
 			(power-meas)
+				# Value completion for --act (specific to power-meas)
+				_nvme_complete_option_value "--act" 0 1 && return
 				local _power_meas
 				_power_meas=(
 				--act=':Action [0-1]: stop|start'
@@ -891,6 +901,7 @@ _nvme () {
 				)
 				_arguments '*:: :->subcmds'
 				_nvme_describe "nvme feat power-meas options" _power_meas
+				compadd -- /dev/nvme*(N)
 				;;
 			(err-recovery)
 				local _err_recovery
@@ -905,6 +916,7 @@ _nvme () {
 				)
 				_arguments '*:: :->subcmds'
 				_nvme_describe "nvme feat err-recovery options" _err_recovery
+				compadd -- /dev/nvme*(N)
 				;;
 			(num-queues)
 				local _num_queues
@@ -917,6 +929,7 @@ _nvme () {
 				)
 				_arguments '*:: :->subcmds'
 				_nvme_describe "nvme feat num-queues options" _num_queues
+				compadd -- /dev/nvme*(N)
 				;;
 			(host-behavior-support)
 				local _host_behavior_support
@@ -935,29 +948,12 @@ _nvme () {
 				)
 				_arguments '*:: :->subcmds'
 				_nvme_describe "nvme feat host-behavior-support options" _host_behavior_support
+				compadd -- /dev/nvme*(N)
 				;;
 			(*)
 				_files
 				;;
 			esac
-
-			# Device path completion: offer /dev/nvme* when at device position
-			# Count non-option arguments and check if device already present
-			# Offer device completion if: >= 3 non-option args AND no device yet
-			local _nonopt_args=0
-			local _has_device=0
-			local _i
-			for ((_i=1; _i < CURRENT; _i++)); do
-				if [[ ${words[_i]} != -* ]] && [[ ${words[_i]} != "=" ]]; then
-					((_nonopt_args++))
-					if [[ ${words[_i]} == /dev/* ]]; then
-						_has_device=1
-					fi
-				fi
-			done
-			if [[ $_nonopt_args -ge 3 ]] && [[ $_has_device -eq 0 ]]; then
-				_files -g '/dev/nvme*'
-			fi
 			;;
 		(dapustor)
 			case ${words[2]} in
