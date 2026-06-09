@@ -9,6 +9,10 @@
 # Sets: $opt (the option name), $val (partial value), $completing_value (0 or 1)
 #
 # Call this after declaring: local opt="" val="" completing_value=0
+#
+# WORD SPLITTING NOTE:
+# By default, bash's COMP_WORDBREAKS includes "=" which causes "--opt=val" to be
+# split into separate words: ["--opt", "=", "val"]. This function handles that.
 _nvme_detect_value_completion() {
 	completing_value=0
 	opt=""
@@ -18,14 +22,6 @@ _nvme_detect_value_completion() {
 		# Form: --option=<TAB> (= not split, cur contains whole --option=)
 		opt="${cur%=}"
 		completing_value=1
-	# Uncomment the following condition if using "_init_completion -n =" to
-	# prevent bash from splitting on "=". This handles --option=val<TAB> when
-	# the whole thing is a single word.
-	#elif [[ $cur == --*=* ]]; then
-	#	# Form: --option=val<TAB> (= not split, typing value)
-	#	opt="${cur%%=*}"
-	#	val="${cur#*=}"
-	#	completing_value=1
 	elif [[ $cur == "=" ]] && [[ $prev == --* ]]; then
 		# Form: --option=<TAB> (= is the current word, bash split it)
 		opt="$prev"
@@ -1359,15 +1355,6 @@ plugin_feat_opts () {
 	local opt=""
 	local val=""
 
-	# NOTE: Value completion for --option=value form has a known limitation.
-	# When user types "--sel=<TAB>", bash splits on "=" (due to COMP_WORDBREAKS),
-	# causing completed values to appear as "--sel= 0" instead of "--sel=0".
-	# The space-separated form "--sel <TAB>" works correctly.
-	#
-	# To fix this globally, change _init_completion to "_init_completion -n ="
-	# in _nvme_subcmds(), then uncomment the commented-out condition in
-	# _nvme_detect_value_completion().
-
 	# Count non-option arguments and check if device already present
 	# Offer device completion if: >= 3 non-option args AND no device yet
 	local nonopt_args=0
@@ -1474,6 +1461,8 @@ plugin_feat_opts () {
 
 	if [[ $vals == " " ]]; then
 		COMPREPLY+=( $( compgen $compargs -W "$opts" -- $cur ) )
+		# Prevent trailing space after options ending with =
+		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
 	else
 		COMPREPLY+=( $( compgen $compargs -W "$vals" -- $val ) )
 	fi
