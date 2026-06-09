@@ -137,17 +137,23 @@ _nvme () {
 	_nvme_describe() {
 		local desc="$1"
 		local -a opts=("${(@P)2}")
-		local opt optname
+		local -a eq_opts noeq_opts
+		local opt
+
+		# Split options into two groups based on trailing =
 		for opt in "${opts[@]}"; do
-			optname="${opt%%:*}"
-			if [[ $optname == *= ]]; then
-				# Option ends with =, suppress trailing space
-				compadd -S '' -- "$optname"
+			if [[ "${opt%%:*}" == *= ]]; then
+				eq_opts+=("$opt")
 			else
-				# Normal option, allow trailing space
-				compadd -- "$optname"
+				noeq_opts+=("$opt")
 			fi
 		done
+
+		# Describe options without = (normal suffix)
+		(( ${#noeq_opts} )) && _describe -t options "$desc" noeq_opts
+
+		# Options with = need no trailing space - use _describe with -S ''
+		(( ${#eq_opts} )) && _describe -t eq-options "$desc" eq_opts -S ''
 	}
 
 	# Helper function for value completion
