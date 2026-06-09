@@ -205,7 +205,7 @@ static enum eDriveModel GetDriveModel(
 /*
  * Recursively remove a directory and its contents.
  * Since this is only used for temporary directories that we create that
- * have no simlinks, it is safe to not check for and handle simlinks here.
+ * have no symlinks, it is safe to not check for and handle symlinks here.
  */
 static int RemoveDirRecursive(const char *path)
 {
