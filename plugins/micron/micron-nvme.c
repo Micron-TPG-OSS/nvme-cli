@@ -201,6 +201,47 @@ static enum eDriveModel GetDriveModel(
 	return eModel;
 }
 
+/*
+ * bsdtar-based versions of tar support creating zip archives when -a is used
+ * with a .zip extension. Check if bsdtar is available and use it to create the
+ * requested zip archive.
+ *
+ * Returns 0 on success, or a negative errno value if tar is not bsdtar
+ * or if the command fails.
+ */
+static int ZipWithBsdTar(char *strDirName, char *strFileName)
+{
+	__cleanup_free char *cmd_buf = NULL;
+	FILE *fpVersion = NULL;
+	char version_buf[256] = { 0 };
+	bool is_bsdtar = false;
+
+	if (system("tar --version >temp.txt 2>&1") < 0)
+		return -errno;
+
+	fpVersion = fopen("temp.txt", "r");
+	if (fpVersion) {
+		while (fgets(version_buf, sizeof(version_buf), fpVersion)) {
+			if (strstr(version_buf, "bsdtar")) {
+				is_bsdtar = true;
+				break;
+			}
+		}
+		fclose(fpVersion);
+	}
+
+	if (!is_bsdtar)
+		return -EINVAL;
+
+	if (asprintf(&cmd_buf, "tar -caf \"%s\" \"%s\"",
+			strFileName, strDirName) < 0)
+		return -ENOMEM;
+
+	if (system(cmd_buf) < 0)
+		return -errno;
+	return 0;
+}
+
 static int ZipAndRemoveDir(char *strDirName, char *strFileName)
 {
 	int  err = 0;
@@ -217,11 +258,14 @@ static int ZipAndRemoveDir(char *strDirName, char *strFileName)
 				strDirName);
 	}
 
-	err = EINVAL;
 	nRet = system(strBuffer);
+	if (nRet && !is_tgz)
+		/* if zip is not available, see if tar can be used instead */
+		nRet = ZipWithBsdTar(strDirName, strFileName);
 
 	/* check if log file is created, if not print error message */
-	if (nRet < 0 || (stat(strFileName, &sb) == -1)) {
+	if (nRet || (stat(strFileName, &sb) == -1)) {
+		err = -EINVAL;
 		if (is_tgz)
 			snprintf(strBuffer, sizeof(strBuffer), "check if tar and gzip commands are installed");
 		else
@@ -235,7 +279,7 @@ static int ZipAndRemoveDir(char *strDirName, char *strFileName)
 	if (nRet < 0)
 		printf("Failed to remove temporary files!\n");
 
-	err = system("rm -f temp.txt");
+	nRet = system("rm -f temp.txt");
 	return err;
 }
 
