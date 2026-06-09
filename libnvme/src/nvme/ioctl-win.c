@@ -1375,7 +1375,7 @@ static int submit_admin_sanitize_reinit_media(
 		struct libnvme_passthru_cmd *cmd)
 {
 	struct libnvme_transport_handle *ns_hdl = NULL;
-	STORAGE_REINITIALIZE_MEDIA reinitialize = {0};
+	STORAGE_REINITIALIZE_MEDIA reinit_media = {0};
 	STORAGE_SANITIZE_METHOD sanitize_method = StorageSanitizeMethodDefault;
 	ULONG returned_len = 0;
 	void *user_data = NULL;
@@ -1435,19 +1435,19 @@ static int submit_admin_sanitize_reinit_media(
 		goto out;
 	}
 
-	reinitialize.Version = sizeof(reinitialize);
-	reinitialize.Size = sizeof(reinitialize);
-	reinitialize.TimeoutInSeconds = (cmd->timeout_ms > 0) ?
+	reinit_media.Version = sizeof(reinit_media);
+	reinit_media.Size = sizeof(reinit_media);
+	reinit_media.TimeoutInSeconds = (cmd->timeout_ms > 0) ?
 		((cmd->timeout_ms + 999) / 1000) : 0;
-	reinitialize.SanitizeOption.SanitizeMethod = sanitize_method;
-	reinitialize.SanitizeOption.DisallowUnrestrictedSanitizeExit = !ause;
+	reinit_media.SanitizeOption.SanitizeMethod = sanitize_method;
+	reinit_media.SanitizeOption.DisallowUnrestrictedSanitizeExit = !ause;
 
 	do {
 		err = 0;
 		result = DeviceIoControl(ns_hdl->fd,
 				IOCTL_STORAGE_REINITIALIZE_MEDIA,
-				&reinitialize,
-				sizeof(reinitialize),
+				&reinit_media,
+				sizeof(reinit_media),
 				NULL,
 				0,
 				&returned_len,
@@ -1487,8 +1487,8 @@ static int submit_admin_sanitize(
 	 * never gets passed to the controller.
 	 *
 	 * Run sanitize using IOCTL_STORAGE_REINITIALIZE_MEDIA instead.
-	 * For controller handles, this will run on the default namespace
-	 * handle if availalbe. If not available, -ENODEV will be returned.
+	 * For controller handles, this will be run on the default namespace
+	 * handle if available. If not available, -ENODEV will be returned.
 	 */
 
 	err = submit_admin_sanitize_reinit_media(hdl, cmd);
