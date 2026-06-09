@@ -270,19 +270,20 @@ static int ZipWithBsdTar(char *strDirName, char *strFileName)
 	char version_buf[256] = { 0 };
 	bool is_bsdtar = false;
 
-	if (system("tar --version >temp.txt 2>&1"))
+	fpVersion = popen("tar --version 2>&1", "r");
+	if (!fpVersion)
 		return -EINVAL;
 
-	fpVersion = fopen("temp.txt", "r");
-	if (fpVersion) {
-		while (fgets(version_buf, sizeof(version_buf), fpVersion)) {
-			if (strstr(version_buf, "bsdtar")) {
-				is_bsdtar = true;
-				break;
-			}
+	while (fgets(version_buf, sizeof(version_buf), fpVersion)) {
+		if (strstr(version_buf, "bsdtar")) {
+			is_bsdtar = true;
+			break;
 		}
-		fclose(fpVersion);
 	}
+
+	if (pclose(fpVersion))
+		return -EINVAL;
+	fpVersion = NULL;
 
 	if (!is_bsdtar)
 		return -EINVAL;
