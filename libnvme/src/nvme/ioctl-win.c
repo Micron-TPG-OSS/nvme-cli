@@ -1435,8 +1435,8 @@ static int submit_admin_sanitize_reinit_media(
 		goto out;
 	}
 
-	reinit_media.Version = sizeof(reinit_media);
-	reinit_media.Size = sizeof(reinit_media);
+	reinit_media.Version = sizeof(STORAGE_REINITIALIZE_MEDIA);
+	reinit_media.Size = sizeof(STORAGE_REINITIALIZE_MEDIA);
 	reinit_media.TimeoutInSeconds = (cmd->timeout_ms > 0) ?
 		((cmd->timeout_ms + 999) / 1000) : 0;
 	reinit_media.SanitizeOption.SanitizeMethod = sanitize_method;
