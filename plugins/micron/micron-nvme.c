@@ -24,6 +24,7 @@
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <dirent.h>
 
 #include <libnvme.h>
 
@@ -201,6 +202,57 @@ static enum eDriveModel GetDriveModel(
 	return eModel;
 }
 
+static int RemoveDirRecursive(const char *path)
+{
+	DIR *dir = NULL;
+	struct dirent *entry;
+	char child[PATH_MAX];
+	struct stat sb;
+
+	dir = opendir(path);
+	if (!dir) {
+		if (errno == ENOENT)
+			return 0;
+		return -1;
+	}
+
+	while ((entry = readdir(dir))) {
+		if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))
+			continue;
+
+		if (snprintf(child, sizeof(child), "%s/%s", path, entry->d_name) >=
+		    (int)sizeof(child)) {
+			errno = ENAMETOOLONG;
+			closedir(dir);
+			return -1;
+		}
+
+		if (stat(child, &sb) < 0) {
+			if (errno == ENOENT)
+				continue;
+			closedir(dir);
+			return -1;
+		}
+
+		if (S_ISDIR(sb.st_mode)) {
+			if (RemoveDirRecursive(child) < 0) {
+				closedir(dir);
+				return -1;
+			}
+		} else if (unlink(child) < 0 && errno != ENOENT) {
+			closedir(dir);
+			return -1;
+		}
+	}
+
+	closedir(dir);
+
+	if (rmdir(path) < 0 && errno != ENOENT)
+		return -1;
+
+	return 0;
+}
+
 /*
  * bsdtar-based versions of tar support creating zip archives when -a is used
  * with a .zip extension. Check if bsdtar is available and use it to create the
@@ -274,12 +326,11 @@ static int ZipAndRemoveDir(char *strDirName, char *strFileName)
 		fprintf(stderr, "Failed to create log data package, %s!\n", strBuffer);
 	}
 
-	snprintf(strBuffer, sizeof(strBuffer), "rm -f -R \"%s\" >temp.txt 2>&1", strDirName);
-	nRet = system(strBuffer);
-	if (nRet < 0)
+	if (RemoveDirRecursive(strDirName) < 0)
 		printf("Failed to remove temporary files!\n");
 
-	nRet = system("rm -f temp.txt");
+	if (unlink("temp.txt") < 0 && errno != ENOENT)
+		printf("Failed to remove temporary file temp.txt!\n");
 	return err;
 }
 
