@@ -131,6 +131,25 @@ _nvme () {
 	'json:dump output in json format'
 	)
 
+	# Helper function to describe options with proper suffix handling
+	# Options ending with "=" get no trailing space; others get normal space
+	# Usage: _nvme_describe "description" array_name
+	_nvme_describe() {
+		local desc="$1"
+		local -a opts=("${(@P)2}")
+		local opt optname
+		for opt in "${opts[@]}"; do
+			optname="${opt%%:*}"
+			if [[ $optname == *= ]]; then
+				# Option ends with =, suppress trailing space
+				compadd -S '' -- "$optname"
+			else
+				# Normal option, allow trailing space
+				compadd -- "$optname"
+			fi
+		done
+	}
+
 	# Helper function for value completion
 	# Usage: _nvme_complete_option_value "long|short" value1 value2 ...
 	# Checks both --option=value and --option value forms
@@ -740,7 +759,7 @@ _nvme () {
 				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
-				_describe -t commands "nvme feat power-mgmt options" _power_mgmt
+				_nvme_describe "nvme feat power-mgmt options" _power_mgmt
 				;;
 			(perf-characteristics)
 				local _perf_characteristics
@@ -762,7 +781,7 @@ _nvme () {
 				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
-				_describe -t commands "nvme feat perf-characteristics options" _perf_characteristics
+				_nvme_describe "nvme feat perf-characteristics options" _perf_characteristics
 				;;
 			(hctm)
 				local _hctm
@@ -774,7 +793,7 @@ _nvme () {
 				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
-				_describe -t commands "nvme feat hctm options" _hctm
+				_nvme_describe "nvme feat hctm options" _hctm
 				;;
 			(timestamp)
 				local _timestamp
@@ -784,7 +803,7 @@ _nvme () {
 				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
-				_describe -t commands "nvme feat timestamp options" _timestamp
+				_nvme_describe "nvme feat timestamp options" _timestamp
 				;;
 			(temp-thresh)
 				local _temp_thresh
@@ -800,7 +819,7 @@ _nvme () {
 				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
-				_describe -t commands "nvme feat temp-thresh options" _temp_thresh
+				_nvme_describe "nvme feat temp-thresh options" _temp_thresh
 				;;
 			(arbitration)
 				local _arbitration
@@ -816,7 +835,7 @@ _nvme () {
 				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
-				_describe -t commands "nvme feat arbitration options" _arbitration
+				_nvme_describe "nvme feat arbitration options" _arbitration
 				;;
 			(volatile-wc)
 				local _volatile_wc
@@ -826,7 +845,7 @@ _nvme () {
 				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
-				_describe -t commands "nvme feat volatile-wc options" _volatile_wc
+				_nvme_describe "nvme feat volatile-wc options" _volatile_wc
 				;;
 			(power-limit)
 				local _power_limit
@@ -840,7 +859,7 @@ _nvme () {
 				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
-				_describe -t commands "nvme feat power-limit options" _power_limit
+				_nvme_describe "nvme feat power-limit options" _power_limit
 				;;
 			(power-thresh)
 				local _power_thresh
@@ -858,7 +877,7 @@ _nvme () {
 				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
-				_describe -t commands "nvme feat power-thresh options" _power_thresh
+				_nvme_describe "nvme feat power-thresh options" _power_thresh
 				;;
 			(power-meas)
 				local _power_meas
@@ -871,7 +890,7 @@ _nvme () {
 				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
-				_describe -t commands "nvme feat power-meas options" _power_meas
+				_nvme_describe "nvme feat power-meas options" _power_meas
 				;;
 			(err-recovery)
 				local _err_recovery
@@ -885,7 +904,7 @@ _nvme () {
 				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
-				_describe -t commands "nvme feat err-recovery options" _err_recovery
+				_nvme_describe "nvme feat err-recovery options" _err_recovery
 				;;
 			(num-queues)
 				local _num_queues
@@ -897,7 +916,7 @@ _nvme () {
 				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
-				_describe -t commands "nvme feat num-queues options" _num_queues
+				_nvme_describe "nvme feat num-queues options" _num_queues
 				;;
 			(host-behavior-support)
 				local _host_behavior_support
@@ -915,7 +934,7 @@ _nvme () {
 				${_feat_common[@]}
 				)
 				_arguments '*:: :->subcmds'
-				_describe -t commands "nvme feat host-behavior-support options" _host_behavior_support
+				_nvme_describe "nvme feat host-behavior-support options" _host_behavior_support
 				;;
 			(*)
 				_files
