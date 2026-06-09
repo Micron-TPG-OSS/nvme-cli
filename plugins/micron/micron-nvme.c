@@ -270,8 +270,8 @@ static int ZipWithBsdTar(char *strDirName, char *strFileName)
 	char version_buf[256] = { 0 };
 	bool is_bsdtar = false;
 
-	if (system("tar --version >temp.txt 2>&1") < 0)
-		return -errno;
+	if (system("tar --version >temp.txt 2>&1"))
+		return -EINVAL;
 
 	fpVersion = fopen("temp.txt", "r");
 	if (fpVersion) {
@@ -291,8 +291,8 @@ static int ZipWithBsdTar(char *strDirName, char *strFileName)
 			strFileName, strDirName) < 0)
 		return -ENOMEM;
 
-	if (system(cmd_buf) < 0)
-		return -errno;
+	if (system(cmd_buf))
+		return -EIO;
 	return 0;
 }
 
