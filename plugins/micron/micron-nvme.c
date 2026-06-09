@@ -202,12 +202,16 @@ static enum eDriveModel GetDriveModel(
 	return eModel;
 }
 
+/*
+ * Recursively remove a directory and its contents.
+ * Since this is only used for temporary directories that we create that
+ * have no simlinks, it is safe to not check for and handle simlinks here.
+ */
 static int RemoveDirRecursive(const char *path)
 {
 	DIR *dir = NULL;
 	struct dirent *entry;
 	char child[PATH_MAX];
-	struct stat sb;
 
 	dir = opendir(path);
 	if (!dir) {
@@ -227,19 +231,17 @@ static int RemoveDirRecursive(const char *path)
 			return -1;
 		}
 
-		if (stat(child, &sb) < 0) {
-			if (errno == ENOENT)
-				continue;
+		if (unlink(child) == 0 || errno == ENOENT)
+			continue;
+
+		if (errno != EISDIR && errno != EPERM) {
 			closedir(dir);
 			return -1;
 		}
 
-		if (S_ISDIR(sb.st_mode)) {
-			if (RemoveDirRecursive(child) < 0) {
-				closedir(dir);
-				return -1;
-			}
-		} else if (unlink(child) < 0 && errno != ENOENT) {
+		if (RemoveDirRecursive(child) < 0) {
+			if (errno == ENOENT)
+				continue;
 			closedir(dir);
 			return -1;
 		}
