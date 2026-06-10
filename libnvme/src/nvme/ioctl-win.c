@@ -124,6 +124,10 @@ __libnvme_public int libnvme_reset_subsystem(struct libnvme_transport_handle *hd
 
 __libnvme_public int libnvme_reset_ctrl(struct libnvme_transport_handle *hdl)
 {
+	// TODO: Implement using SetupDi APIs to change the device state to
+	// disabled, then re-enabled.  This will cause a PnP-level controller
+	// reset.  See swworkbench's implementation in WinUtility.cpp's
+	// ResetDevice function for reference.
 	(void)hdl;
 	errno = ENOTSUP;
 	return -errno;
