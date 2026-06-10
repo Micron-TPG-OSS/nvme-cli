@@ -1368,7 +1368,8 @@ plugin_feat_opts () {
 		fi
 	done
 
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]]; then
+	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
 		opts="/dev/nvme* "
 	fi
 
