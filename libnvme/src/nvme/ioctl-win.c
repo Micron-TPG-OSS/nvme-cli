@@ -1403,7 +1403,7 @@ static int submit_admin_sanitize_reinit_media(
 	if (hdl->ctx->dry_run)
 		goto out;
 
-	if (hdl->fd == INVALID_HANDLE_VALUE || hdl->fd == NULL) {
+	if (ns_hdl->fd == INVALID_HANDLE_VALUE || ns_hdl->fd == NULL) {
 		err = -EBADF;
 		goto out;
 	}
@@ -1468,7 +1468,7 @@ static int submit_admin_sanitize_reinit_media(
 	cmd->result = 0;
 
 out:
-	if (ns_hdl && !libnvme_transport_handle_is_ns(ns_hdl))
+	if (ns_hdl && !libnvme_transport_handle_is_ns(hdl))
 		libnvme_close(ns_hdl);
 	hdl->submit_exit(hdl, cmd, err, user_data);
 	return err;
