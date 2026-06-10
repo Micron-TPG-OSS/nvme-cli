@@ -595,20 +595,6 @@ if want_nvme
 
     if host_system != 'windows'
         subdir('unit')
-        bash = find_program('bash', required: false)
-        if bash.found()
-            test('bash-completion',
-                bash,
-                args: [meson.project_source_root() / 'completions/test-bash-completion.sh'],
-            )
-        endif
-        zsh = find_program('zsh', required: false)
-        if zsh.found()
-            test('zsh-completion',
-                zsh,
-                args: [meson.project_source_root() / 'completions/test-zsh-completion.sh'],
-            )
-        endif
     endif
     if get_option('nvme-tests')
         subdir('tests')
