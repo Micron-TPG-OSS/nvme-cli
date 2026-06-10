@@ -836,3 +836,74 @@ char *libnvme_ctrl_map_entry_get_firmware(const struct ctrl_map_entry *entry)
 		return NULL;
 	return copy_and_rtrim(entry->id_ctrl.fr, sizeof(entry->id_ctrl.fr));
 }
+
+HDEVINFO libnvme_ctrl_map_entry_get_devinfo(
+	const struct ctrl_map_entry *entry,
+	SP_DEVINFO_DATA *dev_info_data)
+{
+	HDEVINFO hdev;
+	DWORD index;
+
+	dev_info_data->cbSize = sizeof(*dev_info_data);
+
+	if (!entry || !entry->ctrl_path)
+		return INVALID_HANDLE_VALUE;
+
+	hdev = SetupDiGetClassDevsW(&GUID_DEVINTERFACE_STORAGEPORT, NULL, NULL,
+				    DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+	if (hdev == INVALID_HANDLE_VALUE)
+		return INVALID_HANDLE_VALUE;
+
+	for (index = 0;; index++) {
+		SP_DEVICE_INTERFACE_DATA if_data = {
+			.cbSize = sizeof(if_data),
+		};
+		SP_DEVINFO_DATA candidate = {
+			.cbSize = sizeof(SP_DEVINFO_DATA),
+		};
+		PSP_DEVICE_INTERFACE_DETAIL_DATA_W detail;
+		DWORD required_size = 0;
+
+		if (!SetupDiEnumDeviceInterfaces(hdev, NULL,
+						 &GUID_DEVINTERFACE_STORAGEPORT,
+						 index, &if_data)) {
+			if (GetLastError() == ERROR_NO_MORE_ITEMS)
+				break;
+			continue;
+		}
+
+		SetupDiGetDeviceInterfaceDetailW(hdev, &if_data, NULL, 0,
+						 &required_size, NULL);
+		if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || !required_size)
+			continue;
+
+		detail = calloc(1, required_size);
+		if (!detail)
+			break;
+
+		detail->cbSize = sizeof(*detail);
+		if (!SetupDiGetDeviceInterfaceDetailW(hdev, &if_data, detail,
+						      required_size,
+						      NULL, &candidate)) {
+			free(detail);
+			continue;
+		}
+
+		if (_wcsicmp(detail->DevicePath, entry->ctrl_path) == 0) {
+			free(detail);
+			*dev_info_data = candidate;
+			return hdev;
+		}
+
+		free(detail);
+	}
+
+	SetupDiDestroyDeviceInfoList(hdev);
+	return INVALID_HANDLE_VALUE;
+}
+
+void libnvme_ctrl_map_entry_free_devinfo(HDEVINFO hdev)
+{
+	if (hdev != INVALID_HANDLE_VALUE)
+		SetupDiDestroyDeviceInfoList(hdev);
+}
