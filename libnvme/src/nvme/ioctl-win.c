@@ -1379,6 +1379,7 @@ static int submit_admin_sanitize_reinit_media(
 	STORAGE_SANITIZE_METHOD sanitize_method = StorageSanitizeMethodDefault;
 	ULONG returned_len = 0;
 	void *user_data = NULL;
+	BOOL lock_succeeded = FALSE;
 	BOOL result = FALSE;
 	int err = 0;
 	__u8 sanact;
@@ -1435,6 +1436,14 @@ static int submit_admin_sanitize_reinit_media(
 		goto out;
 	}
 
+	/*
+	 * Attempt to lock the volume before reinitializing media as documented
+	 * in the Windows Storage documentationto flush cached data.
+	 * If locking fails, the sanitize can still proceed.
+	 */
+	lock_succeeded = DeviceIoControl(ns_hdl->fd, FSCTL_LOCK_VOLUME,
+				NULL, 0, NULL, 0, &returned_len, NULL);
+
 	reinit_media.Version = sizeof(STORAGE_REINITIALIZE_MEDIA);
 	reinit_media.Size = sizeof(STORAGE_REINITIALIZE_MEDIA);
 	reinit_media.TimeoutInSeconds = (cmd->timeout_ms > 0) ?
@@ -1468,8 +1477,13 @@ static int submit_admin_sanitize_reinit_media(
 	cmd->result = 0;
 
 out:
+	if (lock_succeeded)
+		DeviceIoControl(ns_hdl->fd, FSCTL_UNLOCK_VOLUME,
+				NULL, 0, NULL, 0, &returned_len, NULL);
+
 	if (ns_hdl && !libnvme_transport_handle_is_ns(hdl))
 		libnvme_close(ns_hdl);
+
 	hdl->submit_exit(hdl, cmd, err, user_data);
 	return err;
 }
