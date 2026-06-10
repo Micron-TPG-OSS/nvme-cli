@@ -134,13 +134,15 @@ static int reset_ctrl_device(HDEVINFO hdev, SP_DEVINFO_DATA *devinfo)
 	 * controller, but we can cause a PnP-level reset by disabling, then
 	 * re-enabling the device.
 	 */
-	SP_PROPCHANGE_PARAMS params = {0};
-
-	params.ClassInstallHeader.cbSize = sizeof(SP_CLASSINSTALL_HEADER);
-	params.ClassInstallHeader.InstallFunction = DIF_PROPERTYCHANGE;
-	params.HwProfile = 0;
-	params.Scope = DICS_FLAG_CONFIGSPECIFIC;
-	params.StateChange = DICS_DISABLE;
+	SP_PROPCHANGE_PARAMS params = {
+		.ClassInstallHeader = {
+			.cbSize = sizeof(SP_CLASSINSTALL_HEADER),
+			.InstallFunction = DIF_PROPERTYCHANGE
+		},
+		.StateChange = DICS_DISABLE,
+		.Scope = DICS_FLAG_CONFIGSPECIFIC,
+		.HwProfile = 0
+	};
 
 	if (!SetupDiSetClassInstallParamsW(hdev, devinfo,
 			&params.ClassInstallHeader, sizeof(params))) {
