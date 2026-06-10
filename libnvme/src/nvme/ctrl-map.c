@@ -262,7 +262,8 @@ static int get_adapter_bus_type(HANDLE h, STORAGE_BUS_TYPE *out_bus_type)
  */
 static int get_device_interface_path(HDEVINFO hdev,
 				     DWORD index,
-				     WCHAR **device_interface_path)
+				     WCHAR **device_interface_path,
+				     SP_DEVINFO_DATA *devinfo_data_out)
 {
 	SP_DEVICE_INTERFACE_DATA if_data = {
 		.cbSize = sizeof(if_data),
@@ -303,6 +304,9 @@ static int get_device_interface_path(HDEVINFO hdev,
 	if (!*device_interface_path)
 		return -ENOMEM;
 
+	if (devinfo_data_out)
+		*devinfo_data_out = dev_info_data;
+
 	return 0;
 }
 
@@ -331,7 +335,7 @@ int libnvme_ctrl_map_init(void)
 		h = INVALID_HANDLE_VALUE;
 		ctrl_path = NULL;
 
-		ret = get_device_interface_path(hdev, index, &ctrl_path);
+		ret = get_device_interface_path(hdev, index, &ctrl_path, NULL);
 		if (ret == -ENOENT)
 			break;
 		if (ret == -ENOMEM)
@@ -843,6 +847,7 @@ HDEVINFO libnvme_ctrl_map_entry_get_devinfo(
 {
 	HDEVINFO hdev;
 	DWORD index;
+	PWSTR ctrl_path = NULL;
 
 	dev_info_data->cbSize = sizeof(*dev_info_data);
 
@@ -855,47 +860,14 @@ HDEVINFO libnvme_ctrl_map_entry_get_devinfo(
 		return INVALID_HANDLE_VALUE;
 
 	for (index = 0;; index++) {
-		SP_DEVICE_INTERFACE_DATA if_data = {
-			.cbSize = sizeof(if_data),
-		};
-		SP_DEVINFO_DATA candidate = {
-			.cbSize = sizeof(SP_DEVINFO_DATA),
-		};
-		PSP_DEVICE_INTERFACE_DETAIL_DATA_W detail;
-		DWORD required_size = 0;
+		get_device_interface_path(hdev, index, &ctrl_path, dev_info_data);
 
-		if (!SetupDiEnumDeviceInterfaces(hdev, NULL,
-						 &GUID_DEVINTERFACE_STORAGEPORT,
-						 index, &if_data)) {
-			if (GetLastError() == ERROR_NO_MORE_ITEMS)
-				break;
-			continue;
-		}
-
-		SetupDiGetDeviceInterfaceDetailW(hdev, &if_data, NULL, 0,
-						 &required_size, NULL);
-		if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || !required_size)
-			continue;
-
-		detail = calloc(1, required_size);
-		if (!detail)
-			break;
-
-		detail->cbSize = sizeof(*detail);
-		if (!SetupDiGetDeviceInterfaceDetailW(hdev, &if_data, detail,
-						      required_size,
-						      NULL, &candidate)) {
-			free(detail);
-			continue;
-		}
-
-		if (_wcsicmp(detail->DevicePath, entry->ctrl_path) == 0) {
-			free(detail);
-			*dev_info_data = candidate;
+		if (_wcsicmp(ctrl_path, entry->ctrl_path) == 0) {
+			free(ctrl_path);
 			return hdev;
 		}
-
-		free(detail);
+		free(ctrl_path);
+		ctrl_path = NULL;
 	}
 
 	SetupDiDestroyDeviceInfoList(hdev);
