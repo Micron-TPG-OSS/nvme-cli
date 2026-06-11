@@ -849,10 +849,10 @@ HDEVINFO libnvme_ctrl_map_entry_get_devinfo(
 	DWORD index;
 	PWSTR ctrl_path = NULL;
 
-	dev_info_data->cbSize = sizeof(*dev_info_data);
-
-	if (!entry || !entry->ctrl_path)
+	if (!dev_info_data || !entry || !entry->ctrl_path)
 		return INVALID_HANDLE_VALUE;
+	
+	dev_info_data->cbSize = sizeof(*dev_info_data);
 
 	hdev = SetupDiGetClassDevsW(&GUID_DEVINTERFACE_STORAGEPORT, NULL, NULL,
 				    DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
