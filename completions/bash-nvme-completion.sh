@@ -4,6 +4,58 @@
 # (unfortunately, bash won't let me add descriptions to cmds)
 # Kelly Kaoudis kelly.n.kaoudis at intel.com, Aug. 2015
 
+# Helper function to detect if we're completing an option's value.
+# Uses: $cur, $prev, $words, $cword (from _init_completion)
+# Sets: $opt (the option name), $val (partial value), $completing_value (0 or 1)
+#
+# Call this after declaring: local opt="" val="" completing_value=0
+#
+# WORD SPLITTING NOTE:
+# By default, bash's COMP_WORDBREAKS includes "=" which causes "--opt=val" to be
+# split into separate words: ["--opt", "=", "val"]. This function handles that.
+_nvme_detect_value_completion() {
+	completing_value=0
+	opt=""
+	val=""
+
+	if [[ $cur == --*= ]]; then
+		# Form: --option=<TAB> (= not split, cur contains whole --option=)
+		opt="${cur%=}"
+		completing_value=1
+	elif [[ $cur == "=" ]] && [[ $prev == --* ]]; then
+		# Form: --option=<TAB> (= is the current word, bash split it)
+		opt="$prev"
+		completing_value=1
+	elif [[ $cur != -* ]] && [[ $cur != "" ]] && [[ $prev == "=" ]] && [[ ${words[$cword-2]} == --* ]]; then
+		# Form: --option=val<TAB> (= was split, typing value)
+		opt="${words[$cword-2]}"
+		val="$cur"
+		completing_value=1
+	elif [[ $cur != -* ]] && [[ $cur != "" ]] && [[ $prev == --* ]]; then
+		# Form: --option val<TAB> (space-separated, typing value)
+		opt="$prev"
+		val="$cur"
+		completing_value=1
+	elif [[ $cur == "" ]] && [[ $prev == --* ]]; then
+		# Form: --option <TAB> (space-separated, waiting for value)
+		opt="$prev"
+		completing_value=1
+	elif [[ $cur == "" ]] && [[ $prev == "=" ]]; then
+		# Form: --option=<TAB> (= was split, empty string after)
+		opt="${words[$cword-2]}"
+		completing_value=1
+	elif [[ $cur == "" ]] && [[ $prev == -? ]]; then
+		# Form: -o <TAB> (short option, waiting for value)
+		opt="$prev"
+		completing_value=1
+	elif [[ $cur != -* ]] && [[ $cur != "" ]] && [[ $prev == -? ]]; then
+		# Form: -o val<TAB> (short option, typing value)
+		opt="$prev"
+		val="$cur"
+		completing_value=1
+	fi
+}
+
 nvme_list_opts () {
 	local opts=""
 	local compargs=""
@@ -195,6 +247,10 @@ nvme_list_opts () {
 		"boot-part-log")
 		opts+=" --lsp -s --output-file= -f \
 			--output-format= -o"
+			;;
+		"power-measurement-log")
+		opts+=" --raw-binary -b --output-format= -o \
+			--verbose -v --timeout="
 			;;
 		"media-unit-stat-log")
 		opts+=" --dom-id= -d --output-format= -o \
@@ -1292,6 +1348,129 @@ plugin_fdp_opts () {
 	return 0
 }
 
+plugin_feat_opts () {
+	local opts=""
+	local compargs=""
+	local vals=""
+	local opt=""
+	local val=""
+
+	# Count non-option arguments and check if device already present
+	# Offer device completion if: >= 3 non-option args AND no device yet
+	local nonopt_args=0
+	local has_device=0
+	for (( i=0; i < ${#words[@]}-1; i++ )); do
+		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
+			let nonopt_args+=1
+			if [[ ${words[i]} == /dev/* ]]; then
+				has_device=1
+			fi
+		fi
+	done
+
+	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+		opts="/dev/nvme* "
+	fi
+
+	opts+=" "
+	vals+=" "
+
+	# Detect if we're completing an option value
+	local completing_value=0
+	_nvme_detect_value_completion
+
+	# Common options for all feat commands (from FEAT_ARGS macro and globals)
+	case "$1" in
+		"version"|"help")
+		opts+=$NO_OPTS
+			;;
+		*)
+		# FEAT_ARGS options
+		opts+=" --save -s --sel= -S"
+		# Global options (from NVME_ARGS)
+		opts+=" --output-format= -o --verbose -v --timeout="
+		opts+=" --dry-run --no-retries --no-ioctl-probing"
+		opts+=" --output-format-version="
+		# Value completions only when in value position
+		if [[ $completing_value -eq 1 ]]; then
+			case $opt in
+				--output-format|-o)
+				vals+=" normal json binary tabular"
+					;;
+				--sel|-S)
+				vals+=" 0 1 2 3"
+					;;
+				--output-format-version)
+				vals+=" 1 2"
+					;;
+			esac
+		fi
+			;;
+	esac
+
+	# Command-specific options
+	case "$1" in
+		"power-mgmt")
+		opts+=" --ps= -p --wh= -w"
+			;;
+		"perf-characteristics")
+		opts+=" --namespace-id= -n --attri= -a --rvspa -r \
+			--r4karl= -R --paid= -p --attrl= -A --vs-data= -V"
+			;;
+		"hctm")
+		opts+=" --tmt1= -t --tmt2= -T"
+			;;
+		"timestamp")
+		opts+=" --tstmp= -t"
+			;;
+		"temp-thresh")
+		opts+=" --tmpth= -T --tmpsel= -m --thsel= -H --tmpthh= -M"
+			;;
+		"arbitration")
+		opts+=" --ab= -a --lpw= -l --mpw= -m --hpw= -H"
+			;;
+		"volatile-wc")
+		opts+=" --wce -w"
+			;;
+		"power-limit")
+		opts+=" --plv= -p --pls= -l --uuid-index= -u"
+			;;
+		"power-thresh")
+		opts+=" --ptv= -p --pts= -t --pmts= -m --ept= -e \
+			--uuid-index= -u"
+			;;
+		"power-meas")
+		opts+=" --act= --pmts= --smt= --uuid-index= -u"
+		case $opt in
+			--act)
+			vals+=" 0 1"
+				;;
+		esac
+			;;
+		"err-recovery")
+		opts+=" --nsid= -n --tler= -t --dulbe -d"
+			;;
+		"num-queues")
+		opts+=" --nsqr= -n --ncqr= -c"
+			;;
+		"host-behavior-support")
+		opts+=" --acre= -a --etdas= -e --lbafee= -l --hdisns= -H \
+			--cdfe= -c"
+			;;
+	esac
+
+	if [[ $vals == " " ]]; then
+		COMPREPLY+=( $( compgen $compargs -W "$opts" -- $cur ) )
+		# Prevent trailing space after options ending with =
+		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+	else
+		COMPREPLY+=( $( compgen $compargs -W "$vals" -- $val ) )
+	fi
+
+	return 0
+}
+
 plugin_transcend_opts () {
 	local opts=""
 	local compargs=""
@@ -1733,6 +1912,10 @@ _nvme_subcmds () {
 			vs-drive-info cloud-SSDplugin-version market-log \
 			smart-log-add temp-stats workload-tracker version help"
 		[fdp]="feature version help"
+		[feat]="power-mgmt perf-characteristics hctm timestamp \
+			temp-thresh arbitration volatile-wc power-limit \
+			power-thresh power-meas err-recovery num-queues \
+			host-behavior-support version help"
 		[transcend]="healthvalue badblock"
 		[dapustor]="smart-log-add"
 		[zns]="id-ctrl id-ns zone-mgmt-recv \
@@ -1777,6 +1960,7 @@ _nvme_subcmds () {
 		[sfx]="plugin_sfx_opts"
 		[solidigm]="plugin_solidigm_opts"
 		[fdp]="plugin_fdp_opts"
+		[feat]="plugin_feat_opts"
 		[transcend]="plugin_transcend_opts"
 		[dapustor]="plugin_dapustor_opts"
 		[zns]="plugin_zns_opts"
@@ -1798,7 +1982,7 @@ _nvme_subcmds () {
 		error-log effects-log endurance-log \
 		predictable-lat-log pred-lat-event-agg-log \
 		persistent-event-log endurance-agg-log \
-		lba-status-log resv-notif-log get-feature \
+		lba-status-log resv-notif-log power-measurement-log get-feature \
 		device-self-test self-test-log set-feature \
 		set-property get-property format fw-commit \
 		fw-download admin-passthru io-passthru \
