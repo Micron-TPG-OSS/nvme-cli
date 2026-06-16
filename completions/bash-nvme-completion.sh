@@ -1392,6 +1392,8 @@ plugin_feat_opts () {
 		opts+=" --output-format= -o --verbose -v --timeout="
 		opts+=" --dry-run --no-retries --no-ioctl-probing"
 		opts+=" --output-format-version="
+		# Help options (from argconfig)
+		opts+=" -h --help"
 		# Value completions only when in value position
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
