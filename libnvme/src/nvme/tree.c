@@ -588,13 +588,15 @@ static int nvme_subsystem_scan_namespaces(struct libnvme_global_ctx *ctx,
 
 static int libnvme_init_subsystem(libnvme_subsystem_t s, const char *name)
 {
-	char *path;
+	char *path = NULL;
+	const char *sysfs_dir = libnvme_subsys_sysfs_dir();
 
-	if (asprintf(&path, "%s/%s", libnvme_subsys_sysfs_dir(), name) < 0)
-		return -ENOMEM;
+	if (sysfs_dir)
+		if (asprintf(&path, "%s/%s", sysfs_dir, name) < 0)
+			return -ENOMEM;
 
 	s->model = libnvme_get_attr(path, "model");
-	if (!s->model)
+	if (path && !s->model)
 		s->model = strdup("undefined");
 	s->serial = libnvme_get_attr(path, "serial");
 	s->firmware = libnvme_get_attr(path, "firmware_rev");
@@ -619,17 +621,20 @@ static int libnvme_scan_subsystem(struct libnvme_global_ctx *ctx,
 {
 	struct libnvme_subsystem *s = NULL, *_s;
 	__cleanup_free char *path = NULL, *subsysnqn = NULL;
+	const char *sysfs_dir = libnvme_subsys_sysfs_dir();
 	libnvme_host_t h = NULL;
 	int ret;
 
 	libnvme_msg(ctx, LIBNVME_LOG_DEBUG, "scan subsystem %s\n", name);
-	ret = asprintf(&path, "%s/%s", libnvme_subsys_sysfs_dir(), name);
-	if (ret < 0)
-		return -ENOMEM;
+	if (sysfs_dir) {
+		ret = asprintf(&path, "%s/%s", sysfs_dir, name);
+		if (ret < 0)
+			return -ENOMEM;
 
-	subsysnqn = libnvme_get_attr(path, "subsysnqn");
-	if (!subsysnqn)
-		return -ENODEV;
+		subsysnqn = libnvme_get_attr(path, "subsysnqn");
+		if (!subsysnqn)
+			return -ENODEV;
+	}
 	libnvme_for_each_host(ctx, h) {
 		libnvme_for_each_subsystem(h, _s) {
 			/*
