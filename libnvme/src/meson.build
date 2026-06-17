@@ -29,7 +29,7 @@ if host_system == 'windows'
 else
     sources += [
         'nvme/crypto.c',
-        'nvme/filters.c',
+        'nvme/filters-linux.c',
         'nvme/ioctl-linux.c',
         'nvme/lib-linux.c',
         'nvme/linux.c',
