@@ -558,6 +558,7 @@ if want_nvme
         ]
     else
         sources += [
+            'completion-gen.c',
             'libnvme-wrap.c',
             'logging.c',
             'nvme-cmds.c',
@@ -710,6 +711,10 @@ if want_nvme
     install_data(
         'completions/_nvme',
         install_dir: datadir / 'zsh/site-functions',
+    )
+    install_data(
+        'completions/nvme-completion.ps1',
+        install_dir: datadir / 'nvme',
     )
 
     subdir('Documentation')

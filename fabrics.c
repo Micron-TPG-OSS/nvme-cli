@@ -576,7 +576,8 @@ int fabrics_discovery(const char *desc, int argc, char **argv, bool connect)
 
 	nvmf_default_args(&fa);
 
-	load_nvme_fabrics_module();
+	if (!argconfig_parse_hook_active())
+		load_nvme_fabrics_module();
 
 	ret = argconfig_parse(argc, argv, desc, opts);
 	if (ret)
@@ -689,7 +690,8 @@ int fabrics_connect(const char *desc, int argc, char **argv)
 
 	nvmf_default_args(&fa);
 
-	load_nvme_fabrics_module();
+	if (!argconfig_parse_hook_active())
+		load_nvme_fabrics_module();
 
 	ret = argconfig_parse(argc, argv, desc, opts);
 	if (ret)

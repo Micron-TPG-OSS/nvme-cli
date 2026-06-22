@@ -134,6 +134,7 @@ COMMAND_LIST(
 	ENTRY("nvme-mi-recv", "Submit a NVMe-MI Receive command, return results", nmi_recv)
 	ENTRY("nvme-mi-send", "Submit a NVMe-MI Send command, return results", nmi_send)
 #endif
+	ENTRY("gen-completions", "Generate shell completion script (bash|zsh|powershell)", gen_completions_cmd)
 );
 
 #endif
