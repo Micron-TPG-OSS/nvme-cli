@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- * Shell completion generator.
+ * Command/option metadata dump.
  *
  * Builds an in-memory model of the command tree and each command's options by
  * walking the live plugin/command tree and capturing the options array that
- * each command builds via NVME_ARGS (see argconfig_set_parse_hook), then emits
- * a completion script for the requested shell from that model.
+ * each command builds via NVME_ARGS (see argconfig_set_parse_hook), then writes
+ * the model to stdout as JSON for the shell-completion generator to consume.
  */
 #pragma once
 
@@ -57,8 +57,9 @@ struct gen_program {
 };
 
 /*
- * Entry point for the `nvme gen-completions <bash|zsh|powershell>` subcommand.
- * Builds the model from prog and writes the requested completion script to
- * stdout. Returns 0 on success, negative errno on failure.
+ * Entry point for the `nvme dump-commands-and-options` subcommand. Builds the
+ * command/option model from prog and writes it to stdout as JSON, which the
+ * completion generator (completions/generate-completions.py) consumes.
+ * Returns 0 on success, negative errno on failure.
  */
-int gen_run(int argc, char **argv, struct program *prog);
+int dump_commands_and_options(struct program *prog);

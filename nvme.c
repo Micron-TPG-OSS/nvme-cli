@@ -48,7 +48,7 @@
 #include <libnvme.h>
 
 #include "common.h"
-#include "completion-gen.h"
+#include "command-metadata.h"
 #include "fabrics.h"
 #include "logging.h"
 #include "nvme-cmds.h"
@@ -9827,10 +9827,10 @@ static int show_hostnqn_cmd(int argc, char **argv, struct command *acmd, struct 
 	return 0;
 }
 
-static int gen_completions_cmd(int argc, char **argv, struct command *acmd,
-			       struct plugin *plugin)
+static int dump_commands_and_options_cmd(int argc, char **argv, struct command *acmd,
+					 struct plugin *plugin)
 {
-	return gen_run(argc, argv, plugin->parent);
+	return dump_commands_and_options(plugin->parent);
 }
 
 

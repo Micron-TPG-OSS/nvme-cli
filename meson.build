@@ -558,7 +558,7 @@ if want_nvme
         ]
     else
         sources += [
-            'completion-gen.c',
+            'command-metadata.c',
             'libnvme-wrap.c',
             'logging.c',
             'nvme-cmds.c',
@@ -614,6 +614,28 @@ if want_nvme
         install: true,
         install_dir: sbindir,
     )
+
+    # Developer-only helper: regenerate the committed shell completion files
+    # from the freshly built binary. NOT executed during a normal build
+    # (run_target only runs when explicitly requested).
+    #   meson compile -C <build-dir> update-completions
+    # With -Dcheck-completions=true it runs read-only and fails on drift.
+    if host_system != 'windows'
+        _completion_check = get_option('check-completions') ? ['--check'] : []
+        run_target(
+            'update-completions',
+            command: [
+                files('completions/update-completions.sh'),
+                nvme_exe,
+                python3,
+                files('completions/generate-completions.py'),
+                meson.current_source_dir() / 'completions/bash-nvme-completion.sh',
+                meson.current_source_dir() / 'completions/_nvme',
+                meson.current_source_dir() / 'completions/nvme-completion.ps1',
+            ] + _completion_check,
+            depends: nvme_exe,
+        )
+    endif
 
     if host_system != 'windows'
         subdir('unit')
