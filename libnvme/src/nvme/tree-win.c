@@ -58,6 +58,11 @@ int libnvme_reconfigure_ctrl(struct libnvme_global_ctx *ctx,
 	c->hdl = NULL;
 	c->name = xstrdup(name);
 	c->sysfs_dir = xstrdup(path);
+	if (!c->name || !c->sysfs_dir) {
+		FREE_CTRL_ATTR(c->name);
+ 		FREE_CTRL_ATTR(c->sysfs_dir);
+ 		return -ENOMEM;
+	}
 
 	if (!libnvme_ctrl_get_transport_handle(c))
 		return -ENODEV;
@@ -453,6 +458,10 @@ int __libnvme_scan_namespace(struct libnvme_global_ctx *ctx,
 		return ret;
 
 	n->sysfs_dir = strdup(name); /* \\\\.\\PhysicalDriveX */
+	if (!n->sysfs_dir) {
+		libnvme_free_ns(n);
+		return -ENOMEM;
+	}
 
 	*ns = n;
 	return 0;

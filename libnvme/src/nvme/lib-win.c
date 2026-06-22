@@ -127,6 +127,12 @@ __libnvme_public int libnvme_open(struct libnvme_global_ctx *ctx,
 
 	/* Handle test devices */
 	if (!strncmp(name, "NVME_TEST_FD", 12)) {
+		hdl->name = strdup(name);
+		if (!hdl->name) {
+			free(hdl);
+			return -ENOMEM;
+		}
+
 		hdl->type = LIBNVME_TRANSPORT_HANDLE_TYPE_DIRECT;
 		hdl->fd = LIBNVME_TEST_FD;
 
@@ -169,7 +175,7 @@ __libnvme_public int libnvme_open(struct libnvme_global_ctx *ctx,
 	/* Store the nvmeX or nvmeXnY-style name in hdl->name. */
 	hdl->name = strdup(name);
 	if (!hdl->name) {
-		free(hdl);
+		libnvme_close(hdl);
 		return -ENOMEM;
 	}
 
