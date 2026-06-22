@@ -128,21 +128,17 @@ static void json_parse_port(libnvme_subsystem_t s, struct json_object *port_obj)
 
 static void json_parse_subsys(libnvme_host_t h, struct json_object *subsys_obj)
 {
-	struct json_object *nqn_obj, *app_obj, *port_array;
+	struct json_object *nqn_obj, *port_array;
 	libnvme_subsystem_t s;
-	const char *nqn;
+	const char *nqn = "";
 	int p;
 
 	nqn_obj = json_object_object_get(subsys_obj, "nqn");
-	if (!nqn_obj)
-		return;
-	nqn = json_object_get_string(nqn_obj);
+	if (nqn_obj)
+		nqn = json_object_get_string(nqn_obj);
 	s = libnvme_lookup_subsystem(h, NULL, nqn);
 	if (!s)
 		return;
-	app_obj = json_object_object_get(subsys_obj, "application");
-	if (app_obj)
-		libnvme_subsystem_set_application(s, json_object_get_string(app_obj));
 
 	port_array = json_object_object_get(subsys_obj, "ports");
 	if (!port_array)
@@ -160,17 +156,16 @@ static void json_parse_host(struct libnvme_global_ctx *ctx, struct json_object *
 {
 	struct json_object *attr_obj, *subsys_array, *subsys_obj;
 	libnvme_host_t h;
-	const char *hostnqn, *hostid = NULL;
+	const char *hostnqn = NULL, *hostid = NULL;
 	int s;
 
 	attr_obj = json_object_object_get(host_obj, "hostnqn");
-	if (!attr_obj)
-		return;
-	hostnqn = json_object_get_string(attr_obj);
+	if (attr_obj)
+		hostnqn = json_object_get_string(attr_obj);
 	attr_obj = json_object_object_get(host_obj, "hostid");
 	if (attr_obj)
 		hostid = json_object_get_string(attr_obj);
-	h = libnvme_lookup_host(ctx, hostnqn, hostid);
+	libnvme_get_host(ctx, hostnqn, hostid, &h);
 	attr_obj = json_object_object_get(host_obj, "dhchap_key");
 	if (attr_obj)
 		libnvme_host_set_dhchap_host_key(h, json_object_get_string(attr_obj));
@@ -354,7 +349,7 @@ static void json_update_subsys(struct json_object *subsys_array,
 			       libnvme_subsystem_t s)
 {
 	libnvme_ctrl_t c;
-	const char *subsysnqn = libnvme_subsystem_get_subsysnqn(s), *app;
+	const char *subsysnqn = libnvme_subsystem_get_subsysnqn(s);
 	struct json_object *subsys_obj = json_object_new_object();
 	struct json_object *port_array;
 
@@ -364,10 +359,6 @@ static void json_update_subsys(struct json_object *subsys_array,
 
 	json_object_object_add(subsys_obj, "nqn",
 			       json_object_new_string(subsysnqn));
-	app = libnvme_subsystem_get_application(s);
-	if (app)
-		json_object_object_add(subsys_obj, "application",
-				       json_object_new_string(app));
 	port_array = json_object_new_array();
 	libnvme_subsystem_for_each_ctrl(s, c) {
 		json_update_port(port_array, c);

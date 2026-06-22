@@ -74,7 +74,6 @@ struct feat_cfg {
 	__u8 uuid_index;
 	__u32 data_len;
 	bool raw_binary;
-	bool human_readable;
 	bool changed;
 };
 
@@ -105,7 +104,6 @@ struct passthru_config {
 
 struct get_reg_config {
 	int offset;
-	bool human_readable;
 	bool cap;
 	bool vs;
 	bool intms;
@@ -188,17 +186,12 @@ static const char *block_count = "number of blocks (zeroes based) on device to a
 static const char *crkey = "current reservation key";
 static const char *csi = "command set identifier";
 static const char *buf_len = "buffer len (if) data is sent or received";
-static const char *deprecated = "deprecated; does nothing";
 static const char *domainid = "Domain Identifier";
 static const char *doper = "directive operation";
 static const char *dspec_w_dtype = "directive specification associated with directive type";
 static const char *dtype = "directive type";
 static const char *endgid = "Endurance Group Identifier (ENDGID)";
 static const char *force_unit_access = "force device to commit data before command completes";
-static const char *human_readable_directive = "show directive in readable format";
-static const char *human_readable_identify = "show identify in readable format";
-static const char *human_readable_info = "show info in readable format";
-static const char *human_readable_log = "show log in readable format";
 static const char *iekey = "ignore existing res. key";
 static const char *latency = "output latency statistics";
 static const char *lba_format_index = "The index into the LBA Format list\n"
@@ -537,19 +530,16 @@ static int get_smart_log(int argc, char **argv, struct command *acmd, struct plu
 	struct config {
 		__u32	namespace_id;
 		bool	raw_binary;
-		bool	human_readable;
 	};
 
 	struct config cfg = {
 		.namespace_id	= NVME_NSID_ALL,
 		.raw_binary	= false,
-		.human_readable	= false,
 	};
 
 	NVME_ARGS(opts,
-		  OPT_UINT("namespace-id",   'n', &cfg.namespace_id,   namespace),
-		  OPT_FLAG("raw-binary",     'b', &cfg.raw_binary,     raw_output),
-		  OPT_FLAG("human-readable", 'H', &cfg.human_readable, human_readable_info));
+		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace),
+		  OPT_FLAG("raw-binary",   'b', &cfg.raw_binary,   raw_output));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -564,7 +554,7 @@ static int get_smart_log(int argc, char **argv, struct command *acmd, struct plu
 	if (cfg.raw_binary)
 		flags = BINARY;
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	smart_log = libnvme_alloc(sizeof(*smart_log));
@@ -942,7 +932,7 @@ static int get_telemetry_log(int argc, char **argv, struct command *acmd,
 		}
 	}
 
-	output = open(cfg.file_name, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+	output = nvme_open_rawdata(cfg.file_name, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 	if (output < 0) {
 		nvme_show_error("Failed to open output file %s: %s!",
 				cfg.file_name, libnvme_strerror(errno));
@@ -1097,19 +1087,16 @@ static int get_effects_log(int argc, char **argv, struct command *acmd, struct p
 	nvme_print_flags_t flags;
 
 	struct config {
-		bool	human_readable;
 		bool	raw_binary;
 		int	csi;
 	};
 
 	struct config cfg = {
-		.human_readable	= false,
 		.raw_binary	= false,
 		.csi		= -1,
 	};
 
 	NVME_ARGS(opts,
-		  OPT_FLAG("human-readable", 'H', &cfg.human_readable, human_readable_log),
 		  OPT_FLAG("raw-binary",     'b', &cfg.raw_binary,     raw_log),
 		  OPT_INT("csi",             'c', &cfg.csi,            csi));
 
@@ -1127,7 +1114,7 @@ static int get_effects_log(int argc, char **argv, struct command *acmd, struct p
 	if (cfg.raw_binary)
 		flags = BINARY;
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	list_head_init(&log_pages);
@@ -1919,7 +1906,7 @@ static int get_boot_part_log(int argc, char **argv, struct command *acmd, struct
 		return -1;
 	}
 
-	output = open(cfg.file_name, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+	output = nvme_open_rawdata(cfg.file_name, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 	if (output < 0) {
 		nvme_show_error("Failed to open output file %s: %s!",
 				cfg.file_name, libnvme_strerror(errno));
@@ -2292,7 +2279,7 @@ static int io_mgmt_recv(int argc, char **argv, struct command *acmd, struct plug
 	       cfg.nsid);
 
 	if (cfg.file) {
-		dfd = open(cfg.file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		dfd = nvme_open_rawdata(cfg.file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 		if (dfd < 0) {
 			nvme_show_perror(cfg.file);
 			return -errno;
@@ -2536,19 +2523,16 @@ static int sanitize_log(int argc, char **argv, struct command *acmd, struct plug
 
 	struct config {
 		bool	rae;
-		bool	human_readable;
 		bool	raw_binary;
 	};
 
 	struct config cfg = {
 		.rae		= false,
-		.human_readable	= false,
 		.raw_binary	= false,
 	};
 
 	NVME_ARGS(opts,
 		  OPT_FLAG("rae",            'r', &cfg.rae,            rae),
-		  OPT_FLAG("human-readable", 'H', &cfg.human_readable, human_readable_log),
 		  OPT_FLAG("raw-binary",     'b', &cfg.raw_binary,     raw_log));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
@@ -2564,7 +2548,7 @@ static int sanitize_log(int argc, char **argv, struct command *acmd, struct plug
 	if (cfg.raw_binary)
 		flags = BINARY;
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	sanitize_log = libnvme_alloc(sizeof(*sanitize_log));
@@ -2594,16 +2578,7 @@ static int get_fid_support_effects_log(int argc, char **argv, struct command *ac
 	nvme_print_flags_t flags;
 	int err = -1;
 
-	struct config {
-		bool	human_readable;
-	};
-
-	struct config cfg = {
-		.human_readable	= false,
-	};
-
-	NVME_ARGS(opts,
-		  OPT_FLAG("human-readable", 'H', &cfg.human_readable, human_readable_log));
+	NVME_ARGS(opts);
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -2615,7 +2590,7 @@ static int get_fid_support_effects_log(int argc, char **argv, struct command *ac
 		return err;
 	}
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	fid_support_log = libnvme_alloc(sizeof(*fid_support_log));
@@ -2646,16 +2621,7 @@ static int get_mi_cmd_support_effects_log(int argc, char **argv, struct command 
 	nvme_print_flags_t flags;
 	int err = -1;
 
-	struct config {
-		bool	human_readable;
-	};
-
-	struct config cfg = {
-		.human_readable	= false,
-	};
-
-	NVME_ARGS(opts,
-		  OPT_FLAG("human-readable", 'H', &cfg.human_readable, human_readable_log));
+	NVME_ARGS(opts);
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -2667,7 +2633,7 @@ static int get_mi_cmd_support_effects_log(int argc, char **argv, struct command 
 		return err;
 	}
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	mi_cmd_support_log = libnvme_alloc(sizeof(*mi_cmd_support_log));
@@ -3597,6 +3563,7 @@ static int list_subsys(int argc, char **argv, struct command *acmd,
 	return 0;
 }
 
+#ifdef CONFIG_TOP
 static int top(int argc, char **argv, struct command *acmd,
 		struct plugin *plugin)
 {
@@ -3641,6 +3608,7 @@ static int top(int argc, char **argv, struct command *acmd,
 
 	return err;
 }
+#endif
 
 static int list(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
@@ -3697,19 +3665,16 @@ int __id_ctrl(int argc, char **argv, struct command *acmd, struct plugin *plugin
 	struct config {
 		bool	vendor_specific;
 		bool	raw_binary;
-		bool	human_readable;
 	};
 
 	struct config cfg = {
 		.vendor_specific	= false,
 		.raw_binary		= false,
-		.human_readable		= false,
 	};
 
 	NVME_ARGS(opts,
 		  OPT_FLAG("vendor-specific", 'V', &cfg.vendor_specific, vendor_specific),
-		  OPT_FLAG("raw-binary",      'b', &cfg.raw_binary,      raw_identify),
-		  OPT_FLAG("human-readable",  'H', &cfg.human_readable,  human_readable_identify));
+		  OPT_FLAG("raw-binary",      'b', &cfg.raw_binary,      raw_identify));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -3727,7 +3692,7 @@ int __id_ctrl(int argc, char **argv, struct command *acmd, struct plugin *plugin
 	if (cfg.vendor_specific)
 		flags |= VS;
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	ctrl = libnvme_alloc(sizeof(*ctrl));
@@ -4025,7 +3990,6 @@ static int id_ns(int argc, char **argv, struct command *acmd, struct plugin *plu
 		bool	force;
 		bool	vendor_specific;
 		bool	raw_binary;
-		bool	human_readable;
 	};
 
 	struct config cfg = {
@@ -4033,15 +3997,13 @@ static int id_ns(int argc, char **argv, struct command *acmd, struct plugin *plu
 		.force			= false,
 		.vendor_specific	= false,
 		.raw_binary		= false,
-		.human_readable		= false,
 	};
 
 	NVME_ARGS(opts,
 		  OPT_UINT("namespace-id",    'n', &cfg.namespace_id,    namespace_id_desired),
 		  OPT_FLAG("force",             0, &cfg.force,           force),
 		  OPT_FLAG("vendor-specific", 'V', &cfg.vendor_specific, vendor_specific),
-		  OPT_FLAG("raw-binary",      'b', &cfg.raw_binary,      raw_identify),
-		  OPT_FLAG("human-readable",  'H', &cfg.human_readable,  human_readable_identify));
+		  OPT_FLAG("raw-binary",      'b', &cfg.raw_binary,      raw_identify));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -4059,7 +4021,7 @@ static int id_ns(int argc, char **argv, struct command *acmd, struct plugin *plu
 	if (cfg.vendor_specific)
 		flags |= VS;
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	if (!cfg.namespace_id) {
@@ -4108,19 +4070,16 @@ static int cmd_set_independent_id_ns(int argc, char **argv, struct command *acmd
 	struct config {
 		__u32	namespace_id;
 		bool	raw_binary;
-		bool	human_readable;
 	};
 
 	struct config cfg = {
 		.namespace_id	= 0,
 		.raw_binary	= false,
-		.human_readable	= false,
 	};
 
 	NVME_ARGS(opts,
-		  OPT_UINT("namespace-id",    'n', &cfg.namespace_id,    namespace_id_desired),
-		  OPT_FLAG("raw-binary",      'b', &cfg.raw_binary,      raw_identify),
-		  OPT_FLAG("human-readable",  'H', &cfg.human_readable,  human_readable_identify));
+		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id_desired),
+		  OPT_FLAG("raw-binary",   'b', &cfg.raw_binary,   raw_identify));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -4135,7 +4094,7 @@ static int cmd_set_independent_id_ns(int argc, char **argv, struct command *acmd
 	if (cfg.raw_binary)
 		flags = BINARY;
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	if (!cfg.namespace_id) {
@@ -4262,7 +4221,6 @@ static int id_uuid(int argc, char **argv, struct command *acmd, struct plugin *p
 		"given device, returns list of supported Vendor Specific UUIDs "
 		"in either human-readable or binary format.";
 	const char *raw = "show uuid in binary format";
-	const char *human_readable = "show uuid in readable format";
 
 	__cleanup_libnvme_free struct nvme_id_uuid_list *uuid_list = NULL;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
@@ -4272,17 +4230,14 @@ static int id_uuid(int argc, char **argv, struct command *acmd, struct plugin *p
 
 	struct config {
 		bool	raw_binary;
-		bool	human_readable;
 	};
 
 	struct config cfg = {
 		.raw_binary	= false,
-		.human_readable	= false,
 	};
 
 	NVME_ARGS(opts,
-		  OPT_FLAG("raw-binary",     'b', &cfg.raw_binary,     raw),
-		  OPT_FLAG("human-readable", 'H', &cfg.human_readable, human_readable));
+		  OPT_FLAG("raw-binary",     'b', &cfg.raw_binary,     raw));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -4297,7 +4252,7 @@ static int id_uuid(int argc, char **argv, struct command *acmd, struct plugin *p
 	if (cfg.raw_binary)
 		flags = BINARY;
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	uuid_list = libnvme_alloc(sizeof(*uuid_list));
@@ -4532,17 +4487,14 @@ static int primary_ctrl_caps(int argc, char **argv, struct command *acmd, struct
 
 	struct config {
 		__u16	cntlid;
-		bool	human_readable;
 	};
 
 	struct config cfg = {
 		.cntlid		= 0,
-		.human_readable	= false,
 	};
 
 	NVME_ARGS(opts,
-		  OPT_UINT("cntlid",         'c', &cfg.cntlid, cntlid),
-		  OPT_FLAG("human-readable", 'H', &cfg.human_readable, human_readable_info));
+		  OPT_UINT("cntlid",         'c', &cfg.cntlid, cntlid));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -4554,7 +4506,7 @@ static int primary_ctrl_caps(int argc, char **argv, struct command *acmd, struct
 		return err;
 	}
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	caps = libnvme_alloc(sizeof(*caps));
@@ -4632,7 +4584,7 @@ static int list_secondary_ctrl(int argc, char **argv, struct command *acmd, stru
 	return err;
 }
 
-static int sleep_self_test(unsigned int seconds)
+static int nvme_sleep(unsigned int seconds)
 {
 	nvme_sigint_received = false;
 
@@ -4674,7 +4626,7 @@ static int wait_self_test(struct libnvme_transport_handle *hdl)
 	while (true) {
 		printf("\r[%.*s%c%.*s] %3d%%", p / 2, dash, spin[i % 4], 49 - p / 2, space, p);
 		fflush(stdout);
-		err = sleep_self_test(1);
+		err = nvme_sleep(1);
 		if (err)
 			return err;
 
@@ -4697,8 +4649,8 @@ static int wait_self_test(struct libnvme_transport_handle *hdl)
 
 		if (log->completion < p) {
 			printf("\n");
-				nvme_show_error("progress broken");
-				return -EIO;
+			nvme_show_error("progress broken");
+			return -EIO;
 		} else if (log->completion != p) {
 			p = log->completion;
 			cnt = 0;
@@ -5035,7 +4987,6 @@ static int get_feature(int argc, char **argv, struct command *acmd,
 	const char *feature_id = "feature identifier";
 	const char *sel = "[0-3]: current/default/saved/supported";
 	const char *cdw11 = "feature specific dword 11";
-	const char *human_readable = "show feature in readable format";
 	const char *changed = "show feature changed";
 	nvme_print_flags_t flags = NORMAL;
 
@@ -5051,7 +5002,6 @@ static int get_feature(int argc, char **argv, struct command *acmd,
 		.raw_binary	= false,
 		.cdw11		= 0,
 		.uuid_index	= 0,
-		.human_readable	= false,
 	};
 
 	NVME_ARGS(opts,
@@ -5062,7 +5012,6 @@ static int get_feature(int argc, char **argv, struct command *acmd,
 		  OPT_FLAG("raw-binary",     'b', &cfg.raw_binary,     raw),
 		  OPT_UINT("cdw11",          'c', &cfg.cdw11,          cdw11),
 		  OPT_BYTE("uuid-index",     'U', &cfg.uuid_index,     uuid_index_specify),
-		  OPT_FLAG("human-readable", 'H', &cfg.human_readable, human_readable),
 		  OPT_FLAG("changed",        'C', &cfg.changed,        changed));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
@@ -5096,7 +5045,7 @@ static int get_feature(int argc, char **argv, struct command *acmd,
 		return -1;
 	}
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	nvme_show_init();
@@ -5618,6 +5567,146 @@ static int ns_rescan(int argc, char **argv, struct command *acmd, struct plugin 
 	return err;
 }
 
+static int wait_sanitize(struct libnvme_transport_handle *hdl)
+{
+	__cleanup_libnvme_free struct nvme_sanitize_log_page *log = NULL;
+	static const char spin[] = {'-', '\\', '|', '/' };
+	__u64 i = 0, cnt = 0, wthr = 0;
+	__u32 p = 0;
+	int err;
+
+	log = libnvme_alloc(sizeof(*log));
+	if (!log)
+		return -ENOMEM;
+
+	err = nvme_get_log_sanitize(hdl, false, log);
+	if (err) {
+		nvme_show_err(err, "sanitize status log");
+		return err;
+	}
+
+	switch (NVME_GET(log->scdw10, SANITIZE_CDW10_SANACT)) {
+	case NVME_SANITIZE_SANACT_EXIT_FAILURE:
+		break;
+	case NVME_SANITIZE_SANACT_START_BLOCK_ERASE:
+		if (NVME_GET(log->scdw10, SANITIZE_CDW10_NDAS))
+			wthr = le32_to_cpu(log->etbend);
+		else
+			wthr = le32_to_cpu(log->etbe);
+		break;
+	case NVME_SANITIZE_SANACT_START_OVERWRITE:
+		if (NVME_GET(log->scdw10, SANITIZE_CDW10_NDAS))
+			wthr = le32_to_cpu(log->etond);
+		else
+			wthr = le32_to_cpu(log->eto);
+		break;
+	case NVME_SANITIZE_SANACT_START_CRYPTO_ERASE:
+		if (NVME_GET(log->scdw10, SANITIZE_CDW10_NDAS))
+			wthr = le32_to_cpu(log->etcend);
+		else
+			wthr = le32_to_cpu(log->etce);
+		break;
+	case NVME_SANITIZE_SANACT_EXIT_MEDIA_VERIF:
+	default:
+		break;
+	}
+	if (wthr != 0xffffffff && NVME_GET(log->scdw10, SANITIZE_CDW10_EMVS))
+		wthr += le32_to_cpu(log->etpvds);
+
+	printf("Waiting for sanitize completion...\n");
+	while (true) {
+		printf("\r[%.*s%c%.*s] %3d%%", p * 100 / 0xffff / 2, dash,
+		       spin[i % 4], 49 - p * 100 / 0xffff / 2, space,
+		       p * 100 / 0xffff);
+		fflush(stdout);
+		err = nvme_sleep(1);
+		if (err)
+			return err;
+
+		err = nvme_get_log_sanitize(hdl, false, log);
+		if (err) {
+			printf("\n");
+			nvme_show_err(err, "sanitize status log");
+			return err;
+		}
+
+		if (++cnt > wthr) {
+			nvme_show_error(
+			    "no progress for %"PRIu64" seconds, stop waiting",
+			    wthr);
+			return -EIO;
+		}
+
+		if (le16_to_cpu(log->sprog) == 0xffff) {
+			printf("\r[%.*s] %3d%%\n", 50, dash, 100);
+			break;
+		}
+
+		if (le16_to_cpu(log->sprog) < p) {
+			printf("\n");
+			nvme_show_error("progress broken");
+			return -EIO;
+		} else if (le16_to_cpu(log->sprog) != p) {
+			p = le16_to_cpu(log->sprog);
+			cnt = 0;
+		}
+
+		i++;
+	}
+
+	return 0;
+}
+
+static bool is_sanitized(struct libnvme_transport_handle *hdl)
+{
+	__cleanup_libnvme_free struct nvme_sanitize_log_page *log = NULL;
+	int err;
+
+	log = libnvme_alloc(sizeof(*log));
+	if (!log)
+		return -ENOMEM;
+
+	err = nvme_get_log_sanitize(hdl, false, log);
+	if (err) {
+		nvme_show_err(err, "sanitize status log");
+		return err;
+	}
+
+	switch (NVME_GET(le16_to_cpu(log->sstat), SANITIZE_SSTAT_STATUS)) {
+	case NVME_SANITIZE_SSTAT_STATUS_NEVER_SANITIZED:
+		break;
+	case NVME_SANITIZE_SSTAT_STATUS_COMPLETE_SUCCESS:
+		return true;
+	case NVME_SANITIZE_SSTAT_STATUS_IN_PROGRESS:
+	case NVME_SANITIZE_SSTAT_STATUS_COMPLETED_FAILED:
+	case NVME_SANITIZE_SSTAT_STATUS_ND_COMPLETE_SUCCESS:
+	default:
+		break;
+	}
+
+	return false;
+}
+
+struct nvme_id_ctrl *identify_ctrl(struct libnvme_transport_handle *hdl)
+{
+	struct nvme_id_ctrl *ctrl = libnvme_alloc(sizeof(*ctrl));
+	int err = 0;
+
+	if (!ctrl) {
+		errno = ENOMEM;
+		return NULL;
+	}
+
+	err = nvme_identify_ctrl(hdl, ctrl);
+	if (err) {
+		nvme_show_error("identify-ctrl: %s", libnvme_strerror(err));
+		libnvme_free(ctrl);
+		return NULL;
+	}
+
+	return ctrl;
+}
+
 static int sanitize_cmd(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
 	const char *desc = "Send a sanitize command.";
@@ -5629,9 +5718,12 @@ static int sanitize_cmd(int argc, char **argv, struct command *acmd, struct plug
 	const char *sanact_desc = "Sanitize action: 1 = Exit failure mode, 2 = Start block erase,"
 				"3 = Start overwrite, 4 = Start crypto erase, 5 = Exit media verification";
 	const char *ovrpat_desc = "Overwrite pattern.";
+	const char *wait = "Wait for the sanitize to finish";
+	const char *repeat = "Repeat for the multi cycle sanitization";
 
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
+	__cleanup_libnvme_free struct nvme_id_ctrl *ctrl = NULL;
 	struct libnvme_passthru_cmd cmd;
 	nvme_print_flags_t flags;
 	int err;
@@ -5645,6 +5737,8 @@ static int sanitize_cmd(int argc, char **argv, struct command *acmd, struct plug
 		__u8	sanact;
 		__u32	ovrpat;
 		bool	emvs;
+		bool	wait;
+		__u32	repeat;
 	};
 
 	struct config cfg = {
@@ -5656,6 +5750,7 @@ static int sanitize_cmd(int argc, char **argv, struct command *acmd, struct plug
 		.sanact		= 0,
 		.ovrpat		= 0,
 		.emvs		= false,
+		.repeat		= 1,
 	};
 
 	OPT_VALS(sanact) = {
@@ -5675,7 +5770,9 @@ static int sanitize_cmd(int argc, char **argv, struct command *acmd, struct plug
 		  OPT_FLAG("ause",       'u', &cfg.ause,       ause_desc),
 		  OPT_BYTE("sanact",     'a', &cfg.sanact,     sanact_desc, sanact),
 		  OPT_UINT("ovrpat",     'p', &cfg.ovrpat,     ovrpat_desc),
-		  OPT_FLAG("emvs",       'e', &cfg.emvs,       emvs_desc));
+		  OPT_FLAG("emvs",       'e', &cfg.emvs,       emvs_desc),
+		  OPT_FLAG("wait",       'w', &cfg.wait,       wait),
+		  OPT_UINT("repeat",     'r', &cfg.repeat,     repeat));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -5687,15 +5784,40 @@ static int sanitize_cmd(int argc, char **argv, struct command *acmd, struct plug
 		return err;
 	}
 
+	ctrl = identify_ctrl(hdl);
+	if (!ctrl)
+		return -errno;
+
 	switch (cfg.sanact) {
 	case NVME_SANITIZE_SANACT_EXIT_FAILURE:
+		break;
 	case NVME_SANITIZE_SANACT_START_BLOCK_ERASE:
+		if (!NVME_CTRL_SANICAP_BES(le32_to_cpu(ctrl->sanicap))) {
+			nvme_show_error("block erase action unsupported");
+			return -EINVAL;
+		}
+		break;
 	case NVME_SANITIZE_SANACT_START_OVERWRITE:
+		if (!NVME_CTRL_SANICAP_OWS(le32_to_cpu(ctrl->sanicap))) {
+			nvme_show_error("overwrite action unsupported");
+			return -EINVAL;
+		}
+		break;
 	case NVME_SANITIZE_SANACT_START_CRYPTO_ERASE:
+		if (!NVME_CTRL_SANICAP_CES(le32_to_cpu(ctrl->sanicap))) {
+			nvme_show_error("crypto erase action unsupported");
+			return -EINVAL;
+		}
+		break;
 	case NVME_SANITIZE_SANACT_EXIT_MEDIA_VERIF:
 		break;
 	default:
 		nvme_show_error("Invalid Sanitize Action");
+		return -EINVAL;
+	}
+
+	if (cfg.emvs && !NVME_CTRL_SANICAP_VERS(le32_to_cpu(ctrl->sanicap))) {
+		nvme_show_error("media verification unsupported");
 		return -EINVAL;
 	}
 
@@ -5729,11 +5851,17 @@ static int sanitize_cmd(int argc, char **argv, struct command *acmd, struct plug
 		else
 			printf("ISH is supported only for NVMe-MI\n");
 	}
-	err = libnvme_exec_admin_passthru(hdl, &cmd);
-	if (err) {
-		nvme_show_err(err, "sanitize");
-		return err;
-	}
+
+	do {
+		err = libnvme_exec_admin_passthru(hdl, &cmd);
+		if (err) {
+			nvme_show_err(err, "sanitize");
+			return err;
+		}
+
+		if (cfg.wait)
+			err = wait_sanitize(hdl);
+	} while (--cfg.repeat && !err && is_sanitized(hdl));
 
 	return err;
 }
@@ -5951,8 +6079,6 @@ static int show_registers(int argc, char **argv, struct command *acmd, struct pl
 {
 	const char *desc = "Reads and shows the defined NVMe controller registers\n"
 		"in binary or human-readable format";
-	const char *human_readable =
-	    "show info in readable format in case of output_format == normal";
 
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
@@ -5961,12 +6087,10 @@ static int show_registers(int argc, char **argv, struct command *acmd, struct pl
 	int err;
 
 	struct get_reg_config cfg = {
-		.human_readable	= false,
 		.fabrics = false,
 	};
 
-	NVME_ARGS(opts,
-		  OPT_FLAG("human-readable", 'H', &cfg.human_readable, human_readable));
+	NVME_ARGS(opts);
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -5983,7 +6107,7 @@ static int show_registers(int argc, char **argv, struct command *acmd, struct pl
 		return err;
 	}
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	bar = mmap_registers(hdl, false);
@@ -6184,7 +6308,6 @@ static int get_register(int argc, char **argv, struct command *acmd, struct plug
 		"CMBSZ=0x3c, BPINFO=0x40, BPRSEL=0x44, BPMBL=0x48, CMBMSC=0x50,\n"
 		"CMBSTS=0x58, CRTO=0x68, PMRCAP=0xe00, PMRCTL=0xe04,\n"
 		"PMRSTS=0xe08, PMREBS=0xe0c, PMRSWTP=0xe10, PMRMSCL=0xe14, PMRMSCU=0xe18";
-	const char *human_readable = "show register in readable format";
 	const char *cap = "CAP=0x0 register offset";
 	const char *vs = "VS=0x8 register offset";
 	const char *cmbloc = "CMBLOC=0x38 register offset";
@@ -6215,7 +6338,6 @@ static int get_register(int argc, char **argv, struct command *acmd, struct plug
 
 	NVME_ARGS(opts,
 		  OPT_UINT("offset",         'O', &cfg.offset,         offset),
-		  OPT_FLAG("human-readable", 'H', &cfg.human_readable, human_readable),
 		  OPT_FLAG("cap",              0, &cfg.cap,            cap),
 		  OPT_FLAG("vs",               0, &cfg.vs,             vs),
 		  OPT_FLAG("cmbloc",           0, &cfg.cmbloc,         cmbloc),
@@ -6260,7 +6382,7 @@ static int get_register(int argc, char **argv, struct command *acmd, struct plug
 		return err;
 	}
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	bar = mmap_registers(hdl, false);
@@ -6578,7 +6700,6 @@ static int get_property(int argc, char **argv, struct command *acmd, struct plug
 		"for NVMe over Fabric. Property offset must be one of:\n"
 		"CAP=0x0, VS=0x8, CC=0x14, CSTS=0x1c, NSSR=0x20, NSSD=0x64, CRTO=0x68";
 	const char *offset = "offset of the requested property";
-	const char *human_readable = "show property in readable format";
 
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
@@ -6588,13 +6709,11 @@ static int get_property(int argc, char **argv, struct command *acmd, struct plug
 
 	struct get_reg_config cfg = {
 		.offset		= -1,
-		.human_readable	= false,
 		.fabrics	= true,
 	};
 
 	NVME_ARGS(opts,
-		  OPT_UINT("offset",         'O', &cfg.offset,         offset),
-		  OPT_FLAG("human-readable", 'H', &cfg.human_readable, human_readable));
+		  OPT_UINT("offset",         'O', &cfg.offset,         offset));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -6611,7 +6730,7 @@ static int get_property(int argc, char **argv, struct command *acmd, struct plug
 		return -EINVAL;
 	}
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	err = nvme_get_single_property(hdl, &cfg, &value);
@@ -7232,7 +7351,6 @@ static int dir_send(int argc, char **argv, struct command *acmd, struct plugin *
 		__u16	dspec;
 		__u8	doper;
 		__u16	endir;
-		bool	human_readable;
 		bool	raw_binary;
 		char	*file;
 	};
@@ -7245,7 +7363,6 @@ static int dir_send(int argc, char **argv, struct command *acmd, struct plugin *
 		.dspec		= 0,
 		.doper		= 0,
 		.endir		= 1,
-		.human_readable	= false,
 		.raw_binary	= false,
 		.file		= "",
 	};
@@ -7258,7 +7375,6 @@ static int dir_send(int argc, char **argv, struct command *acmd, struct plugin *
 		  OPT_SHRT("dir-spec",       'S', &cfg.dspec,          dspec_w_dtype),
 		  OPT_BYTE("dir-oper",       'O', &cfg.doper,          doper),
 		  OPT_SHRT("endir",          'e', &cfg.endir,          endir),
-		  OPT_FLAG("human-readable", 'H', &cfg.human_readable, deprecated),
 		  OPT_FLAG("raw-binary",     'b', &cfg.raw_binary,     raw_directive),
 		  OPT_FILE("input-file",     'i', &cfg.file,           input));
 
@@ -7441,7 +7557,79 @@ static int invalid_tags(__u64 storage_tag, __u64 ref_tag, __u8 sts, __u8 pif)
 	return result;
 }
 
-static void get_pif_sts(struct nvme_id_ns *ns, struct nvme_nvm_id_ns *nvm_ns,
+static int check_lbstm_byte_granularity(__u64 lbstm, __u8 sts)
+{
+	__u8 nr_full_bytes = sts / 8;
+	__u8 nr_rem_bits = sts % 8;
+	__u8 rem_mask, byte;
+	__u8 i;
+
+	if (sts > 64)
+		return -EINVAL;
+
+	if (sts < 64)
+		lbstm &= (1ULL << sts) - 1;
+
+	for (i = 0; i < nr_full_bytes; i++) {
+		byte = (lbstm >> (i * 8)) & 0xff;
+		if (byte != 0x00 && byte != 0xff)
+			return -EINVAL;
+	}
+
+	if (nr_rem_bits) {
+		rem_mask = (1u << nr_rem_bits) - 1;
+		byte = (lbstm >> (nr_full_bytes * 8)) & rem_mask;
+		if (byte != 0x00 && byte != rem_mask)
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int check_lbstm_masking_not_supported(__u64 lbstm, __u8 sts)
+{
+	__u64 stm_mask;
+
+	if (sts > 64)
+		return -EINVAL;
+
+	stm_mask = (sts < 64) ? ((1ULL << sts) - 1) : ~0ULL;
+	if ((lbstm & stm_mask) != stm_mask)
+		return -EINVAL;
+
+	return 0;
+}
+
+static int get_pif_sts_via_qpif(struct nvme_nvm_id_ns *nvm_ns, __u32 elbaf,
+		__u8 sts, __u8 *pif)
+{
+	__u64 lbstm;
+	int err = 0;
+
+	*pif = NVME_NVM_ELBAF_QPIF(elbaf);
+
+	lbstm = le64_to_cpu(nvm_ns->lbstm);
+	switch (NVME_NVM_PIFA_STMLA(nvm_ns->pifa)) {
+	case NVME_NVM_PIFA_BIT_GRANULARITY_MASKING:
+		break;
+	case NVME_NVM_PIFA_BYTE_GRANULARITY_MASKING:
+		err = check_lbstm_byte_granularity(lbstm, sts);
+		break;
+	case NVME_NVM_PIFA_MASKING_NOT_SUPPORTED:
+		err = check_lbstm_masking_not_supported(lbstm, sts);
+		break;
+	default:
+		err = -EINVAL;
+		break;
+	}
+
+	if (err)
+		nvme_show_error("Logical Block Storage Tag Mask is inconsistent with the Storage Tag Masking Level Attribute");
+
+	return err;
+}
+
+static int get_pif_sts(struct nvme_id_ns *ns, struct nvme_nvm_id_ns *nvm_ns,
 		__u8 *pif, __u8 *sts)
 {
 	__u8 lba_index;
@@ -7451,8 +7639,11 @@ static void get_pif_sts(struct nvme_id_ns *ns, struct nvme_nvm_id_ns *nvm_ns,
 	elbaf = le32_to_cpu(nvm_ns->elbaf[lba_index]);
 	*sts = NVME_NVM_ELBAF_STS(elbaf);
 	*pif = NVME_NVM_ELBAF_PIF(elbaf);
-	if (*pif == NVME_NVM_PIF_QTYPE && (nvm_ns->pic & 0x8))
-		*pif = NVME_NVM_ELBAF_QPIF(elbaf);
+
+	if (*pif == NVME_NVM_PIF_QTYPE && NVME_NVM_PIC_QPIFS(nvm_ns->pic))
+		return get_pif_sts_via_qpif(nvm_ns, elbaf, *sts, pif);
+
+	return 0;
 }
 
 static int get_pi_info(struct libnvme_transport_handle *hdl,
@@ -7487,16 +7678,19 @@ static int get_pi_info(struct libnvme_transport_handle *hdl,
 		return -ENOMEM;
 
 	err = nvme_identify_csi_ns(hdl, nsid, NVME_CSI_NVM, 0, nvm_ns);
-	if (!err)
-		get_pif_sts(ns, nvm_ns, &pif, &sts);
-	else if (!nvme_status_equals(err, NVME_STATUS_TYPE_NVME,
-				     NVME_SC_INVALID_FIELD))
+	if (!err) {
+		err = get_pif_sts(ns, nvm_ns, &pif, &sts);
+		if (err)
+			return err;
+	} else if (!nvme_status_equals(err, NVME_STATUS_TYPE_NVME,
+				       NVME_SC_INVALID_FIELD)) {
 		/*
 		 * Ignore the invalid field error and skip get_pif_sts().
 		 * Keep the I/O commands behavior same as before.
 		 * Since the error returned by drives unsupported.
 		 */
 		return NVME_SC_INVALID_FIELD;
+	}
 
 	pi_size = (pif == NVME_NVM_PIF_16B_GUARD) ? 8 : 16;
 	if (NVME_FLBAS_META_EXT(ns->flbas)) {
@@ -7542,16 +7736,19 @@ static int init_pi_tags(struct libnvme_transport_handle *hdl,
 		return -ENOMEM;
 
 	err = nvme_identify_csi_ns(hdl, nsid, NVME_CSI_NVM, 0, nvm_ns);
-	if (!err)
-		get_pif_sts(ns, nvm_ns, &pif, &sts);
-	else if (!nvme_status_equals(err, NVME_STATUS_TYPE_NVME,
-				     NVME_SC_INVALID_FIELD))
+	if (!err) {
+		err = get_pif_sts(ns, nvm_ns, &pif, &sts);
+		if (err)
+			return err;
+	} else if (!nvme_status_equals(err, NVME_STATUS_TYPE_NVME,
+				       NVME_SC_INVALID_FIELD)) {
 		/*
 		 * Ignore the invalid field error and skip get_pif_sts().
 		 * Keep the I/O commands behavior same as before.
 		 * Since the error returned by drives unsupported.
 		 */
 		return NVME_SC_INVALID_FIELD;
+	}
 
 	if (invalid_tags(lbst, ilbrt, sts, pif))
 		return -EINVAL;
@@ -7708,9 +7905,9 @@ static int dsm(int argc, char **argv, struct command *acmd, struct plugin *plugi
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	__cleanup_libnvme_free struct nvme_dsm_range *dsm = NULL;
 	struct libnvme_passthru_cmd cmd;
-	__u32 ctx_attrs[256] = {0,};
-	__u32 nlbs[256] = {0,};
-	__u64 slbas[256] = {0,};
+	__u32 ctx_attrs[NVME_DSM_MAX_RANGES] = {0,};
+	__u32 nlbs[NVME_DSM_MAX_RANGES] = {0,};
+	__u64 slbas[NVME_DSM_MAX_RANGES] = {0,};
 	nvme_print_flags_t flags;
 	uint16_t nc, nb, ns;
 	int err;
@@ -7769,7 +7966,7 @@ static int dsm(int argc, char **argv, struct command *acmd, struct plugin *plugi
 		nvme_show_error("No valid range definition provided");
 		return -EINVAL;
 	}
-	if (!nb || nb > 256) {
+	if (!nb || nb > NVME_DSM_MAX_RANGES) {
 		nvme_show_error("No range definition provided");
 		return -EINVAL;
 	}
@@ -8583,7 +8780,7 @@ static int submit_io(int opcode, char *command, const char *desc, int argc, char
 	}
 
 	if (strlen(cfg.data)) {
-		dfd = open(cfg.data, flags, mode);
+		dfd = nvme_open_rawdata(cfg.data, flags, mode);
 		if (dfd < 0) {
 			nvme_show_perror(cfg.data);
 			return -EINVAL;
@@ -8591,7 +8788,7 @@ static int submit_io(int opcode, char *command, const char *desc, int argc, char
 	}
 
 	if (strlen(cfg.metadata)) {
-		mfd = open(cfg.metadata, flags, mode);
+		mfd = nvme_open_rawdata(cfg.metadata, flags, mode);
 		if (mfd < 0) {
 			nvme_show_perror(cfg.metadata);
 			return -EINVAL;
@@ -9144,7 +9341,6 @@ static int dir_receive(int argc, char **argv, struct command *acmd, struct plugi
 		__u16	dspec;
 		__u8	doper;
 		__u16	nsr; /* dw12 for NVME_DIR_ST_RCVOP_STATUS */
-		bool	human_readable;
 	};
 
 	struct config cfg = {
@@ -9155,7 +9351,6 @@ static int dir_receive(int argc, char **argv, struct command *acmd, struct plugi
 		.dspec		= 0,
 		.doper		= 0,
 		.nsr		= 0,
-		.human_readable	= false,
 	};
 
 	NVME_ARGS(opts,
@@ -9165,14 +9360,13 @@ static int dir_receive(int argc, char **argv, struct command *acmd, struct plugi
 		  OPT_BYTE("dir-type",       'D', &cfg.dtype,          dtype),
 		  OPT_SHRT("dir-spec",       'S', &cfg.dspec,          dspec_w_dtype),
 		  OPT_BYTE("dir-oper",       'O', &cfg.doper,          doper),
-		  OPT_SHRT("req-resource",   'r', &cfg.nsr,            nsr),
-		  OPT_FLAG("human-readable", 'H', &cfg.human_readable, human_readable_directive));
+		  OPT_SHRT("req-resource",   'r', &cfg.nsr,            nsr));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
 
-	if (cfg.human_readable || nvme_args.verbose)
+	if (nvme_args.verbose)
 		flags |= VERBOSE;
 	if (cfg.raw_binary)
 		flags = BINARY;
@@ -9462,7 +9656,7 @@ static int passthru(int argc, char **argv, bool admin,
 	}
 
 	if (strlen(cfg.input_file)) {
-		dfd = open(cfg.input_file, flags, mode);
+		dfd = nvme_open_rawdata(cfg.input_file, flags, mode);
 		if (dfd < 0) {
 			nvme_show_perror(cfg.input_file);
 			return -EINVAL;
@@ -9470,7 +9664,7 @@ static int passthru(int argc, char **argv, bool admin,
 	}
 
 	if (cfg.metadata && strlen(cfg.metadata)) {
-		mfd = open(cfg.metadata, flags, mode);
+		mfd = nvme_open_rawdata(cfg.metadata, flags, mode);
 		if (mfd < 0) {
 			nvme_show_perror(cfg.metadata);
 			return -EINVAL;
@@ -10297,7 +10491,7 @@ static int tls_key(int argc, char **argv, struct command *acmd, struct plugin *p
 		  OPT_FLAG("export",	'e', &cfg.export,	export),
 		  OPT_STR("revoke",	'r', &cfg.revoke,	revoke));
 
-	err = argconfig_parse(argc, argv, desc, opts);
+	err = parse_args(argc, argv, desc, opts);
 	if (err)
 		return err;
 
@@ -10403,7 +10597,7 @@ static int show_topology_cmd(int argc, char **argv, struct command *acmd, struct
 	NVME_ARGS(opts,
 		  OPT_FMT("ranking",       'r', &cfg.ranking,       ranking));
 
-	err = argconfig_parse(argc, argv, desc, opts);
+	err = parse_args(argc, argv, desc, opts);
 	if (err)
 		return err;
 
@@ -10582,7 +10776,7 @@ static int libnvme_mi(int argc, char **argv, __u8 admin_opcode, const char *desc
 	}
 
 	if (strlen(cfg.input_file)) {
-		fd = open(cfg.input_file, flags, mode);
+		fd = nvme_open_rawdata(cfg.input_file, flags, mode);
 		if (fd < 0) {
 			nvme_show_perror(cfg.input_file);
 			return -EINVAL;
@@ -11399,6 +11593,15 @@ void register_extension(struct plugin *plugin)
 int main(int argc, char **argv)
 {
 	int err;
+
+#ifdef _WIN32
+	/*
+	 * Set stdout and stderr to binary mode to prevent Windows text-mode
+	 * translation from converting LF to CRLF and corrupting binary output.
+	 */
+	_setmode(_fileno(stdout), O_BINARY);
+	_setmode(_fileno(stderr), O_BINARY);
+#endif
 
 	nvme.extensions->parent = &nvme;
 	if (argc < 2) {

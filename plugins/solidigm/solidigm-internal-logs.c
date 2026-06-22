@@ -256,7 +256,7 @@ static int ilog_dump_assert_logs(struct libnvme_transport_handle *hdl, struct il
 		 (int) (sizeof(file_path) - sizeof(file_name) - 1),
 		 ilog->cfg->out_dir, file_name) < 0)
 		return -errno;
-	output = open(file_path, O_WRONLY | O_CREAT | O_TRUNC, LOG_FILE_PERMISSION);
+	output = nvme_open_rawdata(file_path, O_WRONLY | O_CREAT | O_TRUNC, LOG_FILE_PERMISSION);
 	if (output < 0)
 		return -errno;
 	err = write_header((__u8 *)ad, output, ad->header.header_size * DWORD_SIZE);
@@ -311,7 +311,7 @@ static int ilog_dump_event_logs(struct libnvme_transport_handle *hdl, struct ilo
 		return err;
 	if (asprintf(&file_path, "%s/EventLog.bin", ilog->cfg->out_dir))
 		return -errno;
-	output = open(file_path, O_WRONLY | O_CREAT | O_TRUNC, LOG_FILE_PERMISSION);
+	output = nvme_open_rawdata(file_path, O_WRONLY | O_CREAT | O_TRUNC, LOG_FILE_PERMISSION);
 	if (output < 0)
 		return -errno;
 	err = write_header(head_buf, output, INTERNAL_LOG_MAX_BYTE_TRANSFER);
@@ -407,7 +407,7 @@ static int ilog_dump_nlogs(struct libnvme_transport_handle *hdl, struct ilog *il
 			core_num = core < 0 ? nlog_header->corecount : 0;
 			if (!header_size) {
 				if (asprintf(&file_path, "%s/NLog.bin", ilog->cfg->out_dir) >= 0) {
-					output = open(file_path, O_WRONLY | O_CREAT | O_TRUNC,
+					output = nvme_open_rawdata(file_path, O_WRONLY | O_CREAT | O_TRUNC,
 							LOG_FILE_PERMISSION);
 					if (output < 0)
 						return -errno;
@@ -474,7 +474,7 @@ static int log_save(struct log *log, const char *parent_dir_name, const char *su
 	if (asprintf(&file_path, "%s/%s/%s", parent_dir_name, subdir_name, file_name) < 0)
 		return -errno;
 
-	output = open(file_path, O_WRONLY | O_CREAT | O_TRUNC, LOG_FILE_PERMISSION);
+	output = nvme_open_rawdata(file_path, O_WRONLY | O_CREAT | O_TRUNC, LOG_FILE_PERMISSION);
 	if (output < 0)
 		return -errno;
 
@@ -779,7 +779,6 @@ static int ilog_dump_pel(struct libnvme_transport_handle *hdl, struct ilog *ilog
 	__cleanup_libnvme_free struct nvme_persistent_event_log *pevent = NULL;
 	__cleanup_huge struct libnvme_mem_huge mh = {0};
 	void *pevent_log_full;
-	size_t max_data_tx;
 	struct log lp = {
 		NVME_LOG_LID_PERSISTENT_EVENT,
 		nvme_log_to_string(NVME_LOG_LID_PERSISTENT_EVENT)
@@ -802,20 +801,12 @@ static int ilog_dump_pel(struct libnvme_transport_handle *hdl, struct ilog *ilog
 		return err;
 
 	lp.buffer_size = le64_to_cpu(pevent->tll);
-
 	pevent_log_full = libnvme_alloc_huge(lp.buffer_size, &mh);
 	if (!pevent_log_full)
 		return -ENOMEM;
 
 	err = nvme_get_log_persistent_event(hdl, NVME_PEVENT_LOG_READ,
 						pevent_log_full, lp.buffer_size);
-	max_data_tx = (1 << ilog->id_ctrl.mdts) * NVME_LOG_PAGE_PDU_SIZE;
-	do {
-		err = nvme_get_log_persistent_event(hdl, NVME_PEVENT_LOG_READ,
-			pevent_log_full, lp.buffer_size);
-		max_data_tx /= 2;
-	} while (err == -EPERM && max_data_tx >= NVME_LOG_PAGE_PDU_SIZE);
-
 	if (err)
 		return err;
 

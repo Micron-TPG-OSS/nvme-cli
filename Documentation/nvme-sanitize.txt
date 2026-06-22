@@ -13,8 +13,8 @@ SYNOPSIS
 			<overwrite-pass-count>]
 			[--ause | -u] [--sanact=<action> | -a <action>]
 			[--ovrpat=<overwrite-pattern> | -p <overwrite-pattern>]
-			[--emvs | -e] [--force]
-			[--human-readable | -H]
+			[--emvs | -e] [--force] [--wait | -w]
+			[--repeat=<repeat-count> | -r <repeat-count>]
 
 DESCRIPTION
 -----------
@@ -98,10 +98,13 @@ OPTIONS
 	Ignore namespace is currently busy and performed the operation
 	even though.
 
--H::
---human-readable::
-	Display values in a human-readable format where possible.
-	(deprecated, use --verbose)
+-w::
+--wait::
+	Wait for the sanitize to finish
+
+-r <repeat-count>::
+--repeat=<repeat-count>::
+	Repeat for the multi cycle sanitization
 
 include::global-options.txt[]
 

@@ -20,13 +20,17 @@ LIBNVME_3 {
 		libnvme_ctrl_get_subsystem;
 		libnvme_ctrl_get_transport_handle;
 		libnvme_ctrl_identify;
+		libnvme_ctrl_is_transport_fabric;
 		libnvme_ctrl_next_ns;
 		libnvme_ctrl_next_path;
+		libnvme_ctrl_owner;
 		libnvme_ctrl_release_transport_handle;
 		libnvme_describe_key_serial;
 		libnvme_dump_config;
 		libnvme_dump_tree;
 		libnvme_errno_to_string;
+		libnvme_exec_admin_passthru;
+		libnvme_exec_io_passthru;
 		libnvme_export_tls_key;
 		libnvme_export_tls_key_versioned;
 		libnvme_filter_ctrls;
@@ -52,7 +56,6 @@ LIBNVME_3 {
 		libnvme_get_ana_log_atomic;
 		libnvme_get_ana_log_len;
 		libnvme_get_ana_log_len_from_id_ctrl;
-		libnvme_get_application;
 		libnvme_get_attr;
 		libnvme_get_ctrl_attr;
 		libnvme_get_ctrl_telemetry;
@@ -61,6 +64,7 @@ LIBNVME_3 {
 		libnvme_get_host;
 		libnvme_get_host_telemetry;
 		libnvme_get_log;
+		libnvme_get_log_dynamic_chunk;
 		libnvme_get_logging_level;
 		libnvme_get_logical_block_size;
 		libnvme_get_new_host_telemetry;
@@ -149,6 +153,7 @@ LIBNVME_3 {
 		libnvme_read_hostnqn;
 		libnvme_read_key;
 		libnvme_realloc;
+		libnvme_reap_passthru_async;
 		libnvme_refresh_topology;
 		libnvme_rescan_ctrl;
 		libnvme_rescan_ns;
@@ -165,18 +170,20 @@ LIBNVME_3 {
 		libnvme_scan_subsystems;
 		libnvme_scan_tls_keys;
 		libnvme_scan_topology;
-		libnvme_set_application;
 		libnvme_set_dry_run;
 		libnvme_set_etdas;
 		libnvme_set_ioctl_probing;
 		libnvme_set_keyring;
 		libnvme_set_logging_level;
+		libnvme_set_owner;
 		libnvme_skip_namespaces;
 		libnvme_status_to_errno;
 		libnvme_status_to_string;
 		libnvme_strerror;
 		libnvme_submit_admin_passthru;
+		libnvme_submit_admin_passthru_async;
 		libnvme_submit_io_passthru;
+		libnvme_submit_io_passthru_async;
 		libnvme_subsystem_first_ctrl;
 		libnvme_subsystem_first_ns;
 		libnvme_subsystem_get_host;
@@ -201,8 +208,7 @@ LIBNVME_3 {
 		libnvme_update_key;
 		libnvme_uuid_from_string;
 		libnvme_uuid_to_string;
-		libnvme_wait_admin_passthru;
-		libnvme_wait_io_passthru;
+		libnvme_wait_passthru;
 	local:
 		*;
 };

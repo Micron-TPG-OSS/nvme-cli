@@ -24,6 +24,12 @@ option(
   description : 'MI support'
 )
 option(
+  'top',
+  type : 'feature',
+  value: 'enabled',
+  description : 'nvme top support'
+)
+option(
   'python',
   type : 'feature',
   value: 'auto',
@@ -172,7 +178,7 @@ option(
   choices: ['amzn', 'dapustor', 'dell', 'dera',
             'fdp', 'feat', 'huawei', 'ibm', 'innogrit', 'inspur', 'intel',
             'lm', 'mangoboost', 'memblaze', 'micron', 'nbft',
-            'netapp', 'nvidia', 'ocp', 'sandisk', 'scaleflux',
+            'netapp', 'nvidia', 'ocp', 'registry', 'sandisk', 'scaleflux',
             'seagate', 'sed', 'shannon', 'solidigm', 'ssstc', 'toshiba',
             'transcend', 'virtium', 'wdc', 'ymtc', 'zns'],
   description : 'comma-separated list of plugins to build (all plugins are included if unset, [] = no plugins)'

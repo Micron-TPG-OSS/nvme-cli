@@ -26,6 +26,7 @@ tests = [
     'nvme_id_ctrl_test.py',
     'nvme_id_ns_test.py',
     'nvme_read_write_test.py',
+    'nvme_qpif_test.py',
     'nvme_smart_log_test.py',
     'nvme_writeuncor_test.py',
     'nvme_writezeros_test.py',
@@ -57,6 +58,19 @@ foreach t : tests
         is_parallel: false,
     )
 endforeach
+
+# Standalone CLI end-to-end test for the ownership registry.  Unlike the
+# hardware tests above it needs no device (it uses NVME_REGISTRY_DIR), but it
+# lives here so it is gated by the nvme-tests option.
+if want_fabrics and 'registry' in selected_plugins
+    _py3 = find_program('python3', required: false)
+    if _py3.found()
+        test('nvme-cli - registry-cli',
+             _py3,
+             args: [files('nvme_registry_test.py'), nvme_exe],
+             depends: nvme_exe)
+    endif
+endif
 
 mypy = find_program(
     'mypy',

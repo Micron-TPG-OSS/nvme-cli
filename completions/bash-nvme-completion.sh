@@ -98,12 +98,12 @@ nvme_list_opts () {
 		opts=+=" --output-format= -o --verbose -v"
 			;;
 		"id-ctrl")
-		opts+=" --raw-binary -b --human-readable -H \
+		opts+=" --raw-binary -b \
 			--vendor-specific -V --output-format= -o"
 			;;
 		"id-ns")
 		opts+=" --namespace-id= -n --raw-binary -b \
-			--human-readable -H --vendor-specific -V \
+			--vendor-specific -V \
 			--force -f --output-format= -o"
 			;;
 		"id-ns-granularity")
@@ -123,7 +123,7 @@ nvme_list_opts () {
 			;;
 		"cmdset-ind-id-ns")
 		opts+=" --namespace-id= -n --raw-binary -b \
-			--human-readable -H --output-format= -o"
+			--output-format= -o"
 			;;
 		"nvm-id-ctrl")
 		opts+=" --output-format= -o"
@@ -137,7 +137,7 @@ nvme_list_opts () {
 			--verbose -v --output-format= -o"
 			;;
 		"primary-ctrl-caps")
-		opts+=" --output-format= -o --human-readable -H"
+		opts+=" --output-format= -o"
 			;;
 		"list-secondary")
 		opts+=" --cntid= -c --namespace-id= n --num-entries -e \
@@ -150,7 +150,7 @@ nvme_list_opts () {
 		opts+=" --nvmeset-id= -i --output-format= -o"
 			;;
 		"id-uuid")
-		opts+=" --output-format= -o --raw-binary -b --human-readable -H"
+		opts+=" --output-format= -o --raw-binary -b"
 			;;
 		"list-endgrp")
 		opts+=" --endgrp-id= -i --output-format= -o"
@@ -187,7 +187,7 @@ nvme_list_opts () {
 			--raw-binary -b"
 			;;
 		"supported-log-pages")
-		opts+=" --output-format= -o --human-readable -H"
+		opts+=" --output-format= -o"
 			;;
 		"telemetry-log")
 		opts+=" --output-file= -O --host-generate= -g \
@@ -216,7 +216,7 @@ nvme_list_opts () {
 			--csi= -c --opcode= -O"
 			;;
 		"effects-log")
-		opts+=" --output-format= -o --human-readable -H \
+		opts+=" --output-format= -o \
 			--raw-binary -b --timeout="
 			;;
 		"endurance-log")
@@ -263,7 +263,7 @@ nvme_list_opts () {
 		"get-feature")
 		opts+=" --namespace-id= -n --feature-id= -f --sel= -s \
 			--data-len= -l --cdw11= --c -uuid-index= -U --raw-binary -b \
-			--human-readable -H --timeout= --changed -C"
+			--timeout= --changed -C"
 			;;
 		"device-self-test")
 		opts+=" --namespace-id= -n --self-test-code= -s --timeout="
@@ -281,7 +281,7 @@ nvme_list_opts () {
 		opts+=" --offset= -O --value= -V --timeout="
 			;;
 		"get-property")
-		opts=+" --offset= -O --human-readable -H --timeout="
+		opts=+" --offset= -O --timeout="
 			;;
 		"format")
 		opts+=" --namespace-id= -n --timeout= --lbaf= -l \
@@ -422,7 +422,8 @@ nvme_list_opts () {
 			;;
 		"sanitize")
 		opts+=" --no-dealloc -d --oipbp -i --owpass= -n \
-			--ause -u --sanact= -a --ovrpat= -p --emvs= -e"
+			--ause -u --sanact= -a --ovrpat= -p --emvs= -e \
+			--wait -w --repeat= -r"
 		case $opt in
 			--sanact|-a)
 			vals+=" exit-failure start-block-erase start-overwrite \
@@ -431,7 +432,7 @@ nvme_list_opts () {
 		esac
 			;;
 		"sanitize-log")
-		opts+=" --rae -r --output-format= -o --human-readable -H \
+		opts+=" --rae -r --output-format= -o \
 			--raw-binary -b"
 			;;
 		"reset")
@@ -444,7 +445,7 @@ nvme_list_opts () {
 		opts+=$NO_OPTS
 			;;
 		"show-regs")
-		opts+=" --output-format= -o --human-readable -H --timeout="
+		opts+=" --output-format= -o --timeout="
 			;;
 		"discover")
 		opts+=" --transport= -t -traddr= -a -trsvcid= -s \
@@ -456,7 +457,7 @@ nvme_list_opts () {
 			--nr-io-queues= -i --nr-write-queues= -W \
 			--nr-poll-queues= -P --queue-size= -Q \
 			--persistent -p --quiet \
-			--output-format= -o"
+			--owner= --output-format= -o"
 			;;
 		"connect-all")
 		opts+=" --transport= -t -traddr= -a -trsvcid= -s \
@@ -468,7 +469,7 @@ nvme_list_opts () {
 			--nr-io-queues= -i --nr-write-queues= -W \
 			--nr-poll-queues= -P --queue-size= -Q \
 			--persistent -p --quiet \
-			--output-format= -o"
+			--owner= --output-format= -o"
 			;;
 		"connect")
 		opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid -s \
@@ -477,7 +478,8 @@ nvme_list_opts () {
 			--keep-alive-tmo= -k --reconnect-delay= -r \
 			--ctrl-loss-tmo= -l --fast-io-fail-tmo= -f \
 			--tos= -T --duplicate-connect -D --disable-sqflow \
-			--hdr-digest -g --data-digest -G --output-format= -o"
+			--hdr-digest -g --data-digest -G --owner= \
+			--output-format= -o"
 			;;
 		"dim")
 		opts+=" --task -t --nqn -n --device -d"
@@ -502,12 +504,12 @@ nvme_list_opts () {
 		"dir-receive")
 		opts+=" --namespace-id= -n --data-len= -l --raw-binary -b \
 			--dir-type= -D --dir-spec= -S --dir-oper= -O \
-			--req-resource= -r --human-readable -H --timeout="
+			--req-resource= -r --timeout="
 			;;
 		"dir-send")
 		opts+=" --namespace-id= -n --data-len= -l --dir-type= -D \
 			--target-dir= -T --dir-spec= -S --dir-oper= -O \
-			--endir= -e --human-readable -H --raw-binary -b \
+			--endir= -e --raw-binary -b \
 			--timeout="
 			;;
 		"virt-mgmt")
@@ -530,7 +532,7 @@ nvme_list_opts () {
 			--nmimt= -m --nmd0= -0 --nmd1= -1 --input-file= -i"
 			;;
 		"get-reg")
-		opts+=" --offset= -O --human-readable -H --cap --vs --cmbloc \
+		opts+=" --offset= -O --cap --vs --cmbloc \
 			--cmbsz --bpinfo --cmbsts --cmbebs --cmbswtp --crto \
 			--pmrcap --pmrsts --pmrebs --pmrswtp --intms --intmc \
 			--cc --csts --nssr --aqa --asq --acq --bprsel --bpmbl \
@@ -597,7 +599,7 @@ nvme_list_opts () {
 			;;
 	esac
 
-	opts+=" -h --help -j --json"
+	opts+=" -h --help"
 
 	if [[ $vals == " " ]]; then
 		COMPREPLY+=( $( compgen $compargs -W "$opts" -- $cur ) )

@@ -974,10 +974,32 @@ static int __nvmf_supported_options(struct libnvme_global_ctx *ctx)
 	return 0;
 }
 
+/*
+ * Best-effort registry update after a successful connect: record ownership
+ * when an owner is set, otherwise clear any stale entry for a recycled
+ * instance.  Failures are logged but never fail the connection.
+ */
+static void registry_update_on_connect(struct libnvme_global_ctx *ctx,
+				       int instance)
+{
+	int ret;
+
+	if (ctx->owner)
+		ret = libnvmf_registry_create_instance(ctx, instance,
+						       ctx->owner);
+	else
+		ret = libnvmf_registry_delete_instance(ctx, instance);
+	if (ret)
+		libnvme_msg(ctx, LIBNVME_LOG_WARN,
+			    "nvme%d: registry update failed: %s\n",
+			    instance, libnvme_strerror(-ret));
+}
+
 static int __nvmf_add_ctrl(struct libnvme_global_ctx *ctx, const char *argstr)
 {
 	__cleanup_fd int fd = -1;
 	int ret, len = strlen(argstr);
+	int instance;
 	char buf[0x1000], *options, *p;
 
 	fd = open(nvmf_dev, O_RDWR);
@@ -1029,33 +1051,16 @@ static int __nvmf_add_ctrl(struct libnvme_global_ctx *ctx, const char *argstr)
 	while ((p = strsep(&options, ",\n")) != NULL) {
 		if (!*p)
 			continue;
-		if (sscanf(p, "instance=%d", &ret) == 1)
-			return ret;
+		if (sscanf(p, "instance=%d", &instance) == 1) {
+			registry_update_on_connect(ctx, instance);
+			return instance;
+		}
 	}
 
 	libnvme_msg(ctx, LIBNVME_LOG_ERR, "Failed to parse ctrl info for \"%s\"\n", argstr);
 	return -ENVME_CONNECT_PARSE;
 }
 
-static const char *lookup_context(struct libnvme_global_ctx *ctx, libnvme_ctrl_t c)
-{
-	struct libnvmf_context fctx = {};
-	libnvme_host_t h;
-	libnvme_subsystem_t s;
-
-	fctx.ctrl_params.transport = libnvme_ctrl_get_transport(c);
-	fctx.ctrl_params.traddr = libnvme_ctrl_get_traddr(c);
-	fctx.ctrl_params.trsvcid = libnvme_ctrl_get_trsvcid(c);
-
-	libnvme_for_each_host(ctx, h) {
-		libnvme_for_each_subsystem(h, s) {
-			if (libnvmf_ctrl_find(s, &fctx))
-				return libnvme_subsystem_get_application(s);
-		}
-	}
-
-	return NULL;
-}
 
 __libnvme_public int libnvmf_create_ctrl(struct libnvme_global_ctx *ctx,
 		struct libnvmf_context *fctx, libnvme_ctrl_t *cp)
@@ -1066,7 +1071,6 @@ __libnvme_public int libnvmf_create_ctrl(struct libnvme_global_ctx *ctx,
 __libnvme_public int libnvmf_add_ctrl(libnvme_host_t h, libnvme_ctrl_t c)
 {
 	libnvme_subsystem_t s;
-	const char *root_app, *app;
 	__cleanup_free char *argstr = NULL;
 	int ret;
 
@@ -1115,25 +1119,6 @@ __libnvme_public int libnvmf_add_ctrl(libnvme_host_t h, libnvme_ctrl_t c)
 				libnvme_ctrl_set_tls_key(c, key);
 		}
 
-	}
-
-	root_app = libnvme_get_application(h->ctx);
-	if (root_app) {
-		app = libnvme_subsystem_get_application(s);
-		if (!app && libnvme_ctrl_get_discovery_ctrl(c))
-			app = lookup_context(h->ctx, c);
-
-		/*
-		 * configuration is managed by an application,
-		 * refuse to act on subsystems which either have
-		 * no application set or which habe a different
-		 * application string.
-		 */
-		if (app && strcmp(app, root_app)) {
-			libnvme_msg(h->ctx, LIBNVME_LOG_INFO, "skip %s, not managed by %s\n",
-				 libnvme_subsystem_get_subsysnqn(s), root_app);
-			return -ENVME_CONNECT_IGNORED;
-		}
 	}
 
 	libnvme_ctrl_set_discovered(c, true);
@@ -2461,46 +2446,18 @@ __libnvme_public int libnvmf_discovery_config_file(
 		struct libnvme_global_ctx *ctx, struct libnvmf_context *fctx,
 		bool connect, bool force)
 {
-	struct libnvme_host *h;
-	struct libnvme_ctrl *c;
 	int err;
-
-	err = lookup_host(ctx, fctx, &h);
-	if (err)
-		return err;
-
-	err = setup_connection(fctx, h, false);
-	if (err)
-		return err;
 
 	err = fctx->hooks.parser_init(fctx, fctx->hooks.user_data);
 	if (err)
 		return err;
 
 	do {
-		err = fctx->hooks.parser_next_line(fctx, fctx->hooks.user_data);
+		struct libnvmf_context nfctx = *fctx;
+		err = fctx->hooks.parser_next_line(&nfctx, fctx->hooks.user_data);
 		if (err)
 			break;
-
-		struct libnvmf_context nfctx = *fctx;
-
-		if (!force) {
-			c = lookup_ctrl(h, &nfctx);
-			if (c) {
-				_nvmf_discovery(ctx, &nfctx, connect, c);
-				continue;
-			}
-		}
-
-		err = nvmf_create_discovery_ctrl(ctx, &nfctx, h, &c);
-		if (err)
-			continue;
-
-		_nvmf_discovery(ctx, &nfctx, connect, c);
-		if (!(nfctx.persistent ||
-		      is_persistent_discovery_ctrl(h, c)))
-			err = libnvmf_disconnect_ctrl(c);
-		libnvme_free_ctrl(c);
+		libnvmf_discovery(ctx, &nfctx, connect, force);
 	} while (!err);
 
 	fctx->hooks.parser_cleanup(fctx, fctx->hooks.user_data);
