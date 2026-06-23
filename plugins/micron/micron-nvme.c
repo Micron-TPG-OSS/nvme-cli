@@ -203,6 +203,28 @@ static enum eDriveModel GetDriveModel(
 }
 
 /*
+ * sanitize_serial - trim trailing spaces, null-terminate, and replace any
+ * characters that are not alphanumeric, hyphen, or underscore with underscores.
+ */
+static void sanitize_serial(char *sn, size_t len)
+{
+	size_t i;
+	size_t end = len - 1;
+
+	while (end > 0 && isblank((int)sn[end - 1]))
+		end--;
+	sn[end] = '\0';
+
+	for (i = 0; i < end; i++) {
+		if (!((sn[i] >= 'A' && sn[i] <= 'Z') ||
+		      (sn[i] >= 'a' && sn[i] <= 'z') ||
+		      (sn[i] >= '0' && sn[i] <= '9') ||
+		      sn[i] == '-' || sn[i] == '_'))
+			sn[i] = '_';
+	}
+}
+
+/*
  * Recursively remove a directory and its contents.
  * Since this is only used for temporary directories that we create that
  * have no symlinks, it is safe to not check for and handle symlinks here.
@@ -3438,7 +3460,6 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 	unsigned int *puiIDDBuf;
 	unsigned int uiMask;
 	struct nvme_id_ctrl ctrl;
-	char sn[20] = { 0 };
 	char msg[256] = { 0 };
 	int  c_logs_index = 8; /* should be current size of aVendorLogs */
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
@@ -3594,19 +3615,9 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 
 	printf("Preparing log package. This will take a few seconds...\n");
 
-	/* trim spaces out of serial number string */
-	int i, j = 0;
-
-	for (i = 0; i < sizeof(ctrl.sn); i++) {
-		if (isblank((int)ctrl.sn[i]))
-			continue;
-		sn[j++] = ctrl.sn[i];
-	}
-	sn[j] = '\0';
-	strcpy(ctrl.sn, sn);
-
-	SetupDebugDataDirectories(ctrl.sn, cfg.package, strMainDirName, strOSDirName,
-										strCtrlDirName);
+	sanitize_serial(ctrl.sn, sizeof(ctrl.sn));
+	SetupDebugDataDirectories(ctrl.sn, cfg.package,
+			strMainDirName, strOSDirName, strCtrlDirName);
 
 	GetTimestampInfo(strOSDirName);
 	GetCtrlIDDInfo(strCtrlDirName, &ctrl);
