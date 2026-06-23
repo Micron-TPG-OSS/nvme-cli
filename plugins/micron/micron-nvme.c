@@ -265,7 +265,6 @@ static int RemoveDirRecursive(const char *path)
  */
 static int ZipWithBsdTar(char *strDirName, char *strFileName)
 {
-	__cleanup_free char *cmd_buf = NULL;
 	FILE *fpVersion = NULL;
 	char version_buf[256] = { 0 };
 	bool is_bsdtar = false;
@@ -288,32 +287,29 @@ static int ZipWithBsdTar(char *strDirName, char *strFileName)
 	if (!is_bsdtar)
 		return -EINVAL;
 
-	if (asprintf(&cmd_buf, "tar -caf \"%s\" \"%s\"",
-			strFileName, strDirName) < 0)
-		return -ENOMEM;
+	char *argv[] = {"tar", "-caf", strFileName, "--", strDirName, NULL};
 
-	if (system(cmd_buf))
-		return -EIO;
-	return 0;
+	return micron_run_spawn(argv, NULL, false);
 }
 
 static int ZipAndRemoveDir(char *strDirName, char *strFileName)
 {
 	int  err = 0;
-	char strBuffer[PATH_MAX + 128];	/* cmd + path */
 	int  nRet;
 	bool is_tgz = false;
 	struct stat sb;
 
 	if (strstr(strFileName, ".tar.gz") || strstr(strFileName, ".tgz")) {
-		snprintf(strBuffer, sizeof(strBuffer), "tar -zcf \"%s\" \"%s\"", strFileName, strDirName);
+		char *argv[] = {"tar", "-zcf", strFileName, "--", strDirName, NULL};
+
 		is_tgz = true;
+		nRet = micron_run_spawn(argv, NULL, false);
 	} else {
-		snprintf(strBuffer, sizeof(strBuffer), "zip -r \"%s\" \"%s\" >temp.txt 2>&1", strFileName,
-				strDirName);
+		char *argv[] = {"zip", "-r", "--", strFileName, strDirName, NULL};
+
+		nRet = micron_run_spawn(argv, "temp.txt", false);
 	}
 
-	nRet = system(strBuffer);
 	if (nRet && !is_tgz)
 		/* if zip is not available, see if tar can be used instead */
 		nRet = ZipWithBsdTar(strDirName, strFileName);
@@ -322,11 +318,11 @@ static int ZipAndRemoveDir(char *strDirName, char *strFileName)
 	if (nRet || (stat(strFileName, &sb) == -1)) {
 		err = -EINVAL;
 		if (is_tgz)
-			snprintf(strBuffer, sizeof(strBuffer), "check if tar and gzip commands are installed");
+			fprintf(stderr, "Failed to create log data package, "
+				"check if tar and gzip commands are installed!\n");
 		else
-			snprintf(strBuffer, sizeof(strBuffer), "check if zip command is installed");
-
-		fprintf(stderr, "Failed to create log data package, %s!\n", strBuffer);
+			fprintf(stderr, "Failed to create log data package, "
+				"check if zip command is installed!\n");
 	}
 
 	if (RemoveDirRecursive(strDirName) < 0)
