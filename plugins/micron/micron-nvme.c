@@ -233,6 +233,74 @@ static enum eDriveModel GetDriveModel(int idx)
 	return eModel;
 }
 
+/*
+ * is_safe_path - validate that a path string is safe for use in shell commands.
+ *
+ * Uses an allowlist of characters valid in both Linux and Windows paths.
+ * Returns true if the path is non-empty, contains only allowed characters,
+ * and does not end with a backslash (which would escape a trailing quote
+ * in a shell command).
+ *
+ * All shell metacharacters are ASCII (< 0x80), so UTF-8
+ * continuation bytes are safe to allow unconditionally.
+ */
+static bool is_safe_path(const char *path)
+{
+	/* Lookup table: 1 = allowed in a file path, 0 = rejected */
+	static const unsigned char allowed[256] = {
+		['0' ... '9'] = 1,
+		['A' ... 'Z'] = 1,
+		['a' ... 'z'] = 1,
+		[0x80 ... 0xFF] = 1,	/* UTF-8 multibyte sequences */
+		['/']  = 1,
+		['\\'] = 1,
+		[':']  = 1,
+		['.']  = 1,
+		['-']  = 1,
+		['_']  = 1,
+		[' ']  = 1,
+		['+']  = 1,
+		[',']  = 1,
+		['=']  = 1,
+		['@']  = 1,
+		['(']  = 1,
+		[')']  = 1,
+		['[']  = 1,
+		[']']  = 1,
+	};
+	const unsigned char *p = (const unsigned char *)path;
+	size_t len = 0;
+
+	if (!path || !*path)
+		return false;
+
+	for (; *p; p++, len++) {
+		if (!allowed[*p])
+			return false;
+	}
+
+	/* Trailing backslash would escape the closing quote in a shell command */
+	if (path[len - 1] == '\\')
+		return false;
+
+	return true;
+}
+
+/*
+ * sanitize_serial - replace any characters in a serial number string that
+ * are not alphanumeric, hyphen, or underscore with underscores.
+ */
+static void sanitize_serial(char *sn, size_t len)
+{
+	for (size_t i = 0; i < len && sn[i] != '\0'; i++) {
+		if (!((sn[i] >= 'A' && sn[i] <= 'Z') ||
+		      (sn[i] >= 'a' && sn[i] <= 'z') ||
+		      (sn[i] >= '0' && sn[i] <= '9') ||
+		      sn[i] == '-' || sn[i] == '_'))
+			sn[i] = '_';
+	}
+}
+
 static int ZipAndRemoveDir(char *strDirName, char *strFileName)
 {
 	int  err = 0;
@@ -3689,6 +3757,12 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 		goto out;
 	}
 
+	if (!is_safe_path(cfg.package)) {
+		fprintf(stderr,
+			"Invalid package path: contains unsafe characters\n");
+		goto out;
+	}
+
 	/* pull log details based on the model name */
 	if (sscanf(argv[optind], "/dev/nvme%d", &ctrlIdx) != 1)
 		ctrlIdx = 0;
@@ -3731,6 +3805,7 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 		sn[j++] = ctrl.sn[i];
 	}
 	sn[j] = '\0';
+	sanitize_serial(sn, sizeof(sn));
 	strcpy(ctrl.sn, sn);
 
 	SetupDebugDataDirectories(ctrl.sn, cfg.package, strMainDirName, strOSDirName,
