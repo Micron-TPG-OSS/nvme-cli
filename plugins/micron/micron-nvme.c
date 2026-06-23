@@ -225,6 +225,41 @@ static void sanitize_serial(char *sn, size_t len)
 }
 
 /*
+ * is_safe_path - validate that a path string is safe for use as a filename.
+ *
+ * Rejects control characters (0x00-0x1F), characters invalid on Windows
+ * filesystems (<>"|?*), and paths starting with '-' which could be
+ * misinterpreted as flags by tar/zip.
+ */
+static bool is_safe_path(const char *path)
+{
+	/* Lookup table: 1 = rejected character */
+	static const unsigned char rejected[256] = {
+		[0x01 ... 0x1F] = 1,	/* control characters */
+		['<']  = 1,
+		['>']  = 1,
+		['"']  = 1,
+		['|']  = 1,
+		['?']  = 1,
+		['*']  = 1,
+	};
+	const unsigned char *p = (const unsigned char *)path;
+
+	if (!path || !*path)
+		return false;
+
+	if (path[0] == '-')
+		return false;
+
+	for (; *p; p++) {
+		if (rejected[*p])
+			return false;
+	}
+
+	return true;
+}
+
+/*
  * Recursively remove a directory and its contents.
  * Since this is only used for temporary directories that we create that
  * have no symlinks, it is safe to not check for and handle symlinks here.
@@ -3578,6 +3613,12 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 			printf(
 				"Log data file must be specified. ie -p=logfile.zip or -p=logfile.tgz|logfile.tar.gz\n"
 			);
+		goto out;
+	}
+
+	if (!is_safe_path(cfg.package)) {
+		fprintf(stderr,
+			"Invalid package path: contains unsafe characters\n");
 		goto out;
 	}
 
