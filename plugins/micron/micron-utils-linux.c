@@ -240,8 +240,10 @@ int micron_run_spawn(char *const argv[], const char *outfile, bool append)
 
 	if (ret)
 		return -ret;
-	if (waitpid(pid, &status, 0) == -1)
-		return -errno;
+	while (waitpid(pid, &status, 0) == -1) {
+		if (errno != EINTR)
+			return -errno;
+	}
 	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
 		return -EIO;
 	return 0;

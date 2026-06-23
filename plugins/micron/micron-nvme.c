@@ -209,9 +209,13 @@ static enum eDriveModel GetDriveModel(
 static void sanitize_serial(char *sn, size_t len)
 {
 	size_t i;
-	size_t end = len - 1;
+	size_t end;
 
-	while (end > 0 && isblank((int)sn[end - 1]))
+	if (!sn || len == 0)
+		return;
+
+	end = len - 1;
+	while (end > 0 && isblank((unsigned char)sn[end - 1]))
 		end--;
 	sn[end] = '\0';
 
