@@ -466,3 +466,21 @@ int __libnvme_scan_namespace(struct libnvme_global_ctx *ctx,
 	*ns = n;
 	return 0;
 }
+
+int libnvme_init_subsystem(libnvme_subsystem_t s, const char *name)
+{
+	s->model = NULL;
+	s->serial = NULL;
+	s->firmware = NULL;
+	if (!strcmp(s->subsysnqn, NVME_DISC_SUBSYS_NAME))
+		s->subsystype = strdup("discovery");
+	else
+		s->subsystype = strdup("nvm");
+	s->name = strdup(name);
+	if (!s->name)
+		return -ENOMEM;
+	s->sysfs_dir = NULL;
+	s->iopolicy = NULL;
+
+	return 0;
+}
