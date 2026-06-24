@@ -256,6 +256,7 @@ out_destroy:
 void micron_write_os_config_to_file(const char *file_name)
 {
 	FILE *fpOSConfig = NULL;
+	int ret;
 	int i;
 
 	struct {
@@ -291,8 +292,17 @@ void micron_write_os_config_to_file(const char *file_name)
 			fclose(fpOSConfig);
 			fpOSConfig = NULL;
 		}
-		if (micron_run_spawn(cmds[i].argv, file_name, true))
-			fprintf(stderr, "Failed to run \"%s\"\n",
-				cmds[i].argv[0]);
+		ret = micron_run_spawn(cmds[i].argv, file_name, true);
+		if (ret) {
+			char cmdline[512] = "";
+			int pos = 0;
+
+			for (int j = 0; cmds[i].argv[j]; j++)
+				pos += snprintf(cmdline + pos,
+					sizeof(cmdline) - pos, "%s%s",
+					j ? " " : "", cmds[i].argv[j]);
+			fprintf(stderr, "Failed to run \"%s\": %s\n",
+				cmdline, strerror(-ret));
+		}
 	}
 }
