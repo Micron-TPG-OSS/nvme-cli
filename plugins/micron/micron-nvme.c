@@ -295,7 +295,12 @@ static int RemoveDirRecursive(const char *path)
 		if (unlink(child) == 0 || errno == ENOENT)
 			continue;
 
-		if (errno != EISDIR && errno != EPERM) {
+		/*
+		 * On Linux, unlinking a directory fails with EISDIR or EPERM.
+		 * On Windows, it fails with EACCES. In all cases, fall through
+		 * to attempt recursive removal.
+		 */
+		if (errno != EISDIR && errno != EPERM && errno != EACCES) {
 			closedir(dir);
 			return -1;
 		}
