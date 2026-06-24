@@ -297,10 +297,15 @@ void micron_write_os_config_to_file(const char *file_name)
 			char cmdline[512] = "";
 			int pos = 0;
 
-			for (int j = 0; cmds[i].argv[j]; j++)
-				pos += snprintf(cmdline + pos,
-					sizeof(cmdline) - pos, "%s%s",
-					j ? " " : "", cmds[i].argv[j]);
+			for (int j = 0; cmds[i].argv[j] && pos < (int)sizeof(cmdline); j++) {
+				int n = snprintf(cmdline + pos,
+						 sizeof(cmdline) - pos, "%s%s",
+						 j ? " " : "", cmds[i].argv[j]);
+
+				if (n < 0 || n >= (int)(sizeof(cmdline) - pos))
+					break;
+				pos += n;
+			}
 			fprintf(stderr, "Failed to run \"%s\": %s\n",
 				cmdline, strerror(-ret));
 		}
