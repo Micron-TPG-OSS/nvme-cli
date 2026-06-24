@@ -576,12 +576,11 @@ int fabrics_discovery(const char *desc, int argc, char **argv, bool connect)
 
 	nvmf_default_args(&fa);
 
-	if (!argconfig_parse_hook_active())
-		load_nvme_fabrics_module();
-
 	ret = argconfig_parse(argc, argv, desc, opts);
 	if (ret)
 		return ret;
+
+	load_nvme_fabrics_module();
 
 	ret = validate_output_format(nvme_args.output_format, &flags);
 	if (ret < 0) {
@@ -690,12 +689,11 @@ int fabrics_connect(const char *desc, int argc, char **argv)
 
 	nvmf_default_args(&fa);
 
-	if (!argconfig_parse_hook_active())
-		load_nvme_fabrics_module();
-
 	ret = argconfig_parse(argc, argv, desc, opts);
 	if (ret)
 		return ret;
+
+	load_nvme_fabrics_module();
 
 	ret = validate_output_format(nvme_args.output_format, &flags);
 	if (ret < 0) {

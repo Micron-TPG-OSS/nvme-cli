@@ -193,14 +193,6 @@ typedef int (*argconfig_parse_hook_fn)(int argc, char *argv[],
 				       struct argconfig_commandline_options *options);
 void argconfig_set_parse_hook(argconfig_parse_hook_fn hook);
 
-/*
- * True when a parse hook is installed, i.e. options are being captured rather
- * than parsed for execution. Commands that perform side effects (loading kernel
- * modules, opening files) before their parse call should skip that work when
- * this returns true.
- */
-bool argconfig_parse_hook_active(void);
-
 int argconfig_parse_comma_sep_array(char *string, int *ret, unsigned int max_length);
 int argconfig_parse_comma_sep_array_short(char *string, unsigned short *ret,
 					  unsigned int max_length);

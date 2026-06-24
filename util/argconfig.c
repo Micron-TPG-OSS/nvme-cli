@@ -325,11 +325,6 @@ void argconfig_set_parse_hook(argconfig_parse_hook_fn hook)
 	argconfig_parse_hook = hook;
 }
 
-bool argconfig_parse_hook_active(void)
-{
-	return argconfig_parse_hook != NULL;
-}
-
 int argconfig_parse(int argc, char *argv[], const char *program_desc,
 		    struct argconfig_commandline_options *options)
 {
