@@ -232,8 +232,9 @@ static void sanitize_serial(char *sn, size_t len)
  * is_safe_path - validate that a path string is safe for use as a filename.
  *
  * Rejects control characters (0x00-0x1F), characters invalid on Windows
- * filesystems (<>"|?*), and paths starting with '-' which could be
- * misinterpreted as flags by tar/zip.
+ * filesystems (<>"|?*), paths starting with '-' which could be
+ * misinterpreted as flags by tar/zip, and trailing backslashes which
+ * would escape the closing quote in Windows command-line argument parsing.
  */
 static bool is_safe_path(const char *path)
 {
@@ -259,6 +260,9 @@ static bool is_safe_path(const char *path)
 		if (rejected[*p])
 			return false;
 	}
+
+	if (p > (const unsigned char *)path && p[-1] == '\\')
+		return false;
 
 	return true;
 }
@@ -373,7 +377,7 @@ static int ZipAndRemoveDir(char *strDirName, char *strFileName)
 	} else {
 		char *argv[] = {"zip", "-r", strFileName, "--", strDirName, NULL};
 
-		nRet = micron_run_spawn(argv, "temp.txt", false);
+		nRet = micron_run_spawn(argv, NULL, false);
 	}
 
 	if (nRet && !is_tgz)
@@ -394,8 +398,6 @@ static int ZipAndRemoveDir(char *strDirName, char *strFileName)
 	if (RemoveDirRecursive(strDirName) < 0)
 		printf("Failed to remove temporary files!\n");
 
-	if (unlink("temp.txt") < 0 && errno != ENOENT)
-		printf("Failed to remove temporary file temp.txt!\n");
 	return err;
 }
 
@@ -3504,6 +3506,7 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 	unsigned int *puiIDDBuf;
 	unsigned int uiMask;
 	struct nvme_id_ctrl ctrl;
+	char safe_sn[sizeof(ctrl.sn) + 1] = { 0 };
 	char msg[256] = { 0 };
 	int  c_logs_index = 8; /* should be current size of aVendorLogs */
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
@@ -3665,8 +3668,9 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 
 	printf("Preparing log package. This will take a few seconds...\n");
 
-	sanitize_serial(ctrl.sn, sizeof(ctrl.sn));
-	SetupDebugDataDirectories(ctrl.sn, cfg.package,
+	strncpy(safe_sn, ctrl.sn, sizeof(safe_sn) - 1);
+	sanitize_serial(safe_sn, sizeof(safe_sn));
+	SetupDebugDataDirectories(safe_sn, cfg.package,
 			strMainDirName, strOSDirName, strCtrlDirName);
 
 	GetTimestampInfo(strOSDirName);
