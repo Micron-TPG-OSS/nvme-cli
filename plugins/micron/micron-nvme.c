@@ -366,7 +366,7 @@ static int ZipAndRemoveDir(char *strDirName, char *strFileName)
 		is_tgz = true;
 		nRet = micron_run_spawn(argv, NULL, false);
 	} else {
-		char *argv[] = {"zip", "-r", "--", strFileName, strDirName, NULL};
+		char *argv[] = {"zip", "-r", strFileName, "--", strDirName, NULL};
 
 		nRet = micron_run_spawn(argv, "temp.txt", false);
 	}
