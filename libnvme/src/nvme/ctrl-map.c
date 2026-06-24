@@ -405,30 +405,44 @@ struct ctrl_map_entry *libnvme_ctrl_map_lookup(const char *ctrl_name)
 	return &ctrl_map.entries[idx];
 }
 
-const struct ctrl_map_entry *
-libnvme_ctrl_map_lookup_by_physdrive(const char *drive_path)
+/*
+ * Accept \\.\PhysicalDriveX format and extract the device number X
+ * from the path. Returns the device number on success, or a negative
+ * value on error.
+ */
+static int physdrive_parse_number(const char *drive_path)
 {
-	DWORD target_num;
-	char *endptr;
 	const char *num_str;
-	size_t i;
+	char *endptr;
+	int num;
 
 	if (!drive_path)
-		return NULL;
+		return -1;
 
-	/*
-	 * Accept \\.\PhysicalDriveX format and extract the
-	 * device number X from the path.
-	 */
 	num_str = drive_path;
 	if (strncmp(num_str, "\\\\.\\PhysicalDrive", 17) == 0)
 		num_str += 17;
 	else if (strncmp(num_str, "PhysicalDrive", 13) == 0)
 		num_str += 13;
 
-	target_num = strtoul(num_str, &endptr, 10);
-	if (endptr == num_str || *endptr != '\0')
+	num = (int)strtol(num_str, &endptr, 10);
+	if (endptr == num_str || *endptr != '\0' || num < 0)
+		return -1;
+
+	return num;
+}
+
+const struct ctrl_map_entry *
+libnvme_ctrl_map_lookup_by_physdrive(const char *drive_path)
+{
+	DWORD target_num;
+	int num;
+	size_t i;
+
+	num = physdrive_parse_number(drive_path);
+	if (num < 0)
 		return NULL;
+	target_num = (DWORD)num;
 
 	if (libnvme_ctrl_map_init())
 		return NULL;
