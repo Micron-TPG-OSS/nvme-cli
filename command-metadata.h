@@ -23,7 +23,7 @@
 struct gen_option {
 	const char *option;		/* long name; "" for a group separator */
 	char short_option;		/* 0 if none */
-	const char *meta;		/* value placeholder ("NUM"/"FMT"/...) or NULL */
+	const char *meta;		/* metavar / value placeholder ("NUM"/"FMT"/...) or NULL */
 	enum argconfig_types config_type;
 	int argument_type;		/* no_/required_/optional_argument */
 	const char *help;

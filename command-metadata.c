@@ -34,6 +34,14 @@
  */
 #define COMPLETION_GEN_SENTINEL (-ECANCELED)
 
+/*
+ * Version of the emitted JSON schema, bumped on any breaking change to the
+ * output structure (renamed/removed keys, changed value semantics). Additive
+ * changes that keep existing keys stable do not require a bump. Consumers
+ * should reject a major version they do not understand.
+ */
+#define COMMAND_METADATA_SCHEMA_VERSION 1
+
 /* The command currently being captured; set by the driver, read by the hook. */
 static struct gen_command *gen_cur_command;
 
@@ -260,6 +268,19 @@ static bool opt_is_global_separator(const struct gen_option *o)
 	return opt_is_separator(o) && o->help && !strcmp(o->help, "Global options");
 }
 
+/* "none" / "required" / "optional" — how the option consumes its argument. */
+static const char *opt_arg(const struct gen_option *o)
+{
+	switch (o->argument_type) {
+	case optional_argument:
+		return "optional";
+	case no_argument:
+		return "none";
+	default:
+		return "required";
+	}
+}
+
 static bool opt_takes_value(const struct gen_option *o)
 {
 	return o->argument_type != no_argument;
@@ -275,7 +296,8 @@ static bool opt_is_emittable(const struct gen_option *o)
 /* True for the synthetic version/help commands that take no device. */
 static bool command_is_meta(const struct gen_command *c)
 {
-	return !strcmp(c->name, "help") || !strcmp(c->name, "version");
+	return !strcmp(c->name, "help") || !strcmp(c->name, "version") ||
+	       !strcmp(c->name, "dump-commands-and-options");
 }
 
 /* ------------------------------------------------------------------ */
@@ -336,9 +358,9 @@ static void gen_json_option(struct json_object *arr, const struct gen_option *o,
 	json_object_add_value_string(jo, "long", o->option);
 	if (o->short_option)
 		json_object_add_value_string(jo, "short", shortbuf);
-	json_object_add_value_int(jo, "takes_value", opt_takes_value(o));
-	if (o->meta)
-		json_object_add_value_string(jo, "meta", o->meta);
+	json_object_add_value_string(jo, "arg", opt_arg(o));
+	if (o->meta && opt_takes_value(o))
+		json_object_add_value_string(jo, "metavar", o->meta);
 	if (o->help)
 		json_object_add_value_string(jo, "help", o->help);
 	if (global)
@@ -412,6 +434,8 @@ static void gen_json(const struct gen_program *m, FILE *out)
 	(void)out; /* json_print_object writes to stdout */
 
 	root = json_create_object();
+	json_object_add_value_int(root, "schema_version",
+				  COMMAND_METADATA_SCHEMA_VERSION);
 	json_object_add_value_string(root, "name", m->name);
 	if (m->version)
 		json_object_add_value_string(root, "version", m->version);
