@@ -446,9 +446,6 @@ nvme_list_opts () {
 		"nvme-mi-send")
 		opts+=" --opcode= -O --namespace-id= -n --data-len= -l --nmimt= -m --nmd0= -0 --nmd1= -1 --input-file= -i"
 			;;
-		"dump-commands-and-options")
-		opts+=""
-			;;
 	esac
 
 	opts+=" -h --help"
@@ -2680,6 +2677,79 @@ plugin_nbft_opts () {
 	return 0
 }
 
+plugin_registry_opts () {
+	local opts=""
+	local compargs=""
+	local vals=""
+	local opt=""
+	local val=""
+
+	local nonopt_args=0
+	local has_device=0
+	for (( i=0; i < ${#words[@]}-1; i++ )); do
+		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
+			let nonopt_args+=1
+			if [[ ${words[i]} == /dev/* ]]; then
+				has_device=1
+			fi
+		fi
+	done
+
+	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+		opts="/dev/nvme* "
+	fi
+
+	opts+=" "
+	vals+=" "
+
+	local completing_value=0
+	_nvme_detect_value_completion
+	case "$1" in
+		"version"|"help")
+			;;
+		*)
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		if [[ $completing_value -eq 1 ]]; then
+			case $opt in
+				--output-format|-o)
+				vals+=" normal json binary tabular"
+					;;
+				--output-format-version)
+				vals+=" 1 2"
+					;;
+			esac
+		fi
+			;;
+	esac
+
+	case "$1" in
+		"list")
+		opts+=""
+			;;
+		"retrieve")
+		opts+=" --attr= -a"
+			;;
+		"update")
+		opts+=" --attr= -a --value= -V"
+			;;
+		"delete")
+		opts+=" --attr= -a"
+			;;
+	esac
+
+	opts+=" -h --help"
+
+	if [[ $vals == " " ]]; then
+		COMPREPLY+=( $( compgen $compargs -W "$opts" -- $cur ) )
+		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+	else
+		COMPREPLY+=( $( compgen $compargs -W "$vals" -- $val ) )
+	fi
+
+	return 0
+}
+
 plugin_feat_opts () {
 	local opts=""
 	local compargs=""
@@ -3227,6 +3297,7 @@ _nvme_subcmds () {
 		[ymtc]="smart-log-add"
 		[zns]="list id-ctrl id-ns report-zones reset-zone close-zone finish-zone open-zone offline-zone set-zone-desc zrwa-flush-zone changed-zone-list zone-mgmt-recv zone-mgmt-send zone-append"
 		[nbft]="show"
+		[registry]="list retrieve update delete"
 		[feat]="arbitration power-mgmt temp-thresh volatile-wc num-queues timestamp hctm host-behavior-support perf-characteristics power-limit power-thresh power-meas err-recovery"
 		[lm]="create-cdq delete-cdq track-send migration-send migration-recv set-cdq get-cdq"
 		[ocp]="smart-add-log latency-monitor-log set-latency-monitor-feature internal-log clear-fw-activate-history eol-plp-failure-mode clear-pcie-correctable-errors fw-activate-history unsupported-reqs-log error-recovery-log device-capability-log set-dssd-power-state-feature get-dssd-power-state-feature set-plp-health-check-interval get-plp-health-check-interval telemetry-string-log set-telemetry-profile set-dssd-async-event-config get-dssd-async-event-config tcg-configuration-log get-error-injection set-error-injection get-enable-ieee1667-silo set-enable-ieee1667-silo hardware-component-log get-latency-monitor get-clear-pcie-correctable-errors get-telemetry-profile persistent-event-log get-idle-wakeup-time"
@@ -3262,6 +3333,7 @@ _nvme_subcmds () {
 		[ymtc]="plugin_ymtc_opts"
 		[zns]="plugin_zns_opts"
 		[nbft]="plugin_nbft_opts"
+		[registry]="plugin_registry_opts"
 		[feat]="plugin_feat_opts"
 		[lm]="plugin_lm_opts"
 		[ocp]="plugin_ocp_opts"
@@ -3269,7 +3341,7 @@ _nvme_subcmds () {
 		[solidigm]="plugin_solidigm_opts"
 	)
 
-	_cmds="list list-subsys id-ctrl id-ns id-ns-granularity id-ns-lba-format list-ns list-ctrl nvm-id-ctrl nvm-id-ns nvm-id-ns-lba-format primary-ctrl-caps list-secondary cmdset-ind-id-ns ns-descs id-nvmset id-uuid id-iocs id-domain list-endgrp create-ns delete-ns attach-ns detach-ns get-ns-id get-log telemetry-log fw-log changed-ns-list-log smart-log ana-log error-log effects-log endurance-log predictable-lat-log pred-lat-event-agg-log persistent-event-log endurance-event-agg-log lba-status-log resv-notif-log boot-part-log phy-rx-eom-log get-feature device-self-test self-test-log supported-log-pages fid-support-effects-log mi-cmd-support-effects-log media-unit-stat-log supported-cap-config-log mgmt-addr-list-log rotational-media-info-log changed-alloc-ns-list-log dispersed-ns-participating-nss-log reachability-groups-log reachability-associations-log host-discovery-log ave-discovery-log pull-model-ddc-req-log power-measurement-log set-feature set-property get-property format fw-commit fw-download admin-passthru io-passthru security-send security-recv get-lba-status capacity-mgmt resv-acquire resv-register resv-release resv-report dsm copy flush compare read write write-zeroes write-uncor verify sanitize sanitize-log sanitize-ns reset subsystem-reset ns-rescan show-regs set-reg get-reg top discover connect-all connect disconnect disconnect-all config dim gen-hostnqn show-hostnqn gen-dhchap-key check-dhchap-key gen-tls-key check-tls-key tls-key dir-receive dir-send virt-mgmt rpmb lockdown show-topology io-mgmt-recv io-mgmt-send nvme-mi-recv nvme-mi-send dump-commands-and-options amzn dapustor dell dera fdp huawei ibm innogrit inspur intel mangoboost memblaze micron netapp nvidia sndk sfx seagate shannon ssstc toshiba transcend virtium wdc ymtc zns nbft feat lm ocp sed solidigm"
+	_cmds="list list-subsys id-ctrl id-ns id-ns-granularity id-ns-lba-format list-ns list-ctrl nvm-id-ctrl nvm-id-ns nvm-id-ns-lba-format primary-ctrl-caps list-secondary cmdset-ind-id-ns ns-descs id-nvmset id-uuid id-iocs id-domain list-endgrp create-ns delete-ns attach-ns detach-ns get-ns-id get-log telemetry-log fw-log changed-ns-list-log smart-log ana-log error-log effects-log endurance-log predictable-lat-log pred-lat-event-agg-log persistent-event-log endurance-event-agg-log lba-status-log resv-notif-log boot-part-log phy-rx-eom-log get-feature device-self-test self-test-log supported-log-pages fid-support-effects-log mi-cmd-support-effects-log media-unit-stat-log supported-cap-config-log mgmt-addr-list-log rotational-media-info-log changed-alloc-ns-list-log dispersed-ns-participating-nss-log reachability-groups-log reachability-associations-log host-discovery-log ave-discovery-log pull-model-ddc-req-log power-measurement-log set-feature set-property get-property format fw-commit fw-download admin-passthru io-passthru security-send security-recv get-lba-status capacity-mgmt resv-acquire resv-register resv-release resv-report dsm copy flush compare read write write-zeroes write-uncor verify sanitize sanitize-log sanitize-ns reset subsystem-reset ns-rescan show-regs set-reg get-reg top discover connect-all connect disconnect disconnect-all config dim gen-hostnqn show-hostnqn gen-dhchap-key check-dhchap-key gen-tls-key check-tls-key tls-key dir-receive dir-send virt-mgmt rpmb lockdown show-topology io-mgmt-recv io-mgmt-send nvme-mi-recv nvme-mi-send dump-commands-and-options amzn dapustor dell dera fdp huawei ibm innogrit inspur intel mangoboost memblaze micron netapp nvidia sndk sfx seagate shannon ssstc toshiba transcend virtium wdc ymtc zns nbft registry feat lm ocp sed solidigm"
 
 	if [[ ${#words[*]} -lt 3 ]]; then
 		COMPREPLY+=( $(compgen -W "$_cmds" -- $cur ) )

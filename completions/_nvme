@@ -155,6 +155,7 @@ _nvme () {
 	'ymtc:Ymtc vendor specific extensions'
 	'zns:Zoned Namespace Command Set'
 	'nbft:ACPI NBFT table extensions'
+	'registry:NVMeoF controller ownership registry'
 	'feat:NVMe feature extensions'
 	'lm:Live Migration NVMe extensions'
 	'ocp:OCP cloud SSD extensions'
@@ -4523,6 +4524,97 @@ state of the controller at the time the command is processed.
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme nbft show options" _nbft_show
+			compadd -- /dev/nvme*(N)
+				;;
+			(*)
+				_files
+				;;
+			esac
+			;;
+		(registry)
+			case ${words[2]} in
+			(list)
+			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
+			_nvme_complete_option_value "--output-format-version" 1 2 && return
+			local _registry_list
+			_registry_list=(
+	--verbose':Increase output verbosity'
+	-v':alias for --verbose'
+	--output-format=':Output format: normal|json|binary|tabular'
+	-o':alias for --output-format'
+	--timeout=':timeout value, in milliseconds'
+	--dry-run':show command instead of executing'
+	--no-retries':disable retry logic on errors'
+	--no-ioctl-probing':disable 64-bit IOCTL support probing'
+	--output-format-version=':output format version: 1|2'
+			)
+			_arguments '*:: :->subcmds'
+			_nvme_describe "nvme registry list options" _registry_list
+			compadd -- /dev/nvme*(N)
+				;;
+			(retrieve)
+			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
+			_nvme_complete_option_value "--output-format-version" 1 2 && return
+			local _registry_retrieve
+			_registry_retrieve=(
+	--attr=':attribute name (e.g. owner, note)'
+	-a':alias for --attr'
+	--verbose':Increase output verbosity'
+	-v':alias for --verbose'
+	--output-format=':Output format: normal|json|binary|tabular'
+	-o':alias for --output-format'
+	--timeout=':timeout value, in milliseconds'
+	--dry-run':show command instead of executing'
+	--no-retries':disable retry logic on errors'
+	--no-ioctl-probing':disable 64-bit IOCTL support probing'
+	--output-format-version=':output format version: 1|2'
+			)
+			_arguments '*:: :->subcmds'
+			_nvme_describe "nvme registry retrieve options" _registry_retrieve
+			compadd -- /dev/nvme*(N)
+				;;
+			(update)
+			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
+			_nvme_complete_option_value "--output-format-version" 1 2 && return
+			local _registry_update
+			_registry_update=(
+	--attr=':attribute name (e.g. note, owner)'
+	-a':alias for --attr'
+	--value=':new attribute value'
+	-V':alias for --value'
+	--verbose':Increase output verbosity'
+	-v':alias for --verbose'
+	--output-format=':Output format: normal|json|binary|tabular'
+	-o':alias for --output-format'
+	--timeout=':timeout value, in milliseconds'
+	--dry-run':show command instead of executing'
+	--no-retries':disable retry logic on errors'
+	--no-ioctl-probing':disable 64-bit IOCTL support probing'
+	--output-format-version=':output format version: 1|2'
+			)
+			_arguments '*:: :->subcmds'
+			_nvme_describe "nvme registry update options" _registry_update
+			compadd -- /dev/nvme*(N)
+				;;
+			(delete)
+			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
+			_nvme_complete_option_value "--output-format-version" 1 2 && return
+			local _registry_delete
+			_registry_delete=(
+	--attr=':attribute to remove (default: whole entry)'
+	-a':alias for --attr'
+	--verbose':Increase output verbosity'
+	-v':alias for --verbose'
+	--output-format=':Output format: normal|json|binary|tabular'
+	-o':alias for --output-format'
+	--timeout=':timeout value, in milliseconds'
+	--dry-run':show command instead of executing'
+	--no-retries':disable retry logic on errors'
+	--no-ioctl-probing':disable 64-bit IOCTL support probing'
+	--output-format-version=':output format version: 1|2'
+			)
+			_arguments '*:: :->subcmds'
+			_nvme_describe "nvme registry delete options" _registry_delete
 			compadd -- /dev/nvme*(N)
 				;;
 			(*)

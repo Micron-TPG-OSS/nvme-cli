@@ -23,7 +23,7 @@ import sys
 
 def opt_token(opt):
     """The bash/option token for an option: '--name=' or '--name'."""
-    return "--" + opt["long"] + ("=" if opt.get("takes_value") else "")
+    return "--" + opt["long"] + ("=" if opt.get("arg", "none") != "none" else "")
 
 
 def is_meta(cmd):
@@ -339,7 +339,7 @@ def zsh_command_arm(out, tab, path, cmd):
     var = zsh_var(path, cmd["name"])
     out.write(f"{tab}local {var}\n{tab}{var}=(\n")
     for o in cmd["options"]:
-        out.write(f"\t--{o['long']}{'=' if o.get('takes_value') else ''}':{zsh_q(o.get('help'))}'\n")
+        out.write(f"\t--{o['long']}{'=' if o.get('arg', 'none') != 'none' else ''}':{zsh_q(o.get('help'))}'\n")
         if o.get("short"):
             out.write(f"\t-{o['short']}':alias for --{o['long']}'\n")
     out.write(f"{tab})\n")

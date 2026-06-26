@@ -153,6 +153,7 @@ $script:NvmeCommands = @(
     'ymtc'
     'zns'
     'nbft'
+    'registry'
     'feat'
     'lm'
     'ocp'
@@ -188,6 +189,7 @@ $script:NvmePluginCommands = @{
     'ymtc' = @('smart-log-add')
     'zns' = @('list', 'id-ctrl', 'id-ns', 'report-zones', 'reset-zone', 'close-zone', 'finish-zone', 'open-zone', 'offline-zone', 'set-zone-desc', 'zrwa-flush-zone', 'changed-zone-list', 'zone-mgmt-recv', 'zone-mgmt-send', 'zone-append')
     'nbft' = @('show')
+    'registry' = @('list', 'retrieve', 'update', 'delete')
     'feat' = @('arbitration', 'power-mgmt', 'temp-thresh', 'volatile-wc', 'num-queues', 'timestamp', 'hctm', 'host-behavior-support', 'perf-characteristics', 'power-limit', 'power-thresh', 'power-meas', 'err-recovery')
     'lm' = @('create-cdq', 'delete-cdq', 'track-send', 'migration-send', 'migration-recv', 'set-cdq', 'get-cdq')
     'ocp' = @('smart-add-log', 'latency-monitor-log', 'set-latency-monitor-feature', 'internal-log', 'clear-fw-activate-history', 'eol-plp-failure-mode', 'clear-pcie-correctable-errors', 'fw-activate-history', 'unsupported-reqs-log', 'error-recovery-log', 'device-capability-log', 'set-dssd-power-state-feature', 'get-dssd-power-state-feature', 'set-plp-health-check-interval', 'get-plp-health-check-interval', 'telemetry-string-log', 'set-telemetry-profile', 'set-dssd-async-event-config', 'get-dssd-async-event-config', 'tcg-configuration-log', 'get-error-injection', 'set-error-injection', 'get-enable-ieee1667-silo', 'set-enable-ieee1667-silo', 'hardware-component-log', 'get-latency-monitor', 'get-clear-pcie-correctable-errors', 'get-telemetry-profile', 'persistent-event-log', 'get-idle-wakeup-time')
@@ -506,6 +508,10 @@ $script:NvmeOptions = @{
     'zns zone-mgmt-send' = @('--namespace-id', '-n', '--start-lba', '-s', '--zsaso', '-O', '--select-all', '-a', '--zsa', '-z', '--data-len', '-l', '--data', '-d', '--verbose', '-v', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version')
     'zns zone-append' = @('--namespace-id', '-n', '--zslba', '-s', '--data-size', '-z', '--metadata-size', '-y', '--data', '-d', '--metadata', '-M', '--limited-retry', '-l', '--force-unit-access', '-f', '--prinfo', '-p', '--piremap', '-P', '--latency', '-t', '--verbose', '-v', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version')
     'nbft show' = @('--subsystem', '-s', '--hfi', '-H', '--discovery', '-d', '--nbft-path', '--verbose', '-v', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version')
+    'registry list' = @('--verbose', '-v', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version')
+    'registry retrieve' = @('--attr', '-a', '--verbose', '-v', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version')
+    'registry update' = @('--attr', '-a', '--value', '-V', '--verbose', '-v', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version')
+    'registry delete' = @('--attr', '-a', '--verbose', '-v', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version')
     'feat arbitration' = @('--ab', '-a', '--lpw', '-l', '--mpw', '-m', '--hpw', '-H', '--save', '-s', '--sel', '-S', '--verbose', '-v', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version')
     'feat power-mgmt' = @('--ps', '-p', '--wh', '-w', '--save', '-s', '--sel', '-S', '--verbose', '-v', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version')
     'feat temp-thresh' = @('--tmpth', '-T', '--tmpsel', '-m', '--thsel', '-H', '--tmpthh', '-M', '--save', '-s', '--sel', '-S', '--verbose', '-v', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version')
