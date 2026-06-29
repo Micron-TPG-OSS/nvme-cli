@@ -57,9 +57,9 @@ struct gen_program {
 };
 
 /*
- * Entry point for the `nvme dump-commands-and-options` subcommand. Builds the
+ * Entry point for the `nvme dump-command-metadata` subcommand. Builds the
  * command/option model from prog and writes it to stdout as JSON, which the
  * completion generator (completions/generate-completions.py) consumes.
  * Returns 0 on success, negative errno on failure.
  */
-int dump_commands_and_options(struct program *prog);
+int dump_command_metadata(struct program *prog);

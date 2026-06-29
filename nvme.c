@@ -9866,10 +9866,10 @@ static int show_hostnqn_cmd(int argc, char **argv, struct command *acmd, struct 
 	return 0;
 }
 
-static int dump_commands_and_options_cmd(int argc, char **argv, struct command *acmd,
+static int dump_command_metadata_cmd(int argc, char **argv, struct command *acmd,
 					 struct plugin *plugin)
 {
-	return dump_commands_and_options(plugin->parent);
+	return dump_command_metadata(plugin->parent);
 }
 
 

@@ -129,7 +129,7 @@ The original C-emitter design above is preserved on branch `generate-completions
 `libnvme/tools/generator/generate-accessors.py` (a committed, developer-only
 generator run via a `build_by_default:false` meson target, sync-checked in CI).
 
-- The C side now emits a single stable JSON model: `nvme dump-commands-and-options`
+- The C side now emits a single stable JSON model: `nvme dump-command-metadata`
   (via the project's `util/json.h` / json-c). `completion-gen.c` shrank from
   ~990 to ~480 lines; the three shell emitters and their string-escaping
   helpers are gone.
@@ -150,7 +150,7 @@ sources it from the first command that actually has globals.
 
 ### Treat the JSON dump as a general-purpose interface
 
-`dump-commands-and-options` is useful beyond completions — docs/man-page
+`dump-command-metadata` is useful beyond completions — docs/man-page
 generation, test-coverage audits (commands/options exercised by nothing),
 release diffing (auto-changelog of added/removed options, CI catch for an
 accidentally dropped option), CLI self-linting (duplicate short options,
@@ -166,7 +166,7 @@ intentional rather than "whatever completions happened to need":
   `meta` (currently only emitted when non-NULL). Source is the model fields
   already captured in `struct gen_option` (`config_type`, `meta`) — they are
   just not all written out by `gen_json_option()` today.
-- Keep the name as-is: `dump-commands-and-options` is already generic (no
+- Keep the name as-is: `dump-command-metadata` is already generic (no
   "completion" in it), so it reads fine as an introspection command.
 
 ### Command visibility (do NOT use a leading underscore)
@@ -174,7 +174,7 @@ intentional rather than "whatever completions happened to need":
 Verified in `plugin.c`: `general_help()` (lines 105-116) prints **every**
 command unconditionally — there is **no hidden-command mechanism**, and no
 existing command starts with `_`. A leading-underscore name
-(`_dump-commands-and-options`) would NOT hide it: it would still be listed in
+(`_dump-command-metadata`) would NOT hide it: it would still be listed in
 `help`, just be uglier to type and sort oddly. Avoid that.
 
 Two real options:

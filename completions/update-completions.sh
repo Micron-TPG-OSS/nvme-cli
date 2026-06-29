@@ -48,7 +48,7 @@ echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 echo "--- completions: begin generation ---"
 
 # Capture the command/option model from the compiled binary, then format it.
-"$NVME" dump-commands-and-options > "$MODEL"
+"$NVME" dump-command-metadata > "$MODEL"
 "$PYTHON" "$GENERATOR" "$MODEL" \
     --bash "$TMP_BASH" --zsh "$TMP_ZSH" --powershell "$TMP_PS"
 

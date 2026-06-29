@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Generate shell completion scripts for nvme-cli.
 
-Input is the JSON metadata emitted by `nvme dump-commands-and-options`, read
+Input is the JSON metadata emitted by `nvme dump-command-metadata`, read
 from a file or stdin. The command/option model is captured at runtime from the
 compiled binary, so this script does no C parsing -- it only formats.
 
 Usage:
-    nvme dump-commands-and-options | generate-completions.py --bash out.sh \\
+    nvme dump-command-metadata | generate-completions.py --bash out.sh \\
         --zsh _nvme --powershell nvme-completion.ps1
     generate-completions.py model.json --bash -        # '-' writes to stdout
 """

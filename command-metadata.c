@@ -3,7 +3,7 @@
  * Command/option metadata dump for nvme-cli.
  *
  * Builds an in-memory model of every command and its options, then writes it to
- * stdout as JSON for the `dump-commands-and-options` subcommand. The shell
+ * stdout as JSON for the `dump-command-metadata` subcommand. The shell
  * completion scripts are generated from that JSON by
  * completions/generate-completions.py.
  *
@@ -145,9 +145,9 @@ static void gen_capture_command(struct gen_command *gc, struct command *cmd,
 	gc->no_args = false;
 
 	/* Don't invoke the dump command itself: it would re-enter
-	 * dump_commands_and_options() and recurse forever. It has no
+	 * dump_command_metadata() and recurse forever. It has no
 	 * completable options. */
-	if (!strcmp(cmd->name, "dump-commands-and-options")) {
+	if (!strcmp(cmd->name, "dump-command-metadata")) {
 		gc->no_args = true;
 		return;
 	}
@@ -297,7 +297,7 @@ static bool opt_is_emittable(const struct gen_option *o)
 static bool command_is_meta(const struct gen_command *c)
 {
 	return !strcmp(c->name, "help") || !strcmp(c->name, "version") ||
-	       !strcmp(c->name, "dump-commands-and-options");
+	       !strcmp(c->name, "dump-command-metadata");
 }
 
 /* ------------------------------------------------------------------ */
@@ -471,7 +471,7 @@ static void gen_json(const struct gen_program *m, FILE *out)
 	(void)m;
 	(void)out;
 	fprintf(stderr,
-		"dump-commands-and-options requires nvme-cli built with json-c support\n");
+		"dump-command-metadata requires nvme-cli built with json-c support\n");
 }
 
 #endif /* CONFIG_JSONC */
@@ -480,13 +480,13 @@ static void gen_json(const struct gen_program *m, FILE *out)
 /* Entry point                                                        */
 /* ------------------------------------------------------------------ */
 
-int dump_commands_and_options(struct program *prog)
+int dump_command_metadata(struct program *prog)
 {
 	struct gen_program *model;
 
 #ifndef CONFIG_JSONC
 	fprintf(stderr,
-		"dump-commands-and-options requires nvme-cli built with json-c support\n");
+		"dump-command-metadata requires nvme-cli built with json-c support\n");
 	return -ENOTSUP;
 #endif
 
