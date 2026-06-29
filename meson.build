@@ -558,6 +558,7 @@ if want_nvme
         ]
     else
         sources += [
+            'command-metadata.c',
             'libnvme-wrap.c',
             'logging.c',
             'nvme-cmds.c',

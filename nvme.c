@@ -48,6 +48,7 @@
 #include <libnvme.h>
 
 #include "common.h"
+#include "command-metadata.h"
 #include "fabrics.h"
 #include "logging.h"
 #include "nvme-cmds.h"
@@ -9864,6 +9865,13 @@ static int show_hostnqn_cmd(int argc, char **argv, struct command *acmd, struct 
 
 	return 0;
 }
+
+static int dump_command_metadata_cmd(int argc, char **argv, struct command *acmd,
+					 struct plugin *plugin)
+{
+	return dump_command_metadata(plugin->parent);
+}
+
 
 static int gen_dhchap_key(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
