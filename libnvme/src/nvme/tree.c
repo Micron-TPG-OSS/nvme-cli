@@ -124,7 +124,7 @@ __libnvme_public int libnvme_scan_topology(struct libnvme_global_ctx *ctx,
 	if (!ctx)
 		return 0;
 
-	ctrls.num = libnvme_scan_ctrls(&ctrls.ents);
+	ctrls.num = libnvme_scan_ctrls(ctx, &ctrls.ents);
 	if (ctrls.num < 0) {
 		libnvme_msg(ctx, LIBNVME_LOG_DEBUG, "failed to scan ctrls: %s\n",
 			 libnvme_strerror(-ctrls.num));
@@ -143,7 +143,7 @@ __libnvme_public int libnvme_scan_topology(struct libnvme_global_ctx *ctx,
 		}
 	}
 
-	subsys.num = libnvme_scan_subsystems(&subsys.ents);
+	subsys.num = libnvme_scan_subsystems(ctx, &subsys.ents);
 	if (subsys.num < 0) {
 		libnvme_msg(ctx, LIBNVME_LOG_DEBUG, "failed to scan subsystems: %s\n",
 			libnvme_strerror(-subsys.num));
@@ -407,7 +407,12 @@ struct libnvme_subsystem *nvme_alloc_subsystem(struct libnvme_host *h,
 		return NULL;
 
 	s->h = h;
-	s->subsysnqn = strdup(subsysnqn);
+	s->subsysnqn = xstrdup(subsysnqn);
+	if (!s->subsysnqn) {
+		free(s);
+		return NULL;
+	}
+
 	if (name)
 		libnvme_init_subsystem(s, name);
 	list_head_init(&s->ctrls);
@@ -1570,7 +1575,7 @@ int libnvme_ctrl_alloc(struct libnvme_global_ctx *ctx, libnvme_subsystem_t s,
 __libnvme_public void libnvme_rescan_ctrl(struct libnvme_ctrl *c)
 {
 	struct libnvme_global_ctx *ctx = c->s && c->s->h ? c->s->h->ctx : NULL;
-	if (!c->s)
+	if (!ctx)
 		return;
 	libnvme_ctrl_scan_namespaces(ctx, c);
 	libnvme_ctrl_scan_paths(ctx, c);
@@ -1753,7 +1758,7 @@ __libnvme_public int libnvme_ns_verify(
 	nvme_init_verify(&cmd, libnvme_ns_get_nsid(n), slba, nlb,
 		0, 0, NULL, 0, NULL, 0);
 
-	return libnvme_submit_io_passthru(hdl, &cmd);
+	return libnvme_exec_io_passthru(hdl, &cmd);
 }
 
 __libnvme_public int libnvme_ns_write_uncorrectable(
@@ -1775,7 +1780,7 @@ __libnvme_public int libnvme_ns_write_uncorrectable(
 	nvme_init_write_uncorrectable(&cmd, libnvme_ns_get_nsid(n), slba, nlb,
 		0, 0);
 
-	return libnvme_submit_io_passthru(hdl, &cmd);
+	return libnvme_exec_io_passthru(hdl, &cmd);
 }
 
 __libnvme_public int libnvme_ns_write_zeros(
@@ -1797,7 +1802,7 @@ __libnvme_public int libnvme_ns_write_zeros(
 	nvme_init_write_zeros(&cmd, libnvme_ns_get_nsid(n),
 		slba, nlb, 0, 0, 0, 0);
 
-	return libnvme_submit_io_passthru(hdl, &cmd);
+	return libnvme_exec_io_passthru(hdl, &cmd);
 }
 
 __libnvme_public int libnvme_ns_write(libnvme_ns_t n, void *buf, off_t offset,
@@ -1819,7 +1824,7 @@ __libnvme_public int libnvme_ns_write(libnvme_ns_t n, void *buf, off_t offset,
 	nvme_init_write(&cmd, libnvme_ns_get_nsid(n), slba, nlb,
 		0, 0, 0, 0, buf, count, NULL, 0);
 
-	return libnvme_submit_io_passthru(hdl, &cmd);
+	return libnvme_exec_io_passthru(hdl, &cmd);
 }
 
 __libnvme_public int libnvme_ns_read(libnvme_ns_t n, void *buf, off_t offset,
@@ -1841,7 +1846,7 @@ __libnvme_public int libnvme_ns_read(libnvme_ns_t n, void *buf, off_t offset,
 	nvme_init_read(&cmd, libnvme_ns_get_nsid(n), slba, nlb,
 		0, 0, 0, buf, count, NULL, 0);
 
-	return libnvme_submit_io_passthru(hdl, &cmd);
+	return libnvme_exec_io_passthru(hdl, &cmd);
 }
 
 __libnvme_public int libnvme_ns_compare(libnvme_ns_t n, void *buf, off_t offset,
@@ -1863,7 +1868,7 @@ __libnvme_public int libnvme_ns_compare(libnvme_ns_t n, void *buf, off_t offset,
 	nvme_init_compare(&cmd, libnvme_ns_get_nsid(n), slba, nlb,
 		0, 0, buf, count, NULL, 0);
 
-	return libnvme_submit_io_passthru(hdl, &cmd);
+	return libnvme_exec_io_passthru(hdl, &cmd);
 }
 
 __libnvme_public int libnvme_ns_flush(libnvme_ns_t n)
@@ -1877,7 +1882,7 @@ __libnvme_public int libnvme_ns_flush(libnvme_ns_t n)
 		return err;
 
 	nvme_init_flush(&cmd, libnvme_ns_get_nsid(n));
-	return libnvme_submit_io_passthru(hdl, &cmd);
+	return libnvme_exec_io_passthru(hdl, &cmd);
 }
 
 __libnvme_public int libnvme_scan_namespace(struct libnvme_global_ctx *ctx,
