@@ -173,6 +173,12 @@ option(
   description : 'CI mode: verify generated accessor files are in sync instead of updating them'
 )
 option(
+  'check-completions',
+  type : 'boolean',
+  value : false,
+  description : 'CI mode: verify generated shell completion files are in sync instead of updating them'
+)
+option(
   'plugins',
   type : 'array',
   choices: ['amzn', 'dapustor', 'dell', 'dera',
