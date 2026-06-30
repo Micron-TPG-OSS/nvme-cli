@@ -6,12 +6,7 @@
 #
 """Base class for Micron plugin tests."""
 
-import os
-import sys
-
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-
-from plugin_test import TestPlugin
+from plugins.plugin_test import TestPlugin
 
 
 class TestMicron(TestPlugin):

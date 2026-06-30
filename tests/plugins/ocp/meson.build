@@ -11,6 +11,7 @@ python3 = python_module.find_installation('python3')
 
 test_env = environment()
 test_env.prepend('PATH', meson.project_build_root())
+test_env.prepend('PYTHONPATH', meson.project_source_root() / 'tests')
 
 tap_runner = meson.project_source_root() / 'tests' / 'tap_runner.py'
 

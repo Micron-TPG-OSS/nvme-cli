@@ -17,10 +17,6 @@
 """Base class for plugin tests."""
 
 import logging
-import os
-import sys
-
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from nvme_test import TestNVMe
 
