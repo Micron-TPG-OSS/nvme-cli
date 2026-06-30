@@ -286,11 +286,13 @@ static bool opt_takes_value(const struct gen_option *o)
 	return o->argument_type != no_argument;
 }
 
-/* True for an option that should appear in a completion: a real, named,
- * non-hidden, non-separator option. */
+/* True for an option that should be emitted: a real, named, non-separator
+ * option. Hidden options are emitted too (tagged "hidden" in the output) so
+ * the dump describes the full set of accepted options; consumers that only
+ * want user-facing options (e.g. completion generators) filter on that tag. */
 static bool opt_is_emittable(const struct gen_option *o)
 {
-	return !opt_is_separator(o) && !o->hidden && o->option && o->option[0];
+	return !opt_is_separator(o) && o->option && o->option[0];
 }
 
 /* True for the synthetic version/help commands that take no device. */
@@ -365,6 +367,8 @@ static void gen_json_option(struct json_object *arr, const struct gen_option *o,
 		json_object_add_value_string(jo, "help", o->help);
 	if (global)
 		json_object_add_value_bool(jo, "global", true);
+	if (o->hidden)
+		json_object_add_value_bool(jo, "hidden", true);
 
 	vals = gen_json_option_values(o);
 	if (vals)
