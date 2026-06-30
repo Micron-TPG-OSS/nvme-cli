@@ -556,7 +556,6 @@ if want_nvme
     sources = [
         'logging.c',
         'nvme-cmds.c',
-        'nvme-models.c',
         'nvme-print-binary.c',
         'nvme-print-stdout.c',
         'nvme-print.c',
@@ -564,9 +563,14 @@ if want_nvme
         'nvme.c',
         'plugin.c',
     ]
-    if host_system != 'windows'
+    if host_system == 'windows'
+        sources += [
+            'nvme-models-win.c',
+        ]
+    else
         sources += [
             'libnvme-wrap.c',
+            'nvme-models.c',
         ]
     endif
 
