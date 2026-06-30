@@ -27,8 +27,14 @@ def opt_token(opt):
 
 
 def command_options(cmd, globals_only=False, locals_only=False):
-    """Yield options, optionally filtered to globals or command-specific."""
+    """Yield options, optionally filtered to globals or command-specific.
+
+    Hidden options are always skipped: they are accepted on the command line
+    but suppressed from --help, so they should not be offered as completions.
+    """
     for opt in cmd["options"]:
+        if opt.get("hidden"):
+            continue
         g = bool(opt.get("global"))
         if globals_only and not g:
             continue
@@ -314,7 +320,7 @@ def zsh_var(plugin, cmd):
 
 
 def zsh_value_completions(out, tab, cmd):
-    for o in cmd["options"]:
+    for o in command_options(cmd):
         vals = o.get("values")
         if not vals:
             continue
@@ -334,7 +340,7 @@ def zsh_command_arm(out, tab, path, cmd):
 
     var = zsh_var(path, cmd["name"])
     out.write(f"{tab}local {var}\n{tab}{var}=(\n")
-    for o in cmd["options"]:
+    for o in command_options(cmd):
         out.write(f"\t--{o['long']}{'=' if o.get('argument', 'none') != 'none' else ''}':{zsh_q(o.get('help'))}'\n")
         if o.get("short"):
             out.write(f"\t-{o['short']}':alias for --{o['long']}'\n")
@@ -436,7 +442,7 @@ def ps_command_options(cmd):
     """The ('--opt', '-s', ...) token list for one command."""
     toks = []
     if not cmd.get("no_args"):
-        for o in cmd["options"]:
+        for o in command_options(cmd):
             toks.append("'--%s'" % o["long"])
             if o.get("short"):
                 toks.append("'-%s'" % o["short"])
