@@ -84,6 +84,18 @@ option(
   description: 'Run tests against real hardware'
 )
 option(
+  'micron-tests',
+  type : 'boolean',
+  value : false,
+  description: 'Run tests against real Micron hardware'
+)
+option(
+  'ocp-tests',
+  type : 'boolean',
+  value : false,
+  description: 'Run tests against real OCP-compliant hardware'
+)
+option(
   'tests',
   type : 'boolean',
   value : true,
