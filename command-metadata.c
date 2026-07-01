@@ -302,13 +302,6 @@ static bool opt_is_emittable(const struct gen_option *o)
 	return !opt_is_separator(o) && o->option && o->option[0];
 }
 
-/* True for the synthetic version/help commands that take no device. */
-static bool command_is_meta(const struct gen_command *c)
-{
-	return !strcmp(c->name, "help") || !strcmp(c->name, "version") ||
-	       !strcmp(c->name, "dump-command-metadata");
-}
-
 /* ------------------------------------------------------------------ */
 /* Pass 2: JSON                                                       */
 /* ------------------------------------------------------------------ */
@@ -395,8 +388,6 @@ static struct json_object *gen_json_command(const struct gen_command *c)
 		json_object_add_value_string(jc, "alias", c->alias);
 	if (c->help)
 		json_object_add_value_string(jc, "help", c->help);
-	if (command_is_meta(c))
-		json_object_add_value_bool(jc, "meta", true);
 	if (c->no_args)
 		json_object_add_value_bool(jc, "no_args", true);
 
@@ -448,6 +439,8 @@ static void gen_json(const struct gen_program *m, FILE *out)
 	json_object_add_value_string(root, "name", m->name);
 	if (m->version)
 		json_object_add_value_string(root, "version", m->version);
+	if (m->desc)
+		json_object_add_value_string(root, "desc", m->desc);
 
 	/* Builtin (top-level) commands live in their own array; named plugins
 	 * go under "plugins" so generators can build the dispatch nesting. */
