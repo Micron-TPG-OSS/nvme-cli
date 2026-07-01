@@ -149,24 +149,22 @@ static void gen_capture_command(struct gen_command *gc, struct command *cmd,
 	gc->alias = cmd->alias;
 	gc->help = cmd->help;
 	gc->captured = false;
-	gc->no_args = false;
 
 	/* Don't invoke the dump command itself: it would re-enter
 	 * dump_command_metadata() and recurse forever. It has no
-	 * completable options. */
-	if (!strcmp(cmd->name, "dump-command-metadata")) {
-		gc->no_args = true;
+	 * completable options, so leave its options array empty. */
+	if (!strcmp(cmd->name, "dump-command-metadata"))
 		return;
-	}
 
 	gen_cur_command = gc;
 	(void)cmd->fn(2, argv, cmd, plugin);
 	gen_cur_command = NULL;
 
-	/* Hook never fired: the command returned before reaching the parser
-	 * (e.g. gen-hostnqn), so it has no completable options. */
-	if (!gc->captured)
-		gc->no_args = true;
+	/*
+	 * If the hook never fired, the command returned before reaching the
+	 * parser (e.g. gen-hostnqn) and has no completable options; its options
+	 * array is simply left empty.
+	 */
 }
 
 static size_t count_commands(struct command **commands)
@@ -388,8 +386,6 @@ static struct json_object *gen_json_command(const struct gen_command *c)
 		json_object_add_value_string(jc, "alias", c->alias);
 	if (c->help)
 		json_object_add_value_string(jc, "help", c->help);
-	if (c->no_args)
-		json_object_add_value_bool(jc, "no_args", true);
 
 	opts = json_create_array();
 	for (i = 0; i < c->n_options; i++) {

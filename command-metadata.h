@@ -38,7 +38,6 @@ struct gen_command {
 	struct gen_option *options;	/* heap array */
 	size_t n_options;
 	bool captured;			/* hook fired -> options valid */
-	bool no_args;			/* fn returned before reaching parse */
 };
 
 struct gen_plugin {
