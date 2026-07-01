@@ -1493,8 +1493,10 @@ _nvme () {
 			compadd -- /dev/nvme*(N)
 				;;
 			(plugin-version)
+			compadd -- /dev/nvme*(N)
 				;;
 			(cloud-SSD-plugin-version)
+			compadd -- /dev/nvme*(N)
 				;;
 			(log-page-directory)
 			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
@@ -2956,8 +2958,10 @@ state of the controller at the time the command is processed.
 			compadd -- /dev/nvme*(N)
 				;;
 			(plugin-version)
+			compadd -- /dev/nvme*(N)
 				;;
 			(cloud-SSD-plugin-version)
+			compadd -- /dev/nvme*(N)
 				;;
 			(*)
 				_files
@@ -4110,6 +4114,7 @@ state of the controller at the time the command is processed.
 		(zns)
 			case ${words[2]} in
 			(list)
+			compadd -- /dev/nvme*(N)
 				;;
 			(id-ctrl)
 			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
@@ -6013,11 +6018,6 @@ If requested path does not exist, the directory will be newly created.'
 			compadd -- /dev/nvme*(N)
 				;;
 			(password)
-			local _sed_password
-			_sed_password=(
-			)
-			_arguments '*:: :->subcmds'
-			_nvme_describe "nvme sed password options" _sed_password
 			compadd -- /dev/nvme*(N)
 				;;
 			(*)
@@ -9487,8 +9487,10 @@ part of end-to-end data protection processing'
 		compadd -- /dev/nvme*(N)
 			;;
 		(gen-hostnqn)
+		compadd -- /dev/nvme*(N)
 			;;
 		(show-hostnqn)
+		compadd -- /dev/nvme*(N)
 			;;
 		(gen-dhchap-key)
 		_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
@@ -9965,6 +9967,7 @@ then no UUID index is specified'
 		compadd -- /dev/nvme*(N)
 			;;
 		(dump-command-metadata)
+		compadd -- /dev/nvme*(N)
 			;;
 		(*)
 			_files
