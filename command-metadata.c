@@ -28,6 +28,13 @@
 #include "util/json.h"
 
 /*
+ * The whole command is JSON-only, so it is compiled out entirely without
+ * json-c support: nvme-builtin.h does not register it and nvme.c does not
+ * define its handler, so dump_command_metadata() is never referenced.
+ */
+#ifdef CONFIG_JSONC
+
+/*
  * Returned by the capture hook to unwind the command's fn before it opens a
  * device. Distinct from values real parsing returns (0, -EINVAL, -errno);
  * the driver does not rely on it, detecting capture via the "captured" flag.
@@ -306,8 +313,6 @@ static bool command_is_meta(const struct gen_command *c)
 /* Pass 2: JSON                                                       */
 /* ------------------------------------------------------------------ */
 
-#ifdef CONFIG_JSONC
-
 /*
  * The value set for an option, when the generator can derive it. Returns a
  * json array of strings, or NULL if the option has no known value set. The
@@ -468,18 +473,6 @@ static void gen_json(const struct gen_program *m, FILE *out)
 	json_free_object(root);
 }
 
-#else /* CONFIG_JSONC */
-
-static void gen_json(const struct gen_program *m, FILE *out)
-{
-	(void)m;
-	(void)out;
-	fprintf(stderr,
-		"dump-command-metadata requires nvme-cli built with json-c support\n");
-}
-
-#endif /* CONFIG_JSONC */
-
 /* ------------------------------------------------------------------ */
 /* Entry point                                                        */
 /* ------------------------------------------------------------------ */
@@ -487,12 +480,6 @@ static void gen_json(const struct gen_program *m, FILE *out)
 int dump_command_metadata(struct program *prog)
 {
 	struct gen_program *model;
-
-#ifndef CONFIG_JSONC
-	fprintf(stderr,
-		"dump-command-metadata requires nvme-cli built with json-c support\n");
-	return -ENOTSUP;
-#endif
 
 	model = gen_build_model(prog);
 	if (!model)
@@ -502,3 +489,5 @@ int dump_command_metadata(struct program *prog)
 
 	return 0;
 }
+
+#endif /* CONFIG_JSONC */

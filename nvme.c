@@ -9866,11 +9866,13 @@ static int show_hostnqn_cmd(int argc, char **argv, struct command *acmd, struct 
 	return 0;
 }
 
+#ifdef CONFIG_JSONC
 static int dump_command_metadata_cmd(int argc, char **argv, struct command *acmd,
 					 struct plugin *plugin)
 {
 	return dump_command_metadata(plugin->parent);
 }
+#endif /* CONFIG_JSONC */
 
 
 static int gen_dhchap_key(int argc, char **argv, struct command *acmd, struct plugin *plugin)
