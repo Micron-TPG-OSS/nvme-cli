@@ -26,6 +26,11 @@ def opt_token(opt):
     return "--" + opt["long"] + ("=" if opt.get("argument", "none") != "none" else "")
 
 
+def has_options(cmd):
+    """True if the command accepts any options."""
+    return bool(cmd.get("options"))
+
+
 def command_options(cmd, globals_only=False, locals_only=False):
     """Yield options, optionally filtered to globals or command-specific.
 
@@ -175,10 +180,13 @@ def bash_value_arm(opt):
 def bash_plugin_func(out, commands, func, device_argpos):
     out.write(BASH_FUNC_PREAMBLE.format(func=func, device_argpos=device_argpos))
 
-    # Shared arm: global options + value completion.
-    # Source the globals from the first command that has any.
+    # Shared arm: global options + value completion. version/help and commands
+    # that accept no options at all match here as a no-op, so they are not
+    # offered the global options; every other command falls through to '*)'.
     globals_src = next((c for c in commands if list(command_options(c, globals_only=True))), None)
-    out.write('\tcase "$1" in\n\t\t"version"|"help")\n\t\t\t;;\n\t\t*)\n\t\topts+="')
+    skip = "|".join(['"version"', '"help"'] +
+                    [f'"{c["name"]}"' for c in commands if not has_options(c)])
+    out.write(f'\tcase "$1" in\n\t\t{skip})\n\t\t\t;;\n\t\t*)\n\t\topts+="')
     if globals_src:
         out.write(bash_option_tokens(command_options(globals_src, globals_only=True)))
     out.write('"\n')
@@ -191,7 +199,7 @@ def bash_plugin_func(out, commands, func, device_argpos):
     # Per-command specific options.
     out.write('\tcase "$1" in\n')
     for c in commands:
-        if c.get("no_args"):
+        if not has_options(c):
             continue
         toks = bash_option_tokens(command_options(c, locals_only=True))
         out.write(f'\t\t"{c["name"]}")\n\t\topts+="{toks}"\n\t\t\t;;\n')
@@ -332,7 +340,9 @@ def zsh_value_completions(out, tab, cmd):
 
 def zsh_command_arm(out, tab, path, cmd):
     out.write(f"{tab}({cmd['name']})\n")
-    if cmd.get("no_args"):
+    if not has_options(cmd):
+        # No options to offer, but still complete a device argument.
+        out.write(f"{tab}compadd -- /dev/nvme*(N)\n")
         out.write(f"{tab}\t;;\n")
         return
 
@@ -441,7 +451,7 @@ def ps_q(s):
 def ps_command_options(cmd):
     """The ('--opt', '-s', ...) token list for one command."""
     toks = []
-    if not cmd.get("no_args"):
+    if has_options(cmd):
         for o in command_options(cmd):
             toks.append("'--%s'" % o["long"])
             if o.get("short"):
