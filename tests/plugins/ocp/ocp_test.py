@@ -6,7 +6,7 @@
 #
 """Base class for OCP plugin tests."""
 
-from plugins.plugin_test import TestPlugin
+from tests.plugins.plugin_test import TestPlugin
 
 
 class TestOCP(TestPlugin):

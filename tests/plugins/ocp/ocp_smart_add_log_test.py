@@ -4,7 +4,7 @@
 #
 """Test for OCP smart-add-log plugin command."""
 
-from ocp_test import TestOCP
+from tests.plugins.ocp.ocp_test import TestOCP
 
 
 class TestOCPSmartAddLog(TestOCP):

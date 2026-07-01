@@ -11,7 +11,6 @@ python3 = python_module.find_installation('python3')
 
 test_env = environment()
 test_env.prepend('PATH', meson.project_build_root())
-test_env.prepend('PYTHONPATH', meson.project_source_root() / 'tests')
 
 tap_runner = meson.project_source_root() / 'tests' / 'tap_runner.py'
 
@@ -22,8 +21,8 @@ foreach t : micron_tests
         python3,
         args: [
             tap_runner,
-            '--start-dir', meson.current_source_dir(),
-            t_name,
+            '--start-dir', meson.project_source_root(),
+            'tests.plugins.micron.@0@'.format(t_name),
         ],
         env: test_env,
         timeout: 500,

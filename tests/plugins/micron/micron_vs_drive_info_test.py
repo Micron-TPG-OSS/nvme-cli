@@ -4,7 +4,7 @@
 #
 """Test for Micron vs-drive-info plugin command."""
 
-from micron_test import TestMicron
+from tests.plugins.micron.micron_test import TestMicron
 
 
 class TestMicronDriveInfo(TestMicron):
