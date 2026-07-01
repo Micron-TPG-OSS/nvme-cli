@@ -71,7 +71,7 @@ nvme_list_opts () {
 	local completing_value=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
+		"version"|"help"|"gen-hostnqn"|"show-hostnqn"|"dump-command-metadata")
 			;;
 		*)
 		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
@@ -1350,7 +1350,7 @@ plugin_micron_opts () {
 	local completing_value=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
+		"version"|"help"|"plugin-version"|"cloud-SSD-plugin-version")
 			;;
 		*)
 		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
@@ -1850,7 +1850,7 @@ plugin_seagate_opts () {
 	local completing_value=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
+		"version"|"help"|"plugin-version"|"cloud-SSD-plugin-version")
 			;;
 		*)
 		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
@@ -2518,7 +2518,7 @@ plugin_zns_opts () {
 	local completing_value=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
+		"version"|"help"|"list")
 			;;
 		*)
 		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
@@ -3091,7 +3091,7 @@ plugin_sed_opts () {
 	local completing_value=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
+		"version"|"help"|"password")
 			;;
 		*)
 		opts+=""
@@ -3117,9 +3117,6 @@ plugin_sed_opts () {
 			;;
 		"unlock")
 		opts+=" --read-only -r --ask-key -k"
-			;;
-		"password")
-		opts+=""
 			;;
 	esac
 
