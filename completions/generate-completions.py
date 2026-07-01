@@ -31,11 +31,23 @@ def has_options(cmd):
     return bool(cmd.get("options"))
 
 
+# Value hints for options the parser does not constrain to a fixed set, so the
+# metadata dump carries no "values" for them (it emits only enforced sets). A
+# completion suggestion need not be enforced, so we add these here rather than
+# in the schema. Keyed by long option name.
+VALUE_HINTS = {
+    "output-format-version": ["1", "2"],
+}
+
+
 def command_options(cmd, globals_only=False, locals_only=False):
     """Yield options, optionally filtered to globals or command-specific.
 
     Hidden options are always skipped: they are accepted on the command line
     but suppressed from --help, so they should not be offered as completions.
+
+    Options that have no enforced value set but do have a completion hint (see
+    VALUE_HINTS) are yielded with that hint filled into "values".
     """
     for opt in cmd["options"]:
         if opt.get("hidden"):
@@ -45,6 +57,8 @@ def command_options(cmd, globals_only=False, locals_only=False):
             continue
         if locals_only and g:
             continue
+        if "values" not in opt and opt["long"] in VALUE_HINTS:
+            opt = dict(opt, values=VALUE_HINTS[opt["long"]])
         yield opt
 
 
