@@ -365,7 +365,7 @@ def zsh_command_arm(out, tab, path, cmd):
     var = zsh_var(path, cmd["name"])
     out.write(f"{tab}local {var}\n{tab}{var}=(\n")
     for o in command_options(cmd):
-        out.write(f"\t--{o['long']}{'=' if o.get('argument', 'none') != 'none' else ''}':{zsh_q(o.get('help'))}'\n")
+        out.write(f"\t--{o['long']}{'=' if o.get('argument', 'none') != 'none' else ''}':{zsh_q(o.get('description'))}'\n")
         if o.get("short"):
             out.write(f"\t-{o['short']}':alias for --{o['long']}'\n")
     out.write(f"{tab})\n")
@@ -380,9 +380,9 @@ def gen_zsh(model, out):
     out.write(ZSH_HEADER)
     out.write("\n_nvme () {\n\tlocal -a _cmds\n\t_cmds=(\n")
     for c in builtin_commands(model):
-        out.write(f"\t'{c['name']}:{zsh_q(c.get('help'))}'\n")
+        out.write(f"\t'{c['name']}:{zsh_q(c.get('description'))}'\n")
     for p in plugins(model):
-        out.write(f"\t'{p['name']}:{zsh_q(p.get('desc'))}'\n")
+        out.write(f"\t'{p['name']}:{zsh_q(p.get('description'))}'\n")
     out.write("\t)\n\n")
 
     out.write(ZSH_HELPERS)
