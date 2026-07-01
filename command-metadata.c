@@ -309,10 +309,13 @@ static bool opt_is_emittable(const struct gen_option *o)
  * json array of strings, or NULL if the option has no known value set. The
  * caller owns the returned array.
  *
- * output-format and output-format-version are special-cased because their
- * values come from a description string (DESC_OUTPUT_FORMAT, build-config
- * dependent) rather than an opt_val table; every other value set comes from
- * the option's opt_val table.
+ * output-format is special-cased because its values are enforced by
+ * validate_output_format() rather than carried in an opt_val table (they come
+ * from the DESC_OUTPUT_FORMAT description string). Since the whole command is
+ * compiled out without json-c, "json" is always a valid value here. Every
+ * other value set comes from the option's opt_val table, which is the set the
+ * parser actually enforces; options whose value is unconstrained (e.g. any
+ * OPT_UINT such as output-format-version) have no values array.
  */
 static struct json_object *gen_json_option_values(const struct gen_option *o)
 {
@@ -325,12 +328,6 @@ static struct json_object *gen_json_option_values(const struct gen_option *o)
 		json_array_add_value_string(vals, "json");
 		json_array_add_value_string(vals, "binary");
 		json_array_add_value_string(vals, "tabular");
-		return vals;
-	}
-	if (!strcmp(o->option, "output-format-version")) {
-		vals = json_create_array();
-		json_array_add_value_string(vals, "1");
-		json_array_add_value_string(vals, "2");
 		return vals;
 	}
 	if (!o->opt_val)
