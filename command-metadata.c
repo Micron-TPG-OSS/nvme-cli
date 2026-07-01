@@ -357,7 +357,7 @@ static void gen_json_option(struct json_object *arr, const struct gen_option *o,
 	if (o->meta && opt_takes_value(o))
 		json_object_add_value_string(jo, "metavar", o->meta);
 	if (o->help)
-		json_object_add_value_string(jo, "help", o->help);
+		json_object_add_value_string(jo, "description", o->help);
 	if (global)
 		json_object_add_value_bool(jo, "global", true);
 	if (o->hidden)
@@ -370,7 +370,7 @@ static void gen_json_option(struct json_object *arr, const struct gen_option *o,
 	json_array_add_value_object(arr, jo);
 }
 
-/* Emit one command as a json object: name, alias, help, and options. */
+/* Emit one command as a json object: name, alias, description, and options. */
 static struct json_object *gen_json_command(const struct gen_command *c)
 {
 	struct json_object *jc, *opts;
@@ -382,7 +382,7 @@ static struct json_object *gen_json_command(const struct gen_command *c)
 	if (c->alias)
 		json_object_add_value_string(jc, "alias", c->alias);
 	if (c->help)
-		json_object_add_value_string(jc, "help", c->help);
+		json_object_add_value_string(jc, "description", c->help);
 
 	opts = json_create_array();
 	for (i = 0; i < c->n_options; i++) {
@@ -399,7 +399,8 @@ static struct json_object *gen_json_command(const struct gen_command *c)
 	return jc;
 }
 
-/* Emit one plugin as a json object: name (null for builtin), desc, commands. */
+/* Emit one plugin as a json object: name (null for builtin), description,
+ * commands. */
 static struct json_object *gen_json_plugin(const struct gen_plugin *p)
 {
 	struct json_object *jp, *cmds;
@@ -409,7 +410,7 @@ static struct json_object *gen_json_plugin(const struct gen_plugin *p)
 	if (p->name)
 		json_object_add_value_string(jp, "name", p->name);
 	if (p->desc)
-		json_object_add_value_string(jp, "desc", p->desc);
+		json_object_add_value_string(jp, "description", p->desc);
 
 	cmds = json_create_array();
 	for (i = 0; i < p->n_commands; i++)
@@ -433,7 +434,7 @@ static void gen_json(const struct gen_program *m, FILE *out)
 	if (m->version)
 		json_object_add_value_string(root, "version", m->version);
 	if (m->desc)
-		json_object_add_value_string(root, "desc", m->desc);
+		json_object_add_value_string(root, "description", m->desc);
 
 	/* Builtin (top-level) commands live in their own array; named plugins
 	 * go under "plugins" so generators can build the dispatch nesting. */
