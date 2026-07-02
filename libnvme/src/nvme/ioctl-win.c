@@ -1377,12 +1377,6 @@ static int submit_admin_fw_download(struct libnvme_transport_handle *hdl,
 	firmware_download->BufferSize = (DWORDLONG)(cmd->cdw10 + 1) << 2;
 	firmware_download->Offset = (DWORDLONG)cmd->cdw11 << 2;
 
-	/*
-	 * Assuming we need the CONTROLLER flag.
-	 * TODO: Do we need to use the LAST_SEGMENT flag?
-	 * If so, we will need a way to communicate in the cmd struct
-	 * whether this is the last segment.
-	 */
 	firmware_download->Flags = STORAGE_HW_FIRMWARE_REQUEST_FLAG_CONTROLLER;
 
 	if (cmd->addr && cmd->data_len > 0) {
