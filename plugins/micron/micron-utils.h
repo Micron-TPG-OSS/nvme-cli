@@ -6,7 +6,6 @@
  */
 #pragma once
 
-#include <stdbool.h>
 #include <nvme/lib-types.h>
 
 /**
