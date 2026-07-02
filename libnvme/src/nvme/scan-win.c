@@ -11,29 +11,31 @@
 
 #include <libnvme.h>
 
+#include "cleanup.h"
 #include "private.h"
 #include "private-ctrl-map.h"
 #include "compiler-attributes.h"
 
 __libnvme_public int libnvme_scan_subsystems(
-	__libnvme_unused struct libnvme_global_ctx *ctx,
-	__libnvme_unused struct dirent ***subsys)
+		__libnvme_unused struct libnvme_global_ctx *ctx,
+		__libnvme_unused struct dirent ***subsys)
 {
 	return 0;
 }
 
 __libnvme_public int libnvme_scan_subsystem_namespaces(
-	__libnvme_unused libnvme_subsystem_t s,
-	__libnvme_unused struct dirent ***ns)
+		__libnvme_unused libnvme_subsystem_t s,
+		__libnvme_unused struct dirent ***ns)
 {
 	return 0;
 }
 
 __libnvme_public int libnvme_scan_ctrls(
-	struct libnvme_global_ctx *ctx,
-	__libnvme_unused struct dirent ***ctrls)
+		struct libnvme_global_ctx *ctx,
+		__libnvme_unused struct dirent ***ctrls)
 {
 	struct dirent **entries;
+	__cleanup_free const char **names = NULL;
 	size_t i, count;
 	int ret;
 
@@ -47,8 +49,8 @@ __libnvme_public int libnvme_scan_ctrls(
 	if (ret)
 		return ret;
 
-	count = libnvme_ctrl_map_get_count();
-	if (!count)
+	names = libnvme_ctrl_map_get_ctrl_names(&count);
+	if (!names)
 		return 0;
 
 	entries = calloc(count, sizeof(*entries));
@@ -61,7 +63,7 @@ __libnvme_public int libnvme_scan_ctrls(
 			goto enomem;
 		snprintf(entries[i]->d_name,
 			 sizeof(entries[i]->d_name), "%s",
-			 libnvme_ctrl_map_get_name(i));
+			 names[i]);
 	}
 
 	*ctrls = entries;
@@ -78,15 +80,15 @@ enomem:
 }
 
 __libnvme_public int libnvme_scan_ctrl_namespace_paths(
-	__libnvme_unused libnvme_ctrl_t c,
-	__libnvme_unused struct dirent ***paths)
+		__libnvme_unused libnvme_ctrl_t c,
+		__libnvme_unused struct dirent ***paths)
 {
 	return 0;
 }
 
 __libnvme_public int libnvme_scan_ctrl_namespaces(
-	__libnvme_unused libnvme_ctrl_t c,
-	__libnvme_unused struct dirent ***ns)
+		__libnvme_unused libnvme_ctrl_t c,
+		__libnvme_unused struct dirent ***ns)
 {
 	struct dirent **entries = NULL;
 	const struct ctrl_map_entry *ctrl_entry;
@@ -105,8 +107,7 @@ __libnvme_public int libnvme_scan_ctrl_namespaces(
 		return 0;
 
 	ret = libnvme_ctrl_map_entry_scan_device_numbers(ctrl_entry,
-							 &device_numbers,
-							 &dev_count);
+		&device_numbers, &dev_count);
 	if (ret)
 		return ret;
 
@@ -143,8 +144,8 @@ enomem:
 }
 
 __libnvme_public int libnvme_scan_ns_head_paths(
-	__libnvme_unused libnvme_ns_head_t head,
-	__libnvme_unused struct dirent ***paths)
+		__libnvme_unused libnvme_ns_head_t head,
+		__libnvme_unused struct dirent ***paths)
 {
 	return 0;
 }

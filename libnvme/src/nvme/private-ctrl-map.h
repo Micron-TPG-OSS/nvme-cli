@@ -17,20 +17,19 @@
 struct ctrl_map_entry;
 
 /**
- * libnvme_ctrl_map_get_count() - Get number of controller map entries
+ * libnvme_ctrl_map_get_ctrl_names() - Get all controller names, sorted
+ * @count: Optional output for the number of names returned (may be NULL)
  *
- * Return: Number of entries in the global controller map
- */
-size_t libnvme_ctrl_map_get_count(void);
-
-/**
- * libnvme_ctrl_map_get_name() - Get controller name by index
- * @index: Zero-based index into the controller map
+ * Collects the controller names from the map and returns them in ascending
+ * numeric order (e.g. "nvme2" before "nvme10").  The returned array is
+ * NULL-terminated; the caller frees the array but not the name strings,
+ * which remain owned by the controller map and are valid until the next
+ * libnvme_ctrl_map_clear().
  *
- * Return: controller name string (e.g. "nvme0"), or NULL if index
- * is out of range
+ * Return: NULL-terminated array of controller names, or NULL on allocation
+ * failure or when the map is empty
  */
-const char *libnvme_ctrl_map_get_name(size_t index);
+const char **libnvme_ctrl_map_get_ctrl_names(size_t *count);
 
 /**
  * libnvme_ctrl_map_init() - Initialize the controller map
@@ -75,7 +74,7 @@ libnvme_ctrl_map_lookup(struct libnvme_global_ctx *ctx, const char *ctrl_name);
  */
 const struct ctrl_map_entry *
 libnvme_ctrl_map_lookup_by_physdrive(struct libnvme_global_ctx *ctx,
-				     const char *drive_path);
+		const char *drive_path);
 
 /**
  * libnvme_ctrl_map_entry_set_id_ctrl() - Set id_ctrl for a entry
@@ -84,9 +83,8 @@ libnvme_ctrl_map_lookup_by_physdrive(struct libnvme_global_ctx *ctx,
  *
  * Return: 0 on success, -EINVAL for bad args
  */
-int libnvme_ctrl_map_entry_set_id_ctrl(
-	struct ctrl_map_entry *entry,
-	const struct nvme_id_ctrl *id);
+int libnvme_ctrl_map_entry_set_id_ctrl(struct ctrl_map_entry *entry,
+		const struct nvme_id_ctrl *id);
 
 /**
  * libnvme_ctrl_map_entry_get_ctrl_name() - Get UTF-8 controller name for
@@ -96,7 +94,7 @@ int libnvme_ctrl_map_entry_set_id_ctrl(
  * Return: UTF-8 controller name string, or NULL if unavailable
  */
 const char *libnvme_ctrl_map_entry_get_ctrl_name(
-	const struct ctrl_map_entry *entry);
+		const struct ctrl_map_entry *entry);
 
 /**
  * libnvme_ctrl_map_entry_get_ctrl_path() - Get UTF-8 device path for entry
@@ -106,7 +104,7 @@ const char *libnvme_ctrl_map_entry_get_ctrl_name(
  * Return: 0 on success, or a negative error code
  */
 int libnvme_ctrl_map_entry_get_ctrl_path(const struct ctrl_map_entry *entry,
-					 char **ctrl_path);
+		char **ctrl_path);
 
 /**
  * libnvme_ctrl_map_entry_get_pci_address() - Get PCI BDF address for a
@@ -120,7 +118,7 @@ int libnvme_ctrl_map_entry_get_ctrl_path(const struct ctrl_map_entry *entry,
  * Return: 0 on success, or a negative error code
  */
 int libnvme_ctrl_map_entry_get_pci_address(const struct ctrl_map_entry *entry,
-					   char **address);
+		char **address);
 
 /**
  * libnvme_ctrl_map_entry_scan_device_numbers() - Get device numbers for a
@@ -136,9 +134,8 @@ int libnvme_ctrl_map_entry_get_pci_address(const struct ctrl_map_entry *entry,
  * Return: 0 on success, or a negative error code
  */
 int libnvme_ctrl_map_entry_scan_device_numbers(
-	const struct ctrl_map_entry *entry,
-	DWORD **device_numbers,
-	int *count);
+		const struct ctrl_map_entry *entry, DWORD **device_numbers,
+		int *count);
 
 /**
  * libnvme_ctrl_map_entry_map_nsid_to_drive_path() - Map namespace ID to
@@ -154,9 +151,8 @@ int libnvme_ctrl_map_entry_scan_device_numbers(
  * code
  */
 int libnvme_ctrl_map_entry_map_nsid_to_drive_path(
-	const struct ctrl_map_entry *entry,
-	__u32 nsid,
-	char **drive_path);
+		const struct ctrl_map_entry *entry, __u32 nsid,
+		char **drive_path);
 
 /**
  * libnvme_ctrl_map_entry_get_subsys_name() - Get UTF-8 subsystem name for
@@ -166,7 +162,7 @@ int libnvme_ctrl_map_entry_map_nsid_to_drive_path(
  * Return: UTF-8 subsystem name string, or NULL if unavailable
  */
 char *libnvme_ctrl_map_entry_get_subsys_name(
-	const struct ctrl_map_entry *entry);
+		const struct ctrl_map_entry *entry);
 
 /**
  * libnvme_ctrl_map_entry_get_subnqn() - Get UTF-8 subsystem NQN for
