@@ -63,19 +63,23 @@ if want_fabrics
     sources += [
         'nvme/accessors-fabrics.c',
         'nvme/crypto.c',
+        'nvme/exclusion.c',
         'nvme/fabrics.c',
         'nvme/nbft.c',
         'nvme/registry.c',
+        'nvme/tid.c',
         'nvme/tree-fabrics.c',
         'nvme/util-fabrics.c',
     ]
     headers += [
         'nvme/accessors-fabrics.h',
         'nvme/crypto.h',
+        'nvme/exclusion.h',
         'nvme/fabrics.h',
         'nvme/nvme-types-nbft.h',
         'nvme/nbft.h',
         'nvme/registry.h',
+        'nvme/tid.h',
     ]
 else
     sources += [
