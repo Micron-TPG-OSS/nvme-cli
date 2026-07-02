@@ -213,8 +213,8 @@ char *libnvme_ctrl_map_entry_get_firmware(const struct ctrl_map_entry *entry);
  * failure.
  */
 HDEVINFO libnvme_ctrl_map_entry_get_devinfo(
-	const struct ctrl_map_entry *entry,
-	SP_DEVINFO_DATA *dev_info_data);
+		const struct ctrl_map_entry *entry,
+		SP_DEVINFO_DATA *dev_info_data);
 
 /**
  * libnvme_ctrl_map_entry_free_devinfo() - Release a device information set

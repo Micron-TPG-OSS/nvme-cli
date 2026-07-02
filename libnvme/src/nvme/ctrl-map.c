@@ -409,9 +409,9 @@ static int get_adapter_bus_type(libnvme_fd_t h, STORAGE_BUS_TYPE *out_bus_type)
  *   -ENOENT  no more items (enumeration complete)
  */
 static int get_device_interface_path(HDEVINFO hdev,
-				     DWORD index,
-				     WCHAR **device_interface_path,
-				     SP_DEVINFO_DATA *devinfo_data_out)
+		DWORD index,
+		WCHAR **device_interface_path,
+		SP_DEVINFO_DATA *devinfo_data_out)
 {
 	SP_DEVICE_INTERFACE_DATA if_data = {
 		.cbSize = sizeof(if_data),
@@ -1000,7 +1000,7 @@ HDEVINFO libnvme_ctrl_map_entry_get_devinfo(
 
 	if (!dev_info_data || !entry || !entry->ctrl_path)
 		return INVALID_HANDLE_VALUE;
-	
+
 	dev_info_data->cbSize = sizeof(*dev_info_data);
 
 	hdev = SetupDiGetClassDevsW(&GUID_DEVINTERFACE_STORAGEPORT, NULL, NULL,
@@ -1009,7 +1009,8 @@ HDEVINFO libnvme_ctrl_map_entry_get_devinfo(
 		return INVALID_HANDLE_VALUE;
 
 	for (index = 0;; index++) {
-		get_device_interface_path(hdev, index, &ctrl_path, dev_info_data);
+		get_device_interface_path(hdev, index, &ctrl_path,
+			dev_info_data);
 
 		if (_wcsicmp(ctrl_path, entry->ctrl_path) == 0) {
 			free(ctrl_path);

@@ -162,7 +162,7 @@ static int reset_ctrl_device(HDEVINFO hdev, SP_DEVINFO_DATA *devinfo)
 		errno = get_errno_from_error(GetLastError());
 		return -errno;
 	}
-	sleep(1); /* Wait for the device to be disabled */
+
 	params.StateChange = DICS_ENABLE;
 	if (!SetupDiSetClassInstallParamsW(hdev, devinfo,
 			&params.ClassInstallHeader, sizeof(params))) {
@@ -173,7 +173,7 @@ static int reset_ctrl_device(HDEVINFO hdev, SP_DEVINFO_DATA *devinfo)
 		errno = get_errno_from_error(GetLastError());
 		return -errno;
 	}
-	sleep(1); /* Wait for the device to be enabled */
+
 	return 0;
 }
 
