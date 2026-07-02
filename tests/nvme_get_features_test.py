@@ -34,8 +34,6 @@ Test the Mandatory features with get features command:-
     9. 0Bh M Asynchronous Event Configuration.
 """
 
-import json
-
 from nvme_test import TestNVMe
 
 class TestNVMeGetMandatoryFeatures(TestNVMe):
