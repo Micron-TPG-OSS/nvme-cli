@@ -58,6 +58,29 @@
 #define ERESTART  EAGAIN
 #endif
 
+/* write() may return a short count; loop until the whole buffer is written. */
+int write_all(int fd, const void *buf, size_t len)
+{
+	const char *p = buf;
+
+	while (len) {
+		ssize_t w = write(fd, p, len);
+
+		if (w < 0) {
+			if (errno == EINTR || errno == EAGAIN)
+				continue;
+			return -errno;
+		}
+		if (w == 0) {
+			errno = EIO;
+			return -EIO;
+		}
+		p += w;
+		len -= w;
+	}
+	return 0;
+}
+
 /* Source Code Control System, query version of binary with 'what' */
 const char sccsid[] = "@(#)libnvme " GIT_VERSION;
 
@@ -766,9 +789,6 @@ ipaddrs_eq_fail:
 #else /* NVME_HAVE_NETDB */
 bool libnvme_ipaddrs_eq(const char *addr1, const char *addr2)
 {
-	libnvme_msg(NULL, LIBNVME_LOG_ERR, "no support for hostname ip address resolution; " \
-		"recompile with libnss support.\n");
-
 	return false;
 }
 #endif /* NVME_HAVE_NETDB */
@@ -836,18 +856,12 @@ bool libnvme_iface_primary_addr_matches(const struct ifaddrs *iface_list,
 const char *libnvme_iface_matching_addr(const struct ifaddrs *iface_list,
 		const char *addr)
 {
-	libnvme_msg(NULL, LIBNVME_LOG_ERR, "no support for interface lookup; "
-		"recompile with libnss support.\n");
-
 	return NULL;
 }
 
 bool libnvme_iface_primary_addr_matches(const struct ifaddrs *iface_list,
 		const char *iface, const char *addr)
 {
-	libnvme_msg(NULL, LIBNVME_LOG_ERR, "no support for interface lookup; "
-		"recompile with libnss support.\n");
-
 	return false;
 }
 

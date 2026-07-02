@@ -770,6 +770,26 @@ do_connect:
 	if (config_file)
 		return libnvmf_connect_config_json(ctx, fctx);
 
+	/*
+	 * The exclusion list governs auto-connecting orchestrators, not an
+	 * explicit "nvme connect", so we never block it here. But under
+	 * --verbose, note when the target matches an exclusion entry so the
+	 * operator knows they are overriding their own opt-out.
+	 */
+	if (nvme_args.verbose) {
+		struct libnvmf_tid *tid;
+
+		tid = libnvmf_tid_from_fields(fa.transport, fa.traddr,
+					      fa.trsvcid, fa.subsysnqn,
+					      fa.host_traddr, fa.host_iface,
+					      fa.hostnqn, fa.hostid);
+		if (tid && libnvmf_exclusion_match(ctx, tid))
+			fprintf(stderr,
+				"Note: %s is on the exclusion list; connecting anyway\n",
+				fa.subsysnqn ? fa.subsysnqn : "this controller");
+		libnvmf_tid_free(tid);
+	}
+
 	ret = libnvmf_connect(ctx, fctx);
 	if (ret) {
 		fprintf(stderr, "failed to connect: %s\n",
@@ -830,6 +850,7 @@ static void nvmf_disconnect_nqn(struct libnvme_global_ctx *ctx, char *nqn)
 int fabrics_disconnect(const char *desc, int argc, char **argv)
 {
 	const char *device = "nvme device handle";
+	const char *exclude_help = "write exclusion entry before disconnecting";
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	libnvme_ctrl_t c;
 	char *p;
@@ -838,13 +859,15 @@ int fabrics_disconnect(const char *desc, int argc, char **argv)
 	struct config {
 		char *nqn;
 		char *device;
+		bool  exclude;
 	};
 
 	struct config cfg = { 0 };
 
 	NVME_ARGS(opts,
-		OPT_STRING("nqn",        'n', "NAME", &cfg.nqn,    nvmf_nqn),
-		OPT_STRING("device",     'd', "DEV",  &cfg.device, device));
+		OPT_STRING("nqn",        'n', "NAME", &cfg.nqn,     nvmf_nqn),
+		OPT_STRING("device",     'd', "DEV",  &cfg.device,  device),
+		OPT_FLAG("exclude", 'x', &cfg.exclude, exclude_help));
 
 	ret = argconfig_parse(argc, argv, desc, opts);
 	if (ret)
@@ -887,8 +910,23 @@ int fabrics_disconnect(const char *desc, int argc, char **argv)
 		return ret;
 	}
 
-	if (cfg.nqn)
+	if (cfg.nqn) {
+		/*
+		 * Disconnecting by NQN affects every controller of that
+		 * subsystem; with --exclude, write a matching subsysnqn=
+		 * exclusion to the main list first so orchestrators see it
+		 * before the removal events fire.
+		 */
+		if (cfg.exclude) {
+			ret = libnvmf_exclusion_add_subsysnqn(ctx, NULL,
+							      cfg.nqn);
+			if (ret)
+				fprintf(stderr,
+					"Warning: failed to write exclusion entry: %s\n",
+					libnvme_strerror(-ret));
+		}
 		nvmf_disconnect_nqn(ctx, cfg.nqn);
+	}
 
 	if (cfg.device) {
 		char *d;
@@ -902,6 +940,19 @@ int fabrics_disconnect(const char *desc, int argc, char **argv)
 				fprintf(stderr,
 					"Did not find device %s\n", p);
 				return -ENODEV;
+			}
+			/*
+			 * Write exclusion entry before disconnecting so that
+			 * orchestrators see the exclusion in place before the
+			 * device removal event fires.
+			 */
+			if (cfg.exclude) {
+				ret = libnvmf_exclusion_add_ctrl(ctx, NULL,
+								 c);
+				if (ret)
+					fprintf(stderr,
+						"Warning: failed to write exclusion entry: %s\n",
+						libnvme_strerror(-ret));
 			}
 			ret = libnvmf_disconnect_ctrl(c);
 			if (ret)
