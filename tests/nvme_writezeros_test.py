@@ -52,7 +52,6 @@ class TestNVMeWriteZeros(TestNVMeIO):
         super().setUp()
         if self.is_windows():
             self.skipTest("Write Zeroes command not supported by Windows")
-
         self.start_block = 1023
         self.block_count = 0
         self.setup_log_dir(self.__class__.__name__)

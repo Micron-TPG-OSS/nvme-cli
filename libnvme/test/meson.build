@@ -279,7 +279,7 @@ if host_system != 'windows'
             dependencies: openssl_dep,
         )
     endif
-endif # host_system != 'windows'
+endif
 
 foreach hdr : [
     'endian',

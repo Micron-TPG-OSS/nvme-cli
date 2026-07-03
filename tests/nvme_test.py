@@ -124,9 +124,6 @@ class TestNVMe(unittest.TestCase):
         self.dps = 0
         self.flbas = 0
 
-        if self.is_windows():
-            return  # Windows only supports namespace managment in WinPE
-
         (ds, ms) = self.get_lba_format_size()
         ncap = int(self.get_ncap() / (ds+ms))
         self.nsze = ncap
@@ -262,9 +259,10 @@ class TestNVMe(unittest.TestCase):
         err = self.run_cmd(nvme_reset_cmd).returncode
         self.assertEqual(err, 0, "ERROR : nvme reset failed")
 
-        rescan_cmd = "echo 1 > /sys/bus/pci/rescan"
-        result = self.run_cmd(rescan_cmd)
-        self.assertEqual(result.returncode, 0, "ERROR : pci rescan failed")
+        if not self.is_windows():   # Rescan occurs during reset on Windows
+            rescan_cmd = "echo 1 > /sys/bus/pci/rescan"
+            result = self.run_cmd(rescan_cmd)
+            self.assertEqual(result.returncode, 0, "ERROR : pci rescan failed")
 
     def get_ctrl_id(self):
         """ Wrapper for extracting the first controller id.
@@ -308,7 +306,7 @@ class TestNVMe(unittest.TestCase):
             are supported, False otherwise.
         """
         if self.is_windows():
-            return False    # Windows only supports namespace managment in WinPE
+            return False    # Namespace management not supported on Windows
 
         oacs = to_decimal(self.get_id_ctrl_field_value("oacs"))
 

@@ -564,11 +564,6 @@ if want_nvme
         'nvme.c',
         'plugin.c',
     ]
-    if host_system != 'windows'
-        sources += [
-            'libnvme-wrap.c',
-        ]
-    endif
 
     if json_c_dep.found()
         sources += [
