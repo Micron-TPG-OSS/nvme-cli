@@ -56,7 +56,7 @@ want_mi = get_option('mi').disabled() == false and host_system != 'windows'
 want_top = get_option('top').disabled() == false and host_system != 'windows'
 want_json_c = get_option('json-c').disabled() == false
 want_libkmod = get_option('libkmod').disabled() == false and host_system != 'windows'
-want_tests = get_option('tests') and host_system != 'windows'
+want_tests = get_option('tests')
 want_examples = get_option('examples') and host_system != 'windows'
 want_docs = get_option('docs')
 want_docs_build = get_option('docs-build')
@@ -560,7 +560,6 @@ if want_nvme
         ]
     else
         sources += [
-            'libnvme-wrap.c',
             'logging.c',
             'nvme-cmds.c',
             'nvme-models.c',
@@ -602,6 +601,7 @@ if want_nvme
     if host_system == 'windows'
         link_deps += [
             kernel32_dep,
+            bcrypt_dep,
         ]
     else
         link_args_list = ['-ldl']
