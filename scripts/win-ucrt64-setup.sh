@@ -1,6 +1,9 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
+# Utility for installing the UCRT64 MinGW build toolchain and nvme-cli
+# dependencies within an MSYS2 environment on Windows.
+#
 # This file is part of nvme.
 # Copyright (c) 2026 Micron Technology, Inc.
 #
