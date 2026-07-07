@@ -1552,7 +1552,6 @@ static bool nvmf_excluded(struct libnvme_global_ctx *ctx,
 			  const char *hostnqn, const char *hostid)
 {
 	struct libnvmf_tid *tid;
-	const char *canonical;
 	bool excluded;
 
 	tid = libnvmf_tid_from_fields(transport, traddr, trsvcid, subsysnqn,
@@ -1563,10 +1562,10 @@ static bool nvmf_excluded(struct libnvme_global_ctx *ctx,
 
 	excluded = libnvmf_exclusion_match(ctx, tid);
 	if (excluded) {
-		canonical = libnvmf_tid_get_canonical(tid);
+		const char *rendered = libnvmf_tid_str(tid);
 		libnvme_msg(ctx, LIBNVME_LOG_INFO,
 			 "skipping excluded controller %s\n",
-			 canonical ? canonical : subsysnqn);
+			 rendered ? rendered : subsysnqn);
 	}
 	libnvmf_tid_free(tid);
 
@@ -2652,7 +2651,7 @@ int _discovery_config_json(struct libnvme_global_ctx *ctx,
 	nfctx.ctrl_params.host_traddr = libnvme_ctrl_get_host_traddr(c);
 	nfctx.ctrl_params.host_iface = libnvme_ctrl_get_host_iface(c);
 
-	if (!nfctx.ctrl_params.transport && !nfctx.ctrl_params.traddr)
+	if (!nfctx.ctrl_params.transport || !nfctx.ctrl_params.traddr)
 		return 0;
 
 	/* ignore none fabric transports */

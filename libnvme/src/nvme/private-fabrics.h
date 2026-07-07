@@ -99,30 +99,39 @@ struct libnvmf_context { // !generate-accessors:read=generated,write=generated
  * rather than a spec guarantee; carrying hostid keeps the TID correct anyway.
  *
  * This is deliberately a separate type from struct libnvme_ctrl_params, not a
- * reuse of it. libnvmf_tid is a pure, owned, hashable *identity*: it owns its
- * strings, caches derived values (canonical form, hash, string rendering), and
- * carries hostnqn/hostid, which libnvme_ctrl_params does not.
- * libnvme_ctrl_params is a controller-*creation* parameter bag: borrowed
- * pointers, no hashing, and it carries the fabrics tuning config (struct
- * libnvme_fabrics_config) that the TID intentionally excludes. Merging them
- * would force one role onto the other.
+ * reuse of it. libnvmf_tid is a pure, owned *identity*: it owns its strings,
+ * caches derived values (canonical form, string rendering), and carries
+ * hostnqn/hostid, which libnvme_ctrl_params does not. libnvme_ctrl_params is a
+ * controller-*creation* parameter bag: borrowed pointers and it carries the
+ * fabrics tuning config (struct libnvme_fabrics_config) that the TID
+ * intentionally excludes. Merging them would force one role onto the other.
+ *
+ * Addressing is numeric-only: a traddr/host_traddr must be a numeric IP (the
+ * constructors reject a hostname). Resolving a name can block on DNS and is a
+ * policy choice about which address to use, so it belongs to the caller, not
+ * the library (see design/INTEGRATION.md). The caller resolves and hands the
+ * TID a numeric address.
  *
  * All string fields are owned (strdup'd) by the struct. The leading-underscore
- * members cache derived values (canonical form, hash, string rendering),
- * recomputed lazily and cleared by any setter.
+ * members cache derived values (canonical form, string rendering), recomputed
+ * lazily and cleared by any identity change.
  */
 struct libnvmf_tid { // !generate-accessors !generate-lifecycle
-	char *transport;    // !access:write=custom
-	char *traddr;       // !access:write=custom
-	char *trsvcid;      // !access:write=custom
-	char *subsysnqn;    // !access:write=custom
-	char *host_traddr;  // !access:write=custom
-	char *host_iface;   // !access:write=custom
-	char *hostnqn;      // !access:write=custom
-	char *hostid;       // !access:write=custom
-	/* cached derived values — recomputed lazily, cleared by any setter */
+	/*
+	 * Addressing is construction-only (from_fields/parse/dup); the identity
+	 * triplet is set together via libnvmf_tid_set_identity(). No per-field
+	 * setters, so every mutation goes through a sanitizing path.
+	 */
+	char *transport;    // !access:write=none
+	char *traddr;       // !access:write=none
+	char *trsvcid;      // !access:write=none
+	char *subsysnqn;    // !access:write=none
+	char *host_traddr;  // !access:write=none
+	char *host_iface;   // !access:write=none
+	char *hostnqn;      // !access:write=none
+	char *hostid;       // !access:write=none
+	/* cached values; recomputed lazily, cleared on identity edits */
 	char *_canonical;   // !access:read=none,write=none
-	char *_hash;        // !access:read=none,write=none
 	char *_str;         // !access:read=none,write=none
 };
 

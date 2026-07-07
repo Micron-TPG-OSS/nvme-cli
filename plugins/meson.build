@@ -22,15 +22,7 @@ all_plugins = {
   'virtium': ['plugins/virtium/virtium-nvme.c'],
   'ymtc': ['plugins/ymtc/ymtc-nvme.c'],
 }
-if host_system == 'windows'
-  all_plugins += {
-    'micron': [
-      'plugins/micron/micron-nvme.c',
-      'plugins/micron/micron-utils.c',
-      'plugins/micron/micron-utils-win.c'
-      ],
-  }
-else
+if host_system != 'windows'
   all_plugins += {
     'huawei': ['plugins/huawei/huawei-nvme.c'],
     'micron': [
@@ -43,6 +35,14 @@ else
     'scaleflux': ['plugins/scaleflux/sfx-nvme.c'],
     'wdc': ['plugins/wdc/wdc-nvme.c', 'plugins/wdc/wdc-utils.c'],
     'zns': ['plugins/zns/zns.c'],
+  }
+else
+  all_plugins += {
+    'micron': [
+      'plugins/micron/micron-nvme.c',
+      'plugins/micron/micron-utils.c',
+      'plugins/micron/micron-utils-win.c'
+      ],
   }
 endif
 
