@@ -6,13 +6,15 @@
  * Authors: Martin Belanger <martin.belanger@dell.com>
  *
  * Unit tests for the libnvmf_tid API — libnvmf_tid_parse() (valid input,
- * rejected aliases, garbage tokens, duplicate keys, whitespace), plus equal(),
- * dup(), get_canonical(), get_hash(), and setter cache invalidation.
+ * rejected aliases, garbage tokens, duplicate keys, whitespace), plus dup(),
+ * get_canonical(), numeric-only address sanitization, traddr_is_numeric(),
+ * and set_identity() (including cache invalidation).
  *
  * Note: garbage-input tests intentionally trigger error messages on stderr;
  * that output is expected and does not indicate a test failure.
  */
 
+#include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -303,52 +305,6 @@ static bool test_tid_parse_whitespace(void)
 }
 
 /* -------------------------------------------------------------------------
- * libnvmf_tid_equal() — including NULL handling (regression for the NULL crash)
- * -------------------------------------------------------------------------
- */
-static bool test_tid_equal(void)
-{
-	struct libnvme_global_ctx *ctx;
-	struct libnvmf_tid *a, *b;
-	bool pass = true, p;
-
-	ctx = libnvme_create_global_ctx();
-
-	printf("\ntest_tid_equal:\n");
-
-	p = libnvmf_tid_equal(NULL, NULL);
-	CHECK(p, "equal(NULL, NULL) → true");
-	pass &= p;
-
-	a = libnvmf_tid_parse(ctx,
-			      "transport=tcp;traddr=1.2.3.4;trsvcid=4420");
-
-	p = !libnvmf_tid_equal(a, NULL) && !libnvmf_tid_equal(NULL, a);
-	CHECK(p, "equal(t, NULL) and equal(NULL, t) → false (no crash)");
-	pass &= p;
-
-	p = libnvmf_tid_equal(a, a);
-	CHECK(p, "equal(t, t) → true");
-	pass &= p;
-
-	b = libnvmf_tid_parse(ctx,
-			      "transport=tcp;traddr=1.2.3.4;trsvcid=4420");
-	p = libnvmf_tid_equal(a, b);
-	CHECK(p, "identical TIDs → equal");
-	pass &= p;
-
-	libnvmf_tid_set_traddr(b, "5.6.7.8");
-	p = !libnvmf_tid_equal(a, b);
-	CHECK(p, "differing field → not equal");
-	pass &= p;
-
-	libnvmf_tid_free(a);
-	libnvmf_tid_free(b);
-	libnvme_free_global_ctx(ctx);
-	return pass;
-}
-
-/* -------------------------------------------------------------------------
  * libnvmf_tid_dup()
  * -------------------------------------------------------------------------
  */
@@ -369,8 +325,9 @@ static bool test_tid_dup(void)
 	t = libnvmf_tid_parse(ctx,
 			      "transport=tcp;traddr=1.2.3.4;nqn=nqn.test");
 	d = libnvmf_tid_dup(t);
-	p = d && libnvmf_tid_equal(t, d) && d != t;
-	CHECK(p, "dup is a distinct but equal copy");
+	p = d && d != t &&
+	    streq(libnvmf_tid_get_canonical(t), libnvmf_tid_get_canonical(d));
+	CHECK(p, "dup is a distinct copy with the same canonical form");
 	pass &= p;
 
 	libnvmf_tid_free(t);
@@ -419,65 +376,15 @@ static bool test_tid_canonical(void)
 }
 
 /* -------------------------------------------------------------------------
- * libnvmf_tid_get_hash() — format, stability, caching
- * -------------------------------------------------------------------------
- */
-static bool test_tid_hash(void)
-{
-	struct libnvme_global_ctx *ctx;
-	struct libnvmf_tid *a, *b, *c;
-	const char *h1, *h2;
-	bool pass = true, p;
-
-	ctx = libnvme_create_global_ctx();
-
-	printf("\ntest_tid_hash:\n");
-
-	p = (libnvmf_tid_get_hash(NULL) == NULL);
-	CHECK(p, "hash(NULL) → NULL");
-	pass &= p;
-
-	a = libnvmf_tid_parse(ctx,
-			      "transport=tcp;traddr=1.2.3.4;trsvcid=4420");
-	h1 = libnvmf_tid_get_hash(a);
-	p = h1 && strlen(h1) == 12 && strspn(h1, "0123456789abcdef") == 12;
-	CHECK(p, "hash is 12 lowercase hex chars");
-	pass &= p;
-
-	h2 = libnvmf_tid_get_hash(a);
-	p = (h1 == h2);
-	CHECK(p, "hash is cached (same pointer on 2nd call)");
-	pass &= p;
-
-	b = libnvmf_tid_parse(ctx,
-			      "transport=tcp;traddr=1.2.3.4;trsvcid=4420");
-	p = streq(libnvmf_tid_get_hash(a), libnvmf_tid_get_hash(b));
-	CHECK(p, "equal TIDs → equal hash");
-	pass &= p;
-
-	c = libnvmf_tid_parse(ctx,
-			      "transport=tcp;traddr=9.9.9.9;trsvcid=4420");
-	p = !streq(libnvmf_tid_get_hash(a), libnvmf_tid_get_hash(c));
-	CHECK(p, "different TIDs → different hash");
-	pass &= p;
-
-	libnvmf_tid_free(a);
-	libnvmf_tid_free(b);
-	libnvmf_tid_free(c);
-	libnvme_free_global_ctx(ctx);
-	return pass;
-}
-
-/* -------------------------------------------------------------------------
- * Setters invalidate the canonical/hash caches
+ * set_identity() invalidates the canonical cache
  * -------------------------------------------------------------------------
  */
 static bool test_tid_setter_invalidates_cache(void)
 {
 	struct libnvme_global_ctx *ctx;
 	struct libnvmf_tid *t;
-	char before[64], h_before[32];
-	const char *after, *h_after;
+	char before[64];
+	const char *after;
 	bool pass = true, p;
 
 	ctx = libnvme_create_global_ctx();
@@ -486,24 +393,78 @@ static bool test_tid_setter_invalidates_cache(void)
 
 	t = libnvmf_tid_parse(ctx, "transport=tcp;traddr=1.2.3.4");
 
-	/* Prime the caches, mutate, then confirm they were rebuilt. */
+	/* Prime the cache, mutate via set_identity, confirm it rebuilt. */
 	snprintf(before, sizeof(before), "%s", libnvmf_tid_get_canonical(t));
-	snprintf(h_before, sizeof(h_before), "%s", libnvmf_tid_get_hash(t));
 
-	libnvmf_tid_set_traddr(t, "5.6.7.8");
+	libnvmf_tid_set_identity(t, "nqn.sub", NULL, NULL);
 
 	after = libnvmf_tid_get_canonical(t);
-	p = after && !streq(before, after) && strstr(after, "traddr=5.6.7.8");
-	CHECK(p, "setter invalidates canonical cache");
-	pass &= p;
-
-	h_after = libnvmf_tid_get_hash(t);
-	p = h_after && !streq(h_before, h_after);
-	CHECK(p, "setter invalidates hash cache");
+	p = after && !streq(before, after) && strstr(after, "nqn=nqn.sub");
+	CHECK(p, "set_identity invalidates canonical cache");
 	pass &= p;
 
 	libnvmf_tid_free(t);
 	libnvme_free_global_ctx(ctx);
+	return pass;
+}
+
+/* -------------------------------------------------------------------------
+ * libnvmf_tid_set_identity()
+ * -------------------------------------------------------------------------
+ */
+static bool test_tid_set_identity(void)
+{
+	struct libnvme_global_ctx *ctx;
+	struct libnvmf_tid *t;
+	bool pass = true, p;
+
+	ctx = libnvme_create_global_ctx();
+
+	printf("\ntest_tid_set_identity:\n");
+
+	/* Sets the triplet. */
+	t = libnvmf_tid_from_fields("tcp", "1.2.3.4", "4420", NULL,
+				    NULL, NULL, NULL, NULL);
+	p = t && libnvmf_tid_set_identity(t, "nqn.sub", "nqn.host",
+		"46ba5037-7ce5-41fa-9452-48477bf00080") == 0 &&
+	    streq(libnvmf_tid_get_subsysnqn(t), "nqn.sub") &&
+	    streq(libnvmf_tid_get_hostnqn(t), "nqn.host") &&
+	    streq(libnvmf_tid_get_hostid(t),
+		  "46ba5037-7ce5-41fa-9452-48477bf00080");
+	CHECK(p, "set_identity sets the triplet");
+	pass &= p;
+
+	/* A NULL argument leaves that field unchanged. */
+	p = t && libnvmf_tid_set_identity(t, "nqn.sub2", NULL, NULL) == 0 &&
+	    streq(libnvmf_tid_get_subsysnqn(t), "nqn.sub2") &&
+	    streq(libnvmf_tid_get_hostnqn(t), "nqn.host");
+	CHECK(p, "NULL args leave fields unchanged");
+	pass &= p;
+	libnvmf_tid_free(t);
+
+	/* hostid derived from a UUID-format hostnqn when none is given. */
+	t = libnvmf_tid_from_fields("tcp", "1.2.3.4", "4420", NULL,
+				    NULL, NULL, NULL, NULL);
+	p = t && libnvmf_tid_set_identity(t, "nqn.sub",
+		"nqn.2014-08.org.nvmexpress:uuid:46ba5037-7ce5-41fa-9452-48477bf00080",
+		NULL) == 0 &&
+	    streq(libnvmf_tid_get_hostid(t),
+		  "46ba5037-7ce5-41fa-9452-48477bf00080");
+	CHECK(p, "hostid derived from a UUID hostnqn");
+	pass &= p;
+	libnvmf_tid_free(t);
+
+	/* A hostid without any hostnqn is rejected. */
+	t = libnvmf_tid_from_fields("tcp", "1.2.3.4", "4420", NULL,
+				    NULL, NULL, NULL, NULL);
+	p = t && libnvmf_tid_set_identity(t, "nqn.sub", NULL,
+		"46ba5037-7ce5-41fa-9452-48477bf00080") == -EINVAL;
+	CHECK(p, "hostid without hostnqn rejected");
+	pass &= p;
+	libnvmf_tid_free(t);
+
+	libnvme_free_global_ctx(ctx);
+
 	return pass;
 }
 
@@ -598,6 +559,114 @@ static bool test_tid_is_empty(void)
 	return pass;
 }
 
+/* -------------------------------------------------------------------------
+ * Address sanitization by the constructors, and rejection of a hostname
+ * -------------------------------------------------------------------------
+ */
+static bool test_tid_sanitize(void)
+{
+	struct libnvme_global_ctx *ctx;
+	struct libnvmf_tid *t;
+	bool pass = true, p;
+
+	ctx = libnvme_create_global_ctx();
+
+	printf("\ntest_tid_sanitize:\n");
+	printf("  (error messages on stderr below are expected)\n");
+
+	/* An expanded IPv6 traddr is canonicalized to its compressed form. */
+	t = libnvmf_tid_from_fields("tcp", "2001:db8:0:0:0:0:0:1", "4420",
+				    "nqn.t", NULL, NULL, NULL, NULL);
+	p = t && streq(libnvmf_tid_get_traddr(t), "2001:db8::1");
+	CHECK(p, "expanded IPv6 traddr → compressed");
+	pass &= p;
+	libnvmf_tid_free(t);
+
+	/* A numeric host_traddr is canonicalized too. */
+	t = libnvmf_tid_from_fields("tcp", "1.2.3.4", "4420", "nqn.t",
+				    "2001:db8:0:0:0:0:0:2", NULL, NULL, NULL);
+	p = t && streq(libnvmf_tid_get_host_traddr(t), "2001:db8::2");
+	CHECK(p, "host_traddr IPv6 canonicalized");
+	pass &= p;
+	libnvmf_tid_free(t);
+
+	/* An IPv6 scope suffix is kept verbatim after the canonical address. */
+	t = libnvmf_tid_from_fields("tcp", "fe80:0:0:0:0:0:0:1%eth0", "4420",
+				    "nqn.t", NULL, NULL, NULL, NULL);
+	p = t && streq(libnvmf_tid_get_traddr(t), "fe80::1%eth0");
+	CHECK(p, "IPv6 scope preserved: fe80::1%%eth0");
+	pass &= p;
+	libnvmf_tid_free(t);
+
+	/* A hostname traddr is rejected outright: construction fails. */
+	t = libnvmf_tid_from_fields("tcp", "dc.example.com", "8009", "nqn.t",
+				    NULL, NULL, NULL, NULL);
+	p = (t == NULL);
+	CHECK(p, "hostname traddr rejected by from_fields()");
+	libnvmf_tid_free(t);
+	pass &= p;
+
+	/* A hostname host_traddr is rejected too. */
+	t = libnvmf_tid_from_fields("tcp", "1.2.3.4", "8009", "nqn.t",
+				    "dc.example.com", NULL, NULL, NULL);
+	p = (t == NULL);
+	CHECK(p, "hostname host_traddr rejected by from_fields()");
+	libnvmf_tid_free(t);
+	pass &= p;
+
+	/* parse() rejects the same way. */
+	t = libnvmf_tid_parse(ctx, "transport=tcp;traddr=dc.example.com");
+	p = (t == NULL);
+	CHECK(p, "parse() rejects a hostname traddr");
+	libnvmf_tid_free(t);
+	pass &= p;
+
+	/* Non-IP transports are untouched: no canonicalize, no rejection. */
+	t = libnvmf_tid_from_fields("fc", "nn-0x1:pn-0x2", NULL, "nqn.t",
+				    NULL, NULL, NULL, NULL);
+	p = t && streq(libnvmf_tid_get_traddr(t), "nn-0x1:pn-0x2");
+	CHECK(p, "fc traddr untouched");
+	pass &= p;
+	libnvmf_tid_free(t);
+
+	libnvme_free_global_ctx(ctx);
+
+	return pass;
+}
+
+/* -------------------------------------------------------------------------
+ * libnvmf_traddr_is_numeric()
+ * -------------------------------------------------------------------------
+ */
+static bool test_tid_traddr_is_numeric(void)
+{
+	bool pass = true, p;
+
+	printf("\ntest_tid_traddr_is_numeric:\n");
+
+	p = libnvmf_traddr_is_numeric("1.2.3.4");
+	CHECK(p, "dotted IPv4 is numeric");
+	pass &= p;
+
+	p = libnvmf_traddr_is_numeric("2001:db8::1");
+	CHECK(p, "IPv6 is numeric");
+	pass &= p;
+
+	p = libnvmf_traddr_is_numeric("fe80::1%eth0");
+	CHECK(p, "IPv6 with scope is numeric");
+	pass &= p;
+
+	p = !libnvmf_traddr_is_numeric("dc.example.com");
+	CHECK(p, "hostname is not numeric");
+	pass &= p;
+
+	p = !libnvmf_traddr_is_numeric(NULL);
+	CHECK(p, "NULL is not numeric");
+	pass &= p;
+
+	return pass;
+}
+
 int main(int argc, char *argv[])
 {
 	test_rc = EXIT_SUCCESS;
@@ -609,12 +678,13 @@ int main(int argc, char *argv[])
 	test_tid_parse_garbage();
 	test_tid_parse_duplicate_key();
 	test_tid_parse_whitespace();
-	test_tid_equal();
 	test_tid_is_empty();
 	test_tid_dup();
+	test_tid_sanitize();
+	test_tid_traddr_is_numeric();
 	test_tid_canonical();
-	test_tid_hash();
 	test_tid_setter_invalidates_cache();
+	test_tid_set_identity();
 
 	if (test_rc == EXIT_SUCCESS)
 		printf("\nAll tests passed.\n");

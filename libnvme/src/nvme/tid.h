@@ -13,50 +13,6 @@
 struct libnvme_global_ctx;
 
 /**
- * Custom setters for struct libnvmf_tid.
- *
- * Each setter strdup()s the new value, frees the previous one, and invalidates
- * the cached canonical string and hash.  NULL is accepted and stored as NULL.
- */
-void libnvmf_tid_set_transport(struct libnvmf_tid *p, const char *val);
-void libnvmf_tid_set_traddr(struct libnvmf_tid *p, const char *val);
-void libnvmf_tid_set_trsvcid(struct libnvmf_tid *p, const char *val);
-void libnvmf_tid_set_subsysnqn(struct libnvmf_tid *p, const char *val);
-void libnvmf_tid_set_host_traddr(struct libnvmf_tid *p, const char *val);
-void libnvmf_tid_set_host_iface(struct libnvmf_tid *p, const char *val);
-void libnvmf_tid_set_hostnqn(struct libnvmf_tid *p, const char *val);
-void libnvmf_tid_set_hostid(struct libnvmf_tid *p, const char *val);
-
-/**
- * libnvmf_tid_dup() - Allocate a copy of an existing TID.
- * @tid: Source TID, or NULL.
- *
- * Return: Allocated copy, or NULL if @tid is NULL or on allocation failure.
- */
-struct libnvmf_tid *libnvmf_tid_dup(const struct libnvmf_tid *tid);
-
-/**
- * libnvmf_tid_equal() - Compare two TIDs for equality.
- * @a: First TID, or NULL.
- * @b: Second TID, or NULL.
- *
- * Compares all eight fields with exact string equality.  Two NULL TIDs are
- * considered equal.
- *
- * Return: true if all fields match, false otherwise.
- */
-bool libnvmf_tid_equal(const struct libnvmf_tid *a,
-		       const struct libnvmf_tid *b);
-
-/**
- * libnvmf_tid_is_empty() - Test whether a TID sets no fields.
- * @tid: The transport ID, or NULL.
- *
- * Return: true if @tid is NULL or every field is unset, false otherwise.
- */
-bool libnvmf_tid_is_empty(const struct libnvmf_tid *tid);
-
-/**
  * libnvmf_tid_from_fields() - Allocate a TID from individual field strings.
  * @transport:   Transport type (e.g. "tcp", "rdma", "fc").
  * @traddr:      Transport address.
@@ -67,9 +23,12 @@ bool libnvmf_tid_is_empty(const struct libnvmf_tid *tid);
  * @hostnqn:     Host NQN, or NULL.
  * @hostid:      Host Identifier, or NULL.
  *
- * Convenience constructor.  NULL fields are stored as NULL.
+ * Convenience constructor.  NULL fields are stored as NULL.  For an IP
+ * transport (tcp, rdma) a numeric traddr/host_traddr is canonicalized; a
+ * hostname is rejected -- resolving it is the caller's job, not libnvme's.
  *
- * Return: Allocated TID, or NULL on allocation failure.
+ * Return: Allocated TID, or NULL if traddr/host_traddr is not numeric on an
+ * IP transport, or on allocation failure.
  */
 struct libnvmf_tid *libnvmf_tid_from_fields(const char *transport,
 					    const char *traddr,
@@ -79,6 +38,38 @@ struct libnvmf_tid *libnvmf_tid_from_fields(const char *transport,
 					    const char *host_iface,
 					    const char *hostnqn,
 					    const char *hostid);
+
+/**
+ * libnvmf_tid_set_identity() - Set the subsystem and host identity together.
+ * @tid:       The transport ID.
+ * @subsysnqn: Subsystem NQN, or NULL to leave it unchanged.
+ * @hostnqn:   Host NQN, or NULL to leave it unchanged.
+ * @hostid:    Host Identifier, or NULL to leave it unchanged (or derive it).
+ *
+ * Identity is applied after addressing -- which subsystem, and which host
+ * persona, are decided by context.  A NULL argument leaves that field as-is,
+ * which is why the three are set through one call rather than per-field
+ * setters (addressing has none: it is construction-only).
+ *
+ * hostid is never left to chance: when no hostid is set but the resulting
+ * hostnqn carries a UUID (nqn.2014-08.org.nvmexpress:uuid:<X>), the hostid is
+ * derived from it -- the deterministic, per-host value (TP4126), never a
+ * random one.  A hostid without a hostnqn is rejected: one host is one
+ * (hostnqn, hostid) pair.
+ *
+ * Return: 0 on success; -EINVAL for a NULL @tid or a hostid without a hostnqn;
+ * -ENOMEM on allocation failure.
+ */
+int libnvmf_tid_set_identity(struct libnvmf_tid *tid, const char *subsysnqn,
+			     const char *hostnqn, const char *hostid);
+
+/**
+ * libnvmf_tid_dup() - Allocate a copy of an existing TID.
+ * @tid: Source TID, or NULL.
+ *
+ * Return: Allocated copy, or NULL if @tid is NULL or on allocation failure.
+ */
+struct libnvmf_tid *libnvmf_tid_dup(const struct libnvmf_tid *tid);
 
 /**
  * libnvmf_tid_parse() - Allocate a TID from a semicolon-separated key=value
@@ -94,8 +85,11 @@ struct libnvmf_tid *libnvmf_tid_from_fields(const char *transport,
  * C-identifier convention.)  Unknown keys, bare keys (no '='), and empty
  * values are logged at WARN level (when @ctx is non-NULL) and skipped.
  * Whitespace around keys and values is trimmed.  NULL input returns NULL.
+ * Like libnvmf_tid_from_fields(), a traddr/host-traddr that is not numeric on
+ * an IP transport fails the whole parse.
  *
- * Return: Allocated TID, or NULL on allocation failure.
+ * Return: Allocated TID, or NULL on a non-numeric address or allocation
+ * failure.
  */
 struct libnvmf_tid *libnvmf_tid_parse(struct libnvme_global_ctx *ctx,
 				      const char *str);
@@ -118,58 +112,55 @@ struct libnvmf_tid *libnvmf_tid_parse_strict(struct libnvme_global_ctx *ctx,
 					     const char *str);
 
 /**
+ * libnvmf_traddr_is_numeric() - Would this address survive TID construction?
+ * @traddr: A candidate traddr/host_traddr, or NULL.
+ *
+ * The TID constructors accept a numeric IP only and reject a hostname; this
+ * lets a caller check a candidate address -- and decide whether it must
+ * resolve it first -- before building the TID, using the same definition of
+ * "numeric" the constructors use internally (including an IPv6 scope
+ * suffix, which is numeric).
+ *
+ * Return: true if @traddr is a numeric address, false otherwise (including a
+ * NULL @traddr or an allocation failure while checking).
+ */
+bool libnvmf_traddr_is_numeric(const char *traddr);
+
+/**
+ * libnvmf_tid_is_empty() - Test whether a TID sets no fields.
+ * @tid: The transport ID, or NULL.
+ *
+ * Return: true if @tid is NULL or every field is unset, false otherwise.
+ */
+bool libnvmf_tid_is_empty(const struct libnvmf_tid *tid);
+
+/**
  * libnvmf_tid_get_canonical() - Return the canonical string form of a TID.
  * @tid: The transport ID.
  *
  * Returns a deterministic, fixed-field-order semicolon-separated key=value
  * string (e.g. "transport=tcp;traddr=1.2.3.4;trsvcid=8009").  Only non-NULL
  * fields are included.  The string is lazily computed and cached; it is
- * invalidated by any setter call.
+ * invalidated by any identity change.
  *
- * Stability is the whole point of this form, because the hash returned by
- * libnvmf_tid_get_hash() is computed directly from this string.  The fixed
- * field order makes the output independent of the order fields were set, so
- * the same logical TID always yields the same canonical string and therefore
- * the same hash.  Conversely, *any* difference in the bytes here -- a field
- * present vs. absent, or the same field spelled differently -- changes the
- * hash.  Two producers (e.g. discoverd and a udev helper) only agree on a
- * TID's hash if they build the TID with byte-identical field values.
+ * The fixed field order makes the output independent of the order fields
+ * were set, so the same logical TID always yields the same canonical string.
+ * This is the stable primitive libnvme provides for naming a connection; a
+ * caller that wants a compact hash (e.g. for a systemd unit name) derives it
+ * from this string itself -- libnvme does not hash it.
  *
  * IMPORTANT -- address text is a known foot-gun here.  This function does no
- * normalization: it hashes the address exactly as stored.  The same endpoint
- * can be written several ways that are semantically equal but textually
- * different, e.g. a hostname vs. its resolved IP, an IPv4-mapped IPv6 address
- * ("::ffff:1.2.3.4") vs. dotted IPv4 ("1.2.3.4"), or a compressed vs.
- * fully-expanded IPv6 address.  Each spelling produces a different canonical
- * string and hash.
- *
- * This variation comes from *user space*, not the kernel.  The nvme fabrics
- * driver stores traddr/host_traddr verbatim and reports them back through
- * sysfs unchanged; it parses numeric addresses only (inet_pton) and never
- * resolves hostnames.  So a value read from sysfs matches exactly what was
- * written to /dev/nvme-fabrics -- the divergence is strictly between producers
- * that spell the same endpoint differently (e.g. a daemon that resolves a
- * hostname, or normalizes IPv6) before handing it to the kernel.  Callers that
- * rely on hashes matching across producers (or across a connect/reconnect)
- * must build the TID from the same textual form that is handed to the kernel.
+ * normalization beyond what the constructors already applied: the address is
+ * numeric (constructors reject a hostname), but a compressed vs.
+ * fully-expanded IPv6 address, or an IPv4-mapped IPv6 address
+ * ("::ffff:1.2.3.4") vs. dotted IPv4 ("1.2.3.4"), can still spell the same
+ * endpoint differently and yield different canonical strings.  Two producers
+ * only agree on a TID's canonical form if they build the TID from
+ * byte-identical field values.
  *
  * Return: Cached canonical string, or NULL on allocation failure.
  */
 const char *libnvmf_tid_get_canonical(const struct libnvmf_tid *tid);
-
-/**
- * libnvmf_tid_get_hash() - Return a stable hash string for a TID.
- * @tid: The transport ID.
- *
- * Returns a 12-character lowercase hex string derived from the FNV-1a 64-bit
- * hash (truncated to 48 bits) of the canonical TID string.  The hash is lazily
- * computed and cached; it is invalidated by any setter call.
- *
- * Suitable for use as a dictionary key or compact log identifier.
- *
- * Return: Cached hash string, or NULL on allocation failure.
- */
-const char *libnvmf_tid_get_hash(const struct libnvmf_tid *tid);
 
 /**
  * libnvmf_tid_str() - Human-readable string form of a TID, for logging.

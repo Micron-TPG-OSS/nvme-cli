@@ -596,6 +596,16 @@ if want_nvme
             kernel32_dep,
             bcrypt_dep,
         ]
+
+        if is_static
+            # Keep these MinGW runtime dependencies in-process to avoid
+            # requiring extra DLLs in PATH for static Windows builds.
+            link_args_list += ['-Wl,-Bstatic']
+            if json_c_dep.found()
+                link_args_list += ['-ljson-c']
+            endif
+            link_args_list += ['-lwinpthread', '-Wl,-Bdynamic']
+        endif
     else
         link_args_list = ['-ldl']
     endif
@@ -608,6 +618,19 @@ if want_nvme
         install: true,
         install_dir: sbindir,
     )
+
+    if host_system == 'windows' and want_libnvme and not is_static
+        # Copy libnvme DLL next to nvme.exe so it can be found at
+        # runtime without modifying PATH.
+        cp = find_program('cp')
+        custom_target('copy-libnvme-dll',
+            input: libnvme,
+            output: fs.name(libnvme.full_path()),
+            command: [cp, '@INPUT@', '@OUTPUT@'],
+            depends: [libnvme, nvme_exe],
+            build_by_default: true,
+        )
+    endif
 
     if host_system != 'windows'
         subdir('unit')
