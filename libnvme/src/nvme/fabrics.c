@@ -25,7 +25,6 @@
 #include <linux/if_ether.h>
 #include <net/if.h>
 #include <netpacket/packet.h>
-#include <netdb.h>
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -1060,19 +1059,73 @@ static int inet_pton_with_scope(struct libnvme_global_ctx *ctx, int af,
 bool traddr_is_hostname(struct libnvme_global_ctx *ctx,
 		const char *transport, const char *traddr)
 {
-	struct sockaddr_storage addr;
-
 	if (!traddr || !transport)
 		return false;
 	if (!strcmp(traddr, "none"))
 		return false;
 	if (strcmp(transport, "tcp") && strcmp(transport, "rdma"))
 		return false;
-	if (inet_pton_with_scope(ctx, AF_UNSPEC,
-			traddr, NULL, &addr) == 0)  /* scope-aware */
-		return false;
 
-	return true;
+	return !libnvmf_traddr_is_numeric(traddr);
+}
+
+/*
+ * Reject a hostname traddr/host_traddr and canonicalize a numeric one,
+ * routing the check through the TID constructor so the tree keeps one
+ * definition of acceptable and canonical addressing.  Resolving a
+ * hostname is the caller's job, not libnvme's, so the connect paths
+ * simply refuse one instead of resolving it.
+ */
+static int nvmf_sanitize_addrs(struct libnvme_global_ctx *ctx, libnvme_ctrl_t c)
+{
+	struct libnvmf_tid *tid;
+	const char *canon;
+	char *dup;
+
+	if (traddr_is_hostname(ctx, c->transport, c->traddr)) {
+		libnvme_msg(ctx, LIBNVME_LOG_ERR,
+			"traddr '%s' is not a numeric address; hostname resolution is the caller's responsibility\n",
+			c->traddr);
+		return -ENVME_CONNECT_TRADDR;
+	}
+
+	if (traddr_is_hostname(ctx, c->transport, c->host_traddr)) {
+		libnvme_msg(ctx, LIBNVME_LOG_ERR,
+			"host-traddr '%s' is not a numeric address; hostname resolution is the caller's responsibility\n",
+			c->host_traddr);
+		return -ENVME_CONNECT_TRADDR;
+	}
+
+	tid = libnvmf_tid_from_fields(c->transport, c->traddr, c->trsvcid,
+			NULL, c->host_traddr, c->host_iface, NULL, NULL);
+	if (!tid)
+		return -ENOMEM;
+
+	canon = libnvmf_tid_get_traddr(tid);
+	if (canon) {
+		dup = strdup(canon);
+		if (!dup) {
+			libnvmf_tid_free(tid);
+			return -ENOMEM;
+		}
+		free(c->traddr);
+		c->traddr = dup;
+	}
+
+	canon = libnvmf_tid_get_host_traddr(tid);
+	if (canon) {
+		dup = strdup(canon);
+		if (!dup) {
+			libnvmf_tid_free(tid);
+			return -ENOMEM;
+		}
+		free(c->host_traddr);
+		c->host_traddr = dup;
+	}
+
+	libnvmf_tid_free(tid);
+
+	return 0;
 }
 
 static int build_options(libnvme_host_t h, libnvme_ctrl_t c, char **argstr)
@@ -1450,15 +1503,9 @@ __libnvme_public int libnvmf_add_ctrl(libnvme_host_t h, libnvme_ctrl_t c)
 	}
 
 	libnvme_ctrl_set_discovered(c, true);
-	if (traddr_is_hostname(h->ctx, c->transport, c->traddr)) {
-		char *traddr = c->traddr;
-
-		if (hostname2traddr(h->ctx, traddr, &c->traddr)) {
-			c->traddr = traddr;
-			return -ENVME_CONNECT_TRADDR;
-		}
-		free(traddr);
-	}
+	ret = nvmf_sanitize_addrs(h->ctx, c);
+	if (ret)
+		return ret;
 
 	ret = build_options(h, c, &argstr);
 	if (ret)
@@ -1477,6 +1524,10 @@ __libnvme_public int libnvmf_connect_ctrl(libnvme_ctrl_t c)
 {
 	__cleanup_free char *argstr = NULL;
 	int ret;
+
+	ret = nvmf_sanitize_addrs(c->s->h->ctx, c);
+	if (ret)
+		return ret;
 
 	ret = build_options(c->s->h, c, &argstr);
 	if (ret)
