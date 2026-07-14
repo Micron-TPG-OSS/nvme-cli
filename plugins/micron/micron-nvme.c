@@ -30,6 +30,7 @@
 
 #include "common.h"
 #include "nvme-cmds.h"
+#include "nvme-pci-ids.h"
 #include "nvme-print.h"
 #include "nvme.h"
 #include "util/cleanup.h"
@@ -136,8 +137,11 @@ static enum eDriveModel GetDriveModel(
 	struct libnvme_transport_handle *hdl)
 {
 	enum eDriveModel eModel = UNKNOWN_MODEL;
+	uint32_t vid = 0, did = 0;
 
-	micron_get_pci_ids(ctx, hdl, &vendor_id, &device_id);
+	nvme_get_pci_ids(ctx, hdl, &vid, &did, NULL, NULL, NULL);
+	vendor_id = (unsigned short)vid;
+	device_id = (unsigned short)did;
 
 	if (vendor_id == MICRON_VENDOR_ID) {
 		switch (device_id) {
@@ -4429,8 +4433,7 @@ static int micron_id_ctrl(int argc, char **argv, struct command *acmd,
 		return err;
 	}
 
-	nvme_show_id_ctrl(&ctrl, libnvme_transport_handle_get_name(hdl),
-			  flags, micron_id_ctrl_vs);
+	nvme_show_id_ctrl(ctx, hdl, &ctrl, flags, micron_id_ctrl_vs);
 
 	return 0;
 }
