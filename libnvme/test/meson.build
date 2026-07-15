@@ -179,6 +179,42 @@ if want_fabrics
 
     test('libnvme - exclusion', exclusion)
 
+    ini = executable(
+        'test-ini',
+        ['ini.c'],
+        dependencies: [
+            config_dep,
+            ccan_dep,
+            libnvme_test_dep,
+        ],
+    )
+
+    test('libnvme - ini', ini)
+
+    config_ini = executable(
+        'test-config-ini',
+        ['config-ini.c'],
+        dependencies: [
+            config_dep,
+            ccan_dep,
+            libnvme_test_dep,
+        ],
+    )
+
+    test('libnvme - config-ini', config_ini)
+
+    config_api = executable(
+        'test-config-api',
+        ['config-api.c'],
+        dependencies: [
+            config_dep,
+            ccan_dep,
+            libnvme_dep,
+        ],
+    )
+
+    test('libnvme - config-api', config_api)
+
     uriparser = executable(
         'test-uriparser',
         ['uriparser.c'],
