@@ -102,7 +102,10 @@ udevrulesdir   = join_paths(prefixdir, get_option('udevrulesdir'))
 dracutrulesdir = join_paths(prefixdir, get_option('dracutrulesdir'))
 systemddir     = join_paths(prefixdir, get_option('systemddir'))
 nmdispatchdir  = join_paths(prefixdir, get_option('nmdispatchdir'))
-rundir         = join_paths(prefixdir, get_option('rundir'))
+
+# /run's location is fixed by the FHS -- unlike the dirs above, it must
+# never scale with --prefix.
+rundir         = get_option('rundir')
 
 std_prefix = prefixdir == '/usr' or prefixdir == '/usr/local'
 
@@ -436,7 +439,8 @@ conf.set10(
     'NVME_HAVE_REALLOCARRAY',
     cc.has_function(
        'reallocarray',
-       prefix : '#include <stdlib.h>'),
+       prefix : '#include <stdlib.h>',
+       args : '-D_GNU_SOURCE'),
     description: 'Is reallocarray available',
 )
 
