@@ -384,9 +384,9 @@ static bool opt_is_emittable(const struct command_metadata_option *o)
  * json array of strings, or NULL if the option has no known value set. The
  * caller owns the returned array.
  *
- * output-format is special-cased because its values are enforced by
- * validate_output_format() rather than carried in an opt_val table (they come
- * from the DESC_OUTPUT_FORMAT description string). Since the whole command is
+ * output-format is special-cased because its values are not represented via an
+ * opt_val table; keep the hard-coded list below in sync with
+ * validate_output_format() / DESC_OUTPUT_FORMAT. Since the whole command is
  * compiled out without json-c, "json" is always a valid value here. Every
  * other value set comes from the option's opt_val table, which is the set the
  * parser actually enforces; options whose value is unconstrained (e.g. any
