@@ -190,9 +190,9 @@ static int capture_command(struct command_metadata_command *mc, struct command *
 			   struct plugin *plugin)
 {
 	/* argv[1] is a placeholder device; the sentinel returns before it is
-	 * ever opened, so it need not exist.
+	 * ever opened, so it need not (and must not) name a real device.
 	 */
-	char *argv[] = { cmd->name, (char *)"/dev/nvme0", NULL };
+	char *argv[] = { cmd->name, (char *)"metadata-dump-dummy-device", NULL };
 
 	mc->name = cmd->name;
 	mc->alias = cmd->alias;
