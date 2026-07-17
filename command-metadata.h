@@ -11,7 +11,8 @@
 #include "plugin.h"
 #include "util/argconfig.h"
 
-/* A single command-line option, copied from struct argconfig_commandline_options.
+/*
+ * A single command-line option, copied from struct argconfig_commandline_options.
  * String fields and the opt_val table are deep-copied (and owned) because they
  * may point at command-local storage that is freed once the command's fn
  * returns; see command_metadata_copy_options().

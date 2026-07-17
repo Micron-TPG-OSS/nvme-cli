@@ -50,12 +50,14 @@
  */
 #define COMMAND_METADATA_SCHEMA_VERSION 1
 
-/* The command currently being captured; set by capture_command()
+/*
+ * The command currently being captured; set by capture_command()
  * before it invokes the command fn, read by metadata_capture_hook().
  */
 static struct command_metadata_command *command_metadata_cur_command;
 
-/* Capture OOM, reported out-of-band because the hook's return value is reserved
+/*
+ * Capture OOM, reported out-of-band because the hook's return value is reserved
  * for the parser-unwind sentinel; checked after each command fn returns.
  */
 static int command_metadata_capture_error;
@@ -103,7 +105,8 @@ static int copy_opt_val(const struct argconfig_opt_val *src, const struct argcon
 	return 0;
 }
 
-/* Duplicate a possibly-NULL string: NULL src succeeds (copies to NULL); a
+/*
+ * Duplicate a possibly-NULL string: NULL src succeeds (copies to NULL); a
  * non-NULL src that fails to duplicate returns -ENOMEM.
  */
 static int dup_field(const char *src, const char **dst)
@@ -189,7 +192,8 @@ static int metadata_capture_hook(int argc, char **argv, const char *program_desc
 static int capture_command(struct command_metadata_command *mc, struct command *cmd,
 			   struct plugin *plugin)
 {
-	/* argv[1] is a placeholder device; the sentinel returns before it is
+	/*
+	 * argv[1] is a placeholder device; the sentinel returns before it is
 	 * ever opened, so it need not (and must not) name a real device.
 	 */
 	char *argv[] = { cmd->name, (char *)"metadata-dump-dummy-device", NULL };
@@ -199,7 +203,8 @@ static int capture_command(struct command_metadata_command *mc, struct command *
 	mc->help = cmd->help;
 	mc->captured = false;
 
-	/* Don't invoke the dump command itself: it would re-enter
+	/*
+	 * Don't invoke the dump command itself: it would re-enter
 	 * dump_command_metadata() and recurse forever. It has no
 	 * completable options, so leave its options array empty.
 	 */
@@ -263,7 +268,8 @@ static struct command_metadata_program *build_model(struct program *prog)
 		}
 	}
 
-	/* Suppress stdout/stderr while invoking command fns: a few commands
+	/*
+	 * Suppress stdout/stderr while invoking command fns: a few commands
 	 * print before they reach the parser (e.g. gen-hostnqn), and some emit
 	 * parse-error diagnostics in reaction to the capture sentinel.
 	 */
@@ -322,7 +328,8 @@ static struct command_metadata_program *build_model(struct program *prog)
 	if (devnull >= 0)
 		close(devnull);
 
-	/* An allocation failure while capturing would leave an incomplete model
+	/*
+	 * An allocation failure while capturing would leave an incomplete model
 	 * that looks complete in the emitted JSON; fail the dump instead. The
 	 * partial model is left for process exit to reclaim (it is never freed
 	 * on the success path either).
@@ -365,7 +372,8 @@ static bool opt_takes_value(const struct command_metadata_option *o)
 	return o->argument_type != no_argument;
 }
 
-/* True for an option that should be emitted: a real, named, non-separator
+/*
+ * True for an option that should be emitted: a real, named, non-separator
  * option. Hidden options are emitted too (tagged "hidden" in the output) so
  * the dump describes the full set of accepted options; consumers that only
  * want user-facing options (e.g. completion generators) filter on that tag.
@@ -461,7 +469,8 @@ static struct json_object *json_command(const struct command_metadata_command *c
 
 	opts = json_create_array();
 	for (i = 0; i < c->num_options; i++) {
-		/* Options after the "Global options" separator are the shared
+		/*
+		 * Options after the "Global options" separator are the shared
 		 * NVME_ARGS globals; flag them so generators can group them.
 		 */
 		if (opt_is_global_separator(&c->options[i])) {
@@ -509,7 +518,8 @@ static void json_program(const struct command_metadata_program *m)
 	if (m->desc)
 		json_object_add_value_string(root, "description", m->desc);
 
-	/* Builtin (top-level) commands live in their own array; named plugins
+	/*
+	 * Builtin (top-level) commands live in their own array; named plugins
 	 * go under "plugins" so generators can build the dispatch nesting.
 	 */
 	builtin = json_create_array();
