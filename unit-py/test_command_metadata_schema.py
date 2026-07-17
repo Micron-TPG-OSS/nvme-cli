@@ -42,6 +42,10 @@ except ImportError:
     print("jsonschema module not available; skipping")
     sys.exit(77)
 
+if len(sys.argv) < 3:
+    print("usage: %s <nvme-binary> <schema-path>" % sys.argv[0])
+    sys.exit(77)
+
 NVME_BIN = sys.argv[1]
 SCHEMA_PATH = sys.argv[2]
 
@@ -104,7 +108,13 @@ def help_plugin_names():
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         universal_newlines=True)
     text = proc.stdout + proc.stderr
-    after = text.split("installed plugin extensions", 1)[-1]
+    marker = "installed plugin extensions"
+    if marker not in text:
+        # No plugin-extension section (e.g. built with zero external
+        # plugins); scraping the whole help text would mis-read builtin
+        # commands as plugins.
+        return set()
+    after = text.split(marker, 1)[-1]
     return set(HELP_PLUGIN.findall(after))
 
 

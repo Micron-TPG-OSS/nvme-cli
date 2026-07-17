@@ -9978,6 +9978,10 @@ static int show_hostnqn_cmd(int argc, char **argv, struct command *acmd, struct 
 static int dump_command_metadata_cmd(int argc, char **argv, struct command *acmd,
 				     struct plugin *plugin)
 {
+	(void)argc;
+	(void)argv;
+	(void)acmd;
+
 	return dump_command_metadata(plugin->parent);
 }
 #endif /* CONFIG_JSONC */

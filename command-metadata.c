@@ -168,6 +168,10 @@ static int copy_options(const struct argconfig_commandline_options *opts,
 static int metadata_capture_hook(int argc, char **argv, const char *program_desc,
 				 struct argconfig_commandline_options *options)
 {
+	(void)argc;
+	(void)argv;
+	(void)program_desc;
+
 	if (command_metadata_cur_command && !command_metadata_cur_command->captured) {
 		int err = copy_options(options,
 				&command_metadata_cur_command->options,
@@ -268,8 +272,10 @@ static struct command_metadata_program *build_model(struct program *prog)
 	if (devnull >= 0) {
 		saved_stdout = dup(STDOUT_FILENO);
 		saved_stderr = dup(STDERR_FILENO);
-		dup2(devnull, STDOUT_FILENO);
-		dup2(devnull, STDERR_FILENO);
+		if (saved_stdout >= 0)
+			dup2(devnull, STDOUT_FILENO);
+		if (saved_stderr >= 0)
+			dup2(devnull, STDERR_FILENO);
 	}
 
 	argconfig_set_parse_hook(metadata_capture_hook);
