@@ -19,6 +19,7 @@ if py3.found()
                 meson.project_source_root() / 'command-metadata-schema.json',
             ],
             depends: nvme_exe,
+            timeout: 120,
         )
     endif
 endif

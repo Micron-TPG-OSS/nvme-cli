@@ -9974,18 +9974,6 @@ static int show_hostnqn_cmd(int argc, char **argv, struct command *acmd, struct 
 	return 0;
 }
 
-#ifdef CONFIG_JSONC
-static int dump_command_metadata_cmd(int argc, char **argv, struct command *acmd,
-				     struct plugin *plugin)
-{
-	(void)argc;
-	(void)argv;
-	(void)acmd;
-
-	return dump_command_metadata(plugin->parent);
-}
-#endif /* CONFIG_JSONC */
-
 static int gen_dhchap_key(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
 	const char *desc =
@@ -10735,6 +10723,18 @@ static int tls_key(int argc, char **argv, struct command *acmd, struct plugin *p
 	return err;
 }
 #endif /* CONFIG_FABRICS */
+
+#ifdef CONFIG_JSONC
+static int dump_command_metadata_cmd(int argc, char **argv, struct command *acmd,
+				     struct plugin *plugin)
+{
+	(void)argc;
+	(void)argv;
+	(void)acmd;
+
+	return dump_command_metadata(plugin->parent);
+}
+#endif /* CONFIG_JSONC */
 
 static int show_topology_cmd(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
