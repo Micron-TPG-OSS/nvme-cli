@@ -16,7 +16,7 @@ options as JSON (see command-metadata.c).  This test runs it and checks:
      independent code path over the same data, which catches the silent
      failure where capture never fires and a command emits no options.
 
-The command needs no device, so this runs in every CI job.  It requires json-c
+The command needs no device, so this can run in every CI job.  It requires json-c
 in the nvme build (the command is compiled out otherwise); when the output is
 empty the test skips rather than fails.
 
