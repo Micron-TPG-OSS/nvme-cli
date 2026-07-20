@@ -143,6 +143,9 @@ $ meson setup --default-library=static .build
 $ meson test -C .build
 ```
 
+Note: Some tests require the Python `jsonschema` module; they are skipped if it
+is not installed.
+
 #### Installation paths
 
 By default, meson installs everything under `/usr/local` (executables in
