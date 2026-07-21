@@ -130,6 +130,14 @@ test_completion \
     "nvme feat power-meas --output-format=j" \
     "json"
 
+# KNOWN FAILING (generated completions): --sel has no enumerated value set
+# in the command metadata. It is defined as a bare OPT_BYTE with no OPT_VALS
+# table (plugins/feat/feat-nvme.h), so the parser accepts any byte and
+# command-metadata.c emits no "values" array for it. The 0/1/2/3 set is
+# NVMe-spec knowledge that only lived in the hand-written completions.
+# These pass once --sel gains an OPT_VALS table (a command-definition change,
+# tracked as a follow-up to completions generation). Contrast --output-format,
+# which passes because its values ARE carried in the metadata.
 test_completion \
     "--sel=<TAB> should show 0 1 2 3" \
     "nvme feat power-meas --sel=" \
@@ -197,6 +205,7 @@ test_completion \
     "nvme feat power-meas -o j" \
     "json"
 
+# KNOWN FAILING: same --sel value-set gap as above, via the short option -S.
 test_completion \
     "-S <TAB> should show sel values 0 1 2 3" \
     "nvme feat power-meas -S " \

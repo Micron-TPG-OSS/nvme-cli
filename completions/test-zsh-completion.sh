@@ -124,6 +124,17 @@ test_completion \
     "nvme feat power-meas --output-format=j" \
     "normal.*json.*binary.*tabular"
 
+# KNOWN FAILING (generated completions): --sel/--act have no enumerated value
+# set in the command metadata. Both are bare OPT_BYTE options with no OPT_VALS
+# table (plugins/feat), so the parser accepts any byte and command-metadata.c
+# emits no "values" array for them. The 0/1/2/3 (sel) and 0/1 (act) sets are
+# NVMe-spec knowledge that only lived in the hand-written completions. These
+# pass once the options gain OPT_VALS tables (a command-definition change,
+# tracked as a follow-up to completions generation). --output-format passes
+# because its values ARE carried in the metadata.
+# NOTE: some of these also surface a "compadd: can only be called from
+# completion function" message -- that is a limitation of this harness's
+# _values/_describe mocking, not an independent completion bug.
 test_completion \
     "--sel=<TAB> should show 0 1 2 3" \
     "nvme feat power-meas --sel=" \
@@ -140,6 +151,7 @@ test_completion \
     "nvme feat power-meas --output-format j" \
     "normal.*json.*binary.*tabular"
 
+# KNOWN FAILING: --sel value-set gap (see note above).
 test_completion \
     "--sel <TAB> should show 0 1 2 3" \
     "nvme feat power-meas --sel " \
@@ -156,17 +168,20 @@ test_completion \
     "nvme feat power-meas -o j" \
     "normal.*json.*binary.*tabular"
 
+# KNOWN FAILING: --sel value-set gap via the short option -S (see note above).
 test_completion \
     "-S <TAB> should show sel values 0 1 2 3" \
     "nvme feat power-meas -S " \
     "0.*1.*2.*3"
 
 # Command-specific options
+# KNOWN FAILING: --act value-set gap (see note above).
 test_completion \
     "--act <TAB> for power-meas should show 0 1" \
     "nvme feat power-meas --act " \
     "0.*1"
 
+# KNOWN FAILING: --act value-set gap (see note above).
 test_completion \
     "--act=<TAB> for power-meas should show 0 1" \
     "nvme feat power-meas --act=" \
