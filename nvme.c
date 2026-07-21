@@ -812,16 +812,22 @@ static int parse_telemetry_da(struct libnvme_transport_handle *hdl,
 }
 
 static int get_log_telemetry_ctrl(struct libnvme_transport_handle *hdl, bool rae, size_t size,
-				  struct nvme_telemetry_log **buf)
+				  __u32 xfer_len, struct nvme_telemetry_log **buf)
 {
+	struct libnvme_passthru_cmd cmd;
 	struct nvme_telemetry_log *log;
+	__u32 xfer;
 	int err;
 
 	log = libnvme_alloc(size);
 	if (!log)
 		return -ENOMEM;
 
-	err = nvme_get_log_telemetry_ctrl(hdl, rae, 0, log, size);
+	/* xfer_len == 0 => start from the full log size (default behavior) */
+	xfer = xfer_len ? xfer_len : (__u32)size;
+
+	nvme_init_get_log_telemetry_ctrl(&cmd, 0, log, size);
+	err = libnvme_get_log_dynamic_chunk(hdl, &cmd, rae, xfer);
 	if (err) {
 		libnvme_free(log);
 		return err;
@@ -832,16 +838,22 @@ static int get_log_telemetry_ctrl(struct libnvme_transport_handle *hdl, bool rae
 }
 
 static int get_log_telemetry_host(struct libnvme_transport_handle *hdl, size_t size,
-				  struct nvme_telemetry_log **buf)
+				  __u32 xfer_len, struct nvme_telemetry_log **buf)
 {
+	struct libnvme_passthru_cmd cmd;
 	struct nvme_telemetry_log *log;
+	__u32 xfer;
 	int err;
 
 	log = libnvme_alloc(size);
 	if (!log)
 		return -ENOMEM;
 
-	err = nvme_get_log_telemetry_host(hdl, 0, log, size);
+	/* xfer_len == 0 => start from the full log size (default behavior) */
+	xfer = xfer_len ? xfer_len : (__u32)size;
+
+	nvme_init_get_log_telemetry_host(&cmd, 0, log, size);
+	err = libnvme_get_log_dynamic_chunk(hdl, &cmd, false, xfer);
 	if (err) {
 		libnvme_free(log);
 		return err;
@@ -855,7 +867,8 @@ static int __create_telemetry_log_host(struct libnvme_transport_handle *hdl,
 				       enum nvme_telemetry_da da,
 				       size_t *size,
 				       struct nvme_telemetry_log **buf,
-				       bool da4_support)
+				       bool da4_support,
+				       __u32 xfer_len)
 {
 	__cleanup_libnvme_free struct nvme_telemetry_log *log = NULL;
 	int err;
@@ -872,7 +885,7 @@ static int __create_telemetry_log_host(struct libnvme_transport_handle *hdl,
 	if (err)
 		return err;
 
-	return get_log_telemetry_host(hdl, *size, buf);
+	return get_log_telemetry_host(hdl, *size, xfer_len, buf);
 }
 
 static int __get_telemetry_log_ctrl(struct libnvme_transport_handle *hdl,
@@ -880,7 +893,8 @@ static int __get_telemetry_log_ctrl(struct libnvme_transport_handle *hdl,
 				    enum nvme_telemetry_da da,
 				    size_t *size,
 				    struct nvme_telemetry_log **buf,
-				    bool da4_support)
+				    bool da4_support,
+				    __u32 xfer_len)
 {
 	struct nvme_telemetry_log *log;
 	int err;
@@ -916,7 +930,7 @@ static int __get_telemetry_log_ctrl(struct libnvme_transport_handle *hdl,
 	if (err)
 		goto free;
 
-	return get_log_telemetry_ctrl(hdl, rae, *size, buf);
+	return get_log_telemetry_ctrl(hdl, rae, *size, xfer_len, buf);
 
 free:
 	libnvme_free(log);
@@ -927,7 +941,8 @@ static int __get_telemetry_log_host(struct libnvme_transport_handle *hdl,
 				    enum nvme_telemetry_da da,
 				    size_t *size,
 				    struct nvme_telemetry_log **buf,
-				    bool da4_support)
+				    bool da4_support,
+				    __u32 xfer_len)
 {
 	__cleanup_libnvme_free struct nvme_telemetry_log *log = NULL;
 	int err;
@@ -945,7 +960,7 @@ static int __get_telemetry_log_host(struct libnvme_transport_handle *hdl,
 	if (err)
 		return err;
 
-	return get_log_telemetry_host(hdl, *size, buf);
+	return get_log_telemetry_host(hdl, *size, xfer_len, buf);
 }
 
 static int get_telemetry_log(int argc, char **argv, struct command *acmd,
@@ -958,6 +973,11 @@ static int get_telemetry_log(int argc, char **argv, struct command *acmd,
 	const char *dgen = "Pick which telemetry data area to report. Default is 3 to fetch areas 1-3. Valid options are 1, 2, 3, 4.";
 	const char *mcda = "Host-init Maximum Created Data Area. Valid options are 0 ~ 4 "
 		"If given, This option will override dgen. 0 : controller determines data area";
+	const char *xlen = "Get-log-page transfer length in bytes; nonzero multiple of 4096. "
+		"Default is the full log size unless the force-4k option is set. "
+		"Mutually exclusive with --xfer-mdts.";
+	const char *xmdts = "Determine the get-log-page transfer length from the controller MDTS. "
+		"Mutually exclusive with --xfer-len.";
 
 	__cleanup_libnvme_free struct nvme_telemetry_log *log = NULL;
 	__cleanup_libnvme_free struct nvme_id_ctrl *id_ctrl = NULL;
@@ -969,6 +989,7 @@ static int get_telemetry_log(int argc, char **argv, struct command *acmd,
 	__u8 *data_ptr = NULL;
 	int data_written, data_remaining = 0;
 	nvme_print_flags_t flags;
+	__u32 xfer_len = 0;
 	bool da4_support = false,
 	host_behavior_changed = false;
 
@@ -979,6 +1000,8 @@ static int get_telemetry_log(int argc, char **argv, struct command *acmd,
 		int	data_area;
 		bool	rae;
 		__u8	mcda;
+		__u32	xfer_len;
+		bool	xfer_mdts;
 	};
 	struct config cfg = {
 		.file_name	= NULL,
@@ -987,6 +1010,8 @@ static int get_telemetry_log(int argc, char **argv, struct command *acmd,
 		.data_area	= 3,
 		.rae		= false,
 		.mcda		= 0xff,
+		.xfer_len	= 0,
+		.xfer_mdts	= false,
 	};
 
 	NVME_ARGS(opts,
@@ -995,7 +1020,9 @@ static int get_telemetry_log(int argc, char **argv, struct command *acmd,
 		  OPT_FLAG("controller-init", 'c', &cfg.ctrl_init, cgen),
 		  OPT_UINT("data-area",       'd', &cfg.data_area, dgen),
 		  OPT_FLAG("rae",             'r', &cfg.rae,       rae),
-		  OPT_BYTE("mcda",            'm', &cfg.mcda,      mcda));
+		  OPT_BYTE("mcda",            'm', &cfg.mcda,      mcda),
+		  OPT_UINT("xfer-len",        'x', &cfg.xfer_len,  xlen),
+		  OPT_FLAG("xfer-mdts",       'X', &cfg.xfer_mdts, xmdts));
 
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
@@ -1023,7 +1050,19 @@ static int get_telemetry_log(int argc, char **argv, struct command *acmd,
 		cfg.data_area = cfg.mcda;
 	}
 
-	if (cfg.data_area == 4) {
+	if (cfg.xfer_mdts && cfg.xfer_len) {
+		nvme_show_error("--xfer-len and --xfer-mdts are mutually exclusive");
+		return -EINVAL;
+	}
+
+	if (cfg.xfer_len && (cfg.xfer_len % NVME_LOG_PAGE_PDU_SIZE)) {
+		nvme_show_error("xfer-len must be a nonzero multiple of %u",
+				NVME_LOG_PAGE_PDU_SIZE);
+		return -EINVAL;
+	}
+
+	if (cfg.data_area == 4 || cfg.xfer_mdts) {
+		/* Issue an id-ctrl if needed. */
 		id_ctrl = libnvme_alloc(sizeof(*id_ctrl));
 		if (!id_ctrl)
 			return -ENOMEM;
@@ -1033,7 +1072,9 @@ static int get_telemetry_log(int argc, char **argv, struct command *acmd,
 			nvme_show_error("identify-ctrl");
 			return err;
 		}
+	}
 
+	if (cfg.data_area == 4) {
 		da4_support = id_ctrl->lpa & 0x40;
 
 		if (!da4_support) {
@@ -1049,6 +1090,14 @@ static int get_telemetry_log(int argc, char **argv, struct command *acmd,
 		}
 	}
 
+	if (cfg.xfer_mdts) {
+		if (id_ctrl->mdts) {
+			xfer_len = (1 << id_ctrl->mdts) * NVME_LOG_PAGE_PDU_SIZE;
+		}
+	} else if (cfg.xfer_len) {
+		xfer_len = cfg.xfer_len;
+	}
+
 	output = nvme_open_rawdata(cfg.file_name, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 	if (output < 0) {
 		nvme_show_error("Failed to open output file %s: %s!",
@@ -1062,13 +1111,13 @@ static int get_telemetry_log(int argc, char **argv, struct command *acmd,
 
 	if (cfg.ctrl_init)
 		err = __get_telemetry_log_ctrl(hdl, cfg.rae, cfg.data_area,
-					       &total_size, &log, da4_support);
+					       &total_size, &log, da4_support, xfer_len);
 	else if (cfg.host_gen)
 		err = __create_telemetry_log_host(hdl, cfg.data_area,
-						  &total_size, &log, da4_support);
+						  &total_size, &log, da4_support, xfer_len);
 	else
 		err = __get_telemetry_log_host(hdl, cfg.data_area,
-					       &total_size, &log, da4_support);
+					       &total_size, &log, da4_support, xfer_len);
 
 	if (err) {
 		nvme_show_err(err, "get-telemetry-log");

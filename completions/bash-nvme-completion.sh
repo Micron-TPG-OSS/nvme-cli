@@ -139,7 +139,8 @@ nvme_list_opts () {
 			;;
 		"telemetry-log")
 		opts+=" --output-file= -O --host-generate= -g \
-			--controller-init -c --data-area= -d"
+			--controller-init -c --data-area= -d \
+			--rae -r --mcda= -m --xfer-len= -x --xfer-mdts -X"
 			;;
 		"fw-log")
 		opts+=" --raw-binary -b --output-format= -o"

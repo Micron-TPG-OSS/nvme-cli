@@ -28,6 +28,7 @@ tests = [
     'nvme_read_write_test.py',
     'nvme_qpif_test.py',
     'nvme_smart_log_test.py',
+    'nvme_telemetry_log_test.py',
     'nvme_writeuncor_test.py',
     'nvme_writezeros_test.py',
     'nvme_copy_test.py',

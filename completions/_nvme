@@ -1146,10 +1146,14 @@ _nvme () {
 			-c':alias of --controller-init'
 			--data-area':Pick which telemetry data area to report'
 			-d':alias of --data-area'
-			--data-area':Pick which telemetry data area to report'
-			-d':alias of --data-area'
 			--rae':Retain an Asynchronous Event'
 			-r':alias to --rae'
+			--mcda=':Host-init Maximum Created Data Area'
+			-m':alias to --mcda'
+			--xfer-len=':Get-Log transfer size in bytes (multiple of 4096)'
+			-x':alias to --xfer-len'
+			--xfer-mdts':Auto-size transfer from controller MDTS'
+			-X':alias to --xfer-mdts'
 			)
 			_arguments '*:: :->subcmds'
 			_describe -t commands "nvme telemetry-log options" _telemetry_log
