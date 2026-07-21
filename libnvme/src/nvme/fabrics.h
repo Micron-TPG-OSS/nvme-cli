@@ -61,6 +61,7 @@ char *libnvmf_generate_hostid(void);
 /**
  * libnvmf_read_hostnqn() - Reads the host nvm qualified name from the config
  *			      default location
+ * @ctx:		struct libnvme_global_ctx object
  *
  * Retrieve the qualified name from the config file located in $SYSCONFDIR/nvme.
  * $SYSCONFDIR is usually /etc.
@@ -68,11 +69,12 @@ char *libnvmf_generate_hostid(void);
  * Return: The host nqn, or NULL if unsuccessful. If found, the caller
  * is responsible to free the string.
  */
-char *libnvmf_read_hostnqn(void);
+char *libnvmf_read_hostnqn(struct libnvme_global_ctx *ctx);
 
 /**
  * libnvmf_read_hostid() - Reads the host identifier from the config default
  *			     location
+ * @ctx:		struct libnvme_global_ctx object
  *
  * Retrieve the host idenditifer from the config file located in
  * $SYSCONFDIR/nvme/. $SYSCONFDIR is usually /etc.
@@ -80,7 +82,41 @@ char *libnvmf_read_hostnqn(void);
  * Return: The host identifier, or NULL if unsuccessful. If found, the caller
  *	   is responsible to free the string.
  */
-char *libnvmf_read_hostid(void);
+char *libnvmf_read_hostid(struct libnvme_global_ctx *ctx);
+
+/**
+ * libnvmf_host_get_ids() - Retrieve host ids from various sources
+ * @ctx:		struct libnvme_global_ctx object
+ * @hostnqn_arg:	Input hostnqn (command line) argument
+ * @hostid_arg:		Input hostid (command line) argument
+ * @hostnqn:		Output hostnqn; may be NULL if the caller does not need it
+ * @hostid:		Output hostid; may be NULL if the caller does not need it
+ *
+ * libnvmf_host_get_ids figures out which hostnqn/hostid is to be used.
+ * There are several sources where this information can be retrieved.
+ *
+ * The order is:
+ *
+ *  - Start with information from DMI or device-tree
+ *  - Override hostnqn and hostid from /etc/nvme files
+ *  - Override hostnqn or hostid with values from JSON
+ *    configuration file. The first host entry in the file is
+ *    considered the default host.
+ *  - Override hostnqn or hostid with values from the command line
+ *    (@hostnqn_arg, @hostid_arg).
+ *
+ *  If the IDs are still NULL after the lookup algorithm, the function
+ *  will generate random IDs.
+ *
+ *  The function also verifies that hostnqn and hostid matches. The Linux
+ *  NVMe implementation expects a 1:1 matching between the IDs.
+ *
+ *  Return: 0 on success (@hostnqn and @hostid contain valid strings
+ *  which the caller needs to free), or negative error code otherwise.
+ */
+int libnvmf_host_get_ids(struct libnvme_global_ctx *ctx,
+		      const char *hostnqn_arg, const char *hostid_arg,
+		      char **hostnqn, char **hostid);
 
 /**
  * libnvmf_trtype_str() - Decode TRTYPE field

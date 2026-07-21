@@ -71,8 +71,11 @@ static inline PyObject *Py_NewRef(PyObject *obj)
 
 %allowexception;
 
-PyObject *read_hostnqn();
-PyObject *read_hostid();
+PyObject *read_hostnqn(struct libnvme_global_ctx *ctx);
+PyObject *read_hostid(struct libnvme_global_ctx *ctx);
+PyObject *host_get_ids(struct libnvme_global_ctx *ctx,
+		       const char *hostnqn_arg = NULL,
+		       const char *hostid_arg = NULL);
 
 /*******************************************************************************
  * This is the single C implementation block. All pure C code — headers,
@@ -170,11 +173,15 @@ typedef struct { const char *key; const char **val; } str_fields_t;
  * flag — fields that require higher-level libnvmf_context_set_*() helpers
  * rather than direct struct assignment.
  */
-static void set_fctx_host_params(struct libnvmf_context *fctx, PyObject *dict)
+static int set_fctx_host_params(struct libnvme_global_ctx *ctx,
+				struct libnvmf_context *fctx,
+				PyObject *dict)
 {
 	const char *hostnqn = NULL, *hostid = NULL;
+	char *hnqn = NULL, *hid = NULL;
 	const char *hostkey = NULL, *ctrlkey = NULL;
 	const char *keyring = NULL, *tls_key = NULL, *tls_key_identity = NULL;
+	int err;
 	str_fields_t tbl[] = {
 		{"hostnqn",          &hostnqn},
 		{"hostid",           &hostid},
@@ -195,13 +202,22 @@ static void set_fctx_host_params(struct libnvmf_context *fctx, PyObject *dict)
 	for (p = tbl; p->key; p++)
 		*p->val = dict_get_str(dict, p->key);
 
-	/* hostnqn and hostid are passed together to a single setter */
-	if (hostnqn || hostid)
-		libnvmf_context_set_hostnqn(fctx, hostnqn, hostid);
+	err = libnvmf_host_get_ids(ctx, hostnqn, hostid, &hnqn, &hid);
+	if (err) {
+		raise_nvme(NvmeError, err);
+		return -1;
+	}
+
+	libnvmf_context_set_hostnqn(fctx, hnqn, hid);
+
+	free(hnqn);
+	free(hid);
 
 	if (hostkey || ctrlkey || keyring || tls_key || tls_key_identity)
 		libnvmf_context_set_crypto(fctx, hostkey, ctrlkey, keyring,
 					   tls_key, tls_key_identity);
+
+	return 0;
 }
 
 /*
@@ -215,7 +231,8 @@ static void set_fctx_host_params(struct libnvmf_context *fctx, PyObject *dict)
  * Returns 0 on success, -1 with a Python exception set on error.
  * Unknown keys are rejected via fctx_known_keys (built at module init).
  */
-static int set_fctx_from_dict(struct libnvmf_context *fctx, PyObject *dict)
+static int set_fctx_from_dict(struct libnvme_global_ctx *ctx,
+			      struct libnvmf_context *fctx, PyObject *dict)
 {
 	const char *subsysnqn, *transport;
 
@@ -234,7 +251,8 @@ static int set_fctx_from_dict(struct libnvmf_context *fctx, PyObject *dict)
 				       dict_get_str(dict, "host_traddr"),
 				       dict_get_str(dict, "host_iface"));
 
-	set_fctx_host_params(fctx, dict);
+	if (set_fctx_host_params(ctx, fctx, dict))
+		return -1;
 	set_fctx_fabrics_config(fctx, dict);
 
 	/* Reject any key not present in fctx_known_keys (built at module init).
@@ -259,19 +277,60 @@ static int set_fctx_from_dict(struct libnvmf_context *fctx, PyObject *dict)
 
 /*============================================================================*/
 
-PyObject *read_hostnqn()
+PyObject *read_hostnqn(struct libnvme_global_ctx *ctx)
 {
-	char *val = libnvmf_read_hostnqn();
+	char *val = libnvmf_read_hostnqn(ctx);
 	PyObject *obj = val ? PyUnicode_FromString(val) : Py_NewRef(Py_None);
 	free(val);
 	return obj;
 }
 
-PyObject *read_hostid()
+PyObject *read_hostid(struct libnvme_global_ctx *ctx)
 {
-	char *val = libnvmf_read_hostid();
+	char *val = libnvmf_read_hostid(ctx);
 	PyObject *obj = val ? PyUnicode_FromString(val) : Py_NewRef(Py_None);
 	free(val);
+	return obj;
+}
+
+PyObject *host_get_ids(struct libnvme_global_ctx *ctx,
+		       const char *hostnqn_arg,
+		       const char *hostid_arg)
+{
+	char *hostnqn = NULL, *hostid = NULL;
+	PyObject *hostnqn_obj = NULL, *hostid_obj = NULL;
+	PyObject *obj;
+	int err;
+
+	err = libnvmf_host_get_ids(ctx, hostnqn_arg, hostid_arg,
+				   &hostnqn, &hostid);
+	if (err) {
+		raise_nvme(NvmeError, err);
+		return NULL;
+	}
+
+	hostnqn_obj = hostnqn ? PyUnicode_FromString(hostnqn) : Py_NewRef(Py_None);
+	hostid_obj = hostid ? PyUnicode_FromString(hostid) : Py_NewRef(Py_None);
+	if (!hostnqn_obj || !hostid_obj) {
+		Py_XDECREF(hostnqn_obj);
+		Py_XDECREF(hostid_obj);
+		free(hostnqn);
+		free(hostid);
+		return NULL;
+	}
+
+	obj = PyTuple_New(2);
+	if (!obj) {
+		Py_DECREF(hostnqn_obj);
+		Py_DECREF(hostid_obj);
+		free(hostnqn);
+		free(hostid);
+		return NULL;
+	}
+	PyTuple_SET_ITEM(obj, 0, hostnqn_obj);
+	PyTuple_SET_ITEM(obj, 1, hostid_obj);
+	free(hostnqn);
+	free(hostid);
 	return obj;
 }
 
@@ -340,8 +399,12 @@ static PyObject *ssns_to_dict(struct libnbft_subsystem_ns *ss)
 	if (ss->dhcp_root_path_string)
 		PyDict_SetItemStringDecRef(output, "dhcp_root_path_string", PyUnicode_FromString(ss->dhcp_root_path_string));
 
-	PyDict_SetItemStringDecRef(output, "pdu_header_digest_required", PyBool_FromLong(ss->pdu_header_digest_required));
-	PyDict_SetItemStringDecRef(output, "data_digest_required", PyBool_FromLong(ss->data_digest_required));
+	PyDict_SetItemStringDecRef(output, "trflags", PyLong_FromLong(ss->trflags));
+	PyDict_SetItemStringDecRef(output, "naed", PyLong_FromLong(ss->naed));
+	PyDict_SetItemStringDecRef(output, "cipeec", PyLong_FromLong(ss->cipeec));
+	PyDict_SetItemStringDecRef(output, "cto", PyLong_FromLong(ss->cto));
+	PyDict_SetItemStringDecRef(output, "nceec", PyLong_FromLong(ss->nceec));
+	PyDict_SetItemStringDecRef(output, "flags", PyLong_FromLong(ss->flags));
 
 	return output;
 }
@@ -382,8 +445,15 @@ static PyObject *hfi_to_dict(struct libnbft_hfi *hfi)
 		if (hfi->tcp_info.host_name)
 			PyDict_SetItemStringDecRef(output, "host_name", PyUnicode_FromString(hfi->tcp_info.host_name));
 
-		PyDict_SetItemStringDecRef(output, "this_hfi_is_default_route", PyBool_FromLong(hfi->tcp_info.this_hfi_is_default_route));
-		PyDict_SetItemStringDecRef(output, "dhcp_override", PyBool_FromLong(hfi->tcp_info.dhcp_override));
+		PyDict_SetItemStringDecRef(output, "flags", PyLong_FromLong(hfi->tcp_info.flags));
+		PyDict_SetItemStringDecRef(output, "pcie_seg_num", PyLong_FromLong(hfi->tcp_info.pcie_seg_num));
+		PyDict_SetItemStringDecRef(output, "dhcp_iaid", PyLong_FromLong(hfi->tcp_info.dhcp_iaid));
+		{
+			PyObject *duid = PyBytes_FromStringAndSize((const char *)hfi->tcp_info.dhcp_duid,
+								   hfi->tcp_info.dhcp_duid_len);
+			PyDict_SetItemStringDecRef(output, "dhcp_duid", duid);
+		}
+		PyDict_SetItemStringDecRef(output, "dhcp_duid_len", PyLong_FromLong(hfi->tcp_info.dhcp_duid_len));
 	}
 
 	return output;
@@ -407,7 +477,6 @@ static PyObject *discovery_to_dict(struct libnbft_discovery *disc)
 
 static PyObject *nbft_to_pydict(struct libnbft_info *nbft)
 {
-	PyObject *val;
 	PyObject *output = PyDict_New();
 
 	{
@@ -421,13 +490,7 @@ static PyObject *nbft_to_pydict(struct libnbft_info *nbft)
 			PyDict_SetItemStringDecRef(host, "id", PyUnicode_FromString(uuid_str));
 		}
 
-		PyDict_SetItemStringDecRef(host, "host_id_configured", PyBool_FromLong(nbft->host.host_id_configured));
-		PyDict_SetItemStringDecRef(host, "host_nqn_configured", PyBool_FromLong(nbft->host.host_nqn_configured));
-
-		val = PyUnicode_FromString(nbft->host.primary == LIBNBFT_PRIMARY_ADMIN_HOST_FLAG_NOT_INDICATED ? "not indicated" :
-					   nbft->host.primary == LIBNBFT_PRIMARY_ADMIN_HOST_FLAG_UNSELECTED ? "unselected" :
-					   nbft->host.primary == LIBNBFT_PRIMARY_ADMIN_HOST_FLAG_SELECTED ? "selected" : "reserved");
-		PyDict_SetItemStringDecRef(host, "primary_admin_host_flag", val);
+		PyDict_SetItemStringDecRef(host, "flags", PyLong_FromLong(nbft->host.flags));
 
 		PyDict_SetItemStringDecRef(output, "host", host);
 	}
@@ -990,7 +1053,7 @@ def exclusion_match(ctx, transport=None, traddr=None, trsvcid=None,
 				"failed to create fabrics context");
 		SWIG_fail;
 	}
-	if (set_fctx_from_dict(temp, $input)) {
+	if (set_fctx_from_dict(arg1, temp, $input)) {
 		libnvmf_context_free(temp);
 		temp = NULL;
 		SWIG_fail;
@@ -1427,9 +1490,17 @@ struct libnvme_ns *libnvme_ctrl_next_ns(struct libnvme_ctrl *c, struct libnvme_n
 		     const char *hostkey = NULL,
 		     const char *hostsymname = NULL) {
 		libnvme_host_t h;
+		int err;
 
-		if (libnvme_get_host(ctx, hostnqn, hostid, &h))
+		if (!hostnqn)
+			hostnqn = ctx->hostnqn;
+		if (!hostid)
+			hostid = ctx->hostid;
+
+		err = libnvme_get_host(ctx, hostnqn, hostid, &h);
+		if (err)
 			return NULL;
+
 		if (hostsymname)
 			libnvme_host_set_hostsymname(h, hostsymname);
 		if (hostkey)

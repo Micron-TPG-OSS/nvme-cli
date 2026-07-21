@@ -304,33 +304,29 @@ static char *nvmf_read_file(const char *f, int len)
 	return strndup(buf, strcspn(buf, "\n"));
 }
 
-__libnvme_public char *libnvmf_read_hostnqn(void)
+__libnvme_public char *libnvmf_read_hostnqn(struct libnvme_global_ctx *ctx)
 {
-	char *hostnqn = getenv("LIBNVME_HOSTNQN");
-
-	if (hostnqn) {
-		if (!strcmp(hostnqn, ""))
+	if (ctx->hostnqn) {
+		if (!strcmp(ctx->hostnqn, ""))
 			return NULL;
-		return strdup(hostnqn);
+		return strdup(ctx->hostnqn);
 	}
 
 	return nvmf_read_file(NVMF_HOSTNQN_FILE, NVMF_NQN_SIZE);
 }
 
-__libnvme_public char *libnvmf_read_hostid(void)
+__libnvme_public char *libnvmf_read_hostid(struct libnvme_global_ctx *ctx)
 {
-	char *hostid = getenv("LIBNVME_HOSTID");
-
-	if (hostid) {
-		if (!strcmp(hostid, ""))
+	if (ctx->hostid) {
+		if (!strcmp(ctx->hostid, ""))
 			return NULL;
-		return strdup(hostid);
+		return strdup(ctx->hostid);
 	}
 
 	return nvmf_read_file(NVMF_HOSTID_FILE, NVMF_HOSTID_SIZE);
 }
 
-int libnvmf_host_get_ids(struct libnvme_global_ctx *ctx,
+__libnvme_public int libnvmf_host_get_ids(struct libnvme_global_ctx *ctx,
 		      const char *hostnqn_arg, const char *hostid_arg,
 		      char **hostnqn, char **hostid)
 {
@@ -356,9 +352,9 @@ int libnvmf_host_get_ids(struct libnvme_global_ctx *ctx,
 
 	/* /etc/nvme/hostid and/or /etc/nvme/hostnqn */
 	if (!hid)
-		hid = libnvmf_read_hostid();
+		hid = libnvmf_read_hostid(ctx);
 	if (!hnqn)
-		hnqn = libnvmf_read_hostnqn();
+		hnqn = libnvmf_read_hostnqn(ctx);
 
 	/* incomplete configuration, thus derive hostid from hostnqn */
 	if (!hid && hnqn)
@@ -392,10 +388,14 @@ int libnvmf_host_get_ids(struct libnvme_global_ctx *ctx,
 			 hid, hnqn);
 	}
 
-	*hostid = hid;
-	*hostnqn = hnqn;
-	hid = NULL;
-	hnqn = NULL;
+	if (hostid) {
+		*hostid = hid;
+		hid = NULL;
+	}
+	if (hostnqn) {
+		*hostnqn = hnqn;
+		hnqn = NULL;
+	}
 
 	return 0;
 }
@@ -567,6 +567,8 @@ __libnvme_public void libnvmf_context_free(struct libnvmf_context *fctx)
 	if (!fctx)
 		return;
 
+	free(fctx->hostnqn);
+	free(fctx->hostid);
 	free(fctx->tls_key);
 	free(fctx);
 }
@@ -626,10 +628,34 @@ static const char *hostid_from_hostnqn(const char *hostnqn)
 __libnvme_public int libnvmf_context_set_hostnqn(struct libnvmf_context *fctx,
 		const char *hostnqn, const char *hostid)
 {
-	fctx->hostnqn = hostnqn;
+	char *hnqn;
+	char *hid;
+
+	if (!hostnqn)
+		return -EINVAL;
+
+	hnqn = strdup(hostnqn);
+	if (!hnqn)
+		return -ENOMEM;
+
 	if (!hostid)
 		hostid = hostid_from_hostnqn(hostnqn);
-	fctx->hostid = hostid;
+
+	if (!hostid) {
+		free(hnqn);
+		return -EINVAL;
+	}
+
+	hid = strdup(hostid);
+	if (!hid) {
+		free(hnqn);
+		return -ENOMEM;
+	}
+
+	free(fctx->hostnqn);
+	free(fctx->hostid);
+	fctx->hostnqn = hnqn;
+	fctx->hostid = hid;
 
 	return 0;
 }
@@ -2401,28 +2427,6 @@ static libnvme_ctrl_t lookup_ctrl(libnvme_host_t h, struct libnvmf_context *fctx
 	return NULL;
 }
 
-static int lookup_host(struct libnvme_global_ctx *ctx,
-		struct libnvmf_context *fctx, struct libnvme_host **host)
-{
-	__cleanup_free char *hnqn = NULL;
-	__cleanup_free char *hid = NULL;
-	struct libnvme_host *h;
-	int err;
-
-	err = libnvmf_host_get_ids(ctx, fctx->hostnqn, fctx->hostid,
-		&hnqn, &hid);
-	if (err < 0)
-		return err;
-
-	h = libnvme_lookup_host(ctx, hnqn, hid);
-	if (!h)
-		return -ENOMEM;
-
-	*host = h;
-
-	return 0;
-}
-
 static int setup_connection(struct libnvmf_context *fctx, struct libnvme_host *h,
 		bool discovery)
 {
@@ -2829,9 +2833,13 @@ __libnvme_public int libnvmf_discovery_config_json(
 	struct libnvme_ctrl *c;
 	int ret = 0, err;
 
-	err = lookup_host(ctx, fctx, &h);
-	if (err)
-		return err;
+	h = libnvme_lookup_host(ctx, fctx->hostnqn, fctx->hostid);
+	if (!h) {
+		libnvme_msg(ctx, LIBNVME_LOG_ERR,
+			"Failed to lookup host '%s'\n",
+			fctx->hostnqn ? fctx->hostnqn : "<unset>");
+		return -ENODEV;
+	}
 
 	err = setup_connection(fctx, h, false);
 	if (err)
@@ -2878,9 +2886,13 @@ __libnvme_public int libnvmf_connect_config_json(struct libnvme_global_ctx *ctx,
 	libnvme_ctrl_t c, _c;
 	int ret = 0, err;
 
-	err = lookup_host(ctx, fctx, &h);
-	if (err)
-		return err;
+	h = libnvme_lookup_host(ctx, fctx->hostnqn, fctx->hostid);
+	if (!h) {
+		libnvme_msg(ctx, LIBNVME_LOG_ERR,
+			"Failed to lookup host '%s'\n",
+			fctx->hostnqn ? fctx->hostnqn : "<unset>");
+		return -ENODEV;
+	}
 
 	err = setup_connection(fctx, h, false);
 	if (err)
@@ -2967,21 +2979,15 @@ __libnvme_public int libnvmf_discovery_config_file(
 __libnvme_public int libnvmf_config_modify(struct libnvme_global_ctx *ctx,
 		struct libnvmf_context *fctx)
 {
-	__cleanup_free char *hnqn = NULL;
-	__cleanup_free char *hid = NULL;
 	struct libnvme_host *h;
 	struct libnvme_subsystem *s;
 	struct libnvme_ctrl *c;
 
-	if (!fctx->hostnqn)
-		fctx->hostnqn = hnqn = libnvmf_read_hostnqn();
-	if (!fctx->hostid && hnqn)
-		fctx->hostid = hid = libnvmf_read_hostid();
-
 	h = libnvme_lookup_host(ctx, fctx->hostnqn, fctx->hostid);
 	if (!h) {
-		libnvme_msg(ctx, LIBNVME_LOG_ERR, "Failed to lookup host '%s'\n",
-			fctx->hostnqn);
+		libnvme_msg(ctx, LIBNVME_LOG_ERR,
+			"Failed to lookup host '%s'\n",
+			fctx->hostnqn ? fctx->hostnqn : "<unset>");
 		return -ENODEV;
 	}
 
@@ -3132,7 +3138,7 @@ static int nbft_connect(struct libnvme_global_ctx *ctx,
 		return ret;
 
 	/* Pause logging for unavailable SSNSs */
-	if (ss && ss->unavailable && saved_log_level < 1)
+	if (ss && (ss->flags & NBFT_SSNS_UNAVAIL_NAMESPACE_UNAVAIL) && saved_log_level < 1)
 		libnvme_set_logging_level(ctx, -1, false, false);
 
 	/* Update tls or concat */
@@ -3141,7 +3147,7 @@ static int nbft_connect(struct libnvme_global_ctx *ctx,
 	ret = libnvmf_add_ctrl(h, c);
 
 	/* Resume logging */
-	if (ss && ss->unavailable && saved_log_level < 1)
+	if (ss && (ss->flags & NBFT_SSNS_UNAVAIL_NAMESPACE_UNAVAIL) && saved_log_level < 1)
 		libnvme_set_logging_level(ctx,
 				  saved_log_level,
 				  saved_log_pid,
@@ -3153,7 +3159,7 @@ static int nbft_connect(struct libnvme_global_ctx *ctx,
 		 * In case this SSNS was marked as 'unavailable' and
 		 * our connection attempt has failed, ignore it.
 		 */
-		if (ss && ss->unavailable) {
+		if (ss && (ss->flags & NBFT_SSNS_UNAVAIL_NAMESPACE_UNAVAIL)) {
 			libnvme_msg(ctx, LIBNVME_LOG_INFO,
 				"SSNS %d reported as unavailable, skipping\n",
 				ss->index);
@@ -3346,9 +3352,13 @@ __libnvme_public int libnvmf_discovery_nbft(struct libnvme_global_ctx *ctx,
 	struct libnvme_host *h;
 	int ret, rr, i;
 
-	ret = lookup_host(ctx, fctx, &h);
-	if (ret)
-		return ret;
+	h = libnvme_lookup_host(ctx, hostnqn, hostid);
+	if (!h) {
+		libnvme_msg(ctx, LIBNVME_LOG_ERR,
+			"Failed to lookup host '%s'\n",
+			fctx->hostnqn ? fctx->hostnqn : "<unset>");
+		return -ENODEV;
+	}
 
 	ret = setup_connection(fctx, h, false);
 	if (ret)
@@ -3389,7 +3399,10 @@ __libnvme_public int libnvmf_discovery_nbft(struct libnvme_global_ctx *ctx,
 
 		h = libnvme_lookup_host(ctx, hostnqn, hostid);
 		if (!h) {
-			ret = -ENOENT;
+			libnvme_msg(ctx, LIBNVME_LOG_ERR,
+				"Failed to lookup host '%s'\n",
+				hostnqn ? hostnqn : "<unset>");
+			ret = -ENODEV;
 			goto out_free;
 		}
 
@@ -3573,9 +3586,13 @@ __libnvme_public int libnvmf_discovery(
 	struct libnvme_host *h;
 	int ret;
 
-	ret = lookup_host(ctx, fctx, &h);
-	if (ret)
-		return ret;
+	h = libnvme_lookup_host(ctx, fctx->hostnqn, fctx->hostid);
+	if (!h) {
+		libnvme_msg(ctx, LIBNVME_LOG_ERR,
+			"Failed to lookup host '%s'\n",
+			fctx->hostnqn ? fctx->hostnqn : "<unset>");
+		return -ENODEV;
+	}
 
 	ret = setup_connection(fctx, h, true);
 	if (ret)
@@ -3676,9 +3693,13 @@ __libnvme_public int libnvmf_connect(
 			return devid_fd;
 	}
 
-	err = lookup_host(ctx, fctx, &h);
-	if (err)
-		return err;
+	h = libnvme_lookup_host(ctx, fctx->hostnqn, fctx->hostid);
+	if (!h) {
+		libnvme_msg(ctx, LIBNVME_LOG_ERR,
+			"Failed to lookup host '%s'\n",
+			fctx->hostnqn ? fctx->hostnqn : "<unset>");
+		return -ENODEV;
+	}
 
 	err = setup_connection(fctx, h, false);
 	if (err)
