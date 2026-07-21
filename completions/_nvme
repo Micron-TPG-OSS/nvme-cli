@@ -109,6 +109,7 @@ _nvme () {
 	'disconnect:Disconnect from NVMeoF subsystem'
 	'disconnect-all:Disconnect from all connected NVMeoF subsystems'
 	'config:Configuration of NVMeoF subsystems'
+	'config-convert:Convert config to INI'
 	'dim:Send Discovery Information Management command to a Discovery Controller'
 	'gen-hostnqn:Generate NVMeoF host NQN'
 	'show-hostnqn:Show NVMeoF host NQN'
@@ -232,6 +233,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme amzn id-ctrl options" _amzn_id_ctrl
@@ -255,6 +257,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme amzn stats options" _amzn_stats
@@ -287,6 +290,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme dapustor smart-log-add options" _dapustor_smart_log_add
@@ -317,6 +321,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme dell id-ctrl options" _dell_id_ctrl
@@ -343,6 +348,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme dera smart-log-add options" _dera_smart_log_add
@@ -375,6 +381,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme fdp configs options" _fdp_configs
@@ -398,6 +405,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme fdp usage options" _fdp_usage
@@ -421,6 +429,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme fdp stats options" _fdp_stats
@@ -446,6 +455,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme fdp events options" _fdp_events
@@ -469,6 +479,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme fdp status options" _fdp_status
@@ -492,6 +503,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme fdp update options" _fdp_update
@@ -521,6 +533,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme fdp set-events options" _fdp_set_events
@@ -546,6 +559,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme fdp feature options" _fdp_feature
@@ -572,6 +586,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme huawei list options" _huawei_list
@@ -595,6 +610,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme huawei id-ctrl options" _huawei_id_ctrl
@@ -623,6 +639,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ibm crit-log options" _ibm_crit_log
@@ -644,6 +661,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ibm vpd options" _ibm_vpd
@@ -669,6 +687,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ibm persist-event-log options" _ibm_persist_event_log
@@ -695,6 +714,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme innogrit get-eventlog options" _innogrit_get_eventlog
@@ -714,6 +734,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme innogrit get-cdump options" _innogrit_get_cdump
@@ -740,6 +761,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme inspur nvme-vendor-log options" _inspur_nvme_vendor_log
@@ -770,6 +792,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme intel id-ctrl options" _intel_id_ctrl
@@ -801,6 +824,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme intel internal-log options" _intel_internal_log
@@ -826,6 +850,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme intel lat-stats options" _intel_lat_stats
@@ -849,6 +874,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme intel set-bucket-thresholds options" _intel_set_bucket_thresholds
@@ -882,6 +908,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme intel market-name options" _intel_market_name
@@ -907,6 +934,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme intel smart-log-add options" _intel_smart_log_add
@@ -928,6 +956,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme intel temp-stats options" _intel_temp_stats
@@ -958,6 +987,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme mangoboost id-ctrl options" _mangoboost_id_ctrl
@@ -988,6 +1018,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme memblaze smart-log-add options" _memblaze_smart_log_add
@@ -1007,6 +1038,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme memblaze get-pm-status options" _memblaze_get_pm_status
@@ -1030,6 +1062,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme memblaze set-pm-status options" _memblaze_set_pm_status
@@ -1053,6 +1086,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme memblaze select-download options" _memblaze_select_download
@@ -1086,6 +1120,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme memblaze lat-stats-print options" _memblaze_lat_stats_print
@@ -1107,6 +1142,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme memblaze lat-log options" _memblaze_lat_log
@@ -1126,6 +1162,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme memblaze lat-log-print options" _memblaze_lat_log_print
@@ -1145,27 +1182,17 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme memblaze clear-error-log options" _memblaze_clear_error_log
 			compadd -- /dev/nvme*(N)
 				;;
 			(smart-log-add-x)
-			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
-			_nvme_complete_option_value "--output-format-version" 1 2 && return
 			local _memblaze_smart_log_add_x
 			_memblaze_smart_log_add_x=(
 	--raw-binary':dump the whole log buffer in binary format'
 	-b':alias for --raw-binary'
-	--verbose':Increase output verbosity'
-	-v':alias for --verbose'
-	--output-format=':Output format: normal|json|binary|tabular'
-	-o':alias for --output-format'
-	--timeout=':timeout value, in milliseconds'
-	--dry-run':show command instead of executing'
-	--no-retries':disable retry logic on errors'
-	--no-ioctl-probing':disable 64-bit IOCTL support probing'
-	--output-format-version=':output format version: 1|2'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme memblaze smart-log-add-x options" _memblaze_smart_log_add_x
@@ -1201,6 +1228,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme memblaze lat-set-feature-x options" _memblaze_lat_set_feature_x
@@ -1220,6 +1248,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme memblaze lat-get-feature-x options" _memblaze_lat_get_feature_x
@@ -1241,6 +1270,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme memblaze lat-stats-print-x options" _memblaze_lat_stats_print_x
@@ -1262,6 +1292,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme memblaze lat-log-print-x options" _memblaze_lat_log_print_x
@@ -1285,6 +1316,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme memblaze perf-stats-print-x options" _memblaze_perf_stats_print_x
@@ -1315,6 +1347,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron select-download options" _micron_select_download
@@ -1336,6 +1369,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron vs-temperature-stats options" _micron_vs_temperature_stats
@@ -1357,6 +1391,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron vs-pcie-stats options" _micron_vs_pcie_stats
@@ -1376,6 +1411,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron clear-pcie-correctable-errors options" _micron_clear_pcie_correctable_errors
@@ -1401,6 +1437,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron vs-internal-log options" _micron_vs_internal_log
@@ -1424,6 +1461,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron vs-telemetry-controller-option options" _micron_vs_telemetry_controller_option
@@ -1445,6 +1483,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron vs-nand-stats options" _micron_vs_nand_stats
@@ -1466,6 +1505,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron vs-smart-ext-log options" _micron_vs_smart_ext_log
@@ -1487,6 +1527,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron vs-drive-info options" _micron_vs_drive_info
@@ -1512,6 +1553,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron log-page-directory options" _micron_log_page_directory
@@ -1533,6 +1575,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron vs-fw-activate-history options" _micron_vs_fw_activate_history
@@ -1558,6 +1601,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron latency-tracking options" _micron_latency_tracking
@@ -1579,6 +1623,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron latency-stats options" _micron_latency_stats
@@ -1598,6 +1643,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron latency-logs options" _micron_latency_logs
@@ -1619,6 +1665,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron vs-smart-add-log options" _micron_vs_smart_add_log
@@ -1638,6 +1685,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron clear-fw-activate-history options" _micron_clear_fw_activate_history
@@ -1663,6 +1711,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron vs-smbus-option options" _micron_vs_smbus_option
@@ -1684,6 +1733,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron cloud-boot-SSD-version options" _micron_cloud_boot_SSD_version
@@ -1705,6 +1755,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron vs-device-waf options" _micron_vs_device_waf
@@ -1726,6 +1777,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron vs-cloud-log options" _micron_vs_cloud_log
@@ -1747,6 +1799,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron vs-work-load-log options" _micron_vs_work_load_log
@@ -1768,6 +1821,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron vs-vendor-telemetry-log options" _micron_vs_vendor_telemetry_log
@@ -1789,6 +1843,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron smart-log options" _micron_smart_log
@@ -1808,6 +1863,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme micron id-ctrl options" _micron_id_ctrl
@@ -1834,6 +1890,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme netapp smdevices options" _netapp_smdevices
@@ -1853,6 +1910,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme netapp ontapdevices options" _netapp_ontapdevices
@@ -1883,6 +1941,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme nvidia id-ctrl options" _nvidia_id_ctrl
@@ -1935,6 +1994,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk vs-nand-stats options" _sndk_vs_nand_stats
@@ -1962,6 +2022,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk vs-smart-add-log options" _sndk_vs_smart_add_log
@@ -1981,6 +2042,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk clear-pcie-correctable-errors options" _sndk_clear_pcie_correctable_errors
@@ -2000,6 +2062,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk get-drive-status options" _sndk_get_drive_status
@@ -2019,6 +2082,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk clear-assert-dump options" _sndk_clear_assert_dump
@@ -2040,6 +2104,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk drive-resize options" _sndk_drive_resize
@@ -2059,6 +2124,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk vs-fw-activate-history options" _sndk_vs_fw_activate_history
@@ -2078,6 +2144,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk clear-fw-activate-history options" _sndk_clear_fw_activate_history
@@ -2103,6 +2170,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk vs-telemetry-controller-option options" _sndk_vs_telemetry_controller_option
@@ -2126,6 +2194,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk vs-error-reason-identifier options" _sndk_vs_error_reason_identifier
@@ -2145,6 +2214,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk log-page-directory options" _sndk_log_page_directory
@@ -2168,6 +2238,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk namespace-resize options" _sndk_namespace_resize
@@ -2187,6 +2258,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk vs-drive-info options" _sndk_vs_drive_info
@@ -2206,6 +2278,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk vs-temperature-stats options" _sndk_vs_temperature_stats
@@ -2225,6 +2298,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk capabilities options" _sndk_capabilities
@@ -2244,6 +2318,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk cloud-SSD-plugin-version options" _sndk_cloud_SSD_plugin_version
@@ -2263,6 +2338,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk vs-pcie-stats options" _sndk_vs_pcie_stats
@@ -2282,6 +2358,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk get-latency-monitor-log options" _sndk_get_latency_monitor_log
@@ -2301,6 +2378,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk get-error-recovery-log options" _sndk_get_error_recovery_log
@@ -2320,6 +2398,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk get-dev-capabilities-log options" _sndk_get_dev_capabilities_log
@@ -2339,6 +2418,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk get-unsupported-reqs-log options" _sndk_get_unsupported_reqs_log
@@ -2360,6 +2440,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk cloud-boot-SSD-version options" _sndk_cloud_boot_SSD_version
@@ -2381,6 +2462,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk vs-cloud-log options" _sndk_vs_cloud_log
@@ -2402,6 +2484,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk vs-hw-rev-log options" _sndk_vs_hw_rev_log
@@ -2423,6 +2506,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk vs-device-waf options" _sndk_vs_device_waf
@@ -2462,6 +2546,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk set-latency-monitor-feature options" _sndk_set_latency_monitor_feature
@@ -2483,6 +2568,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sndk cu-smart-log options" _sndk_cu_smart_log
@@ -2515,6 +2601,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sfx smart-log-add options" _sfx_smart_log_add
@@ -2538,6 +2625,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sfx lat-stats options" _sfx_lat_stats
@@ -2557,6 +2645,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sfx get-bad-block options" _sfx_get_bad_block
@@ -2578,6 +2667,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sfx query-cap options" _sfx_query_cap
@@ -2603,6 +2693,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sfx change-cap options" _sfx_change_cap
@@ -2630,6 +2721,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sfx set-feature options" _sfx_set_feature
@@ -2653,6 +2745,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sfx get-feature options" _sfx_get_feature
@@ -2683,6 +2776,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sfx dump-evtlog options" _sfx_dump_evtlog
@@ -2714,6 +2808,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sfx expand-cap options" _sfx_expand_cap
@@ -2735,6 +2830,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme sfx status options" _sfx_status
@@ -2761,6 +2857,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme seagate vs-temperature-stats options" _seagate_vs_temperature_stats
@@ -2780,6 +2877,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme seagate vs-log-page-sup options" _seagate_vs_log_page_sup
@@ -2799,6 +2897,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme seagate vs-smart-add-log options" _seagate_vs_smart_add_log
@@ -2818,6 +2917,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme seagate vs-pcie-stats options" _seagate_vs_pcie_stats
@@ -2839,6 +2939,7 @@ _nvme () {
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme seagate clear-pcie-correctable-errors options" _seagate_clear_pcie_correctable_errors
@@ -2866,6 +2967,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme seagate get-host-tele options" _seagate_get_host_tele
@@ -2889,6 +2991,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme seagate get-ctrl-tele options" _seagate_get_ctrl_tele
@@ -2912,6 +3015,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme seagate vs-internal-log options" _seagate_vs_internal_log
@@ -2931,6 +3035,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme seagate vs-fw-activate-history options" _seagate_vs_fw_activate_history
@@ -2952,6 +3057,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme seagate clear-fw-activate-history options" _seagate_clear_fw_activate_history
@@ -2988,6 +3094,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme shannon smart-log-add options" _shannon_smart_log_add
@@ -3019,6 +3126,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme shannon set-additioal-feature options" _shannon_set_additioal_feature
@@ -3052,6 +3160,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme shannon get-additional-feature options" _shannon_get_additional_feature
@@ -3075,6 +3184,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme shannon id-ctrl options" _shannon_id_ctrl
@@ -3107,6 +3217,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ssstc smart-log-add options" _ssstc_smart_log_add
@@ -3139,6 +3250,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme toshiba vs-smart-add-log options" _toshiba_vs_smart_add_log
@@ -3162,6 +3274,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme toshiba vs-internal-log options" _toshiba_vs_internal_log
@@ -3181,6 +3294,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme toshiba clear-pcie-correctable-errors options" _toshiba_clear_pcie_correctable_errors
@@ -3207,6 +3321,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme transcend healthvalue options" _transcend_healthvalue
@@ -3226,6 +3341,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme transcend badblock options" _transcend_badblock
@@ -3260,6 +3376,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme virtium save-smart-to-vtview-log options" _virtium_save_smart_to_vtview_log
@@ -3279,6 +3396,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme virtium show-identify options" _virtium_show_identify
@@ -3309,6 +3427,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc cap-diag options" _wdc_cap_diag
@@ -3330,6 +3449,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc drive-log options" _wdc_drive_log
@@ -3351,6 +3471,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc get-crash-dump options" _wdc_get_crash_dump
@@ -3372,6 +3493,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc get-pfail-dump options" _wdc_get_pfail_dump
@@ -3395,6 +3517,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc id-ctrl options" _wdc_id_ctrl
@@ -3414,6 +3537,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc purge options" _wdc_purge
@@ -3433,6 +3557,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc purge-monitor options" _wdc_purge_monitor
@@ -3477,6 +3602,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc vs-nand-stats options" _wdc_vs_nand_stats
@@ -3504,6 +3630,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc vs-smart-add-log options" _wdc_vs_smart_add_log
@@ -3523,6 +3650,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc clear-pcie-correctable-errors options" _wdc_clear_pcie_correctable_errors
@@ -3544,6 +3672,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc drive-essentials options" _wdc_drive_essentials
@@ -3563,6 +3692,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc get-drive-status options" _wdc_get_drive_status
@@ -3582,6 +3712,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc clear-assert-dump options" _wdc_clear_assert_dump
@@ -3603,6 +3734,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc drive-resize options" _wdc_drive_resize
@@ -3622,6 +3754,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc vs-fw-activate-history options" _wdc_vs_fw_activate_history
@@ -3641,6 +3774,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc clear-fw-activate-history options" _wdc_clear_fw_activate_history
@@ -3666,6 +3800,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc enc-get-log options" _wdc_enc_get_log
@@ -3691,6 +3826,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc vs-telemetry-controller-option options" _wdc_vs_telemetry_controller_option
@@ -3714,6 +3850,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc vs-error-reason-identifier options" _wdc_vs_error_reason_identifier
@@ -3733,6 +3870,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc log-page-directory options" _wdc_log_page_directory
@@ -3756,6 +3894,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc namespace-resize options" _wdc_namespace_resize
@@ -3775,6 +3914,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc vs-drive-info options" _wdc_vs_drive_info
@@ -3794,6 +3934,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc vs-temperature-stats options" _wdc_vs_temperature_stats
@@ -3813,6 +3954,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc capabilities options" _wdc_capabilities
@@ -3832,6 +3974,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc cloud-SSD-plugin-version options" _wdc_cloud_SSD_plugin_version
@@ -3851,6 +3994,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc vs-pcie-stats options" _wdc_vs_pcie_stats
@@ -3870,6 +4014,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc get-latency-monitor-log options" _wdc_get_latency_monitor_log
@@ -3889,6 +4034,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc get-error-recovery-log options" _wdc_get_error_recovery_log
@@ -3908,6 +4054,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc get-dev-capabilities-log options" _wdc_get_dev_capabilities_log
@@ -3927,6 +4074,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc get-unsupported-reqs-log options" _wdc_get_unsupported_reqs_log
@@ -3948,6 +4096,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc cloud-boot-SSD-version options" _wdc_cloud_boot_SSD_version
@@ -3969,6 +4118,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc vs-cloud-log options" _wdc_vs_cloud_log
@@ -3990,6 +4140,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc vs-hw-rev-log options" _wdc_vs_hw_rev_log
@@ -4011,6 +4162,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc vs-device-waf options" _wdc_vs_device_waf
@@ -4050,6 +4202,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc set-latency-monitor-feature options" _wdc_set_latency_monitor_feature
@@ -4071,6 +4224,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme wdc cu-smart-log options" _wdc_cu_smart_log
@@ -4101,6 +4255,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ymtc smart-log-add options" _ymtc_smart_log_add
@@ -4130,6 +4285,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme zns id-ctrl options" _zns_id_ctrl
@@ -4155,6 +4311,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme zns id-ns options" _zns_id_ns
@@ -4188,6 +4345,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme zns report-zones options" _zns_report_zones
@@ -4213,6 +4371,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme zns reset-zone options" _zns_reset_zone
@@ -4238,6 +4397,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme zns close-zone options" _zns_close_zone
@@ -4263,6 +4423,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme zns finish-zone options" _zns_finish_zone
@@ -4290,6 +4451,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme zns open-zone options" _zns_open_zone
@@ -4315,6 +4477,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme zns offline-zone options" _zns_offline_zone
@@ -4342,6 +4505,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme zns set-zone-desc options" _zns_set_zone_desc
@@ -4365,6 +4529,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme zns zrwa-flush-zone options" _zns_zrwa_flush_zone
@@ -4388,6 +4553,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme zns changed-zone-list options" _zns_changed_zone_list
@@ -4419,6 +4585,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme zns zone-mgmt-recv options" _zns_zone_mgmt_recv
@@ -4452,6 +4619,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme zns zone-mgmt-send options" _zns_zone_mgmt_send
@@ -4493,6 +4661,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme zns zone-append options" _zns_zone_append
@@ -4526,6 +4695,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme nbft show options" _nbft_show
@@ -4552,6 +4722,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme registry list options" _registry_list
@@ -4573,6 +4744,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme registry retrieve options" _registry_retrieve
@@ -4596,6 +4768,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme registry update options" _registry_update
@@ -4617,6 +4790,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme registry delete options" _registry_delete
@@ -4655,6 +4829,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme feat arbitration options" _feat_arbitration
@@ -4682,6 +4857,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme feat power-mgmt options" _feat_power_mgmt
@@ -4713,6 +4889,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme feat temp-thresh options" _feat_temp_thresh
@@ -4738,6 +4915,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme feat volatile-wc options" _feat_volatile_wc
@@ -4765,6 +4943,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme feat num-queues options" _feat_num_queues
@@ -4790,6 +4969,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme feat timestamp options" _feat_timestamp
@@ -4817,6 +4997,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme feat hctm options" _feat_hctm
@@ -4850,6 +5031,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme feat host-behavior-support options" _feat_host_behavior_support
@@ -4887,6 +5069,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme feat perf-characteristics options" _feat_perf_characteristics
@@ -4916,6 +5099,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme feat power-limit options" _feat_power_limit
@@ -4949,6 +5133,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme feat power-thresh options" _feat_power_thresh
@@ -4977,6 +5162,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme feat power-meas options" _feat_power_meas
@@ -5006,6 +5192,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme feat err-recovery options" _feat_err_recovery
@@ -5039,6 +5226,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme lm create-cdq options" _lm_create_cdq
@@ -5060,6 +5248,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme lm delete-cdq options" _lm_delete_cdq
@@ -5089,6 +5278,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme lm track-send options" _lm_track_send
@@ -5139,6 +5329,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme lm migration-send options" _lm_migration_send
@@ -5177,6 +5368,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme lm migration-recv options" _lm_migration_recv
@@ -5202,6 +5394,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme lm set-cdq options" _lm_set_cdq
@@ -5223,6 +5416,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme lm get-cdq options" _lm_get_cdq
@@ -5249,6 +5443,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp smart-add-log options" _ocp_smart_add_log
@@ -5268,6 +5463,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp latency-monitor-log options" _ocp_latency_monitor_log
@@ -5307,6 +5503,7 @@ state of the controller at the time the command is processed.
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp set-latency-monitor-feature options" _ocp_set_latency_monitor_feature
@@ -5345,6 +5542,7 @@ e.g. '\''-a 4 for Data Areas 1, 2, 3, and 4.'\'';
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp internal-log options" _ocp_internal_log
@@ -5366,6 +5564,7 @@ e.g. '\''-a 4 for Data Areas 1, 2, 3, and 4.'\'';
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp clear-fw-activate-history options" _ocp_clear_fw_activate_history
@@ -5393,6 +5592,7 @@ e.g. '\''-a 4 for Data Areas 1, 2, 3, and 4.'\'';
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp eol-plp-failure-mode options" _ocp_eol_plp_failure_mode
@@ -5414,6 +5614,7 @@ e.g. '\''-a 4 for Data Areas 1, 2, 3, and 4.'\'';
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp clear-pcie-correctable-errors options" _ocp_clear_pcie_correctable_errors
@@ -5433,6 +5634,7 @@ e.g. '\''-a 4 for Data Areas 1, 2, 3, and 4.'\'';
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp fw-activate-history options" _ocp_fw_activate_history
@@ -5452,6 +5654,7 @@ e.g. '\''-a 4 for Data Areas 1, 2, 3, and 4.'\'';
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp unsupported-reqs-log options" _ocp_unsupported_reqs_log
@@ -5471,6 +5674,7 @@ e.g. '\''-a 4 for Data Areas 1, 2, 3, and 4.'\'';
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp error-recovery-log options" _ocp_error_recovery_log
@@ -5490,6 +5694,7 @@ e.g. '\''-a 4 for Data Areas 1, 2, 3, and 4.'\'';
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp device-capability-log options" _ocp_device_capability_log
@@ -5515,6 +5720,7 @@ e.g. '\''-a 4 for Data Areas 1, 2, 3, and 4.'\'';
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp set-dssd-power-state-feature options" _ocp_set_dssd_power_state_feature
@@ -5540,6 +5746,7 @@ e.g. '\''-a 4 for Data Areas 1, 2, 3, and 4.'\'';
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp get-dssd-power-state-feature options" _ocp_get_dssd_power_state_feature
@@ -5565,6 +5772,7 @@ e.g. '\''-a 4 for Data Areas 1, 2, 3, and 4.'\'';
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp set-plp-health-check-interval options" _ocp_set_plp_health_check_interval
@@ -5586,6 +5794,7 @@ e.g. '\''-a 4 for Data Areas 1, 2, 3, and 4.'\'';
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp get-plp-health-check-interval options" _ocp_get_plp_health_check_interval
@@ -5610,6 +5819,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp telemetry-string-log options" _ocp_telemetry_string_log
@@ -5631,6 +5841,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp set-telemetry-profile options" _ocp_set_telemetry_profile
@@ -5654,6 +5865,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp set-dssd-async-event-config options" _ocp_set_dssd_async_event_config
@@ -5675,6 +5887,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp get-dssd-async-event-config options" _ocp_get_dssd_async_event_config
@@ -5694,6 +5907,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp tcg-configuration-log options" _ocp_tcg_configuration_log
@@ -5719,6 +5933,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp get-error-injection options" _ocp_get_error_injection
@@ -5750,6 +5965,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp set-error-injection options" _ocp_set_error_injection
@@ -5773,6 +5989,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp get-enable-ieee1667-silo options" _ocp_get_enable_ieee1667_silo
@@ -5798,6 +6015,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp set-enable-ieee1667-silo options" _ocp_set_enable_ieee1667_silo
@@ -5822,6 +6040,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp hardware-component-log options" _ocp_hardware_component_log
@@ -5847,6 +6066,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp get-latency-monitor options" _ocp_get_latency_monitor
@@ -5872,6 +6092,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp get-clear-pcie-correctable-errors options" _ocp_get_clear_pcie_correctable_errors
@@ -5897,6 +6118,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp get-telemetry-profile options" _ocp_get_telemetry_profile
@@ -5922,6 +6144,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp persistent-event-log options" _ocp_persistent_event_log
@@ -5947,6 +6170,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme ocp get-idle-wakeup-time options" _ocp_get_idle_wakeup_time
@@ -6045,6 +6269,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm id-ctrl options" _solidigm_id_ctrl
@@ -6066,6 +6291,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm smart-log-add options" _solidigm_smart_log_add
@@ -6085,6 +6311,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm vs-smart-add-log options" _solidigm_vs_smart_add_log
@@ -6108,6 +6335,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm vs-internal-log options" _solidigm_vs_internal_log
@@ -6127,6 +6355,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm garbage-collect-log options" _solidigm_garbage_collect_log
@@ -6148,6 +6377,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm market-log options" _solidigm_market_log
@@ -6177,6 +6407,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm latency-tracking-log options" _solidigm_latency_tracking_log
@@ -6208,6 +6439,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm parse-telemetry-log options" _solidigm_parse_telemetry_log
@@ -6229,6 +6461,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm clear-pcie-correctable-errors  options" _solidigm_clear_pcie_correctable_errors 
@@ -6250,6 +6483,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm clear-fw-activate-history options" _solidigm_clear_fw_activate_history
@@ -6269,6 +6503,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm vs-fw-activate-history options" _solidigm_vs_fw_activate_history
@@ -6288,6 +6523,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm log-page-directory options" _solidigm_log_page_directory
@@ -6309,6 +6545,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm temp-stats options" _solidigm_temp_stats
@@ -6328,6 +6565,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm vs-drive-info options" _solidigm_vs_drive_info
@@ -6347,6 +6585,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm cloud-SSDplugin-version options" _solidigm_cloud_SSDplugin_version
@@ -6390,6 +6629,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme solidigm workload-tracker options" _solidigm_workload_tracker
@@ -6414,6 +6654,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme list options" _list
@@ -6433,6 +6674,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme list-subsys options" _list_subsys
@@ -6456,6 +6698,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme id-ctrl options" _id_ctrl
@@ -6482,6 +6725,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme id-ns options" _id_ns
@@ -6501,6 +6745,7 @@ If requested path does not exist, the directory will be newly created.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme id-ns-granularity options" _id_ns_granularity
@@ -6525,6 +6770,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme id-ns-lba-format options" _id_ns_lba_format
@@ -6550,6 +6796,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme list-ns options" _list_ns
@@ -6573,6 +6820,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme list-ctrl options" _list_ctrl
@@ -6592,6 +6840,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme nvm-id-ctrl options" _nvm_id_ctrl
@@ -6615,6 +6864,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme nvm-id-ns options" _nvm_id_ns
@@ -6639,6 +6889,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme nvm-id-ns-lba-format options" _nvm_id_ns_lba_format
@@ -6660,6 +6911,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme primary-ctrl-caps options" _primary_ctrl_caps
@@ -6683,6 +6935,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme list-secondary options" _list_secondary
@@ -6706,6 +6959,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme cmdset-ind-id-ns options" _cmdset_ind_id_ns
@@ -6729,6 +6983,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme ns-descs options" _ns_descs
@@ -6750,6 +7005,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme id-nvmset options" _id_nvmset
@@ -6771,6 +7027,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme id-uuid options" _id_uuid
@@ -6792,6 +7049,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme id-iocs options" _id_iocs
@@ -6813,6 +7071,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme id-domain options" _id_domain
@@ -6834,6 +7093,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme list-endgrp options" _list_endgrp
@@ -6893,6 +7153,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme create-ns options" _create_ns
@@ -6916,6 +7177,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme delete-ns options" _delete_ns
@@ -6941,6 +7203,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme attach-ns options" _attach_ns
@@ -6966,6 +7229,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme detach-ns options" _detach_ns
@@ -6985,6 +7249,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme get-ns-id options" _get_ns_id
@@ -7033,6 +7298,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme get-log options" _get_log
@@ -7064,6 +7330,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme telemetry-log options" _telemetry_log
@@ -7085,6 +7352,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme fw-log options" _fw_log
@@ -7106,6 +7374,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme changed-ns-list-log options" _changed_ns_list_log
@@ -7129,6 +7398,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme smart-log options" _smart_log
@@ -7150,6 +7420,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme ana-log options" _ana_log
@@ -7189,6 +7460,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme error-log options" _error_log
@@ -7212,6 +7484,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme effects-log options" _effects_log
@@ -7233,6 +7506,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme endurance-log options" _endurance_log
@@ -7256,6 +7530,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme predictable-lat-log options" _predictable_lat_log
@@ -7281,6 +7556,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme pred-lat-event-agg-log options" _pred_lat_event_agg_log
@@ -7306,6 +7582,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme persistent-event-log options" _persistent_event_log
@@ -7331,6 +7608,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme endurance-event-agg-log options" _endurance_event_agg_log
@@ -7352,6 +7630,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme lba-status-log options" _lba_status_log
@@ -7371,6 +7650,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme resv-notif-log options" _resv_notif_log
@@ -7394,6 +7674,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme boot-part-log options" _boot_part_log
@@ -7417,6 +7698,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme phy-rx-eom-log options" _phy_rx_eom_log
@@ -7453,6 +7735,7 @@ identifying the LBA Format capabilities that are to be returned'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme get-feature options" _get_feature
@@ -7486,6 +7769,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme device-self-test options" _device_self_test
@@ -7507,6 +7791,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme self-test-log options" _self_test_log
@@ -7526,6 +7811,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme supported-log-pages options" _supported_log_pages
@@ -7545,6 +7831,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme fid-support-effects-log options" _fid_support_effects_log
@@ -7564,6 +7851,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme mi-cmd-support-effects-log options" _mi_cmd_support_effects_log
@@ -7587,6 +7875,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme media-unit-stat-log options" _media_unit_stat_log
@@ -7610,6 +7899,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme supported-cap-config-log options" _supported_cap_config_log
@@ -7629,6 +7919,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme mgmt-addr-list-log options" _mgmt_addr_list_log
@@ -7650,6 +7941,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme rotational-media-info-log options" _rotational_media_info_log
@@ -7671,6 +7963,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme changed-alloc-ns-list-log options" _changed_alloc_ns_list_log
@@ -7692,6 +7985,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme dispersed-ns-participating-nss-log options" _dispersed_ns_participating_nss_log
@@ -7715,6 +8009,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme reachability-groups-log options" _reachability_groups_log
@@ -7738,6 +8033,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme reachability-associations-log options" _reachability_associations_log
@@ -7761,6 +8057,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme host-discovery-log options" _host_discovery_log
@@ -7782,6 +8079,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme ave-discovery-log options" _ave_discovery_log
@@ -7803,6 +8101,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme pull-model-ddc-req-log options" _pull_model_ddc_req_log
@@ -7824,6 +8123,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme power-measurement-log options" _power_measurement_log
@@ -7860,6 +8160,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme set-feature options" _set_feature
@@ -7883,6 +8184,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme set-property options" _set_property
@@ -7904,6 +8206,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme get-property options" _get_property
@@ -7942,6 +8245,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme format options" _format
@@ -7970,6 +8274,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme fw-commit options" _fw_commit
@@ -8001,6 +8306,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme fw-download options" _fw_download
@@ -8064,6 +8370,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme admin-passthru options" _admin_passthru
@@ -8127,6 +8434,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme io-passthru options" _io_passthru
@@ -8160,6 +8468,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme security-send options" _security_send
@@ -8195,6 +8504,7 @@ fh Abort the device self-test operation'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme security-recv options" _security_recv
@@ -8227,6 +8537,7 @@ the controller uses in determining the LBA Status Descriptors to return.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme get-lba-status options" _get_lba_status
@@ -8256,6 +8567,7 @@ the controller uses in determining the LBA Status Descriptors to return.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme capacity-mgmt options" _capacity_mgmt
@@ -8287,6 +8599,7 @@ the controller uses in determining the LBA Status Descriptors to return.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme resv-acquire options" _resv_acquire
@@ -8318,6 +8631,7 @@ the controller uses in determining the LBA Status Descriptors to return.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme resv-register options" _resv_register
@@ -8347,6 +8661,7 @@ the controller uses in determining the LBA Status Descriptors to return.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme resv-release options" _resv_release
@@ -8374,6 +8689,7 @@ the controller uses in determining the LBA Status Descriptors to return.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme resv-report options" _resv_report
@@ -8409,6 +8725,7 @@ the controller uses in determining the LBA Status Descriptors to return.'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme dsm options" _dsm
@@ -8471,6 +8788,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme copy options" _copy
@@ -8492,6 +8810,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme flush options" _flush
@@ -8556,6 +8875,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme compare options" _compare
@@ -8620,6 +8940,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme read options" _read
@@ -8684,6 +9005,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme write options" _write
@@ -8734,6 +9056,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme write-zeroes options" _write_zeroes
@@ -8763,6 +9086,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme write-uncor options" _write_uncor
@@ -8804,6 +9128,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme verify options" _verify
@@ -8844,6 +9169,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme sanitize options" _sanitize
@@ -8867,6 +9193,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme sanitize-log options" _sanitize_log
@@ -8897,6 +9224,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme sanitize-ns options" _sanitize_ns
@@ -8916,6 +9244,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme reset options" _reset
@@ -8935,6 +9264,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme subsystem-reset options" _subsystem_reset
@@ -8954,6 +9284,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme ns-rescan options" _ns_rescan
@@ -8973,6 +9304,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme show-regs options" _show_regs
@@ -9013,6 +9345,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme set-reg options" _set_reg
@@ -9062,6 +9395,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme get-reg options" _get_reg
@@ -9083,6 +9417,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme top options" _top
@@ -9151,7 +9486,7 @@ part of end-to-end data protection processing'
 	--persistent':persistent discovery connection'
 	-p':alias for --persistent'
 	--quiet':suppress already connected errors'
-	--config=':Use specified JSON configuration file or '\''none'\'' to disable'
+	--config=':Use specified INI configuration file (auto-converts a legacy .json) or '\''none'\'' to disable'
 	-J':alias for --config'
 	--dump-config':Dump configuration file to stdout'
 	-O':alias for --dump-config'
@@ -9169,6 +9504,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme discover options" _discover
@@ -9237,7 +9573,7 @@ part of end-to-end data protection processing'
 	--persistent':persistent discovery connection'
 	-p':alias for --persistent'
 	--quiet':suppress already connected errors'
-	--config=':Use specified JSON configuration file or '\''none'\'' to disable'
+	--config=':Use specified INI configuration file (auto-converts a legacy .json) or '\''none'\'' to disable'
 	-J':alias for --config'
 	--dump-config':Dump configuration file to stdout'
 	-O':alias for --dump-config'
@@ -9255,6 +9591,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme connect-all options" _connect_all
@@ -9316,9 +9653,11 @@ part of end-to-end data protection processing'
 	-G':alias for --data-digest'
 	--tls':enable TLS'
 	--concat':enable secure concatenation'
-	--config=':Use specified JSON configuration file or '\''none'\'' to disable'
+	--config=':Use specified INI configuration file (auto-converts a legacy .json) or '\''none'\'' to disable'
 	-J':alias for --config'
 	--owner=':record this owner in the registry'
+	--devid-file=':write connected device name to FILE'
+	--idempotent':exit 0 if already connected'
 	--dump-config':Dump JSON configuration to stdout'
 	-O':alias for --dump-config'
 	--verbose':Increase output verbosity'
@@ -9330,6 +9669,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme connect options" _connect
@@ -9344,6 +9684,8 @@ part of end-to-end data protection processing'
 	-n':alias for --nqn'
 	--device=':nvme device handle'
 	-d':alias for --device'
+	--exclude':write exclusion entry before disconnecting'
+	-x':alias for --exclude'
 	--verbose':Increase output verbosity'
 	-v':alias for --verbose'
 	--output-format=':Output format: normal|json|binary|tabular'
@@ -9353,6 +9695,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme disconnect options" _disconnect
@@ -9376,6 +9719,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme disconnect-all options" _disconnect_all
@@ -9437,7 +9781,7 @@ part of end-to-end data protection processing'
 	-G':alias for --data-digest'
 	--tls':enable TLS'
 	--concat':enable secure concatenation'
-	--config=':Use specified JSON configuration file or '\''none'\'' to disable'
+	--config=':Use specified INI configuration file (auto-converts a legacy .json) or '\''none'\'' to disable'
 	-J':alias for --config'
 	--scan':Scan current NVMeoF topology'
 	-R':alias for --scan'
@@ -9456,9 +9800,25 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme config options" _config
+		compadd -- /dev/nvme*(N)
+			;;
+		(config-convert)
+		local _config_convert
+		_config_convert=(
+	--config=':convert this JSON file (default: config.json)'
+	-J':alias for --config'
+	--output=':write result here (default: nvme-fabrics.conf)'
+	-o':alias for --output'
+	--force':overwrite an existing target'
+	--verbose':increase output verbosity'
+	-v':alias for --verbose'
+		)
+		_arguments '*:: :->subcmds'
+		_nvme_describe "nvme config-convert options" _config_convert
 		compadd -- /dev/nvme*(N)
 			;;
 		(dim)
@@ -9481,6 +9841,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme dim options" _dim
@@ -9514,6 +9875,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme gen-dhchap-key options" _gen_dhchap_key
@@ -9535,6 +9897,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme check-dhchap-key options" _check_dhchap_key
@@ -9574,6 +9937,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme gen-tls-key options" _gen_tls_key
@@ -9611,6 +9975,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme check-tls-key options" _check_tls_key
@@ -9642,6 +10007,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme tls-key options" _tls_key
@@ -9675,6 +10041,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme dir-receive options" _dir_receive
@@ -9712,6 +10079,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme dir-send options" _dir_send
@@ -9745,6 +10113,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme virt-mgmt options" _virt_mgmt
@@ -9780,6 +10149,7 @@ part of end-to-end data protection processing'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme rpmb options" _rpmb
@@ -9816,6 +10186,7 @@ then no UUID index is specified'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme lockdown options" _lockdown
@@ -9837,6 +10208,7 @@ then no UUID index is specified'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme show-topology options" _show_topology
@@ -9866,6 +10238,7 @@ then no UUID index is specified'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme io-mgmt-recv options" _io_mgmt_recv
@@ -9895,6 +10268,7 @@ then no UUID index is specified'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme io-mgmt-send options" _io_mgmt_send
@@ -9928,6 +10302,7 @@ then no UUID index is specified'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme nvme-mi-recv options" _nvme_mi_recv
@@ -9961,6 +10336,7 @@ then no UUID index is specified'
 	--no-retries':disable retry logic on errors'
 	--no-ioctl-probing':disable 64-bit IOCTL support probing'
 	--output-format-version=':output format version: 1|2'
+	--set-options=':set a libnvme library option (key=value[,key=value,...]);'
 		)
 		_arguments '*:: :->subcmds'
 		_nvme_describe "nvme nvme-mi-send options" _nvme_mi_send

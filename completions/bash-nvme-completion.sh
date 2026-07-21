@@ -74,7 +74,7 @@ nvme_list_opts () {
 		"version"|"help"|"gen-hostnqn"|"show-hostnqn"|"dump-command-metadata")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -381,16 +381,19 @@ nvme_list_opts () {
 		opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --dhchap-secret= -S --dhchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --raw= -r --persistent -p --quiet --config= -J --dump-config -O --force --nbft --no-nbft --owner= --nbft-path="
 			;;
 		"connect")
-		opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --dhchap-secret= -S --dhchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --config= -J --owner= --dump-config -O"
+		opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --dhchap-secret= -S --dhchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --config= -J --owner= --devid-file= --idempotent --dump-config -O"
 			;;
 		"disconnect")
-		opts+=" --nqn= -n --device= -d"
+		opts+=" --nqn= -n --device= -d --exclude -x"
 			;;
 		"disconnect-all")
 		opts+=" --transport= -t --owner= --force"
 			;;
 		"config")
 		opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --dhchap-secret= -S --dhchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --config= -J --scan -R --modify -M --dump -O --update -U"
+			;;
+		"config-convert")
+		opts+=" --config= -J --output= -o --force --verbose -v"
 			;;
 		"dim")
 		opts+=" --nqn= -n --device= -d --task= -t"
@@ -486,7 +489,7 @@ plugin_amzn_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -553,7 +556,7 @@ plugin_dapustor_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -617,7 +620,7 @@ plugin_dell_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -681,7 +684,7 @@ plugin_dera_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -745,7 +748,7 @@ plugin_fdp_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -830,7 +833,7 @@ plugin_huawei_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -897,7 +900,7 @@ plugin_ibm_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -967,7 +970,7 @@ plugin_innogrit_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -1034,7 +1037,7 @@ plugin_inspur_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -1098,7 +1101,7 @@ plugin_intel_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -1183,7 +1186,7 @@ plugin_mangoboost_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -1247,7 +1250,7 @@ plugin_memblaze_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -1353,7 +1356,7 @@ plugin_micron_opts () {
 		"version"|"help"|"plugin-version"|"cloud-SSD-plugin-version")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -1486,7 +1489,7 @@ plugin_netapp_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -1553,7 +1556,7 @@ plugin_nvidia_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -1617,7 +1620,7 @@ plugin_sndk_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -1762,7 +1765,7 @@ plugin_sfx_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -1853,7 +1856,7 @@ plugin_seagate_opts () {
 		"version"|"help"|"plugin-version"|"cloud-SSD-plugin-version")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -1944,7 +1947,7 @@ plugin_shannon_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -2017,7 +2020,7 @@ plugin_ssstc_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -2081,7 +2084,7 @@ plugin_toshiba_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -2151,7 +2154,7 @@ plugin_transcend_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -2218,7 +2221,7 @@ plugin_virtium_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -2285,7 +2288,7 @@ plugin_wdc_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -2457,7 +2460,7 @@ plugin_ymtc_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -2521,7 +2524,7 @@ plugin_zns_opts () {
 		"version"|"help"|"list")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -2624,7 +2627,7 @@ plugin_nbft_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -2688,7 +2691,7 @@ plugin_registry_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -2761,7 +2764,7 @@ plugin_feat_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -2861,7 +2864,7 @@ plugin_lm_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -2943,7 +2946,7 @@ plugin_ocp_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -3164,7 +3167,7 @@ plugin_solidigm_opts () {
 		"version"|"help")
 			;;
 		*)
-		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version="
+		opts+=" --verbose -v --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 		if [[ $completing_value -eq 1 ]]; then
 			case $opt in
 				--output-format|-o)
@@ -3317,7 +3320,7 @@ _nvme_subcmds () {
 		[solidigm]="plugin_solidigm_opts"
 	)
 
-	_cmds="list list-subsys id-ctrl id-ns id-ns-granularity id-ns-lba-format list-ns list-ctrl nvm-id-ctrl nvm-id-ns nvm-id-ns-lba-format primary-ctrl-caps list-secondary cmdset-ind-id-ns ns-descs id-nvmset id-uuid id-iocs id-domain list-endgrp create-ns delete-ns attach-ns detach-ns get-ns-id get-log telemetry-log fw-log changed-ns-list-log smart-log ana-log error-log effects-log endurance-log predictable-lat-log pred-lat-event-agg-log persistent-event-log endurance-event-agg-log lba-status-log resv-notif-log boot-part-log phy-rx-eom-log get-feature device-self-test self-test-log supported-log-pages fid-support-effects-log mi-cmd-support-effects-log media-unit-stat-log supported-cap-config-log mgmt-addr-list-log rotational-media-info-log changed-alloc-ns-list-log dispersed-ns-participating-nss-log reachability-groups-log reachability-associations-log host-discovery-log ave-discovery-log pull-model-ddc-req-log power-measurement-log set-feature set-property get-property format fw-commit fw-download admin-passthru io-passthru security-send security-recv get-lba-status capacity-mgmt resv-acquire resv-register resv-release resv-report dsm copy flush compare read write write-zeroes write-uncor verify sanitize sanitize-log sanitize-ns reset subsystem-reset ns-rescan show-regs set-reg get-reg top discover connect-all connect disconnect disconnect-all config dim gen-hostnqn show-hostnqn gen-dhchap-key check-dhchap-key gen-tls-key check-tls-key tls-key dir-receive dir-send virt-mgmt rpmb lockdown show-topology io-mgmt-recv io-mgmt-send nvme-mi-recv nvme-mi-send dump-command-metadata amzn dapustor dell dera fdp huawei ibm innogrit inspur intel mangoboost memblaze micron netapp nvidia sndk sfx seagate shannon ssstc toshiba transcend virtium wdc ymtc zns nbft registry feat lm ocp sed solidigm"
+	_cmds="list list-subsys id-ctrl id-ns id-ns-granularity id-ns-lba-format list-ns list-ctrl nvm-id-ctrl nvm-id-ns nvm-id-ns-lba-format primary-ctrl-caps list-secondary cmdset-ind-id-ns ns-descs id-nvmset id-uuid id-iocs id-domain list-endgrp create-ns delete-ns attach-ns detach-ns get-ns-id get-log telemetry-log fw-log changed-ns-list-log smart-log ana-log error-log effects-log endurance-log predictable-lat-log pred-lat-event-agg-log persistent-event-log endurance-event-agg-log lba-status-log resv-notif-log boot-part-log phy-rx-eom-log get-feature device-self-test self-test-log supported-log-pages fid-support-effects-log mi-cmd-support-effects-log media-unit-stat-log supported-cap-config-log mgmt-addr-list-log rotational-media-info-log changed-alloc-ns-list-log dispersed-ns-participating-nss-log reachability-groups-log reachability-associations-log host-discovery-log ave-discovery-log pull-model-ddc-req-log power-measurement-log set-feature set-property get-property format fw-commit fw-download admin-passthru io-passthru security-send security-recv get-lba-status capacity-mgmt resv-acquire resv-register resv-release resv-report dsm copy flush compare read write write-zeroes write-uncor verify sanitize sanitize-log sanitize-ns reset subsystem-reset ns-rescan show-regs set-reg get-reg top discover connect-all connect disconnect disconnect-all config config-convert dim gen-hostnqn show-hostnqn gen-dhchap-key check-dhchap-key gen-tls-key check-tls-key tls-key dir-receive dir-send virt-mgmt rpmb lockdown show-topology io-mgmt-recv io-mgmt-send nvme-mi-recv nvme-mi-send dump-command-metadata amzn dapustor dell dera fdp huawei ibm innogrit inspur intel mangoboost memblaze micron netapp nvidia sndk sfx seagate shannon ssstc toshiba transcend virtium wdc ymtc zns nbft registry feat lm ocp sed solidigm"
 
 	if [[ ${#words[*]} -lt 3 ]]; then
 		COMPREPLY+=( $(compgen -W "$_cmds" -- $cur ) )
