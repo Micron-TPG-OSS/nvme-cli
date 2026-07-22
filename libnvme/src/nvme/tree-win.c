@@ -115,40 +115,6 @@ int libnvme_reconfigure_ctrl(struct libnvme_global_ctx *ctx,
 	return 0;
 }
 
-__libnvme_public int libnvme_get_host(struct libnvme_global_ctx *ctx,
-		const char *hostnqn, const char *hostid, libnvme_host_t *host)
-{
-	__cleanup_free char *hnqn = NULL;
-	__cleanup_free char *hid = NULL;
-	struct libnvme_host *h;
-
-	/* Use provided values or generate defaults */
-	if (hostnqn)
-		hnqn = strdup(hostnqn);
-	else
-		hnqn = strdup("nqn.2014-08.org.nvmexpress:uuid:00000000-0000-0000-0000-000000000000");
-
-	if (!hnqn)
-		return -ENOMEM;
-
-	if (hostid)
-		hid = strdup(hostid);
-	else
-		hid = strdup("00000000-0000-0000-0000-000000000000");
-
-	if (!hid)
-		return -ENOMEM;
-
-	h = libnvme_lookup_host(ctx, hnqn, hid);
-	if (!h)
-		return -ENOMEM;
-
-	libnvme_host_set_hostsymname(h, NULL);
-
-	*host = h;
-	return 0;
-}
-
 __libnvme_public const char *libnvme_ctrl_get_state(libnvme_ctrl_t c)
 {
 	char *state = c->state;

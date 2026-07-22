@@ -534,6 +534,32 @@ struct libnvme_host *libnvme_lookup_host(struct libnvme_global_ctx *ctx,
 	return h;
 }
 
+__libnvme_public int libnvme_get_host(
+		struct libnvme_global_ctx *ctx, const char *hostnqn,
+		const char *hostid, libnvme_host_t *host)
+{
+	struct libnvme_host *h;
+
+	/*
+	 * No sysfs identity (e.g. PCIe) and no ctx default: use a fixed
+	 * placeholder rather than resolving/generating one -- that's a
+	 * policy call for the caller, not us.
+	 */
+	if (!hostnqn)
+		hostnqn = NVME_DEFAULT_HOSTNQN;
+	if (!hostid)
+		hostid = NVME_DEFAULT_HOSTID;
+
+	h = libnvme_lookup_host(ctx, hostnqn, hostid);
+	if (!h)
+		return -ENOMEM;
+
+	libnvme_host_set_hostsymname(h, NULL);
+
+	*host = h;
+	return 0;
+}
+
 static int nvme_subsystem_scan_namespaces(struct libnvme_global_ctx *ctx,
 		libnvme_subsystem_t s)
 {
@@ -1504,11 +1530,16 @@ int libnvme_ctrl_scan_namespaces(struct libnvme_global_ctx *ctx,
  * Fabrics = any transport that is not a known local one (pcie/apple-nvme).
  * Testing by exclusion means a newly added transport defaults to fabrics.
  */
+__libnvme_public bool libnvme_transport_is_fabric(const char *transport)
+{
+	return transport &&
+	       strcmp(transport, "pcie") &&
+	       strcmp(transport, "apple-nvme");
+}
+
 __libnvme_public bool libnvme_ctrl_is_transport_fabric(libnvme_ctrl_t c)
 {
-	return c && c->transport &&
-	       strcmp(c->transport, "pcie") &&
-	       strcmp(c->transport, "apple-nvme");
+	return c && libnvme_transport_is_fabric(c->transport);
 }
 
 int libnvme_ctrl_alloc(struct libnvme_global_ctx *ctx, libnvme_subsystem_t s,
