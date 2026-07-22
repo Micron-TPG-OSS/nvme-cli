@@ -664,9 +664,9 @@ if want_nvme
         configuration: substs,
     )
 
-    disc = configure_file(
-        input: 'etc/discovery.conf.in',
-        output: 'discovery.conf',
+    configure_file(
+        input: 'etc/nvme-fabrics.conf.sample.in',
+        output: 'nvme-fabrics.conf.sample',
         configuration: substs,
         install: true,
         install_dir: join_paths(sysconfdir, 'nvme'),
