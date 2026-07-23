@@ -488,7 +488,8 @@ int nvme_config_convert_auto(struct libnvme_global_ctx *ctx,
 
 	*ini_path = NULL;
 
-	is_default = !strcmp(config_file, PATH_NVMF_INI);
+	is_default = !strcmp(config_file, PATH_NVMF_INI) ||
+		     !strcmp(config_file, PATH_NVMF_CONFIG);
 	if (is_default) {
 		json_path = PATH_NVMF_CONFIG;
 		*ini_path = strdup(PATH_NVMF_INI);
@@ -586,6 +587,8 @@ int nvme_config_convert(const char *desc, int argc, char **argv)
 	ret = argconfig_parse(argc, argv, desc, opts);
 	if (ret)
 		return ret;
+
+	nvme_show_init();
 
 	log_level = map_log_level(verbose ? 1 : 0, false);
 

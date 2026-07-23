@@ -2744,47 +2744,6 @@ static int nvmf_create_discovery_ctrl(struct libnvme_global_ctx *ctx,
 	return 0;
 }
 
-__libnvme_public int libnvmf_config_modify(struct libnvme_global_ctx *ctx,
-		struct libnvmf_context *fctx)
-{
-	struct libnvme_host *h;
-	struct libnvme_subsystem *s;
-	struct libnvme_ctrl *c;
-
-	h = libnvme_lookup_host(ctx, fctx->hostnqn, fctx->hostid);
-	if (!h) {
-		libnvme_msg(ctx, LIBNVME_LOG_ERR,
-			"Failed to lookup host '%s'\n",
-			fctx->hostnqn ? fctx->hostnqn : "<unset>");
-		return -ENODEV;
-	}
-
-	if (fctx->hostkey)
-		libnvme_host_set_dhchap_host_key(h, fctx->hostkey);
-
-	s = libnvme_lookup_subsystem(h, NULL, fctx->ctrl_params.subsysnqn);
-	if (!s) {
-		libnvme_msg(ctx, LIBNVME_LOG_ERR, "Failed to lookup subsystem '%s'\n",
-			fctx->ctrl_params.subsysnqn);
-		return -ENODEV;
-	}
-
-	c = libnvme_lookup_ctrl(s, &fctx->ctrl_params, NULL);
-	if (!c) {
-		libnvme_msg(ctx, LIBNVME_LOG_ERR, "Failed to lookup controller\n");
-		return -ENODEV;
-	}
-	if (fctx->ctrlkey)
-		libnvme_ctrl_set_dhchap_ctrl_key(c, fctx->ctrlkey);
-
-	nvme_parse_tls_args(fctx->keyring, fctx->tls_key,
-			    fctx->tls_key_identity, &fctx->ctrl_params.cfg, c);
-
-	update_config(c, &fctx->ctrl_params.cfg);
-
-	return 0;
-}
-
 #define NBFT_SYSFS_FILENAME	"NBFT*"
 
 static int nbft_filter(const struct dirent *dent)
@@ -3120,13 +3079,9 @@ __libnvme_public int libnvmf_discovery_nbft(struct libnvme_global_ctx *ctx,
 	struct libnvme_host *h;
 	int ret, rr, i;
 
-	h = libnvme_lookup_host(ctx, hostnqn, hostid);
-	if (!h) {
-		libnvme_msg(ctx, LIBNVME_LOG_ERR,
-			"Failed to lookup host '%s'\n",
-			fctx->hostnqn ? fctx->hostnqn : "<unset>");
-		return -ENODEV;
-	}
+	ret = libnvme_get_host(ctx, fctx->hostnqn, fctx->hostid, &h);
+	if (ret)
+		return ret;
 
 	ret = setup_connection(fctx, h, false);
 	if (ret)
@@ -3165,14 +3120,9 @@ __libnvme_public int libnvmf_discovery_nbft(struct libnvme_global_ctx *ctx,
 				hostid = fctx->hostid;
 		}
 
-		h = libnvme_lookup_host(ctx, hostnqn, hostid);
-		if (!h) {
-			libnvme_msg(ctx, LIBNVME_LOG_ERR,
-				"Failed to lookup host '%s'\n",
-				hostnqn ? hostnqn : "<unset>");
-			ret = -ENODEV;
+		ret = libnvme_get_host(ctx, hostnqn, hostid, &h);
+		if (ret)
 			goto out_free;
-		}
 
 		/* Subsystem Namespace Descriptor List */
 		for (ss = entry->nbft->subsystem_ns_list; ss && *ss; ss++)
@@ -3354,13 +3304,9 @@ __libnvme_public int libnvmf_discovery(
 	struct libnvme_host *h;
 	int ret;
 
-	h = libnvme_lookup_host(ctx, fctx->hostnqn, fctx->hostid);
-	if (!h) {
-		libnvme_msg(ctx, LIBNVME_LOG_ERR,
-			"Failed to lookup host '%s'\n",
-			fctx->hostnqn ? fctx->hostnqn : "<unset>");
-		return -ENODEV;
-	}
+	ret = libnvme_get_host(ctx, fctx->hostnqn, fctx->hostid, &h);
+	if (ret)
+		return ret;
 
 	ret = setup_connection(fctx, h, true);
 	if (ret)
@@ -3423,8 +3369,17 @@ __libnvme_public int libnvmf_discovery(
 
 	if (!c && !force) {
 		c = lookup_ctrl(h, fctx);
-		if (c)
+		if (c) {
 			fctx->persistent = true;
+			if (!libnvme_ctrl_get_transport_handle(c)) {
+				ret = libnvme_open(ctx, c->name, &c->hdl);
+				if (ret) {
+					libnvme_msg(ctx, LIBNVME_LOG_ERR,
+						"failed to open %s\n", c->name);
+					return ret;
+				}
+			}
+		}
 	}
 	if (!c) {
 		/* No device or non-matching device, create a new controller */
@@ -3461,13 +3416,9 @@ __libnvme_public int libnvmf_connect(
 			return devid_fd;
 	}
 
-	h = libnvme_lookup_host(ctx, fctx->hostnqn, fctx->hostid);
-	if (!h) {
-		libnvme_msg(ctx, LIBNVME_LOG_ERR,
-			"Failed to lookup host '%s'\n",
-			fctx->hostnqn ? fctx->hostnqn : "<unset>");
-		return -ENODEV;
-	}
+	err = libnvme_get_host(ctx, fctx->hostnqn, fctx->hostid, &h);
+	if (err)
+		return err;
 
 	err = setup_connection(fctx, h, false);
 	if (err)
