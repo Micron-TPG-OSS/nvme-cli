@@ -1441,6 +1441,22 @@ static int __nvmf_supported_options(struct libnvme_global_ctx *ctx)
 	return 0;
 }
 
+/* Parse the kernel instance number out of a ctrl's name ("nvme3" -> 3). */
+static int ctrl_instance(libnvme_ctrl_t c)
+{
+	int instance = -1;
+	const char *name;
+
+	if (!c)
+		return instance;
+
+	name = libnvme_ctrl_get_name(c);
+	if (name)
+		sscanf(name, "nvme%d", &instance);
+
+	return instance;
+}
+
 /*
  * Best-effort registry update after a successful connect: record ownership
  * when an owner is set, otherwise clear any stale entry for a recycled
@@ -2432,6 +2448,81 @@ static libnvme_ctrl_t lookup_ctrl(libnvme_host_t h, struct libnvmf_context *fctx
 	}
 
 	return NULL;
+}
+
+__libnvme_public int libnvmf_get_owner_from_tid(struct libnvme_global_ctx *ctx,
+		const struct libnvmf_tid *tid, char **owner)
+{
+	struct libnvme_ctrl_params params = { 0 };
+	libnvme_subsystem_t s;
+	libnvme_host_t h;
+	libnvme_ctrl_t c = NULL;
+	int ret;
+
+	if (!ctx || !tid || !owner)
+		return -EINVAL;
+
+	*owner = NULL;
+
+	h = libnvme_lookup_host(ctx, libnvmf_tid_get_hostnqn(tid),
+				 libnvmf_tid_get_hostid(tid));
+	if (!h)
+		return 0;
+
+	params.transport = libnvmf_tid_get_transport(tid);
+	params.traddr = libnvmf_tid_get_traddr(tid);
+	params.trsvcid = libnvmf_tid_get_trsvcid(tid);
+	params.subsysnqn = libnvmf_tid_get_subsysnqn(tid);
+	params.host_traddr = libnvmf_tid_get_host_traddr(tid);
+	params.host_iface = libnvmf_tid_get_host_iface(tid);
+
+	libnvme_for_each_subsystem(h, s) {
+		c = libnvme_ctrl_find(s, &params, NULL);
+		if (c)
+			break;
+	}
+	if (!c)
+		return 0;
+
+	ret = libnvmf_registry_retrieve(ctx, libnvme_ctrl_get_name(c),
+					"owner", owner);
+	return (ret == -ENOENT) ? 0 : ret;
+}
+
+__libnvme_public int libnvmf_get_owner_from_fctx(struct libnvme_global_ctx *ctx,
+		struct libnvmf_context *fctx, char **owner)
+{
+	struct libnvmf_tid *tid;
+	const char *name;
+	int ret;
+
+	if (!ctx || !fctx || !owner)
+		return -EINVAL;
+
+	*owner = NULL;
+
+	name = libnvmf_context_get_device(fctx);
+	if (name) {
+		ret = libnvmf_registry_retrieve(ctx, name, "owner", owner);
+		return (ret == -ENOENT) ? 0 : ret;
+	}
+
+	tid = libnvmf_tid_from_fields(
+			libnvmf_context_get_transport(fctx),
+			libnvmf_context_get_traddr(fctx),
+			libnvmf_context_get_trsvcid(fctx),
+			libnvmf_context_get_subsysnqn(fctx),
+			libnvmf_context_get_host_traddr(fctx),
+			libnvmf_context_get_host_iface(fctx),
+			libnvmf_context_get_hostnqn(fctx),
+			libnvmf_context_get_hostid(fctx));
+	if (!tid)
+		return -ENOMEM;
+
+	ret = libnvmf_get_owner_from_tid(ctx, tid, owner);
+	libnvmf_tid_free(tid);
+
+	return ret;
 }
 
 static int setup_connection(struct libnvmf_context *fctx, struct libnvme_host *h,
@@ -3427,7 +3518,11 @@ __libnvme_public int libnvmf_connect(
 	c = lookup_ctrl(h, fctx);
 	if (c && libnvme_ctrl_get_name(c) &&
 	    !fctx->ctrl_params.cfg.duplicate_connect) {
+		int instance = ctrl_instance(c);
+
 		write_devid_file(fctx, devid_fd, c);
+		if (instance >= 0)
+			registry_update_on_connect(ctx, instance);
 		fctx->hooks.already_connected(fctx, h,
 			libnvme_ctrl_get_subsysnqn(c),
 			libnvme_ctrl_get_transport(c),
@@ -3468,8 +3563,14 @@ __libnvme_public int libnvmf_connect(
 		 * the winner -- rescan to find it.
 		 */
 		if (err == -ENVME_CONNECT_ALREADY &&
-		    libnvme_scan_topology(ctx, NULL, NULL) == 0)
-			write_devid_file(fctx, devid_fd, lookup_ctrl(h, fctx));
+		    libnvme_scan_topology(ctx, NULL, NULL) == 0) {
+			libnvme_ctrl_t winner = lookup_ctrl(h, fctx);
+			int instance = ctrl_instance(winner);
+
+			write_devid_file(fctx, devid_fd, winner);
+			if (instance >= 0)
+				registry_update_on_connect(ctx, instance);
+		}
 
 		libnvme_msg(ctx, LIBNVME_LOG_ERR, "could not add new controller: %s\n",
 			libnvme_strerror(-err));
