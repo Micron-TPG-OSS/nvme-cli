@@ -1849,6 +1849,15 @@ out:
 /*SEAGATE-PLUGIN Version */
 static int seagate_plugin_version(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
+	const char *desc = "Prints the Seagate plugin version.";
+	int err;
+
+	NVME_ARGS(opts);
+
+	err = parse_args(argc, argv, desc, opts);
+	if (err)
+		return err;
+
 	printf("Seagate-Plugin version : %d.%d\n",
 		   SEAGATE_PLUGIN_VERSION_MAJOR,
 		   SEAGATE_PLUGIN_VERSION_MINOR);
@@ -1859,6 +1868,15 @@ static int seagate_plugin_version(int argc, char **argv, struct command *acmd, s
 /*OCP SEAGATE-PLUGIN Version */
 static int stx_ocp_plugin_version(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
+	const char *desc = "Prints the Seagate OCP plugin version.";
+	int err;
+
+	NVME_ARGS(opts);
+
+	err = parse_args(argc, argv, desc, opts);
+	if (err)
+		return err;
+
 	printf("Seagate-OCP-Plugin version : %d.%d\n",
 		SEAGATE_OCP_PLUGIN_VERSION_MAJOR,
 		SEAGATE_OCP_PLUGIN_VERSION_MINOR);

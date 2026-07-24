@@ -75,6 +75,12 @@ static inline bool subsystem_iopolicy_filter(const char *name, void *arg)
 void register_extension(struct plugin *plugin);
 
 /*
+ * parse_args - parse arguments without opening a device
+ */
+int parse_args(int argc, char *argv[], const char *desc,
+	       struct argconfig_commandline_options *opts);
+
+/*
  * parse_and_open - parses arguments and opens the NVMe device, populating @ctx, @hdl
  */
 int parse_and_open(struct libnvme_global_ctx **ctx,

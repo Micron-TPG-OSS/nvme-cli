@@ -9967,7 +9967,15 @@ static int admin_passthru(int argc, char **argv, struct command *acmd, struct pl
 #ifdef CONFIG_FABRICS
 static int gen_hostnqn_cmd(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
+	const char *desc = "Generate a host NVMe Qualified Name.";
 	char *hostnqn;
+	int err;
+
+	NVME_ARGS(opts);
+
+	err = parse_args(argc, argv, desc, opts);
+	if (err)
+		return err;
 
 	hostnqn = libnvmf_generate_hostnqn();
 	if (!hostnqn) {
@@ -9982,12 +9990,22 @@ static int gen_hostnqn_cmd(int argc, char **argv, struct command *acmd, struct p
 
 static int show_hostnqn_cmd(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
+	const char *desc = "Show the configured host NVMe Qualified Name.";
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	char *hostnqn;
+	int err;
 
-	ctx = libnvme_create_global_ctx();
-	if (!ctx)
-		return -ENOMEM;
+	NVME_ARGS(opts);
+
+	err = parse_args(argc, argv, desc, opts);
+	if (err)
+		return err;
+
+	err = nvme_create_global_ctx(&ctx);
+	if (err)
+		return err;
+	libnvme_set_logging_file(ctx, stdout);
+	libnvme_set_logging_level(ctx, log_level, false, false);
 
 	hostnqn = libnvmf_read_hostnqn(ctx);
 	if (!hostnqn)

@@ -2578,6 +2578,15 @@ static int micron_drive_info(int argc, char **argv, struct command *acmd,
 static int micron_cloud_ssd_plugin_version(int argc, char **argv,
 					   struct command *command, struct plugin *plugin)
 {
+	const char *desc = "Prints the Micron cloud SSD plugin version.";
+	int err;
+
+	NVME_ARGS(opts);
+
+	err = parse_args(argc, argv, desc, opts);
+	if (err)
+		return err;
+
 	printf("nvme-cli Micron cloud SSD plugin version: %s.%s\n",
 		   __version_major, __version_minor);
 	return 0;
@@ -2586,6 +2595,15 @@ static int micron_cloud_ssd_plugin_version(int argc, char **argv,
 static int micron_plugin_version(int argc, char **argv, struct command *acmd,
 				 struct plugin *plugin)
 {
+	const char *desc = "Prints the Micron plugin version.";
+	int err;
+
+	NVME_ARGS(opts);
+
+	err = parse_args(argc, argv, desc, opts);
+	if (err)
+		return err;
+
 	printf("nvme-cli Micron plugin version: %s.%s.%s\n",
 		   __version_major, __version_minor, __version_patch);
 	return 0;
