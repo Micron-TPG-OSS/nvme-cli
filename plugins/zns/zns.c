@@ -124,6 +124,10 @@ static int list(int argc, char **argv, struct command *acmd,
 	}
 
 	t = table_init_with_columns(columns, ARRAY_SIZE(columns));
+	if (!t) {
+		nvme_show_error("Failed to allocate table");
+		return -ENOMEM;
+	}
 
 	err = print_zns_list(ctx, t);
 
