@@ -46,9 +46,11 @@
 #include <sys/types.h>
 
 #include <libnvme.h>
+#include <libnvme-mi.h>
 
 #include "common.h"
 #include "fabrics.h"
+#include "global-config.h"
 #include "logging.h"
 #include "nvme-cmds.h"
 #include "nvme-print.h"
@@ -240,13 +242,6 @@ static const char *pmrctl = "PMRCTL=0xe04 register offset";
 static const char *pmrmscl = "PMRMSCL=0xe14 register offset";
 static const char *pmrmscu = "PMRMSCU=0xe18 register offset";
 static const char *ish = "Ignore Shutdown (for NVMe-MI command)";
-
-struct nvme_args nvme_args = {
-	.output_format = "normal",
-	.output_format_ver = 2,
-	.timeout = NVME_DEFAULT_IOCTL_TIMEOUT,
-	.supported_output_formats = DEFAULT_OUTPUT_FORMATS,
-};
 
 static void *mmap_registers(struct libnvme_transport_handle *hdl, bool writable);
 static int munmap_registers(void *addr);
@@ -11785,6 +11780,10 @@ int main(int argc, char **argv)
 		return 0;
 	}
 	setlocale(LC_ALL, "");
+
+	err = nvme_load_global_config();
+	if (err)
+		return err;
 
 	err = nvme_install_sigint_handler();
 	if (err)
