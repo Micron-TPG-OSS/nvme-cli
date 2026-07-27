@@ -107,7 +107,7 @@ static int list(int argc, char **argv, struct command *acmd,
 	};
 	struct table *t;
 
-	NVME_ARGS(opts);
+	NVME_ARGS_OUTPUT_FORMATS(opts, NORMAL, "Output format: normal");
 
 	err = parse_args(argc, argv, desc, opts);
 	if (err)
