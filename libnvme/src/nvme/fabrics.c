@@ -712,6 +712,7 @@ __libnvme_public int libnvmf_context_set_crypto(struct libnvmf_context *fctx,
 		return 0;
 	}
 
+	free(fctx->tls_key);
 	fctx->tls_key = strdup(tls_key);
 	return 0;
 }
@@ -1341,10 +1342,8 @@ static int build_options(libnvme_host_t h, libnvme_ctrl_t c, char **argstr)
 	    (!strcmp(transport, "tcp") &&
 	     add_bool_argument(ctx, argstr, tls, c->cfg.tls)) ||
 	    (!strcmp(transport, "tcp") &&
-	     add_bool_argument(ctx, argstr, concat, c->cfg.concat))) {
-		free(*argstr);
+	     add_bool_argument(ctx, argstr, concat, c->cfg.concat)))
 		return -1;
-	}
 
 	return 0;
 }
