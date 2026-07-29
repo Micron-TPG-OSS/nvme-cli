@@ -42,6 +42,12 @@ option(
   description : 'nvme top support'
 )
 option(
+  'deprecated-cmds',
+  type : 'feature',
+  value: 'disabled',
+  description : 'Deprecated commands support'
+)
+option(
   'python',
   type : 'feature',
   value: 'auto',
@@ -189,7 +195,7 @@ option(
   type : 'array',
   choices: ['amzn', 'config', 'dapustor', 'dell', 'dera',
             'exclusion', 'fdp', 'feat', 'huawei', 'ibm', 'innogrit', 'inspur',
-            'intel', 'lm', 'mangoboost', 'memblaze', 'micron', 'nbft',
+            'intel', 'keys', 'lm', 'mangoboost', 'memblaze', 'micron', 'nbft',
             'netapp', 'nvidia', 'ocp', 'registry', 'sandisk', 'scaleflux',
             'seagate', 'sed', 'shannon', 'solidigm', 'ssstc', 'toshiba',
             'transcend', 'utils', 'virtium', 'wdc', 'ymtc', 'zns'],

@@ -77,6 +77,14 @@ adoc_sources = [
     'nvme-io-mgmt-recv',
     'nvme-io-mgmt-send',
     'nvme-io-passthru',
+    'nvme-keys-check-kxchap',
+    'nvme-keys-check-tls',
+    'nvme-keys-export',
+    'nvme-keys-gen-kxchap',
+    'nvme-keys-gen-tls',
+    'nvme-keys-import',
+    'nvme-keys-insert-tls',
+    'nvme-keys-revoke',
     'nvme-lba-status-log',
     'nvme-list',
     'nvme-list-ctrl',
@@ -206,7 +214,6 @@ adoc_sources = [
     'nvme-subsystem-reset',
     'nvme-supported-log-pages',
     'nvme-telemetry-log',
-    'nvme-tls-key',
     'nvme-toshiba-clear-pcie-correctable-errors',
     'nvme-toshiba-vs-internal-log',
     'nvme-toshiba-vs-smart-add-log',
@@ -274,6 +281,16 @@ adoc_sources = [
     'nvme-sed-unlock',
     'nvme-mangoboost-id-ctrl',
 ]
+
+if want_deprecated_cmds
+    adoc_sources += [
+        'nvme-check-dhchap-key',
+        'nvme-check-tls-key',
+        'nvme-gen-dhchap-key',
+        'nvme-gen-tls-key',
+        'nvme-tls-key',
+    ]
+endif
 
 # File-format references (man section 5), installed separately from the
 # man1 command pages above.
