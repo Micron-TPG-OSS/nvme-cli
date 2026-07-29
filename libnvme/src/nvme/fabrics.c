@@ -34,13 +34,14 @@
 #include <ccan/list/list.h>
 #include <ccan/str/str.h>
 
+#include <compiler-attributes.h>
+
 #include <libnvme.h>
 
 #include "cleanup.h"
 #include "cleanup-linux.h"
 #include "private.h"
 #include "private-fabrics.h"
-#include "compiler-attributes.h"
 
 const char *nvmf_dev = "/dev/nvme-fabrics";
 
@@ -350,7 +351,7 @@ __libnvme_public int libnvmf_host_get_ids(struct libnvme_global_ctx *ctx,
 	if (hostnqn_arg)
 		hnqn = strdup(hostnqn_arg);
 
-	/* JSON config: assume the first entry is the default host */
+	/* first host already resolved in ctx->hosts, if any */
 	h = libnvme_first_host(ctx);
 	if (h) {
 		if (!hid)
@@ -1167,6 +1168,7 @@ static int nvmf_sanitize_addrs(struct libnvme_global_ctx *ctx, libnvme_ctrl_t c)
 	struct libnvmf_tid *tid;
 	const char *canon;
 	char *dup;
+	int rc;
 
 	if (traddr_is_hostname(ctx, c->transport, c->traddr)) {
 		libnvme_msg(ctx, LIBNVME_LOG_ERR,
@@ -1182,10 +1184,10 @@ static int nvmf_sanitize_addrs(struct libnvme_global_ctx *ctx, libnvme_ctrl_t c)
 		return -ENVME_CONNECT_TRADDR;
 	}
 
-	tid = libnvmf_tid_from_fields(c->transport, c->traddr, c->trsvcid,
-			NULL, c->host_traddr, c->host_iface, NULL, NULL);
-	if (!tid)
-		return -ENOMEM;
+	rc = libnvmf_tid_from_fields(c->transport, c->traddr, c->trsvcid,
+			NULL, c->host_traddr, c->host_iface, NULL, NULL, &tid);
+	if (rc)
+		return rc;
 
 	canon = libnvmf_tid_get_traddr(tid);
 	if (canon) {
@@ -1561,7 +1563,7 @@ __libnvme_public int libnvmf_add_ctrl(libnvme_host_t h, libnvme_ctrl_t c)
 	if (libnvme_ctrl_get_name(c) && !c->cfg.duplicate_connect)
 		return -ENVME_CONNECT_ALREADY;
 
-	/* apply configuration from config file (JSON) */
+	/* carry over config from an existing ctrl on the same subsystem */
 	s = libnvme_lookup_subsystem(h, NULL, libnvme_ctrl_get_subsysnqn(c));
 	if (s) {
 		libnvme_ctrl_t fc;
@@ -1707,9 +1709,8 @@ static bool nvmf_excluded(struct libnvme_global_ctx *ctx,
 	struct libnvmf_tid *tid;
 	bool excluded;
 
-	tid = libnvmf_tid_from_fields(transport, traddr, trsvcid, subsysnqn,
-				      host_traddr, host_iface, hostnqn,
-				      hostid);
+	libnvmf_tid_from_fields(transport, traddr, trsvcid, subsysnqn,
+				host_traddr, host_iface, hostnqn, hostid, &tid);
 	if (!tid)
 		return false; /* fail-safe: never block on allocation failure */
 
@@ -2507,7 +2508,7 @@ __libnvme_public int libnvmf_get_owner_from_fctx(struct libnvme_global_ctx *ctx,
 		return (ret == -ENOENT) ? 0 : ret;
 	}
 
-	tid = libnvmf_tid_from_fields(
+	ret = libnvmf_tid_from_fields(
 			libnvmf_context_get_transport(fctx),
 			libnvmf_context_get_traddr(fctx),
 			libnvmf_context_get_trsvcid(fctx),
@@ -2515,9 +2516,9 @@ __libnvme_public int libnvmf_get_owner_from_fctx(struct libnvme_global_ctx *ctx,
 			libnvmf_context_get_host_traddr(fctx),
 			libnvmf_context_get_host_iface(fctx),
 			libnvmf_context_get_hostnqn(fctx),
-			libnvmf_context_get_hostid(fctx));
-	if (!tid)
-		return -ENOMEM;
+			libnvmf_context_get_hostid(fctx), &tid);
+	if (ret)
+		return ret;
 
 	ret = libnvmf_get_owner_from_tid(ctx, tid, owner);
 	libnvmf_tid_free(tid);
