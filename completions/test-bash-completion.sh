@@ -70,10 +70,12 @@ simulate_completion() {
     # Call _init_completion equivalent (set up variables)
     # We're simulating what _init_completion does
 
-    # Now call the function we want to test
-    # For feat plugin, we need to call plugin_feat_opts with subcommand
+    # Now call the function we want to test: plugin subcommands go through the
+    # plugin's opts function, everything else through nvme_list_opts (builtins).
     if [[ ${words[1]} == "feat" ]] && [[ ${#words[@]} -ge 3 ]]; then
         plugin_feat_opts "${words[2]}" "$prev"
+    else
+        nvme_list_opts "${words[1]}" "$prev"
     fi
 
     echo "  DEBUG: COMPREPLY=(${COMPREPLY[*]})"
@@ -130,14 +132,8 @@ test_completion \
     "nvme feat power-meas --output-format=j" \
     "json"
 
-# KNOWN FAILING (generated completions): --sel has no enumerated value set
-# in the command metadata. It is defined as a bare OPT_BYTE with no OPT_VALS
-# table (plugins/feat/feat-nvme.h), so the parser accepts any byte and
-# command-metadata.c emits no "values" array for it. The 0/1/2/3 set is
-# NVMe-spec knowledge that only lived in the hand-written completions.
-# These pass once --sel gains an OPT_VALS table (a command-definition change,
-# tracked as a follow-up to completions generation). Contrast --output-format,
-# which passes because its values ARE carried in the metadata.
+# --sel values come from the generator's VALUE_HINTS table (the parser leaves
+# it unconstrained, so the metadata carries no values).
 test_completion \
     "--sel=<TAB> should show 0 1 2 3" \
     "nvme feat power-meas --sel=" \
@@ -205,11 +201,25 @@ test_completion \
     "nvme feat power-meas -o j" \
     "json"
 
-# KNOWN FAILING: same --sel value-set gap as above, via the short option -S.
 test_completion \
     "-S <TAB> should show sel values 0 1 2 3" \
     "nvme feat power-meas -S " \
     "0.*1.*2.*3"
+
+# Regression: a command-LOCAL option whose values come from the metadata
+# (fw-commit --action has an OPT_VALS table). Guards the per-command value clause,
+# which the generator once emitted only for global options -- so local option
+# values silently never completed. Uses an enforced set, not VALUE_HINTS, so it
+# stays meaningful independent of the hint table.
+test_completion \
+    "--action <TAB> for fw-commit should show action values" \
+    "nvme fw-commit --action " \
+    "replace.*set-active"
+
+test_completion \
+    "-a <TAB> for fw-commit should show action values" \
+    "nvme fw-commit -a " \
+    "replace.*set-active"
 
 echo ""
 echo "========================================"
