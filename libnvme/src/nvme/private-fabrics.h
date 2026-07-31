@@ -49,7 +49,8 @@ struct libnvmf_context { // !generate-accessors:read=generated,write=generated
 
 	/* common fabrics configuration */
 	const char *device;
-	bool persistent;
+	enum libnvmf_tristate persistent;
+	enum libnvmf_tristate epcsd;
 	const char *devid_file; // !access:write=custom
 
 	/* host configuration */
