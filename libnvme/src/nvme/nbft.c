@@ -258,7 +258,8 @@ static int read_ssns(struct libnvme_global_ctx *ctx,
 
 	ssns->index = le16_to_cpu(raw_ssns->index);
 	strncpy(ssns->transport, trtype_to_string(raw_ssns->trtype),
-		sizeof(ssns->transport));
+		sizeof(ssns->transport) - 1);
+	ssns->transport[sizeof(ssns->transport) - 1] = '\0';
 
 	/* transport specific flags */
 	ssns->trflags = le16_to_cpu(raw_ssns->trflags);
@@ -508,7 +509,8 @@ static int read_hfi(struct libnvme_global_ctx *ctx, struct libnbft_info *nbft,
 		struct nbft_hfi_info_tcp *raw_hfi_info_tcp;
 
 		strncpy(hfi->transport, trtype_to_string(raw_hfi->trtype),
-			sizeof(hfi->transport));
+			sizeof(hfi->transport) - 1);
+		hfi->transport[sizeof(hfi->transport) - 1] = '\0';
 
 		ret = get_heap_obj(ctx, raw_hfi, trinfo_obj,
 			0, (char **)&raw_hfi_info_tcp);
@@ -879,7 +881,7 @@ static int parse_raw_nbft(struct libnvme_global_ctx *ctx, struct libnbft_info *n
 	return 0;
 }
 
-__libnvme_public void libnvmf_free_nbft(
+__shr_public void libnvmf_free_nbft(
 		struct libnvme_global_ctx *ctx, struct libnbft_info *nbft)
 {
 	struct libnbft_hfi **hfi;
@@ -906,7 +908,7 @@ __libnvme_public void libnvmf_free_nbft(
 	free(nbft);
 }
 
-__libnvme_public int libnvmf_read_nbft(
+__shr_public int libnvmf_read_nbft(
 		struct libnvme_global_ctx *ctx, struct libnbft_info **nbft,
 		const char *filename)
 {

@@ -15,7 +15,10 @@
 
 #if defined(_WIN32)
 #include <direct.h>
+#include <io.h>
 #define rmdir _rmdir
+#define close _close
+#define unlink _unlink
 #else
 #include <fcntl.h>
 #include <unistd.h>
@@ -71,6 +74,51 @@ static bool test_basename(void)
 	return pass;
 }
 
+static bool test_dirname(void)
+{
+	struct {
+		const char *input;
+		const char *expected;
+	} cases[] = {
+		{ "/usr/lib", "/usr" },
+		{ "/usr/", "/" },
+		{ "/usr", "/" },
+		{ "usr", "." },
+		{ "/", "/" },
+		{ ".", "." },
+		{ "..", "." },
+		{ "", "." },
+		{ "///", "/" },
+		{ "/usr///lib", "/usr" },
+		{ "/usr/lib/", "/usr" },
+		{ NULL, "." },
+	};
+	bool pass = true;
+	unsigned int i;
+
+	printf("test_dirname:\n");
+
+	for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		char buf[256];
+		char *input = NULL;
+		char *res;
+
+		if (cases[i].input) {
+			strncpy(buf, cases[i].input, sizeof(buf) - 1);
+			buf[sizeof(buf) - 1] = '\0';
+			input = buf;
+		}
+
+		res = shr_dirname(input);
+
+		char desc[512];
+		snprintf(desc, sizeof(desc), "shr_dirname(\"%s\")", cases[i].input ? cases[i].input : "NULL");
+		pass &= check_str(desc, res, cases[i].expected);
+	}
+
+	return pass;
+}
+
 /* Prove the directory tree really exists by writing a file inside it. */
 static bool dir_is_writable(const char *dir)
 {
@@ -85,6 +133,30 @@ static bool dir_is_writable(const char *dir)
 	remove(path);
 
 	return true;
+}
+
+static bool test_mkdir(void)
+{
+	static const char *dir = "shr-test-mkdir-dir";
+	bool pass = true;
+	int ret;
+
+	printf("test_mkdir:\n");
+
+	/* Clean up if it was left over from a previous crashed run */
+	rmdir(dir);
+
+	ret = shr_mkdir(dir, 0755);
+	pass &= check_ret("creates directory", ret, 0);
+	pass &= check_bool("the directory is real and writable",
+			    dir_is_writable(dir));
+
+	ret = shr_mkdir(dir, 0755);
+	pass &= check_ret("re-running on an existing directory returns -EEXIST", ret, -EEXIST);
+
+	rmdir(dir);
+
+	return pass;
 }
 
 static bool test_mkdir_p(void)
@@ -129,12 +201,11 @@ static bool test_mkdir_p(void)
 	return pass;
 }
 
-#if !defined(_WIN32)
 static bool test_mkstemp(void)
 {
 	char template[] = "shr-test-mkstemp-XXXXXX";
 	bool pass = true;
-	int fd, flags;
+	int fd;
 
 	printf("test_mkstemp:\n");
 
@@ -146,16 +217,60 @@ static bool test_mkstemp(void)
 	pass &= check_bool("template's X's got replaced",
 			    strcmp(template, "shr-test-mkstemp-XXXXXX") != 0);
 
-	flags = fcntl(fd, F_GETFD);
+#if !defined(_WIN32)
+	int flags = fcntl(fd, F_GETFD);
 	pass &= check_bool("O_CLOEXEC is set on the returned fd",
 			    flags >= 0 && (flags & FD_CLOEXEC));
+#endif
 
 	close(fd);
 	unlink(template);
 
 	return pass;
 }
-#endif
+
+static bool test_mkdir_from_fname(void)
+{
+	static const char *base = "shr-test-mkdir-fname-dir";
+	char fname[256];
+	bool pass = true;
+	int ret;
+
+	printf("test_mkdir_from_fname:\n");
+
+	snprintf(fname, sizeof(fname), "%s/level1/level2/file.txt", base);
+
+	ret = shr_mkdir_from_fname(fname, 0755);
+	pass &= check_ret("creates parent directories from filename", ret, 0);
+	pass &= check_bool("the deepest parent directory is real and writable",
+			    dir_is_writable("shr-test-mkdir-fname-dir/level1/level2"));
+
+	ret = shr_mkdir_from_fname(fname, 0755);
+	pass &= check_ret("re-running on an existing tree is a no-op success",
+			   ret, 0);
+
+	ret = shr_mkdir_from_fname("bare_filename.txt", 0755);
+	pass &= check_ret("bare filename without directories is a no-op success",
+			   ret, 0);
+
+	{
+		char toolong[PATH_MAX + 10];
+
+		memset(toolong, 'a', sizeof(toolong) - 1);
+		toolong[sizeof(toolong) - 1] = '\0';
+		toolong[PATH_MAX + 2] = '/';
+		ret = shr_mkdir_from_fname(toolong, 0755);
+		pass &= check_ret("a parent path longer than PATH_MAX is rejected",
+				  ret, -ENAMETOOLONG);
+	}
+
+	/* Clean up what we created, deepest first. */
+	rmdir("shr-test-mkdir-fname-dir/level1/level2");
+	rmdir("shr-test-mkdir-fname-dir/level1");
+	rmdir("shr-test-mkdir-fname-dir");
+
+	return pass;
+}
 
 static bool test_fsync_dir(void)
 {
@@ -175,10 +290,11 @@ int main(void)
 	bool pass = true;
 
 	pass &= test_basename();
+	pass &= test_dirname();
+	pass &= test_mkdir();
 	pass &= test_mkdir_p();
-#if !defined(_WIN32)
+	pass &= test_mkdir_from_fname();
 	pass &= test_mkstemp();
-#endif
 	pass &= test_fsync_dir();
 
 	fflush(stdout);

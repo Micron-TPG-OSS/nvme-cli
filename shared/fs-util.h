@@ -10,11 +10,23 @@
 #include <sys/types.h>
 
 /*
+ * Create a single directory.
+ * Return: 0 on success, -errno otherwise.
+ */
+int shr_mkdir(const char *path, mode_t mode);
+
+/*
  * Create path and every missing parent directory, like "mkdir -p".
  * Return: 0 on success (including if path already exists as a directory),
  * -errno otherwise.
  */
 int shr_mkdir_p(const char *path, mode_t mode);
+
+/*
+ * Create path and every missing parent directory using shr_mkdir_p
+ * from a full path including a filename.
+ */
+int shr_mkdir_from_fname(const char *file, mode_t mode);
 
 /*
  * mkstemp(), with O_CLOEXEC set atomically where possible.
@@ -31,3 +43,10 @@ void shr_fsync_dir(const char *path);
  * never returns a pointer to static storage.
  */
 char *shr_basename(const char *path);
+
+/*
+ * dirname returns the string up to, but not including, the final '/', and
+ * basename returns the component following the final '/'. Trailing '/'
+ * characters are not counted as part of the pathname.
+ */
+char *shr_dirname(char *path);
