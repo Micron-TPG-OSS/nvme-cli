@@ -2545,11 +2545,12 @@ static int set_discovery_kato(struct libnvmf_context *fctx)
 	int tmo = fctx->ctrl_params.cfg.keep_alive_tmo;
 
 	/* Set kato to NVMF_DEF_DISC_TMO for persistent controllers */
-	if (fctx->persistent && !fctx->ctrl_params.cfg.keep_alive_tmo)
+	if (fctx->persistent == LIBNVMF_TRISTATE_TRUE &&
+	    !fctx->ctrl_params.cfg.keep_alive_tmo)
 		fctx->ctrl_params.cfg.keep_alive_tmo =
 			fctx->default_keep_alive_timeout;
 	/* Set kato to zero for non-persistent controllers */
-	else if (!fctx->persistent &&
+	else if (fctx->persistent != LIBNVMF_TRISTATE_TRUE &&
 		 (fctx->ctrl_params.cfg.keep_alive_tmo > 0))
 		fctx->ctrl_params.cfg.keep_alive_tmo = 0;
 
@@ -2655,7 +2656,7 @@ static int _nvmf_discovery(struct libnvme_global_ctx *ctx,
 			 * Are we supposed to keep the discovery
 			 * controller around?
 			 */
-			disconnect = !nfctx.persistent;
+			disconnect = nfctx.persistent != LIBNVMF_TRISTATE_TRUE;
 
 			if (strcmp(e->subnqn, NVME_DISC_SUBSYS_NAME)) {
 				/*
@@ -2715,14 +2716,6 @@ __shr_public const char *libnvmf_get_default_trsvcid(const char *transport,
 	}
 
 	return NULL;
-}
-
-static bool is_persistent_discovery_ctrl(libnvme_host_t h, libnvme_ctrl_t c)
-{
-	if (libnvme_host_is_pdc_enabled(h, DEFAULT_PDC_ENABLED))
-		return libnvme_ctrl_get_unique_discovery_ctrl(c);
-
-	return false;
 }
 
 static int libnvme_add_ctrl(struct libnvmf_context *fctx,
@@ -3432,14 +3425,14 @@ __shr_public int libnvmf_discovery(
 
 				libnvme_free_ctrl(c);
 				c = NULL;
-				fctx->persistent = false;
+				fctx->persistent = LIBNVMF_TRISTATE_FALSE;
 			} else {
 				/*
 				 * If the controller device is found it must
 				 * be persistent, and shouldn't be disconnected
 				 * on exit.
 				 */
-				fctx->persistent = true;
+				fctx->persistent = LIBNVMF_TRISTATE_TRUE;
 				/*
 				 * When --host-traddr/--host-iface are not specified on the
 				 * command line, use the discovery controller's (c) host-
@@ -3464,15 +3457,16 @@ __shr_public int libnvmf_discovery(
 			 */
 			libnvme_msg(ctx, LIBNVME_LOG_ERR,
 				"ctrl device %s not found%s\n", fctx->device,
-				fctx->persistent ? ", ignoring --persistent" : "");
-			fctx->persistent = false;
+				fctx->persistent == LIBNVMF_TRISTATE_TRUE ?
+					", ignoring --persistent" : "");
+			fctx->persistent = LIBNVMF_TRISTATE_FALSE;
 		}
 	}
 
 	if (!c && !force) {
 		c = lookup_ctrl(h, fctx);
 		if (c) {
-			fctx->persistent = true;
+			fctx->persistent = LIBNVMF_TRISTATE_TRUE;
 			if (!libnvme_ctrl_get_transport_handle(c)) {
 				ret = libnvme_open(ctx, c->name, &c->hdl);
 				if (ret) {
@@ -3496,7 +3490,7 @@ __shr_public int libnvmf_discovery(
 	}
 
 	ret = _nvmf_discovery(ctx, fctx, connect, c);
-	if (!(fctx->persistent || is_persistent_discovery_ctrl(h, c)))
+	if (fctx->persistent != LIBNVMF_TRISTATE_TRUE)
 		libnvmf_disconnect_ctrl(c);
 	libnvme_free_ctrl(c);
 
@@ -3561,7 +3555,7 @@ __shr_public int libnvmf_connect(
 	 * this as a persistent connection and specify a KATO.
 	 */
 	if (!strcmp(fctx->ctrl_params.subsysnqn, NVME_DISC_SUBSYS_NAME)) {
-		fctx->persistent = true;
+		fctx->persistent = LIBNVMF_TRISTATE_TRUE;
 
 		set_discovery_kato(fctx);
 	}

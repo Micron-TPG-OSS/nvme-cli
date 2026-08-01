@@ -19,7 +19,7 @@ project(
         'GPL-2.0-only',         # nvme-cli
         'LGPL-2.1-or-later',    # libnvme
     ],
-    version: '3.0-b.3',
+    version: '3.0-b.4',
     default_options: [
         'c_std=gnu99',
         'buildtype=debugoptimized',
@@ -175,8 +175,6 @@ conf.set('CONFIG_JSONC', json_c_dep.found(), description: 'Is json-c available?'
 
 conf.set('NVME_VERSION', '"@0@"'.format(meson.project_version()))
 conf.set('LIBNVME_VERSION', '"@0@"'.format(meson.project_version()))
-
-conf.set10('DEFAULT_PDC_ENABLED', get_option('pdc-enabled'))
 
 # local (cross-compilable) implementations of ccan configure steps
 conf.set10(
@@ -868,6 +866,5 @@ summary(wanted_dict, section: 'Features to build', bool_yn: true)
 
 conf_dict = {
     'git version':      conf.get('GIT_VERSION'),
-    'pdc enabled':      get_option('pdc-enabled'),
 }
 summary(conf_dict, section: 'Configuration', bool_yn: true)
