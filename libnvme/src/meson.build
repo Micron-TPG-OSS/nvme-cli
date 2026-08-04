@@ -136,24 +136,41 @@ mi_ld = meson.current_source_dir() / 'libnvme-mi.ld'
 accessors_ld = meson.current_source_dir() / 'accessors.ld'
 nvmf_accessors_ld = meson.current_source_dir() / 'accessors-fabrics.ld'
 
-link_args = [
-    '-Wl,--version-script=@0@'.format(nvme_ld),
-    '-Wl,--version-script=@0@'.format(accessors_ld),
-]
+# Version scripts filter the exported symbols. GNU ld honours
+# --version-script for PE/COFF too, but LLVM's lld-link does not accept the
+# option at all, so the MSYS2 CLANG64/CLANGARM64 environments cannot use
+# them. Fall back to exporting everything there; -fvisibility=hidden below
+# is a no-op for PE, where auto-export is the default.
+want_version_scripts = cc.has_link_argument(
+    '-Wl,--version-script=@0@'.format(nvme_ld)
+)
+if not want_version_scripts
+    message('Linker does not support --version-script; exporting all symbols')
+endif
+
+link_args = []
+if want_version_scripts
+    link_args += [
+        '-Wl,--version-script=@0@'.format(nvme_ld),
+        '-Wl,--version-script=@0@'.format(accessors_ld),
+    ]
+endif
 
 libconf = configuration_data()
 if want_fabrics
-    link_args += [
-        '-Wl,--version-script=@0@'.format(nvmf_ld),
-        '-Wl,--version-script=@0@'.format(nvmf_accessors_ld),
-    ]
+    if want_version_scripts
+        link_args += [
+            '-Wl,--version-script=@0@'.format(nvmf_ld),
+            '-Wl,--version-script=@0@'.format(nvmf_accessors_ld),
+        ]
+    endif
     libconf.set('FABRICS_INCLUDE',
                 fs.read('fabrics-includes.h.in').strip())
 else
     libconf.set('FABRICS_INCLUDE', '')
 endif
 
-if want_mi
+if want_mi and want_version_scripts
     link_args += [
         '-Wl,--version-script=@0@'.format(mi_ld),
     ]
