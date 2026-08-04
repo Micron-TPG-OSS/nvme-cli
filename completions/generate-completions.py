@@ -123,8 +123,9 @@ _nvme_detect_value_completion() {
 \topt=""
 \tval=""
 
-\tif [[ $cur == --*= ]]; then
-\t\topt="${cur%=}"
+\tif [[ $cur == --*=* ]]; then
+\t\topt="${cur%%=*}"
+\t\tval="${cur#*=}"
 \t\tcompleting_value=1
 \telif [[ $cur == "=" ]] && [[ $prev == --* ]]; then
 \t\topt="$prev"
