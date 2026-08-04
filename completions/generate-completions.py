@@ -166,6 +166,7 @@ BASH_FUNC_PREAMBLE = '''\
 
 {func} () {{
 \tlocal opts=""
+\tlocal valopts=""
 \tlocal vals=""
 \tlocal opt=""
 \tlocal val=""
@@ -198,6 +199,12 @@ BASH_FUNC_PREAMBLE = '''\
 BASH_FUNC_EPILOGUE = '''\
 
 \topts+=" -h --help"
+
+\t# If we thought we were completing a value but $opt is not a value-taking
+\t# option, it is a flag -- fall back to normal option completion.
+\tif [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+\t\tcompleting_value=0
+\tfi
 
 \tif [[ $completing_value -eq 1 ]]; then
 \t\tif [[ $vals != " " ]]; then
@@ -246,6 +253,22 @@ def bash_option_words(opts):
     return out
 
 
+def bash_valopt_words(opts):
+    """Names (long and short, no '=') of the options that take a value.
+
+    The value-completion path keys off this: an option word not listed here is a
+    flag, so completing after it must fall back to normal option completion
+    rather than sit in value mode offering nothing.
+    """
+    out = ""
+    for o in opts:
+        if opt_suffix(o):
+            out += " --" + o["long"]
+            if o.get("short"):
+                out += " -" + o["short"]
+    return out
+
+
 def opt_is_file(opt):
     """True if the option's value is a filename/path we can file-complete."""
     return opt.get("metavar") in ("FILE", "DIRECTORY")
@@ -290,6 +313,9 @@ def emit_bash_plugin(out, commands, func, device_argpos):
         words = bash_option_words(global_opts)
         out.write(f'\tcase "$1" in\n\t\t{skip})\n\t\t\t;;\n\t\t*)\n')
         out.write(f'\t\t\topts+="{words}"\n')
+        valwords = bash_valopt_words(global_opts)
+        if valwords:
+            out.write(f'\t\t\tvalopts+="{valwords}"\n')
         clauses = "".join(bash_value_clause(o) for o in global_opts)
         if clauses:
             out.write('\t\t\tif [[ $completing_value -eq 1 ]]; then\n\t\t\t\tcase $opt in\n')
@@ -311,6 +337,9 @@ def emit_bash_plugin(out, commands, func, device_argpos):
             continue
         label = "|".join(f'"{n}"' for n in cmd_names(c))
         body += f'\t\t{label})\n\t\t\topts+="{words}"\n'
+        valwords = bash_valopt_words(locals_)
+        if valwords:
+            body += f'\t\t\tvalopts+="{valwords}"\n'
         if value_clauses:
             body += '\t\t\tif [[ $completing_value -eq 1 ]]; then\n\t\t\t\tcase $opt in\n'
             body += value_clauses

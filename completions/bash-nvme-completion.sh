@@ -53,6 +53,7 @@ _nvme_detect_value_completion() {
 
 nvme_list_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -85,6 +86,7 @@ nvme_list_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -104,63 +106,82 @@ nvme_list_opts () {
 			;;
 		"id-ns")
 			opts+=" --namespace-id= -n --force --vendor-specific -V --raw-binary -b"
+			valopts+=" --namespace-id -n"
 			;;
 		"id-ns-lba-format")
 			opts+=" --lba-format-index= -i --uuid-index= -U"
+			valopts+=" --lba-format-index -i --uuid-index -U"
 			;;
 		"list-ns")
 			opts+=" --namespace-id= -n --csi= -y --all -a"
+			valopts+=" --namespace-id -n --csi -y"
 			;;
 		"list-ctrl")
 			opts+=" --cntid= -c --namespace-id= -n"
+			valopts+=" --cntid -c --namespace-id -n"
 			;;
 		"nvm-id-ns")
 			opts+=" --namespace-id= -n --uuid-index= -U"
+			valopts+=" --namespace-id -n --uuid-index -U"
 			;;
 		"nvm-id-ns-lba-format")
 			opts+=" --lba-format-index= -i --uuid-index= -U"
+			valopts+=" --lba-format-index -i --uuid-index -U"
 			;;
 		"primary-ctrl-caps")
 			opts+=" --cntlid= -c"
+			valopts+=" --cntlid -c"
 			;;
 		"list-secondary")
 			opts+=" --cntid= -c --num-entries= -e"
+			valopts+=" --cntid -c --num-entries -e"
 			;;
 		"cmdset-ind-id-ns")
 			opts+=" --namespace-id= -n --raw-binary -b"
+			valopts+=" --namespace-id -n"
 			;;
 		"ns-descs")
 			opts+=" --namespace-id= -n --raw-binary -b"
+			valopts+=" --namespace-id -n"
 			;;
 		"id-nvmset")
 			opts+=" --nvmset_id= -i"
+			valopts+=" --nvmset_id -i"
 			;;
 		"id-uuid")
 			opts+=" --raw-binary -b"
 			;;
 		"id-iocs")
 			opts+=" --controller-id= -c"
+			valopts+=" --controller-id -c"
 			;;
 		"id-domain")
 			opts+=" --dom-id= -d"
+			valopts+=" --dom-id -d"
 			;;
 		"list-endgrp")
 			opts+=" --endgrp-id= -i"
+			valopts+=" --endgrp-id -i"
 			;;
 		"create-ns")
 			opts+=" --ish -I --nsze= -s --ncap= -c --flbas= -f --dps= -d --nmic= -m --anagrp-id= -a --nvmset-id= -i --endg-id= -e --block-size= -b --csi= -y --lbstm= -l --nphndls= -n --nsze-si= -S --ncap-si= -C --azr -z --rar= -r --ror= -O --rnumzrwa= -u --phndls= -p"
+			valopts+=" --nsze -s --ncap -c --flbas -f --dps -d --nmic -m --anagrp-id -a --nvmset-id -i --endg-id -e --block-size -b --csi -y --lbstm -l --nphndls -n --nsze-si -S --ncap-si -C --rar -r --ror -O --rnumzrwa -u --phndls -p"
 			;;
 		"delete-ns")
 			opts+=" --ish -I --namespace-id= -n"
+			valopts+=" --namespace-id -n"
 			;;
 		"attach-ns")
 			opts+=" --ish -I --namespace-id= -n --controllers= -c"
+			valopts+=" --namespace-id -n --controllers -c"
 			;;
 		"detach-ns")
 			opts+=" --ish -I --namespace-id= -n --controllers= -c"
+			valopts+=" --namespace-id -n --controllers -c"
 			;;
 		"get-log")
 			opts+=" --ish -I --namespace-id= -n --log-id= -i --log-len= -l --aen= -a --lpo= -L --lsp= -s --lsi= -S --rae -r --uuid-index= -U --raw-binary -b --csi= -y --ot -O --xfer-len= -x"
+			valopts+=" --namespace-id -n --log-id -i --log-len -l --aen -a --lpo -L --lsp -s --lsi -S --uuid-index -U --csi -y --xfer-len -x"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--log-id|-i)
@@ -171,6 +192,7 @@ nvme_list_opts () {
 			;;
 		"telemetry-log")
 			opts+=" --output-file= -O --host-generate= -g --controller-init -c --data-area= -d --rae -r --mcda= -m"
+			valopts+=" --output-file -O --host-generate -g --data-area -d --mcda -m"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
@@ -187,36 +209,45 @@ nvme_list_opts () {
 			;;
 		"smart-log")
 			opts+=" --namespace-id= -n --raw-binary -b"
+			valopts+=" --namespace-id -n"
 			;;
 		"ana-log")
 			opts+=" --groups -g"
 			;;
 		"error-log")
 			opts+=" --log-entries= -e --raw-binary -b --valid-entry -V --sqid= -S --status= -s --lba= -l --namespace-id= -n --trtype= -t --csi= -c --opcode= -O"
+			valopts+=" --log-entries -e --sqid -S --status -s --lba -l --namespace-id -n --trtype -t --csi -c --opcode -O"
 			;;
 		"effects-log")
 			opts+=" --raw-binary -b --csi= -c"
+			valopts+=" --csi -c"
 			;;
 		"endurance-log")
 			opts+=" --group-id= -g"
+			valopts+=" --group-id -g"
 			;;
 		"predictable-lat-log")
 			opts+=" --nvmset-id= -i --raw-binary -b"
+			valopts+=" --nvmset-id -i"
 			;;
 		"pred-lat-event-agg-log")
 			opts+=" --log-entries= -e --rae -r --raw-binary -b"
+			valopts+=" --log-entries -e"
 			;;
 		"persistent-event-log")
 			opts+=" --action= -a --log_len= -l --raw-binary -b"
+			valopts+=" --action -a --log_len -l"
 			;;
 		"endurance-event-agg-log")
 			opts+=" --log-entries= -e --rae -r --raw-binary -b"
+			valopts+=" --log-entries -e"
 			;;
 		"lba-status-log")
 			opts+=" --rae -r"
 			;;
 		"boot-part-log")
 			opts+=" --lsp= -s --output-file= -f"
+			valopts+=" --lsp -s --output-file -f"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-f)
@@ -227,9 +258,11 @@ nvme_list_opts () {
 			;;
 		"phy-rx-eom-log")
 			opts+=" --lsp= -s --controller= -c"
+			valopts+=" --lsp -s --controller -c"
 			;;
 		"get-feature")
 			opts+=" --feature-id= -f --namespace-id= -n --sel= -s --data-len= -l --raw-binary -b --cdw11= -c --uuid-index= -U --changed -C"
+			valopts+=" --feature-id -f --namespace-id -n --sel -s --data-len -l --cdw11 -c --uuid-index -U"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--feature-id|-f)
@@ -243,24 +276,30 @@ nvme_list_opts () {
 			;;
 		"device-self-test")
 			opts+=" --ish -I --namespace-id= -n --self-test-code= -s --wait -w"
+			valopts+=" --namespace-id -n --self-test-code -s"
 			;;
 		"self-test-log")
 			opts+=" --dst-entries= -e"
+			valopts+=" --dst-entries -e"
 			;;
 		"media-unit-stat-log")
 			opts+=" --domain-id= -d --raw-binary -b"
+			valopts+=" --domain-id -d"
 			;;
 		"supported-cap-config-log")
 			opts+=" --domain-id= -d --raw-binary -b"
+			valopts+=" --domain-id -d"
 			;;
 		"rotational-media-info-log")
 			opts+=" --endg-id= -e"
+			valopts+=" --endg-id -e"
 			;;
 		"changed-alloc-ns-list-log")
 			opts+=" --raw-binary -b"
 			;;
 		"dispersed-ns-participating-nss-log")
 			opts+=" --namespace-id= -n"
+			valopts+=" --namespace-id -n"
 			;;
 		"reachability-groups-log")
 			opts+=" --groups-only -g --rae -r"
@@ -282,6 +321,7 @@ nvme_list_opts () {
 			;;
 		"set-feature")
 			opts+=" --namespace-id= -n --feature-id= -f --value= -V --cdw12= -c --uuid-index= -U --data-len= -l --data= -d --save -s"
+			valopts+=" --namespace-id -n --feature-id -f --value -V --cdw12 -c --uuid-index -U --data-len -l --data -d"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--feature-id|-f)
@@ -295,15 +335,19 @@ nvme_list_opts () {
 			;;
 		"set-property")
 			opts+=" --offset= -O --value= -V"
+			valopts+=" --offset -O --value -V"
 			;;
 		"get-property")
 			opts+=" --offset= -O"
+			valopts+=" --offset -O"
 			;;
 		"format")
 			opts+=" --ish -I --namespace-id= -n --lbaf= -l --ses= -s --pi= -i --pil= -p --ms= -m --reset -r --force --block-size= -b"
+			valopts+=" --namespace-id -n --lbaf -l --ses -s --pi -i --pil -p --ms -m --block-size -b"
 			;;
 		"fw-commit"|"fw-activate")
 			opts+=" --ish -I --slot= -s --action= -a --bpid= -b"
+			valopts+=" --slot -s --action -a --bpid -b"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--action|-a)
@@ -314,6 +358,7 @@ nvme_list_opts () {
 			;;
 		"fw-download")
 			opts+=" --fw= -f --ish -I --xfer= -x --offset= -O --progress -p --ignore-ovr -i"
+			valopts+=" --fw -f --xfer -x --offset -O"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--fw|-f)
@@ -324,6 +369,7 @@ nvme_list_opts () {
 			;;
 		"admin-passthru")
 			opts+=" --opcode= -O --flags= -f --prefill= -p --rsvd= -R --namespace-id= -n --data-len= -l --metadata-len= -m --cdw2= -2 --cdw3= -3 --cdw10= -4 --cdw11= -5 --cdw12= -6 --cdw13= -7 --cdw14= -8 --cdw15= -9 --input-file= -i --metadata= -M --raw-binary -b --show-command -s --read -r --write -w --latency -T"
+			valopts+=" --opcode -O --flags -f --prefill -p --rsvd -R --namespace-id -n --data-len -l --metadata-len -m --cdw2 -2 --cdw3 -3 --cdw10 -4 --cdw11 -5 --cdw12 -6 --cdw13 -7 --cdw14 -8 --cdw15 -9 --input-file -i --metadata -M"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--input-file|-i)
@@ -337,6 +383,7 @@ nvme_list_opts () {
 			;;
 		"io-passthru")
 			opts+=" --opcode= -O --flags= -f --prefill= -p --rsvd= -R --namespace-id= -n --data-len= -l --metadata-len= -m --cdw2= -2 --cdw3= -3 --cdw10= -4 --cdw11= -5 --cdw12= -6 --cdw13= -7 --cdw14= -8 --cdw15= -9 --input-file= -i --metadata= -M --raw-binary -b --show-command -s --read -r --write -w --latency -T"
+			valopts+=" --opcode -O --flags -f --prefill -p --rsvd -R --namespace-id -n --data-len -l --metadata-len -m --cdw2 -2 --cdw3 -3 --cdw10 -4 --cdw11 -5 --cdw12 -6 --cdw13 -7 --cdw14 -8 --cdw15 -9 --input-file -i --metadata -M"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--input-file|-i)
@@ -350,6 +397,7 @@ nvme_list_opts () {
 			;;
 		"security-send")
 			opts+=" --ish -I --namespace-id= -n --file= -f --nssf= -N --secp= -p --spsp= -s --tl= -t"
+			valopts+=" --namespace-id -n --file -f --nssf -N --secp -p --spsp -s --tl -t"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--file|-f)
@@ -360,36 +408,47 @@ nvme_list_opts () {
 			;;
 		"security-recv")
 			opts+=" --ish -I --namespace-id= -n --size= -x --nssf= -N --secp= -p --spsp= -s --al= -t --raw-binary -b"
+			valopts+=" --namespace-id -n --size -x --nssf -N --secp -p --spsp -s --al -t"
 			;;
 		"get-lba-status")
 			opts+=" --ish -I --namespace-id= -n --start-lba= -s --max-dw= -m --action= -a --range-len= -l"
+			valopts+=" --namespace-id -n --start-lba -s --max-dw -m --action -a --range-len -l"
 			;;
 		"capacity-mgmt")
 			opts+=" --ish -I --operation= -O --element-id= -i --cap-lower= -l --cap-upper= -u"
+			valopts+=" --operation -O --element-id -i --cap-lower -l --cap-upper -u"
 			;;
 		"resv-acquire")
 			opts+=" --namespace-id= -n --crkey= -c --prkey= -p --rtype= -t --racqa= -a --iekey -i"
+			valopts+=" --namespace-id -n --crkey -c --prkey -p --rtype -t --racqa -a"
 			;;
 		"resv-register")
 			opts+=" --namespace-id= -n --crkey= -c --nrkey= -k --rrega= -r --cptpl= -p --iekey -i"
+			valopts+=" --namespace-id -n --crkey -c --nrkey -k --rrega -r --cptpl -p"
 			;;
 		"resv-release")
 			opts+=" --namespace-id= -n --crkey= -c --rtype= -t --rrela= -a --iekey -i"
+			valopts+=" --namespace-id -n --crkey -c --rtype -t --rrela -a"
 			;;
 		"resv-report")
 			opts+=" --namespace-id= -n --numd= -d --eds -e --raw-binary -b"
+			valopts+=" --namespace-id -n --numd -d"
 			;;
 		"dsm")
 			opts+=" --namespace-id= -n --ctx-attrs= -a --blocks= -b --slbs= -s --ad -d --idw -w --idr -r --cdw11= -c"
+			valopts+=" --namespace-id -n --ctx-attrs -a --blocks -b --slbs -s --cdw11 -c"
 			;;
 		"copy")
 			opts+=" --namespace-id= -n --sdlba= -d --slbs= -s --blocks= -b --snsids= -N --sopts= -O --limited-retry -l --force-unit-access -f --prinfow= -p --prinfor= -P --ref-tag= -r --expected-ref-tags= -R --app-tag= -a --expected-app-tags= -A --app-tag-mask= -m --expected-app-tag-masks= -M --dir-type= -T --dir-spec= -S --format= -F --storage-tag= -t --storage-tag-check -c"
+			valopts+=" --namespace-id -n --sdlba -d --slbs -s --blocks -b --snsids -N --sopts -O --prinfow -p --prinfor -P --ref-tag -r --expected-ref-tags -R --app-tag -a --expected-app-tags -A --app-tag-mask -m --expected-app-tag-masks -M --dir-type -T --dir-spec -S --format -F --storage-tag -t"
 			;;
 		"flush")
 			opts+=" --namespace-id= -n"
+			valopts+=" --namespace-id -n"
 			;;
 		"compare")
 			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --block-size= -b --data-size= -z --metadata-size= -y --ref-tag= -r --data= -d --metadata= -M --prinfo= -p --app-tag-mask= -m --app-tag= -a --storage-tag= -g --limited-retry -l --force-unit-access -f --storage-tag-check -C --dir-type= -T --dir-spec= -S --dsm= -D --show-command -V --latency -t --force"
+			valopts+=" --namespace-id -n --start-block -s --block-count -c --block-size -b --data-size -z --metadata-size -y --ref-tag -r --data -d --metadata -M --prinfo -p --app-tag-mask -m --app-tag -a --storage-tag -g --dir-type -T --dir-spec -S --dsm -D"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
@@ -403,6 +462,7 @@ nvme_list_opts () {
 			;;
 		"read")
 			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --block-size= -b --data-size= -z --metadata-size= -y --ref-tag= -r --data= -d --metadata= -M --prinfo= -p --app-tag-mask= -m --app-tag= -a --storage-tag= -g --limited-retry -l --force-unit-access -f --storage-tag-check -C --dir-type= -T --dir-spec= -S --dsm= -D --show-command -V --latency -t --force"
+			valopts+=" --namespace-id -n --start-block -s --block-count -c --block-size -b --data-size -z --metadata-size -y --ref-tag -r --data -d --metadata -M --prinfo -p --app-tag-mask -m --app-tag -a --storage-tag -g --dir-type -T --dir-spec -S --dsm -D"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
@@ -416,6 +476,7 @@ nvme_list_opts () {
 			;;
 		"write")
 			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --block-size= -b --data-size= -z --metadata-size= -y --ref-tag= -r --data= -d --metadata= -M --prinfo= -p --app-tag-mask= -m --app-tag= -a --storage-tag= -g --limited-retry -l --force-unit-access -f --storage-tag-check -C --dir-type= -T --dir-spec= -S --dsm= -D --show-command -V --latency -t --force"
+			valopts+=" --namespace-id -n --start-block -s --block-count -c --block-size -b --data-size -z --metadata-size -y --ref-tag -r --data -d --metadata -M --prinfo -p --app-tag-mask -m --app-tag -a --storage-tag -g --dir-type -T --dir-spec -S --dsm -D"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
@@ -429,15 +490,19 @@ nvme_list_opts () {
 			;;
 		"write-zeroes")
 			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --dir-type= -T --deac -d --limited-retry -l --force-unit-access -f --prinfo= -p --ref-tag= -r --app-tag-mask= -m --app-tag= -a --storage-tag= -S --storage-tag-check -C --dir-spec= -D --namespace-zeroes -Z"
+			valopts+=" --namespace-id -n --start-block -s --block-count -c --dir-type -T --prinfo -p --ref-tag -r --app-tag-mask -m --app-tag -a --storage-tag -S --dir-spec -D"
 			;;
 		"write-uncor")
 			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --dir-type= -T --dir-spec= -S"
+			valopts+=" --namespace-id -n --start-block -s --block-count -c --dir-type -T --dir-spec -S"
 			;;
 		"verify")
 			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --limited-retry -l --force-unit-access -f --prinfo= -p --ref-tag= -r --app-tag= -a --app-tag-mask= -m --storage-tag= -S --storage-tag-check -C"
+			valopts+=" --namespace-id -n --start-block -s --block-count -c --prinfo -p --ref-tag -r --app-tag -a --app-tag-mask -m --storage-tag -S"
 			;;
 		"sanitize")
 			opts+=" --ish -I --no-dealloc -d --oipbp -i --owpass= -n --ause -u --sanact= -a --ovrpat= -p --emvs -e --wait -w --repeat= -r"
+			valopts+=" --owpass -n --sanact -a --ovrpat -p --repeat -r"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sanact|-a)
@@ -451,6 +516,7 @@ nvme_list_opts () {
 			;;
 		"sanitize-ns")
 			opts+=" --ish -I --ause -u --sanact= -a --emvs -e"
+			valopts+=" --sanact -a"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sanact|-a)
@@ -461,15 +527,19 @@ nvme_list_opts () {
 			;;
 		"set-reg")
 			opts+=" --offset= -O --value= -V --mmio32 -m --intms= --intmc= --cc= --csts= --nssr= --aqa= --asq= --acq= --bprsel= --bpmbl= --cmbmsc= --nssd= --pmrctl= --pmrmscl= --pmrmscu="
+			valopts+=" --offset -O --value -V --intms --intmc --cc --csts --nssr --aqa --asq --acq --bprsel --bpmbl --cmbmsc --nssd --pmrctl --pmrmscl --pmrmscu"
 			;;
 		"get-reg")
 			opts+=" --offset= -O --cap --vs --cmbloc --cmbsz --bpinfo --cmbsts --cmbebs --cmbswtp --crto --pmrcap --pmrsts --pmrebs --pmrswtp --intms --intmc --cc --csts --nssr --aqa --asq --acq --bprsel --bpmbl --cmbmsc --nssd --pmrctl --pmrmscl --pmrmscu"
+			valopts+=" --offset -O"
 			;;
 		"top")
 			opts+=" --delay= -d"
+			valopts+=" --delay -d"
 			;;
 		"discover")
 			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --raw= -r --persistent -p --no-persistent --epcsd --no-epcsd --config= -J --force --nbft --no-nbft --owner= --nbft-path="
+			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --device -d --raw -r --config -J --owner --nbft-path"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--raw|-r)
@@ -483,6 +553,7 @@ nvme_list_opts () {
 			;;
 		"connect-all")
 			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --raw= -r --persistent -p --no-persistent --epcsd --no-epcsd --config= -J --force --nbft --no-nbft --owner= --nbft-path="
+			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --device -d --raw -r --config -J --owner --nbft-path"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--raw|-r)
@@ -496,6 +567,7 @@ nvme_list_opts () {
 			;;
 		"connect")
 			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --config= -J --owner= --devid-file= --idempotent"
+			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --config -J --owner --devid-file"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--config|-J)
@@ -509,18 +581,23 @@ nvme_list_opts () {
 			;;
 		"disconnect")
 			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --exclude -x"
+			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --device -d"
 			;;
 		"disconnect-all")
 			opts+=" --transport= -t --owner= --force"
+			valopts+=" --transport -t --owner"
 			;;
 		"dim")
 			opts+=" --nqn= -n --device= -d --task= -t"
+			valopts+=" --nqn -n --device -d --task -t"
 			;;
 		"dir-receive")
 			opts+=" --namespace-id= -n --data-len= -l --raw-binary -b --dir-type= -D --dir-spec= -S --dir-oper= -O --req-resource= -r"
+			valopts+=" --namespace-id -n --data-len -l --dir-type -D --dir-spec -S --dir-oper -O --req-resource -r"
 			;;
 		"dir-send")
 			opts+=" --namespace-id= -n --data-len= -l --dir-type= -D --target-dir= -T --dir-spec= -S --dir-oper= -O --endir= -e --raw-binary -b --input-file= -i"
+			valopts+=" --namespace-id -n --data-len -l --dir-type -D --target-dir -T --dir-spec -S --dir-oper -O --endir -e --input-file -i"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--input-file|-i)
@@ -531,9 +608,11 @@ nvme_list_opts () {
 			;;
 		"virt-mgmt")
 			opts+=" --cntlid= -c --rt= -r --act= -a --nr= -n"
+			valopts+=" --cntlid -c --rt -r --act -a --nr -n"
 			;;
 		"rpmb")
 			opts+=" --cmd= -c --msgfile= -f --keyfile= -g --key= -k --msg= -d --address= -o --blocks= -b --target= -t"
+			valopts+=" --cmd -c --msgfile -f --keyfile -g --key -k --msg -d --address -o --blocks -b --target -t"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--msgfile|-f)
@@ -547,12 +626,15 @@ nvme_list_opts () {
 			;;
 		"lockdown")
 			opts+=" --ofi= -O --ifc= -f --prhbt= -p --scp= -s --uuid= -U"
+			valopts+=" --ofi -O --ifc -f --prhbt -p --scp -s --uuid -U"
 			;;
 		"show-topology")
 			opts+=" --ranking= -r"
+			valopts+=" --ranking -r"
 			;;
 		"io-mgmt-recv")
 			opts+=" --namespace-id= -n --mos= -s --mo= -m --data= -d --data-len= -l"
+			valopts+=" --namespace-id -n --mos -s --mo -m --data -d --data-len -l"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
@@ -563,6 +645,7 @@ nvme_list_opts () {
 			;;
 		"io-mgmt-send")
 			opts+=" --namespace-id= -n --mos= -s --mo= -m --data= -d --data-len= -l"
+			valopts+=" --namespace-id -n --mos -s --mo -m --data -d --data-len -l"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
@@ -573,6 +656,7 @@ nvme_list_opts () {
 			;;
 		"nvme-mi-recv")
 			opts+=" --opcode= -O --namespace-id= -n --data-len= -l --nmimt= -m --nmd0= -0 --nmd1= -1 --input-file= -i"
+			valopts+=" --opcode -O --namespace-id -n --data-len -l --nmimt -m --nmd0 -0 --nmd1 -1 --input-file -i"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--input-file|-i)
@@ -583,6 +667,7 @@ nvme_list_opts () {
 			;;
 		"nvme-mi-send")
 			opts+=" --opcode= -O --namespace-id= -n --data-len= -l --nmimt= -m --nmd0= -0 --nmd1= -1 --input-file= -i"
+			valopts+=" --opcode -O --namespace-id -n --data-len -l --nmimt -m --nmd0 -0 --nmd1 -1 --input-file -i"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--input-file|-i)
@@ -594,6 +679,12 @@ nvme_list_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -618,6 +709,7 @@ nvme_list_opts () {
 
 plugin_amzn_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -650,6 +742,7 @@ plugin_amzn_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -669,10 +762,17 @@ plugin_amzn_opts () {
 			;;
 		"stats")
 			opts+=" --details -d --interval= -i"
+			valopts+=" --interval -i"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -697,6 +797,7 @@ plugin_amzn_opts () {
 
 plugin_dapustor_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -729,6 +830,7 @@ plugin_dapustor_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -745,10 +847,17 @@ plugin_dapustor_opts () {
 	case "$1" in
 		"smart-log-add")
 			opts+=" --namespace-id= -n --raw-binary -b --json -j"
+			valopts+=" --namespace-id -n"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -773,6 +882,7 @@ plugin_dapustor_opts () {
 
 plugin_dell_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -805,6 +915,7 @@ plugin_dell_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -825,6 +936,12 @@ plugin_dell_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -849,6 +966,7 @@ plugin_dell_opts () {
 
 plugin_dera_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -881,6 +999,7 @@ plugin_dera_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -896,6 +1015,12 @@ plugin_dera_opts () {
 
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -920,6 +1045,7 @@ plugin_dera_opts () {
 
 plugin_fdp_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -952,6 +1078,7 @@ plugin_fdp_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -968,31 +1095,45 @@ plugin_fdp_opts () {
 	case "$1" in
 		"configs")
 			opts+=" --endgrp-id= -e --raw-binary -b --human-readable -H"
+			valopts+=" --endgrp-id -e"
 			;;
 		"usage")
 			opts+=" --endgrp-id= -e --raw-binary -b"
+			valopts+=" --endgrp-id -e"
 			;;
 		"stats")
 			opts+=" --endgrp-id= -e --raw-binary -b"
+			valopts+=" --endgrp-id -e"
 			;;
 		"events")
 			opts+=" --endgrp-id= -e --host-events -E --raw-binary -b"
+			valopts+=" --endgrp-id -e"
 			;;
 		"status")
 			opts+=" --namespace-id= -n --raw-binary -b"
+			valopts+=" --namespace-id -n"
 			;;
 		"update")
 			opts+=" --namespace-id= -n --pids= -p"
+			valopts+=" --namespace-id -n --pids -p"
 			;;
 		"set-events")
 			opts+=" --namespace-id= -n --placement-handle= -p --enable -e --save -s --event-types= -t"
+			valopts+=" --namespace-id -n --placement-handle -p --event-types -t"
 			;;
 		"feature")
 			opts+=" --endgrp-id= -e --enable-conf-idx= -c --disable -d"
+			valopts+=" --endgrp-id -e --enable-conf-idx -c"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -1017,6 +1158,7 @@ plugin_fdp_opts () {
 
 plugin_huawei_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -1049,6 +1191,7 @@ plugin_huawei_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -1069,6 +1212,12 @@ plugin_huawei_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -1093,6 +1242,7 @@ plugin_huawei_opts () {
 
 plugin_ibm_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -1125,6 +1275,7 @@ plugin_ibm_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -1147,10 +1298,17 @@ plugin_ibm_opts () {
 			;;
 		"persist-event-log")
 			opts+=" --action= -a --log_len= -l --raw-binary -b"
+			valopts+=" --action -a --log_len -l"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -1175,6 +1333,7 @@ plugin_ibm_opts () {
 
 plugin_innogrit_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -1207,6 +1366,7 @@ plugin_innogrit_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -1222,6 +1382,12 @@ plugin_innogrit_opts () {
 
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -1246,6 +1412,7 @@ plugin_innogrit_opts () {
 
 plugin_inspur_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -1278,6 +1445,7 @@ plugin_inspur_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -1293,6 +1461,12 @@ plugin_inspur_opts () {
 
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -1317,6 +1491,7 @@ plugin_inspur_opts () {
 
 plugin_intel_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -1349,6 +1524,7 @@ plugin_intel_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -1368,6 +1544,7 @@ plugin_intel_opts () {
 			;;
 		"internal-log")
 			opts+=" --log= -l --region= -r --nlognum= -m --namespace-id= -n --output-file= -O --verbose-nlog -V"
+			valopts+=" --log -l --region -r --nlognum -m --namespace-id -n --output-file -O"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
@@ -1381,6 +1558,7 @@ plugin_intel_opts () {
 			;;
 		"set-bucket-thresholds")
 			opts+=" --write -w --bucket-thresholds= -t"
+			valopts+=" --bucket-thresholds -t"
 			;;
 		"lat-stats-tracking")
 			opts+=" --enable -e --disable -d"
@@ -1390,6 +1568,7 @@ plugin_intel_opts () {
 			;;
 		"smart-log-add")
 			opts+=" --namespace-id= -n --raw-binary -b --json -j"
+			valopts+=" --namespace-id -n"
 			;;
 		"temp-stats")
 			opts+=" --raw-binary -b"
@@ -1397,6 +1576,12 @@ plugin_intel_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -1421,6 +1606,7 @@ plugin_intel_opts () {
 
 plugin_mangoboost_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -1453,6 +1639,7 @@ plugin_mangoboost_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -1473,6 +1660,12 @@ plugin_mangoboost_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -1497,6 +1690,7 @@ plugin_mangoboost_opts () {
 
 plugin_memblaze_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -1529,6 +1723,7 @@ plugin_memblaze_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -1545,12 +1740,15 @@ plugin_memblaze_opts () {
 	case "$1" in
 		"smart-log-add")
 			opts+=" --namespace-id= -n --raw-binary -b"
+			valopts+=" --namespace-id -n"
 			;;
 		"set-pm-status")
 			opts+=" --value= -V --save -s"
+			valopts+=" --value -V"
 			;;
 		"select-download")
 			opts+=" --fw= -f --select= -s"
+			valopts+=" --fw -f --select -s"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--fw|-f)
@@ -1567,12 +1765,14 @@ plugin_memblaze_opts () {
 			;;
 		"lat-log")
 			opts+=" --param= -p"
+			valopts+=" --param -p"
 			;;
 		"smart-log-add-x")
 			opts+=" --raw-binary -b"
 			;;
 		"lat-set-feature-x")
 			opts+=" --sel-perf-log= -s --set-commands-mask= -m --set-read-threshold= -r --set-write-threshold= -w --set-trim-threshold= -t"
+			valopts+=" --sel-perf-log -s --set-commands-mask -m --set-read-threshold -r --set-write-threshold -w --set-trim-threshold -t"
 			;;
 		"lat-stats-print-x")
 			opts+=" --raw-binary -b"
@@ -1582,10 +1782,17 @@ plugin_memblaze_opts () {
 			;;
 		"perf-stats-print-x")
 			opts+=" --duration= -d --raw-binary -b"
+			valopts+=" --duration -d"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -1610,6 +1817,7 @@ plugin_memblaze_opts () {
 
 plugin_micron_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -1642,6 +1850,7 @@ plugin_micron_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -1658,6 +1867,7 @@ plugin_micron_opts () {
 	case "$1" in
 		"select-download")
 			opts+=" --fw= -f --select= -s"
+			valopts+=" --fw -f --select -s"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--fw|-f)
@@ -1668,12 +1878,15 @@ plugin_micron_opts () {
 			;;
 		"vs-temperature-stats")
 			opts+=" --format= -f"
+			valopts+=" --format -f"
 			;;
 		"vs-pcie-stats")
 			opts+=" --format= -f"
+			valopts+=" --format -f"
 			;;
 		"vs-internal-log")
 			opts+=" --type= -t --package= -p --data_area= -d"
+			valopts+=" --type -t --package -p --data_area -d"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--package|-p)
@@ -1684,52 +1897,73 @@ plugin_micron_opts () {
 			;;
 		"vs-telemetry-controller-option")
 			opts+=" --option= -O --select= -s"
+			valopts+=" --option -O --select -s"
 			;;
 		"vs-nand-stats")
 			opts+=" --format= -f"
+			valopts+=" --format -f"
 			;;
 		"vs-smart-ext-log")
 			opts+=" --format= -f"
+			valopts+=" --format -f"
 			;;
 		"vs-drive-info")
 			opts+=" --format= -f"
+			valopts+=" --format -f"
 			;;
 		"vs-fw-activate-history")
 			opts+=" --format= -f"
+			valopts+=" --format -f"
 			;;
 		"latency-tracking")
 			opts+=" --option= -O --command= -c --threshold= -t"
+			valopts+=" --option -O --command -c --threshold -t"
 			;;
 		"latency-stats")
 			opts+=" --command= -c"
+			valopts+=" --command -c"
 			;;
 		"vs-smart-add-log")
 			opts+=" --format= -f"
+			valopts+=" --format -f"
 			;;
 		"vs-smbus-option")
 			opts+=" --option= -O --value= -V --save= -s"
+			valopts+=" --option -O --value -V --save -s"
 			;;
 		"cloud-boot-SSD-version")
 			opts+=" --format= -f"
+			valopts+=" --format -f"
 			;;
 		"vs-device-waf")
 			opts+=" --format= -f"
+			valopts+=" --format -f"
 			;;
 		"vs-cloud-log")
 			opts+=" --format= -f"
+			valopts+=" --format -f"
 			;;
 		"vs-work-load-log")
 			opts+=" --format= -f"
+			valopts+=" --format -f"
 			;;
 		"vs-vendor-telemetry-log")
 			opts+=" --format= -f"
+			valopts+=" --format -f"
 			;;
 		"smart-log")
 			opts+=" --format= -f"
+			valopts+=" --format -f"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -1754,6 +1988,7 @@ plugin_micron_opts () {
 
 plugin_netapp_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -1786,6 +2021,7 @@ plugin_netapp_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -1801,6 +2037,12 @@ plugin_netapp_opts () {
 
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -1825,6 +2067,7 @@ plugin_netapp_opts () {
 
 plugin_nvidia_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -1857,6 +2100,7 @@ plugin_nvidia_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -1877,6 +2121,12 @@ plugin_nvidia_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -1901,6 +2151,7 @@ plugin_nvidia_opts () {
 
 plugin_sndk_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -1933,6 +2184,7 @@ plugin_sndk_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -1949,6 +2201,7 @@ plugin_sndk_opts () {
 	case "$1" in
 		"vs-internal-log")
 			opts+=" --output-file= -O --transfer-size= -s --data-area= -d --type= -t --verbose -V --file-size= -f --offset= -e"
+			valopts+=" --output-file -O --transfer-size -s --data-area -d --type -t --file-size -f --offset -e"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
@@ -1962,15 +2215,18 @@ plugin_sndk_opts () {
 			;;
 		"vs-smart-add-log")
 			opts+=" --interval= -i --log-page-version= -l --log-page-mask= -p --namespace-id= -n"
+			valopts+=" --interval -i --log-page-version -l --log-page-mask -p --namespace-id -n"
 			;;
 		"drive-resize")
 			opts+=" --size= -s"
+			valopts+=" --size -s"
 			;;
 		"vs-telemetry-controller-option")
 			opts+=" --disable -d --enable -e --status -s"
 			;;
 		"vs-error-reason-identifier")
 			opts+=" --log-id= -i --file= -O"
+			valopts+=" --log-id -i --file -O"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--file|-O)
@@ -1981,28 +2237,41 @@ plugin_sndk_opts () {
 			;;
 		"namespace-resize")
 			opts+=" --namespace-id= -n --op-option= -O"
+			valopts+=" --namespace-id -n --op-option -O"
 			;;
 		"cloud-boot-SSD-version")
 			opts+=" --namespace-id= -n"
+			valopts+=" --namespace-id -n"
 			;;
 		"vs-cloud-log")
 			opts+=" --namespace-id= -n"
+			valopts+=" --namespace-id -n"
 			;;
 		"vs-hw-rev-log")
 			opts+=" --namespace-id= -n"
+			valopts+=" --namespace-id -n"
 			;;
 		"vs-device-waf")
 			opts+=" --namespace-id= -n"
+			valopts+=" --namespace-id -n"
 			;;
 		"set-latency-monitor-feature")
 			opts+=" --active_bucket_timer_threshold= -t --active_threshold_a= -a --active_threshold_b= -b --active_threshold_c= -c --active_threshold_d= -d --active_latency_config= -f --active_latency_minimum_window= -w --debug_log_trigger_enable= -r --discard_debug_log= -l --latency_monitor_feature_enable= -e"
+			valopts+=" --active_bucket_timer_threshold -t --active_threshold_a -a --active_threshold_b -b --active_threshold_c -c --active_threshold_d -d --active_latency_config -f --active_latency_minimum_window -w --debug_log_trigger_enable -r --discard_debug_log -l --latency_monitor_feature_enable -e"
 			;;
 		"cu-smart-log")
 			opts+=" --uuid-index= -u"
+			valopts+=" --uuid-index -u"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -2027,6 +2296,7 @@ plugin_sndk_opts () {
 
 plugin_sfx_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -2059,6 +2329,7 @@ plugin_sfx_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -2075,6 +2346,7 @@ plugin_sfx_opts () {
 	case "$1" in
 		"smart-log-add")
 			opts+=" --namespace-id= -n --raw-binary -b --json -j"
+			valopts+=" --namespace-id -n"
 			;;
 		"lat-stats")
 			opts+=" --write -w --raw-binary -b"
@@ -2084,15 +2356,19 @@ plugin_sfx_opts () {
 			;;
 		"change-cap")
 			opts+=" --cap= -c --cap-byte= -z --force -f"
+			valopts+=" --cap -c --cap-byte -z"
 			;;
 		"set-feature")
 			opts+=" --namespace-id= -n --feature-id= -f --value= -V --force -s"
+			valopts+=" --namespace-id -n --feature-id -f --value -V"
 			;;
 		"get-feature")
 			opts+=" --namespace-id= -n --feature-id= -f"
+			valopts+=" --namespace-id -n --feature-id -f"
 			;;
 		"dump-evtlog")
 			opts+=" --file= -f --namespace_id= -n --storage_medium= -s --parse -p --output= -O"
+			valopts+=" --file -f --namespace_id -n --storage_medium -s --output -O"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--file|-f)
@@ -2106,6 +2382,7 @@ plugin_sfx_opts () {
 			;;
 		"expand-cap")
 			opts+=" --namespace_id= -n --namespace_size= -s --namespace_cap= -c --lbaf= -l --units= -u"
+			valopts+=" --namespace_id -n --namespace_size -s --namespace_cap -c --lbaf -l --units -u"
 			;;
 		"status")
 			opts+=" --json-print -j"
@@ -2113,6 +2390,12 @@ plugin_sfx_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -2137,6 +2420,7 @@ plugin_sfx_opts () {
 
 plugin_seagate_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -2169,6 +2453,7 @@ plugin_seagate_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -2188,12 +2473,15 @@ plugin_seagate_opts () {
 			;;
 		"get-host-tele")
 			opts+=" --namespace-id= -n --log_specific= -i --raw-binary -b"
+			valopts+=" --namespace-id -n --log_specific -i"
 			;;
 		"get-ctrl-tele")
 			opts+=" --namespace-id= -n --raw-binary -b"
+			valopts+=" --namespace-id -n"
 			;;
 		"vs-internal-log")
 			opts+=" --namespace-id= -n --dump-file= -f"
+			valopts+=" --namespace-id -n --dump-file -f"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--dump-file|-f)
@@ -2208,6 +2496,12 @@ plugin_seagate_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -2232,6 +2526,7 @@ plugin_seagate_opts () {
 
 plugin_shannon_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -2264,6 +2559,7 @@ plugin_shannon_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -2280,9 +2576,11 @@ plugin_shannon_opts () {
 	case "$1" in
 		"smart-log-add")
 			opts+=" --namespace-id= -n --raw-binary -b"
+			valopts+=" --namespace-id -n"
 			;;
 		"set-additioal-feature")
 			opts+=" --namespace-id= -n --feature-id= -f --value= -V --data-len= -l --data= -d --save -s"
+			valopts+=" --namespace-id -n --feature-id -f --value -V --data-len -l --data -d"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
@@ -2293,6 +2591,7 @@ plugin_shannon_opts () {
 			;;
 		"get-additional-feature")
 			opts+=" --namespace-id= -n --feature-id= -f --sel= -s --data-len= -l --raw-binary -b --cdw11= -c --human-readable -H"
+			valopts+=" --namespace-id -n --feature-id -f --sel -s --data-len -l --cdw11 -c"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
@@ -2307,6 +2606,12 @@ plugin_shannon_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -2331,6 +2636,7 @@ plugin_shannon_opts () {
 
 plugin_ssstc_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -2363,6 +2669,7 @@ plugin_ssstc_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -2379,10 +2686,17 @@ plugin_ssstc_opts () {
 	case "$1" in
 		"smart-log-add")
 			opts+=" --namespace-id= -n --raw-binary -b --json -j"
+			valopts+=" --namespace-id -n"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -2407,6 +2721,7 @@ plugin_ssstc_opts () {
 
 plugin_toshiba_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -2439,6 +2754,7 @@ plugin_toshiba_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -2455,6 +2771,7 @@ plugin_toshiba_opts () {
 	case "$1" in
 		"vs-smart-add-log")
 			opts+=" --namespace-id= -n --output-file= -O --log= -l"
+			valopts+=" --namespace-id -n --output-file -O --log -l"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
@@ -2465,6 +2782,7 @@ plugin_toshiba_opts () {
 			;;
 		"vs-internal-log")
 			opts+=" --output-file= -O --prev-log -p"
+			valopts+=" --output-file -O"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
@@ -2476,6 +2794,12 @@ plugin_toshiba_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -2500,6 +2824,7 @@ plugin_toshiba_opts () {
 
 plugin_transcend_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -2532,6 +2857,7 @@ plugin_transcend_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -2547,6 +2873,12 @@ plugin_transcend_opts () {
 
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -2571,6 +2903,7 @@ plugin_transcend_opts () {
 
 plugin_utils_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -2600,6 +2933,12 @@ plugin_utils_opts () {
 	_nvme_detect_value_completion
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -2624,6 +2963,7 @@ plugin_utils_opts () {
 
 plugin_virtium_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -2656,6 +2996,7 @@ plugin_virtium_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -2672,6 +3013,7 @@ plugin_virtium_opts () {
 	case "$1" in
 		"save-smart-to-vtview-log")
 			opts+=" --run-time= -r --freq= -f --output-file= -O --test-name= -n"
+			valopts+=" --run-time -r --freq -f --output-file -O --test-name -n"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
@@ -2683,6 +3025,12 @@ plugin_virtium_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -2707,6 +3055,7 @@ plugin_virtium_opts () {
 
 plugin_wdc_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -2739,6 +3088,7 @@ plugin_wdc_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -2755,6 +3105,7 @@ plugin_wdc_opts () {
 	case "$1" in
 		"cap-diag")
 			opts+=" --output-file= -O --transfer-size= -s"
+			valopts+=" --output-file -O --transfer-size -s"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
@@ -2765,6 +3116,7 @@ plugin_wdc_opts () {
 			;;
 		"drive-log")
 			opts+=" --output-file= -O"
+			valopts+=" --output-file -O"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
@@ -2775,6 +3127,7 @@ plugin_wdc_opts () {
 			;;
 		"get-crash-dump")
 			opts+=" --output-file= -O"
+			valopts+=" --output-file -O"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
@@ -2785,6 +3138,7 @@ plugin_wdc_opts () {
 			;;
 		"get-pfail-dump")
 			opts+=" --output-file= -O"
+			valopts+=" --output-file -O"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
@@ -2798,6 +3152,7 @@ plugin_wdc_opts () {
 			;;
 		"vs-internal-log")
 			opts+=" --output-file= -O --transfer-size= -s --data-area= -d --type= -t --verbose -V --file-size= -f --offset= -e"
+			valopts+=" --output-file -O --transfer-size -s --data-area -d --type -t --file-size -f --offset -e"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
@@ -2811,9 +3166,11 @@ plugin_wdc_opts () {
 			;;
 		"vs-smart-add-log")
 			opts+=" --interval= -i --log-page-version= -l --log-page-mask= -p --namespace-id= -n"
+			valopts+=" --interval -i --log-page-version -l --log-page-mask -p --namespace-id -n"
 			;;
 		"drive-essentials")
 			opts+=" --dir-name= -d"
+			valopts+=" --dir-name -d"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--dir-name|-d)
@@ -2824,9 +3181,11 @@ plugin_wdc_opts () {
 			;;
 		"drive-resize")
 			opts+=" --size= -s"
+			valopts+=" --size -s"
 			;;
 		"enc-get-log")
 			opts+=" --output-file= -O --transfer-size= -s --log-id= -l"
+			valopts+=" --output-file -O --transfer-size -s --log-id -l"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
@@ -2840,6 +3199,7 @@ plugin_wdc_opts () {
 			;;
 		"vs-error-reason-identifier")
 			opts+=" --log-id= -i --file= -O"
+			valopts+=" --log-id -i --file -O"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--file|-O)
@@ -2850,28 +3210,41 @@ plugin_wdc_opts () {
 			;;
 		"namespace-resize")
 			opts+=" --namespace-id= -n --op-option= -O"
+			valopts+=" --namespace-id -n --op-option -O"
 			;;
 		"cloud-boot-SSD-version")
 			opts+=" --namespace-id= -n"
+			valopts+=" --namespace-id -n"
 			;;
 		"vs-cloud-log")
 			opts+=" --namespace-id= -n"
+			valopts+=" --namespace-id -n"
 			;;
 		"vs-hw-rev-log")
 			opts+=" --namespace-id= -n"
+			valopts+=" --namespace-id -n"
 			;;
 		"vs-device-waf")
 			opts+=" --namespace-id= -n"
+			valopts+=" --namespace-id -n"
 			;;
 		"set-latency-monitor-feature")
 			opts+=" --active_bucket_timer_threshold= -t --active_threshold_a= -a --active_threshold_b= -b --active_threshold_c= -c --active_threshold_d= -d --active_latency_config= -f --active_latency_minimum_window= -w --debug_log_trigger_enable= -r --discard_debug_log= -l --latency_monitor_feature_enable= -e"
+			valopts+=" --active_bucket_timer_threshold -t --active_threshold_a -a --active_threshold_b -b --active_threshold_c -c --active_threshold_d -d --active_latency_config -f --active_latency_minimum_window -w --debug_log_trigger_enable -r --discard_debug_log -l --latency_monitor_feature_enable -e"
 			;;
 		"cu-smart-log")
 			opts+=" --uuid-index= -u"
+			valopts+=" --uuid-index -u"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -2896,6 +3269,7 @@ plugin_wdc_opts () {
 
 plugin_ymtc_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -2928,6 +3302,7 @@ plugin_ymtc_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -2944,10 +3319,17 @@ plugin_ymtc_opts () {
 	case "$1" in
 		"smart-log-add")
 			opts+=" --namespace-id= -n --raw-binary -b"
+			valopts+=" --namespace-id -n"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -2972,6 +3354,7 @@ plugin_ymtc_opts () {
 
 plugin_zns_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -3004,6 +3387,7 @@ plugin_zns_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -3020,27 +3404,35 @@ plugin_zns_opts () {
 	case "$1" in
 		"id-ns")
 			opts+=" --namespace-id= -n --vendor-specific -V --human-readable -H"
+			valopts+=" --namespace-id -n"
 			;;
 		"report-zones")
 			opts+=" --namespace-id= -n --start-lba= -s --descs= -d --state= -S --verbose -V --extended -e --partial -p"
+			valopts+=" --namespace-id -n --start-lba -s --descs -d --state -S"
 			;;
 		"reset-zone")
 			opts+=" --namespace-id= -n --start-lba= -s --select-all -a"
+			valopts+=" --namespace-id -n --start-lba -s"
 			;;
 		"close-zone")
 			opts+=" --namespace-id= -n --start-lba= -s --select-all -a"
+			valopts+=" --namespace-id -n --start-lba -s"
 			;;
 		"finish-zone")
 			opts+=" --namespace-id= -n --start-lba= -s --select-all -a"
+			valopts+=" --namespace-id -n --start-lba -s"
 			;;
 		"open-zone")
 			opts+=" --namespace-id= -n --start-lba= -s --zrwaa -r --select-all -a"
+			valopts+=" --namespace-id -n --start-lba -s"
 			;;
 		"offline-zone")
 			opts+=" --namespace-id= -n --start-lba= -s --select-all -a"
+			valopts+=" --namespace-id -n --start-lba -s"
 			;;
 		"set-zone-desc")
 			opts+=" --namespace-id= -n --start-lba= -s --zrwaa -r --data= -d"
+			valopts+=" --namespace-id -n --start-lba -s --data -d"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
@@ -3051,15 +3443,19 @@ plugin_zns_opts () {
 			;;
 		"zrwa-flush-zone")
 			opts+=" --namespace-id= -n --lba= -l"
+			valopts+=" --namespace-id -n --lba -l"
 			;;
 		"changed-zone-list")
 			opts+=" --namespace-id= -n --rae -r"
+			valopts+=" --namespace-id -n"
 			;;
 		"zone-mgmt-recv")
 			opts+=" --namespace-id= -n --start-lba= -s --zra= -z --zrasf= -S --partial -p --data-len= -l"
+			valopts+=" --namespace-id -n --start-lba -s --zra -z --zrasf -S --data-len -l"
 			;;
 		"zone-mgmt-send")
 			opts+=" --namespace-id= -n --start-lba= -s --zsaso -O --select-all -a --zsa= -z --data-len= -l --data= -d"
+			valopts+=" --namespace-id -n --start-lba -s --zsa -z --data-len -l --data -d"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
@@ -3070,6 +3466,7 @@ plugin_zns_opts () {
 			;;
 		"zone-append")
 			opts+=" --namespace-id= -n --zslba= -s --data-size= -z --metadata-size= -y --data= -d --metadata= -M --limited-retry -l --force-unit-access -f --prinfo= -p --piremap -P --latency -t"
+			valopts+=" --namespace-id -n --zslba -s --data-size -z --metadata-size -y --data -d --metadata -M --prinfo -p"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
@@ -3084,6 +3481,12 @@ plugin_zns_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -3108,6 +3511,7 @@ plugin_zns_opts () {
 
 plugin_nbft_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -3140,6 +3544,7 @@ plugin_nbft_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -3156,10 +3561,17 @@ plugin_nbft_opts () {
 	case "$1" in
 		"show")
 			opts+=" --subsystem -s --hfi -H --discovery -d --nbft-path="
+			valopts+=" --nbft-path"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -3184,6 +3596,7 @@ plugin_nbft_opts () {
 
 plugin_keys_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -3216,6 +3629,7 @@ plugin_keys_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -3232,31 +3646,45 @@ plugin_keys_opts () {
 	case "$1" in
 		"gen-kxchap")
 			opts+=" --secret= -s --key-length= -l --nqn= -n --hmac= -m"
+			valopts+=" --secret -s --key-length -l --nqn -n --hmac -m"
 			;;
 		"check-kxchap")
 			opts+=" --keydata= -d --keyring= -k --keytype= -t --identity= -i"
+			valopts+=" --keydata -d --keyring -k --keytype -t --identity -i"
 			;;
 		"gen-tls")
 			opts+=" --keyring= -k --keytype= -t --hostnqn= -n --subsysnqn= -c --secret= -s --keyfile= -f --hmac= -m --identity= -I --insert -i --compat -C"
+			valopts+=" --keyring -k --keytype -t --hostnqn -n --subsysnqn -c --secret -s --keyfile -f --hmac -m --identity -I"
 			;;
 		"check-tls")
 			opts+=" --keyring= -k --keytype= -t --hostnqn= -n --subsysnqn= -c --keydata= -d --identity= -I --compat -C"
+			valopts+=" --keyring -k --keytype -t --hostnqn -n --subsysnqn -c --keydata -d --identity -I"
 			;;
 		"insert-tls")
 			opts+=" --keyring= -k --keytype= -t --hostnqn= -n --subsysnqn= -c --keydata= -d --keyfile= -f --identity= -I --compat -C"
+			valopts+=" --keyring -k --keytype -t --hostnqn -n --subsysnqn -c --keydata -d --keyfile -f --identity -I"
 			;;
 		"import")
 			opts+=" --keyring= -k --keyfile= -f --keydata= -d --identity= -i"
+			valopts+=" --keyring -k --keyfile -f --keydata -d --identity -i"
 			;;
 		"export")
 			opts+=" --keyring= -k --keyfile= -f"
+			valopts+=" --keyring -k --keyfile -f"
 			;;
 		"revoke")
 			opts+=" --keyring= -k --keytype= -t --identity= -i"
+			valopts+=" --keyring -k --keytype -t --identity -i"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -3281,6 +3709,7 @@ plugin_keys_opts () {
 
 plugin_exclusion_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -3313,6 +3742,7 @@ plugin_exclusion_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -3329,25 +3759,37 @@ plugin_exclusion_opts () {
 	case "$1" in
 		"create")
 			opts+=" --name= -N"
+			valopts+=" --name -N"
 			;;
 		"delete")
 			opts+=" --name= -N"
+			valopts+=" --name -N"
 			;;
 		"edit")
 			opts+=" --name= -N"
+			valopts+=" --name -N"
 			;;
 		"list")
 			opts+=" --name= -N"
+			valopts+=" --name -N"
 			;;
 		"add")
 			opts+=" --name= -N --entry= -e"
+			valopts+=" --name -N --entry -e"
 			;;
 		"remove")
 			opts+=" --name= -N"
+			valopts+=" --name -N"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -3372,6 +3814,7 @@ plugin_exclusion_opts () {
 
 plugin_registry_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -3404,6 +3847,7 @@ plugin_registry_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -3420,16 +3864,25 @@ plugin_registry_opts () {
 	case "$1" in
 		"retrieve")
 			opts+=" --attr= -a"
+			valopts+=" --attr -a"
 			;;
 		"update")
 			opts+=" --attr= -a --value= -V"
+			valopts+=" --attr -a --value -V"
 			;;
 		"delete")
 			opts+=" --attr= -a"
+			valopts+=" --attr -a"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -3454,6 +3907,7 @@ plugin_registry_opts () {
 
 plugin_config_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -3486,6 +3940,7 @@ plugin_config_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -3502,6 +3957,7 @@ plugin_config_opts () {
 	case "$1" in
 		"validate")
 			opts+=" --config= -J"
+			valopts+=" --config -J"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--config|-J)
@@ -3512,6 +3968,7 @@ plugin_config_opts () {
 			;;
 		"show")
 			opts+=" --config= -J"
+			valopts+=" --config -J"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--config|-J)
@@ -3522,6 +3979,7 @@ plugin_config_opts () {
 			;;
 		"convert")
 			opts+=" --config= -J --output= -o --force"
+			valopts+=" --config -J --output -o"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--config|-J)
@@ -3535,6 +3993,7 @@ plugin_config_opts () {
 			;;
 		"create")
 			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --discovery --persistent --no-persistent --epcsd --no-epcsd --host-symname= --output="
+			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --host-symname --output"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output)
@@ -3546,6 +4005,12 @@ plugin_config_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -3570,6 +4035,7 @@ plugin_config_opts () {
 
 plugin_feat_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -3602,6 +4068,7 @@ plugin_feat_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -3618,6 +4085,7 @@ plugin_feat_opts () {
 	case "$1" in
 		"arbitration")
 			opts+=" --ab= -a --lpw= -l --mpw= -m --hpw= -H --save -s --sel= -S"
+			valopts+=" --ab -a --lpw -l --mpw -m --hpw -H --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -3628,6 +4096,7 @@ plugin_feat_opts () {
 			;;
 		"power-mgmt")
 			opts+=" --ps= -p --wh= -w --save -s --sel= -S"
+			valopts+=" --ps -p --wh -w --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -3638,6 +4107,7 @@ plugin_feat_opts () {
 			;;
 		"temp-thresh")
 			opts+=" --tmpth= -T --tmpsel= -m --thsel= -H --tmpthh= -M --save -s --sel= -S"
+			valopts+=" --tmpth -T --tmpsel -m --thsel -H --tmpthh -M --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -3648,6 +4118,7 @@ plugin_feat_opts () {
 			;;
 		"volatile-wc")
 			opts+=" --wce -w --save -s --sel= -S"
+			valopts+=" --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -3658,6 +4129,7 @@ plugin_feat_opts () {
 			;;
 		"num-queues")
 			opts+=" --nsqr= -n --ncqr= -c --save -s --sel= -S"
+			valopts+=" --nsqr -n --ncqr -c --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -3668,6 +4140,7 @@ plugin_feat_opts () {
 			;;
 		"timestamp")
 			opts+=" --tstmp= -t --save -s --sel= -S"
+			valopts+=" --tstmp -t --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -3678,6 +4151,7 @@ plugin_feat_opts () {
 			;;
 		"hctm")
 			opts+=" --tmt1= -t --tmt2= -T --save -s --sel= -S"
+			valopts+=" --tmt1 -t --tmt2 -T --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -3688,6 +4162,7 @@ plugin_feat_opts () {
 			;;
 		"host-behavior-support")
 			opts+=" --acre= -a --etdas= -e --lbafee= -l --hdisns= -H --cdfe= -c --save -s --sel= -S"
+			valopts+=" --acre -a --etdas -e --lbafee -l --hdisns -H --cdfe -c --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -3698,6 +4173,7 @@ plugin_feat_opts () {
 			;;
 		"perf-characteristics")
 			opts+=" --namespace-id= -n --attri= -a --rvspa -r --r4karl= -R --paid= -p --attrl= -A --vs-data= -V --save -s --sel= -S"
+			valopts+=" --namespace-id -n --attri -a --r4karl -R --paid -p --attrl -A --vs-data -V --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--vs-data|-V)
@@ -3711,6 +4187,7 @@ plugin_feat_opts () {
 			;;
 		"power-limit")
 			opts+=" --plv= -p --pls= -l --uuid-index= -u --save -s --sel= -S"
+			valopts+=" --plv -p --pls -l --uuid-index -u --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -3721,6 +4198,7 @@ plugin_feat_opts () {
 			;;
 		"power-thresh")
 			opts+=" --ptv= -p --pts= -t --pmts= -m --ept= -e --uuid-index= -u --save -s --sel= -S"
+			valopts+=" --ptv -p --pts -t --pmts -m --ept -e --uuid-index -u --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -3731,6 +4209,7 @@ plugin_feat_opts () {
 			;;
 		"power-meas")
 			opts+=" --act= --pmts= --smt= --uuid-index= -u --save -s --sel= -S"
+			valopts+=" --act --pmts --smt --uuid-index -u --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -3741,6 +4220,7 @@ plugin_feat_opts () {
 			;;
 		"err-recovery")
 			opts+=" --nsid= -n --tler= -t --dulbe -d --save -s --sel= -S"
+			valopts+=" --nsid -n --tler -t --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -3752,6 +4232,12 @@ plugin_feat_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -3776,6 +4262,7 @@ plugin_feat_opts () {
 
 plugin_lm_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -3808,6 +4295,7 @@ plugin_lm_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -3824,12 +4312,15 @@ plugin_lm_opts () {
 	case "$1" in
 		"create-cdq")
 			opts+=" --size= -s --cntlid= -c --queue-type= -q --consent"
+			valopts+=" --size -s --cntlid -c --queue-type -q"
 			;;
 		"delete-cdq")
 			opts+=" --cdqid= -C"
+			valopts+=" --cdqid -C"
 			;;
 		"track-send")
 			opts+=" --sel= -s --mos= -m --cdqid= -C --start --stop"
+			valopts+=" --sel -s --mos -m --cdqid -C"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
@@ -3840,6 +4331,7 @@ plugin_lm_opts () {
 			;;
 		"migration-send")
 			opts+=" --sel= -s --cntlid= -c --stype= -t --dudmq -d --seq-ind= -S --csuuidi= -U --csvi= -V --uidx= -u --offset= -O --numd= -n --input-file= -f"
+			valopts+=" --sel -s --cntlid -c --stype -t --seq-ind -S --csuuidi -U --csvi -V --uidx -u --offset -O --numd -n --input-file -f"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
@@ -3853,6 +4345,7 @@ plugin_lm_opts () {
 			;;
 		"migration-recv")
 			opts+=" --sel= -s --cntlid= -c --csuuidi= -U --csvi= -V --uidx= -u --offset= -O --numd= -n --output-file= -f --human-readable -H"
+			valopts+=" --sel -s --cntlid -c --csuuidi -U --csvi -V --uidx -u --offset -O --numd -n --output-file -f"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
@@ -3866,13 +4359,21 @@ plugin_lm_opts () {
 			;;
 		"set-cdq")
 			opts+=" --cdqid= -C --hp= -H --tpt= -T"
+			valopts+=" --cdqid -C --hp -H --tpt -T"
 			;;
 		"get-cdq")
 			opts+=" --cdqid= -C"
+			valopts+=" --cdqid -C"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -3897,6 +4398,7 @@ plugin_lm_opts () {
 
 plugin_ocp_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -3929,6 +4431,7 @@ plugin_ocp_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -3945,9 +4448,11 @@ plugin_ocp_opts () {
 	case "$1" in
 		"set-latency-monitor-feature")
 			opts+=" --active_bucket_timer_threshold= -t --active_threshold_a= -a --active_threshold_b= -b --active_threshold_c= -c --active_threshold_d= -d --active_latency_config= -f --active_latency_minimum_window= -w --debug_log_trigger_enable= -r --discard_debug_log= -l --latency_monitor_feature_enable= -e"
+			valopts+=" --active_bucket_timer_threshold -t --active_threshold_a -a --active_threshold_b -b --active_threshold_c -c --active_threshold_d -d --active_latency_config -f --active_latency_minimum_window -w --debug_log_trigger_enable -r --discard_debug_log -l --latency_monitor_feature_enable -e"
 			;;
 		"internal-log")
 			opts+=" --telemetry-log= -l --string-log= -s --output-file= -f --data-area= -a --telemetry-type= -t"
+			valopts+=" --telemetry-log -l --string-log -s --output-file -f --data-area -a --telemetry-type -t"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-f)
@@ -3961,6 +4466,7 @@ plugin_ocp_opts () {
 			;;
 		"eol-plp-failure-mode")
 			opts+=" --mode= -m --save -s --sel= -S --no-uuid -n"
+			valopts+=" --mode -m --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -3974,9 +4480,11 @@ plugin_ocp_opts () {
 			;;
 		"set-dssd-power-state-feature")
 			opts+=" --power-state= -p --save -s --no-uuid -n"
+			valopts+=" --power-state -p"
 			;;
 		"get-dssd-power-state-feature")
 			opts+=" --sel= -S --all -a --no-uuid -n"
+			valopts+=" --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -3987,9 +4495,11 @@ plugin_ocp_opts () {
 			;;
 		"set-plp-health-check-interval")
 			opts+=" --plp_health_interval= -p --save -s --no-uuid -n"
+			valopts+=" --plp_health_interval -p"
 			;;
 		"get-plp-health-check-interval")
 			opts+=" --sel= -S"
+			valopts+=" --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -4000,6 +4510,7 @@ plugin_ocp_opts () {
 			;;
 		"telemetry-string-log")
 			opts+=" --output-file= -f"
+			valopts+=" --output-file -f"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-f)
@@ -4010,12 +4521,14 @@ plugin_ocp_opts () {
 			;;
 		"set-telemetry-profile")
 			opts+=" --telemetry-profile-select= -t"
+			valopts+=" --telemetry-profile-select -t"
 			;;
 		"set-dssd-async-event-config")
 			opts+=" --enable-panic-notices -e --save -s"
 			;;
 		"get-dssd-async-event-config")
 			opts+=" --sel= -S"
+			valopts+=" --sel -S"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
@@ -4026,6 +4539,7 @@ plugin_ocp_opts () {
 			;;
 		"get-error-injection")
 			opts+=" --sel= -s --no-uuid -n --all-ns -a"
+			valopts+=" --sel -s"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
@@ -4036,6 +4550,7 @@ plugin_ocp_opts () {
 			;;
 		"set-error-injection")
 			opts+=" --data= -d --number= -n --no-uuid -N --all-ns -a --type= -t --nrtdp= -r"
+			valopts+=" --data -d --number -n --type -t --nrtdp -r"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
@@ -4046,6 +4561,7 @@ plugin_ocp_opts () {
 			;;
 		"get-enable-ieee1667-silo")
 			opts+=" --sel= -s --no-uuid -n"
+			valopts+=" --sel -s"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
@@ -4059,6 +4575,7 @@ plugin_ocp_opts () {
 			;;
 		"hardware-component-log")
 			opts+=" --comp-id= -i --list -l"
+			valopts+=" --comp-id -i"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--comp-id|-i)
@@ -4069,6 +4586,7 @@ plugin_ocp_opts () {
 			;;
 		"get-latency-monitor")
 			opts+=" --sel= -s --namespace-id= -n --no-uuid -u"
+			valopts+=" --sel -s --namespace-id -n"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
@@ -4079,6 +4597,7 @@ plugin_ocp_opts () {
 			;;
 		"get-clear-pcie-correctable-errors")
 			opts+=" --sel= -s --namespace-id= -n --no-uuid -u"
+			valopts+=" --sel -s --namespace-id -n"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
@@ -4089,6 +4608,7 @@ plugin_ocp_opts () {
 			;;
 		"get-telemetry-profile")
 			opts+=" --sel= -s --namespace-id= -n --no-uuid -u"
+			valopts+=" --sel -s --namespace-id -n"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
@@ -4099,9 +4619,11 @@ plugin_ocp_opts () {
 			;;
 		"persistent-event-log")
 			opts+=" --action= -a --log_len= -l --raw-binary -b"
+			valopts+=" --action -a --log_len -l"
 			;;
 		"get-idle-wakeup-time")
 			opts+=" --sel= -s --namespace-id= -n --no-uuid -u"
+			valopts+=" --sel -s --namespace-id -n"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
@@ -4113,6 +4635,12 @@ plugin_ocp_opts () {
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
@@ -4137,6 +4665,7 @@ plugin_ocp_opts () {
 
 plugin_sed_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -4184,6 +4713,12 @@ plugin_sed_opts () {
 
 	opts+=" -h --help"
 
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
+
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then
 			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
@@ -4207,6 +4742,7 @@ plugin_sed_opts () {
 
 plugin_solidigm_opts () {
 	local opts=""
+	local valopts=""
 	local vals=""
 	local opt=""
 	local val=""
@@ -4239,6 +4775,7 @@ plugin_solidigm_opts () {
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -4258,9 +4795,11 @@ plugin_solidigm_opts () {
 			;;
 		"smart-log-add")
 			opts+=" --namespace-id= -n"
+			valopts+=" --namespace-id -n"
 			;;
 		"vs-internal-log")
 			opts+=" --type= -t --dir-name= -d"
+			valopts+=" --type -t --dir-name -d"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--dir-name|-d)
@@ -4274,9 +4813,11 @@ plugin_solidigm_opts () {
 			;;
 		"latency-tracking-log")
 			opts+=" --enable -e --disable -d --read -r --write -w --type= -t"
+			valopts+=" --type -t"
 			;;
 		"parse-telemetry-log")
 			opts+=" --host-generate= -g --controller-init -c --data-area= -d --config-file= -j --source-file= -s --jq-filter= -q"
+			valopts+=" --host-generate -g --data-area -d --config-file -j --source-file -s --jq-filter -q"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--config-file|-j)
@@ -4299,10 +4840,17 @@ plugin_solidigm_opts () {
 			;;
 		"workload-tracker")
 			opts+=" --uuid-index= -U --enable -e --disable -d --sample-time= -s --type= -t --run-time= -r --flush-freq= -f --wall-clock -w --trigger-field= -T --trigger-threshold= -V --trigger-on-delta -D --trigger-on-latency -L"
+			valopts+=" --uuid-index -U --sample-time -s --type -t --run-time -r --flush-freq -f --trigger-field -T --trigger-threshold -V"
 			;;
 	esac
 
 	opts+=" -h --help"
+
+	# If we thought we were completing a value but $opt is not a value-taking
+	# option, it is a flag -- fall back to normal option completion.
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
 
 	if [[ $completing_value -eq 1 ]]; then
 		if [[ $vals != " " ]]; then

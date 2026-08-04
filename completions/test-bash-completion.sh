@@ -343,6 +343,26 @@ expect_no_var_leak \
     "nvme id-ctrl " \
     i
 
+# A flag option takes no value, so completing after it (empty word, i.e. a
+# trailing space) must resume normal option completion, not enter value mode
+# (which offers nothing and suppresses files). Covers both long and short flags.
+expect_match \
+    "completion resumes after a long flag option" \
+    "nvme id-ctrl --verbose " \
+    "--help"
+
+expect_match \
+    "completion resumes after a short flag option" \
+    "nvme id-ctrl -v " \
+    "--help"
+
+# The complement stays correct: a value-taking flagless option still completes
+# its value (guard against the fix over-reaching and disabling value mode).
+expect_match \
+    "a value option still completes its value after the fix" \
+    "nvme id-ctrl --output-format " \
+    "normal.*json"
+
 # ---------------------------------------------------------------------------
 # Option-value completion (enumerated values)
 # ---------------------------------------------------------------------------
