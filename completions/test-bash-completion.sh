@@ -186,6 +186,32 @@ expect_allows_files() {
     fi
 }
 
+# The completion did NOT call compopt with args containing <substr>.
+expect_no_compopt() {
+    local desc=$1 cmdline=$2 substr=$3
+    run_completion "$cmdline"
+    if [[ "$_compopt_calls" != *"$substr"* ]]; then
+        _check 0 "$desc" "'$cmdline<TAB>' did not request 'compopt $substr'"
+    else
+        _check 1 "$desc" "'$cmdline<TAB>' unexpectedly requested 'compopt $substr' (COMPREPLY=${COMPREPLY[*]})"
+    fi
+}
+
+# The completion must not leak <var> into the caller's scope. Completion
+# functions run in the user's shell, so any variable they use has to be local;
+# a bare loop counter or temporary would otherwise clobber the user's variable
+# of the same name. Seed <var> with a sentinel, run the completion, check it.
+expect_no_var_leak() {
+    local desc=$1 cmdline=$2 var=$3
+    printf -v "$var" '%s' "__sentinel__"
+    run_completion "$cmdline"
+    if [[ "${!var}" == "__sentinel__" ]]; then
+        _check 0 "$desc" "'$cmdline<TAB>' left \$$var untouched"
+    else
+        _check 1 "$desc" "'$cmdline<TAB>' clobbered \$$var to '${!var}' (missing 'local $var')"
+    fi
+}
+
 echo "========================================"
 echo "Bash Completion Tests"
 echo "========================================"
@@ -293,6 +319,23 @@ expect_compopt \
     "a value-taking option completes with a trailing '=' and no space" \
     "nvme id-ctrl --timeout" \
     "-o nospace"
+
+# But nospace must NOT fire when a prefix matches several options -- e.g.
+# '--output-format' matches both '--output-format=' and '--output-format-version='.
+# bash appends nothing for an ambiguous completion, and suppressing the space
+# would be wrong. (Regression: the check once looked only at COMPREPLY[0].)
+expect_no_compopt \
+    "no nospace when a prefix matches multiple options" \
+    "nvme id-ctrl --output-format" \
+    "-o nospace"
+
+# Regression: the generated opts functions once used their loop counter i
+# without declaring it local, silently clobbering the user's own $i. It must
+# stay local so a completion never leaks into the caller's shell.
+expect_no_var_leak \
+    "completion does not leak loop variable i" \
+    "nvme id-ctrl " \
+    i
 
 # ---------------------------------------------------------------------------
 # Option-value completion (enumerated values)
