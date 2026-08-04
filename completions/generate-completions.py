@@ -164,6 +164,7 @@ BASH_FUNC_PREAMBLE = '''\
 
 \tlocal nonopt_args=0
 \tlocal has_device=0
+\tlocal i
 \tfor (( i=0; i < ${{#words[@]}}-1; i++ )); do
 \t\tif [[ ${{words[i]}} != -* ]] && [[ ${{words[i]}} != "=" ]]; then
 \t\t\t(( nonopt_args += 1 ))
@@ -202,7 +203,10 @@ BASH_FUNC_EPILOGUE = '''\
 \t\tfi
 \telse
 \t\tCOMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-\t\t[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+\t\t# Suppress the trailing space only when the sole completion ends in '=',
+\t\t# so the user can type the value immediately. With more than one candidate
+\t\t# bash appends nothing, so nospace must not fire.
+\t\t[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 \tfi
 
 \treturn 0

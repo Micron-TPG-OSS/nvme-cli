@@ -54,6 +54,7 @@ nvme_list_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -601,7 +602,10 @@ nvme_list_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -615,6 +619,7 @@ plugin_amzn_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -676,7 +681,10 @@ plugin_amzn_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -690,6 +698,7 @@ plugin_dapustor_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -748,7 +757,10 @@ plugin_dapustor_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -762,6 +774,7 @@ plugin_dell_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -820,7 +833,10 @@ plugin_dell_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -834,6 +850,7 @@ plugin_dera_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -887,7 +904,10 @@ plugin_dera_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -901,6 +921,7 @@ plugin_fdp_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -980,7 +1001,10 @@ plugin_fdp_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -994,6 +1018,7 @@ plugin_huawei_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -1052,7 +1077,10 @@ plugin_huawei_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -1066,6 +1094,7 @@ plugin_ibm_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -1130,7 +1159,10 @@ plugin_ibm_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -1144,6 +1176,7 @@ plugin_innogrit_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -1197,7 +1230,10 @@ plugin_innogrit_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -1211,6 +1247,7 @@ plugin_inspur_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -1264,7 +1301,10 @@ plugin_inspur_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -1278,6 +1318,7 @@ plugin_intel_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -1364,7 +1405,10 @@ plugin_intel_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -1378,6 +1422,7 @@ plugin_mangoboost_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -1436,7 +1481,10 @@ plugin_mangoboost_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -1450,6 +1498,7 @@ plugin_memblaze_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -1545,7 +1594,10 @@ plugin_memblaze_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -1559,6 +1611,7 @@ plugin_micron_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -1685,7 +1738,10 @@ plugin_micron_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -1699,6 +1755,7 @@ plugin_netapp_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -1752,7 +1809,10 @@ plugin_netapp_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -1766,6 +1826,7 @@ plugin_nvidia_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -1824,7 +1885,10 @@ plugin_nvidia_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -1838,6 +1902,7 @@ plugin_sndk_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -1946,7 +2011,10 @@ plugin_sndk_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -1960,6 +2028,7 @@ plugin_sfx_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -2052,7 +2121,10 @@ plugin_sfx_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -2066,6 +2138,7 @@ plugin_seagate_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -2143,7 +2216,10 @@ plugin_seagate_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -2157,6 +2233,7 @@ plugin_shannon_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -2238,7 +2315,10 @@ plugin_shannon_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -2252,6 +2332,7 @@ plugin_ssstc_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -2310,7 +2391,10 @@ plugin_ssstc_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -2324,6 +2408,7 @@ plugin_toshiba_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -2399,7 +2484,10 @@ plugin_toshiba_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -2413,6 +2501,7 @@ plugin_transcend_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -2466,7 +2555,10 @@ plugin_transcend_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -2480,6 +2572,7 @@ plugin_utils_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -2515,7 +2608,10 @@ plugin_utils_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -2529,6 +2625,7 @@ plugin_virtium_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -2594,7 +2691,10 @@ plugin_virtium_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -2608,6 +2708,7 @@ plugin_wdc_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -2779,7 +2880,10 @@ plugin_wdc_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -2793,6 +2897,7 @@ plugin_ymtc_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -2851,7 +2956,10 @@ plugin_ymtc_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -2865,6 +2973,7 @@ plugin_zns_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -2983,7 +3092,10 @@ plugin_zns_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -2997,6 +3109,7 @@ plugin_nbft_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -3055,7 +3168,10 @@ plugin_nbft_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -3069,6 +3185,7 @@ plugin_keys_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -3148,7 +3265,10 @@ plugin_keys_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -3162,6 +3282,7 @@ plugin_exclusion_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -3235,7 +3356,10 @@ plugin_exclusion_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -3249,6 +3373,7 @@ plugin_registry_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -3313,7 +3438,10 @@ plugin_registry_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -3327,6 +3455,7 @@ plugin_config_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -3425,7 +3554,10 @@ plugin_config_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -3439,6 +3571,7 @@ plugin_feat_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -3627,7 +3760,10 @@ plugin_feat_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -3641,6 +3777,7 @@ plugin_lm_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -3744,7 +3881,10 @@ plugin_lm_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -3758,6 +3898,7 @@ plugin_ocp_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -3980,7 +4121,10 @@ plugin_ocp_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -3994,6 +4138,7 @@ plugin_sed_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -4046,7 +4191,10 @@ plugin_sed_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
@@ -4060,6 +4208,7 @@ plugin_solidigm_opts () {
 
 	local nonopt_args=0
 	local has_device=0
+	local i
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
@@ -4162,7 +4311,10 @@ plugin_solidigm_opts () {
 		fi
 	else
 		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
 	fi
 
 	return 0
