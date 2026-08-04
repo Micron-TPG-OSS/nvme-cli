@@ -13,6 +13,22 @@
 #define FREE_CTRL_ATTR(a) \
 	do { free(a); (a) = NULL; } while (0)
 
+/*
+ * NO_SYSFS_ATTR marks a lazy sysfs member as read, but the attribute
+ * does not exist -- different from NULL, which means the attribute has
+ * not been read yet.
+ */
+extern char NO_SYSFS_ATTR[];
+
+#define SYSFS_IS_LOADED(p) ((p) != NULL)
+#define SYSFS_GET(p) (((p) == NO_SYSFS_ATTR) ? NULL : (p))
+#define SYSFS_FREE(p) \
+	do { \
+		if ((p) != NULL && (p) != NO_SYSFS_ATTR) \
+			free(p); \
+		(p) = NULL; \
+	} while (0)
+
 /* Placeholder identity for a controller with none of its own (e.g.
  * PCIe) -- fixed, not resolved/generated, so it's deterministic.
  */
@@ -21,6 +37,19 @@
 #define NVME_DEFAULT_HOSTID "00000000-0000-0000-0000-000000000000"
 
 char *libnvme_hostid_from_hostnqn(const char *hostnqn);
+
+/**
+ * libnvme_parse_src_addr - Extract the source address from an address string
+ * @ctx:		libnvme global context
+ * @address:		Address string to parse (may be NULL)
+ * @src_addr:		Buffer to store the extracted source address
+ * @src_addr_len:	Size of @src_addr
+ *
+ * Return: @src_addr on success, or NULL if @address has no src_addr field
+ *	   or @src_addr is too small.
+ */
+char *libnvme_parse_src_addr(struct libnvme_global_ctx *ctx,
+		const char *address, char *src_addr, size_t src_addr_len);
 
 int libnvme_ctrl_alloc(struct libnvme_global_ctx *ctx, libnvme_subsystem_t s,
 		const char *path, const char *name, libnvme_ctrl_t *cp);
