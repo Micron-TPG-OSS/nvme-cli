@@ -1573,9 +1573,45 @@ _nvme () {
 			compadd -- /dev/nvme*(N)
 				;;
 			(plugin-version)
+			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
+			_nvme_complete_option_value "--output-format-version" 1 2 && return
+			local _micron_plugin_version
+			_micron_plugin_version=(
+				--verbose':Increase output verbosity'
+				-v':alias for --verbose'
+				--quiet':suppress output messages, overwrites verbose mode'
+				--output-format=':Output format: normal|json|binary'
+				-o':alias for --output-format'
+				--timeout=':timeout value, in milliseconds'
+				--dry-run':show command instead of executing'
+				--no-retries':disable retry logic on errors'
+				--no-ioctl-probing':disable 64-bit IOCTL support probing'
+				--output-format-version=':output format version: 1|2'
+				--set-options=':set a libnvme library option (key=value[,key=value,...]);'
+			)
+			_arguments '*:: :->subcmds'
+			_nvme_describe "nvme micron plugin-version options" _micron_plugin_version
 			compadd -- /dev/nvme*(N)
 				;;
 			(cloud-SSD-plugin-version)
+			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
+			_nvme_complete_option_value "--output-format-version" 1 2 && return
+			local _micron_cloud_SSD_plugin_version
+			_micron_cloud_SSD_plugin_version=(
+				--verbose':Increase output verbosity'
+				-v':alias for --verbose'
+				--quiet':suppress output messages, overwrites verbose mode'
+				--output-format=':Output format: normal|json|binary'
+				-o':alias for --output-format'
+				--timeout=':timeout value, in milliseconds'
+				--dry-run':show command instead of executing'
+				--no-retries':disable retry logic on errors'
+				--no-ioctl-probing':disable 64-bit IOCTL support probing'
+				--output-format-version=':output format version: 1|2'
+				--set-options=':set a libnvme library option (key=value[,key=value,...]);'
+			)
+			_arguments '*:: :->subcmds'
+			_nvme_describe "nvme micron cloud-SSD-plugin-version options" _micron_cloud_SSD_plugin_version
 			compadd -- /dev/nvme*(N)
 				;;
 			(log-page-directory)
@@ -3159,9 +3195,45 @@ _nvme () {
 			compadd -- /dev/nvme*(N)
 				;;
 			(plugin-version)
+			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
+			_nvme_complete_option_value "--output-format-version" 1 2 && return
+			local _seagate_plugin_version
+			_seagate_plugin_version=(
+				--verbose':Increase output verbosity'
+				-v':alias for --verbose'
+				--quiet':suppress output messages, overwrites verbose mode'
+				--output-format=':Output format: normal|json|binary'
+				-o':alias for --output-format'
+				--timeout=':timeout value, in milliseconds'
+				--dry-run':show command instead of executing'
+				--no-retries':disable retry logic on errors'
+				--no-ioctl-probing':disable 64-bit IOCTL support probing'
+				--output-format-version=':output format version: 1|2'
+				--set-options=':set a libnvme library option (key=value[,key=value,...]);'
+			)
+			_arguments '*:: :->subcmds'
+			_nvme_describe "nvme seagate plugin-version options" _seagate_plugin_version
 			compadd -- /dev/nvme*(N)
 				;;
 			(cloud-SSD-plugin-version)
+			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
+			_nvme_complete_option_value "--output-format-version" 1 2 && return
+			local _seagate_cloud_SSD_plugin_version
+			_seagate_cloud_SSD_plugin_version=(
+				--verbose':Increase output verbosity'
+				-v':alias for --verbose'
+				--quiet':suppress output messages, overwrites verbose mode'
+				--output-format=':Output format: normal|json|binary'
+				-o':alias for --output-format'
+				--timeout=':timeout value, in milliseconds'
+				--dry-run':show command instead of executing'
+				--no-retries':disable retry logic on errors'
+				--no-ioctl-probing':disable 64-bit IOCTL support probing'
+				--output-format-version=':output format version: 1|2'
+				--set-options=':set a libnvme library option (key=value[,key=value,...]);'
+			)
+			_arguments '*:: :->subcmds'
+			_nvme_describe "nvme seagate cloud-SSD-plugin-version options" _seagate_cloud_SSD_plugin_version
 			compadd -- /dev/nvme*(N)
 				;;
 			(*)
@@ -4421,6 +4493,24 @@ _nvme () {
 		(zns)
 			case ${words[2]} in
 			(list)
+			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
+			_nvme_complete_option_value "--output-format-version" 1 2 && return
+			local _zns_list
+			_zns_list=(
+				--verbose':Increase output verbosity'
+				-v':alias for --verbose'
+				--quiet':suppress output messages, overwrites verbose mode'
+				--output-format=':Output format: normal'
+				-o':alias for --output-format'
+				--timeout=':timeout value, in milliseconds'
+				--dry-run':show command instead of executing'
+				--no-retries':disable retry logic on errors'
+				--no-ioctl-probing':disable 64-bit IOCTL support probing'
+				--output-format-version=':output format version: 1|2'
+				--set-options=':set a libnvme library option (key=value[,key=value,...]);'
+			)
+			_arguments '*:: :->subcmds'
+			_nvme_describe "nvme zns list options" _zns_list
 			compadd -- /dev/nvme*(N)
 				;;
 			(id-ctrl)
@@ -5424,6 +5514,85 @@ _nvme () {
 			)
 			_arguments '*:: :->subcmds'
 			_nvme_describe "nvme config convert options" _config_convert
+			compadd -- /dev/nvme*(N)
+				;;
+			(create)
+			_nvme_complete_option_value "--output-format|-o" normal json binary tabular && return
+			_nvme_complete_option_value "--output-format-version" 1 2 && return
+			local _config_create
+			_config_create=(
+				--transport=':transport type'
+				-t':alias for --transport'
+				--nqn=':subsystem nqn'
+				-n':alias for --nqn'
+				--traddr=':transport address'
+				-a':alias for --traddr'
+				--trsvcid=':transport service id (e.g. IP port)'
+				-s':alias for --trsvcid'
+				--host-traddr=':host traddr (e.g. FC WWN'\''s)'
+				-w':alias for --host-traddr'
+				--host-iface=':host interface (for tcp transport)'
+				-f':alias for --host-iface'
+				--hostnqn=':user-defined hostnqn'
+				-q':alias for --hostnqn'
+				--hostid=':user-defined hostid (if default not used)'
+				-I':alias for --hostid'
+				--kxchap-secret=':user-defined kxchap key (if default not used)'
+				-S':alias for --kxchap-secret'
+				--kxchap-ctrl-secret=':user-defined kxchap controller key (for bi-directional authentication)'
+				-C':alias for --kxchap-ctrl-secret'
+				--keyring=':Keyring for TLS key lookup (key id or keyring name)'
+				--tls-key=':TLS key to use (key id or key in interchange format)'
+				--tls-key-identity=':TLS key identity'
+				--nr-io-queues=':number of io queues to use (default is core count)'
+				-i':alias for --nr-io-queues'
+				--nr-write-queues=':number of write queues to use (default 0)'
+				-W':alias for --nr-write-queues'
+				--nr-poll-queues=':number of poll queues to use (default 0)'
+				-P':alias for --nr-poll-queues'
+				--queue-size=':number of io queue elements to use (default 128)'
+				-Q':alias for --queue-size'
+				--keep-alive-tmo=':keep alive timeout period in seconds'
+				-k':alias for --keep-alive-tmo'
+				--reconnect-delay=':reconnect timeout period in seconds'
+				-c':alias for --reconnect-delay'
+				--ctrl-loss-tmo=':controller loss timeout period in seconds'
+				-l':alias for --ctrl-loss-tmo'
+				--fast_io_fail_tmo=':fast I/O fail timeout (default off)'
+				-F':alias for --fast_io_fail_tmo'
+				--tos=':type of service'
+				-T':alias for --tos'
+				--tls_key=':TLS key to use (key id)'
+				--duplicate-connect':allow duplicate connections between same transport host and subsystem port'
+				-D':alias for --duplicate-connect'
+				--disable-sqflow':disable controller sq flow control (default false)'
+				--hdr-digest':enable transport protocol header digest (TCP transport)'
+				-g':alias for --hdr-digest'
+				--data-digest':enable transport protocol data digest (TCP transport)'
+				-G':alias for --data-digest'
+				--tls':enable TLS'
+				--concat':enable secure concatenation'
+				--discovery':create a discovery controller entry instead of an I/O controller (subsystem) entry; an I/O controller entry requires --nqn'
+				--persistent':keep the discovery controller connected to receive Asynchronous Event Notifications instead of disconnecting after the discovery log page fetch; requires --discovery'
+				--no-persistent':explicitly record that this discovery controller is not persistent, overriding any default that would otherwise apply; requires --discovery'
+				--epcsd':mark this discovery controller as supporting Explicit Persistent Connection Support for Discovery (EPCSD); requires --discovery'
+				--no-epcsd':explicitly record that this discovery controller does not support EPCSD, overriding any default that would otherwise apply; requires --discovery'
+				--host-symname=':name this host persona, so it gets its own configuration drop-in'
+				--output=':add the entry to this INI configuration file (default: /usr/local/etc/nvme/nvme-fabrics.conf)'
+				--verbose':Increase output verbosity'
+				-v':alias for --verbose'
+				--quiet':suppress output messages, overwrites verbose mode'
+				--output-format=':Output format: normal|json|binary'
+				-o':alias for --output-format'
+				--timeout=':timeout value, in milliseconds'
+				--dry-run':show command instead of executing'
+				--no-retries':disable retry logic on errors'
+				--no-ioctl-probing':disable 64-bit IOCTL support probing'
+				--output-format-version=':output format version: 1|2'
+				--set-options=':set a libnvme library option (key=value[,key=value,...]);'
+			)
+			_arguments '*:: :->subcmds'
+			_nvme_describe "nvme config create options" _config_create
 			compadd -- /dev/nvme*(N)
 				;;
 			(*)
@@ -10260,6 +10429,9 @@ _nvme () {
 			-r':alias for --raw'
 			--persistent':persistent discovery connection'
 			-p':alias for --persistent'
+			--no-persistent':explicitly not a persistent discovery connection'
+			--epcsd':Explicit Persistent Connection Support for Discovery'
+			--no-epcsd':explicitly does not support Explicit Persistent Connection Support for Discovery'
 			--config=':Use specified INI configuration file (auto-converts a legacy .json) or '\''none'\'' to disable'
 			-J':alias for --config'
 			--force':Force persistent discovery controller creation'
@@ -10345,6 +10517,9 @@ _nvme () {
 			-r':alias for --raw'
 			--persistent':persistent discovery connection'
 			-p':alias for --persistent'
+			--no-persistent':explicitly not a persistent discovery connection'
+			--epcsd':Explicit Persistent Connection Support for Discovery'
+			--no-epcsd':explicitly does not support Explicit Persistent Connection Support for Discovery'
 			--config=':Use specified INI configuration file (auto-converts a legacy .json) or '\''none'\'' to disable'
 			-J':alias for --config'
 			--force':Force persistent discovery controller creation'

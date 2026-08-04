@@ -463,7 +463,7 @@ nvme_list_opts () {
 			opts+=" --delay= -d"
 			;;
 		"discover")
-			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --raw= -r --persistent -p --config= -J --force --nbft --no-nbft --owner= --nbft-path="
+			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --raw= -r --persistent -p --no-persistent --epcsd --no-epcsd --config= -J --force --nbft --no-nbft --owner= --nbft-path="
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--raw|-r)
@@ -476,7 +476,7 @@ nvme_list_opts () {
 			fi
 			;;
 		"connect-all")
-			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --raw= -r --persistent -p --config= -J --force --nbft --no-nbft --owner= --nbft-path="
+			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --raw= -r --persistent -p --no-persistent --epcsd --no-epcsd --config= -J --force --nbft --no-nbft --owner= --nbft-path="
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--raw|-r)
@@ -1580,7 +1580,7 @@ plugin_micron_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help"|"plugin-version"|"cloud-SSD-plugin-version")
+		"version"|"help")
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
@@ -2087,7 +2087,7 @@ plugin_seagate_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help"|"plugin-version"|"cloud-SSD-plugin-version")
+		"version"|"help")
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
@@ -2886,7 +2886,7 @@ plugin_zns_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help"|"list")
+		"version"|"help")
 			;;
 		*)
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
@@ -3394,6 +3394,16 @@ plugin_config_opts () {
 						wantfiles=1
 						;;
 					--output|-o)
+						wantfiles=1
+						;;
+				esac
+			fi
+			;;
+		"create")
+			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --discovery --persistent --no-persistent --epcsd --no-epcsd --host-symname= --output="
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output)
 						wantfiles=1
 						;;
 				esac
@@ -4194,7 +4204,7 @@ _nvme_subcmds () {
 		[keys]="gen-kxchap check-kxchap gen-tls check-tls insert-tls import export revoke"
 		[exclusion]="create delete edit list add remove"
 		[registry]="list retrieve update delete"
-		[config]="validate show convert"
+		[config]="validate show convert create"
 		[feat]="arbitration power-mgmt temp-thresh volatile-wc num-queues timestamp hctm host-behavior-support perf-characteristics power-limit power-thresh power-meas err-recovery"
 		[lm]="create-cdq delete-cdq track-send migration-send migration-recv set-cdq get-cdq"
 		[ocp]="smart-add-log latency-monitor-log set-latency-monitor-feature internal-log clear-fw-activate-history eol-plp-failure-mode clear-pcie-correctable-errors fw-activate-history unsupported-reqs-log error-recovery-log device-capability-log set-dssd-power-state-feature get-dssd-power-state-feature set-plp-health-check-interval get-plp-health-check-interval telemetry-string-log set-telemetry-profile set-dssd-async-event-config get-dssd-async-event-config tcg-configuration-log get-error-injection set-error-injection get-enable-ieee1667-silo set-enable-ieee1667-silo hardware-component-log get-latency-monitor get-clear-pcie-correctable-errors get-telemetry-profile persistent-event-log get-idle-wakeup-time"
