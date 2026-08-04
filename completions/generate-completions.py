@@ -169,6 +169,7 @@ BASH_FUNC_PREAMBLE = '''\
 \tvals+=" "
 
 \tlocal completing_value=0
+\tlocal wantfiles=0
 \t_nvme_detect_value_completion
 '''
 
@@ -176,11 +177,19 @@ BASH_FUNC_EPILOGUE = '''\
 
 \topts+=" -h --help"
 
-\tif [[ $vals == " " ]]; then
+\tif [[ $completing_value -eq 1 ]]; then
+\t\tif [[ $vals != " " ]]; then
+\t\t\tCOMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
+\t\telif [[ $wantfiles -eq 1 ]]; then
+\t\t\t: # value is a filename; let 'complete -o default' offer files
+\t\telse
+\t\t\t# No candidate values (e.g. a NUM or free-form string); offer
+\t\t\t# nothing and suppress the filename fallback.
+\t\t\tcompopt +o default
+\t\tfi
+\telse
 \t\tCOMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
 \t\t[[ ${COMPREPLY-} == *= ]] && compopt -o nospace
-\telse
-\t\tCOMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
 \tfi
 
 \treturn 0
@@ -212,16 +221,30 @@ def bash_option_words(opts):
     return out
 
 
+def opt_is_file(opt):
+    """True if the option's value is a filename/path we can file-complete."""
+    return opt.get("metavar") in ("FILE", "DIRECTORY")
+
+
 def bash_value_clause(opt):
-    """A 'case $opt in' clause for an option with a known value set, or ''."""
-    vals = opt.get("values")
-    if not vals:
-        return ""
+    """A 'case $opt in' clause for an option whose value we can complete.
+
+    Emits a clause that sets $vals (known value set) or $wantfiles (file/path
+    argument). Returns '' for options with no completable value -- their value
+    branch offers nothing and suppresses the filename fallback.
+    """
     sel = "--" + opt["long"]
     if opt.get("short"):
         sel += "|-" + opt["short"]
+    vals = opt.get("values")
+    if vals:
+        action = f"vals+=\" {' '.join(vals)}\""
+    elif opt_is_file(opt):
+        action = "wantfiles=1"
+    else:
+        return ""
     return (f"\t\t\t\t\t{sel})\n"
-            f"\t\t\t\t\t\tvals+=\" {' '.join(vals)}\"\n"
+            f"\t\t\t\t\t\t{action}\n"
             f"\t\t\t\t\t\t;;\n")
 
 

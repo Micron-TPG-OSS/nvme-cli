@@ -147,6 +147,7 @@ $script:NvmeCommands = @(
     'ymtc'
     'zns'
     'nbft'
+    'keys'
     'exclusion'
     'registry'
     'config'
@@ -186,6 +187,7 @@ $script:NvmePluginCommands = @{
     'ymtc' = @('smart-log-add')
     'zns' = @('list', 'id-ctrl', 'id-ns', 'report-zones', 'reset-zone', 'close-zone', 'finish-zone', 'open-zone', 'offline-zone', 'set-zone-desc', 'zrwa-flush-zone', 'changed-zone-list', 'zone-mgmt-recv', 'zone-mgmt-send', 'zone-append')
     'nbft' = @('show')
+    'keys' = @('gen-kxchap', 'check-kxchap', 'gen-tls', 'check-tls', 'insert-tls', 'import', 'export', 'revoke')
     'exclusion' = @('create', 'delete', 'edit', 'list', 'add', 'remove')
     'registry' = @('list', 'retrieve', 'update', 'delete')
     'config' = @('validate', 'show', 'convert')
@@ -501,6 +503,14 @@ $script:NvmeOptions = @{
     'zns zone-mgmt-send' = @('--namespace-id', '-n', '--start-lba', '-s', '--zsaso', '-O', '--select-all', '-a', '--zsa', '-z', '--data-len', '-l', '--data', '-d', '--verbose', '-v', '--quiet', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version', '--set-options')
     'zns zone-append' = @('--namespace-id', '-n', '--zslba', '-s', '--data-size', '-z', '--metadata-size', '-y', '--data', '-d', '--metadata', '-M', '--limited-retry', '-l', '--force-unit-access', '-f', '--prinfo', '-p', '--piremap', '-P', '--latency', '-t', '--verbose', '-v', '--quiet', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version', '--set-options')
     'nbft show' = @('--subsystem', '-s', '--hfi', '-H', '--discovery', '-d', '--nbft-path', '--verbose', '-v', '--quiet', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version', '--set-options')
+    'keys gen-kxchap' = @('--secret', '-s', '--key-length', '-l', '--nqn', '-n', '--hmac', '-m', '--verbose', '-v', '--quiet', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version', '--set-options')
+    'keys check-kxchap' = @('--keydata', '-d', '--keyring', '-k', '--keytype', '-t', '--identity', '-i', '--verbose', '-v', '--quiet', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version', '--set-options')
+    'keys gen-tls' = @('--keyring', '-k', '--keytype', '-t', '--hostnqn', '-n', '--subsysnqn', '-c', '--secret', '-s', '--keyfile', '-f', '--hmac', '-m', '--identity', '-I', '--insert', '-i', '--compat', '-C', '--verbose', '-v', '--quiet', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version', '--set-options')
+    'keys check-tls' = @('--keyring', '-k', '--keytype', '-t', '--hostnqn', '-n', '--subsysnqn', '-c', '--keydata', '-d', '--identity', '-I', '--compat', '-C', '--verbose', '-v', '--quiet', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version', '--set-options')
+    'keys insert-tls' = @('--keyring', '-k', '--keytype', '-t', '--hostnqn', '-n', '--subsysnqn', '-c', '--keydata', '-d', '--keyfile', '-f', '--identity', '-I', '--compat', '-C', '--verbose', '-v', '--quiet', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version', '--set-options')
+    'keys import' = @('--keyring', '-k', '--keyfile', '-f', '--keydata', '-d', '--identity', '-i', '--verbose', '-v', '--quiet', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version', '--set-options')
+    'keys export' = @('--keyring', '-k', '--keyfile', '-f', '--verbose', '-v', '--quiet', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version', '--set-options')
+    'keys revoke' = @('--keyring', '-k', '--keytype', '-t', '--identity', '-i', '--verbose', '-v', '--quiet', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version', '--set-options')
     'exclusion create' = @('--name', '-N', '--verbose', '-v', '--quiet', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version', '--set-options')
     'exclusion delete' = @('--name', '-N', '--verbose', '-v', '--quiet', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version', '--set-options')
     'exclusion edit' = @('--name', '-N', '--verbose', '-v', '--quiet', '--output-format', '-o', '--timeout', '--dry-run', '--no-retries', '--no-ioctl-probing', '--output-format-version', '--set-options')
