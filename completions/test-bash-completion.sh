@@ -390,6 +390,16 @@ else
     _check 1 "value list appears for an unsplit '--opt=' token" "got '${COMPREPLY[*]}'"
 fi
 
+# Same unsplit form but with a partial value ('--output-format=j'), which occurs
+# when '=' is removed from COMP_WORDBREAKS. The partial must still filter the
+# value list down to the match.
+run_completion_words nvme id-ctrl "--output-format=j"
+if [[ " ${COMPREPLY[*]} " =~ json ]]; then
+    _check 0 "partial value filters for an unsplit '--opt=partial' token" "got '${COMPREPLY[*]}'"
+else
+    _check 1 "partial value filters for an unsplit '--opt=partial' token" "got '${COMPREPLY[*]}'"
+fi
+
 # --sel is an enumerated option carried by feat's sub-commands. Its values come
 # from the generator's VALUE_HINTS table (the arg parser leaves --sel
 # unconstrained, so the command metadata carries no values). This also exercises

@@ -16,8 +16,9 @@ _nvme_detect_value_completion() {
 	opt=""
 	val=""
 
-	if [[ $cur == --*= ]]; then
-		opt="${cur%=}"
+	if [[ $cur == --*=* ]]; then
+		opt="${cur%%=*}"
+		val="${cur#*=}"
 		completing_value=1
 	elif [[ $cur == "=" ]] && [[ $prev == --* ]]; then
 		opt="$prev"
