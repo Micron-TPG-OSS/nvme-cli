@@ -208,6 +208,18 @@ expect_match \
     "nvme " \
     "feat.*zns"
 
+# A command's alias is offered alongside its primary name (fw-commit/fw-activate)
+# and its options complete when invoked by the alias.
+expect_match \
+    "top-level list includes a command alias" \
+    "nvme fw-a" \
+    "fw-activate"
+
+expect_match \
+    "a command invoked by its alias completes options" \
+    "nvme fw-activate --" \
+    "--action"
+
 # ---------------------------------------------------------------------------
 # Plugin sub-command dispatch
 # ---------------------------------------------------------------------------
@@ -226,6 +238,13 @@ expect_match \
     "sub-command routing works for any plugin" \
     "nvme zns " \
     "report-zones.*reset-zone"
+
+# A plugin sub-command alias is listed alongside its primary name (dera defines
+# alias 'stat' for 'smart-log-add').
+expect_match \
+    "a plugin lists a sub-command alias" \
+    "nvme dera " \
+    "smart-log-add.*stat"
 
 # ---------------------------------------------------------------------------
 # Device-argument injection

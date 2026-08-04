@@ -296,7 +296,7 @@ nvme_list_opts () {
 		"format")
 			opts+=" --ish -I --namespace-id= -n --lbaf= -l --ses= -s --pi= -i --pil= -p --ms= -m --reset -r --force --block-size= -b"
 			;;
-		"fw-commit")
+		"fw-commit"|"fw-activate")
 			opts+=" --ish -I --slot= -s --action= -a --bpid= -b"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
@@ -4015,7 +4015,7 @@ plugin_sed_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"discover")
+		"discover"|"1")
 			opts+=" --verbose -V --udev -u"
 			;;
 		"initialize")
@@ -4134,7 +4134,7 @@ plugin_solidigm_opts () {
 				esac
 			fi
 			;;
-		"clear-pcie-correctable-errors ")
+		"clear-pcie-correctable-errors")
 			opts+=" --no-uuid -n"
 			;;
 		"clear-fw-activate-history")
@@ -4176,7 +4176,7 @@ _nvme_subcmds () {
 		[amzn]="id-ctrl stats"
 		[dapustor]="smart-log-add"
 		[dell]="id-ctrl"
-		[dera]="smart-log-add"
+		[dera]="smart-log-add stat"
 		[fdp]="configs usage stats events status update set-events feature"
 		[huawei]="list id-ctrl"
 		[ibm]="crit-log vpd persist-event-log"
@@ -4208,8 +4208,8 @@ _nvme_subcmds () {
 		[feat]="arbitration power-mgmt temp-thresh volatile-wc num-queues timestamp hctm host-behavior-support perf-characteristics power-limit power-thresh power-meas err-recovery"
 		[lm]="create-cdq delete-cdq track-send migration-send migration-recv set-cdq get-cdq"
 		[ocp]="smart-add-log latency-monitor-log set-latency-monitor-feature internal-log clear-fw-activate-history eol-plp-failure-mode clear-pcie-correctable-errors fw-activate-history unsupported-reqs-log error-recovery-log device-capability-log set-dssd-power-state-feature get-dssd-power-state-feature set-plp-health-check-interval get-plp-health-check-interval telemetry-string-log set-telemetry-profile set-dssd-async-event-config get-dssd-async-event-config tcg-configuration-log get-error-injection set-error-injection get-enable-ieee1667-silo set-enable-ieee1667-silo hardware-component-log get-latency-monitor get-clear-pcie-correctable-errors get-telemetry-profile persistent-event-log get-idle-wakeup-time"
-		[sed]="discover initialize revert lock unlock password"
-		[solidigm]="id-ctrl smart-log-add vs-smart-add-log vs-internal-log garbage-collect-log market-log latency-tracking-log parse-telemetry-log clear-pcie-correctable-errors  clear-fw-activate-history vs-fw-activate-history log-page-directory temp-stats vs-drive-info cloud-SSDplugin-version workload-tracker"
+		[sed]="discover 1 initialize revert lock unlock password"
+		[solidigm]="id-ctrl smart-log-add vs-smart-add-log vs-internal-log garbage-collect-log market-log latency-tracking-log parse-telemetry-log clear-pcie-correctable-errors clear-fw-activate-history vs-fw-activate-history log-page-directory temp-stats vs-drive-info cloud-SSDplugin-version workload-tracker"
 	)
 
 	typeset -Ar _plugin_funcs=(
@@ -4268,18 +4268,18 @@ _nvme_subcmds () {
 		dispersed-ns-participating-nss-log reachability-groups-log
 		reachability-associations-log host-discovery-log ave-discovery-log
 		pull-model-ddc-req-log power-measurement-log set-feature set-property
-		get-property format fw-commit fw-download admin-passthru io-passthru
-		security-send security-recv get-lba-status capacity-mgmt resv-acquire
-		resv-register resv-release resv-report dsm copy flush compare read
-		write write-zeroes write-uncor verify sanitize sanitize-log
-		sanitize-ns reset subsystem-reset ns-rescan show-regs set-reg get-reg
-		top discover connect-all connect disconnect disconnect-all dim
-		gen-hostnqn show-hostnqn dir-receive dir-send virt-mgmt rpmb lockdown
-		show-topology io-mgmt-recv io-mgmt-send nvme-mi-recv nvme-mi-send amzn
-		dapustor dell dera fdp huawei ibm innogrit inspur intel mangoboost
-		memblaze micron netapp nvidia sndk sfx seagate shannon ssstc toshiba
-		transcend utils virtium wdc ymtc zns nbft keys exclusion registry
-		config feat lm ocp sed solidigm
+		get-property format fw-commit fw-activate fw-download admin-passthru
+		io-passthru security-send security-recv get-lba-status capacity-mgmt
+		resv-acquire resv-register resv-release resv-report dsm copy flush
+		compare read write write-zeroes write-uncor verify sanitize
+		sanitize-log sanitize-ns reset subsystem-reset ns-rescan show-regs
+		set-reg get-reg top discover connect-all connect disconnect
+		disconnect-all dim gen-hostnqn show-hostnqn dir-receive dir-send
+		virt-mgmt rpmb lockdown show-topology io-mgmt-recv io-mgmt-send
+		nvme-mi-recv nvme-mi-send amzn dapustor dell dera fdp huawei ibm
+		innogrit inspur intel mangoboost memblaze micron netapp nvidia sndk
+		sfx seagate shannon ssstc toshiba transcend utils virtium wdc ymtc zns
+		nbft keys exclusion registry config feat lm ocp sed solidigm
 	)
 
 	local func subcmd
