@@ -44,6 +44,19 @@ def has_options(cmd):
     return bool(cmd.get("options"))
 
 
+def cmd_names(cmd):
+    """Every name a command answers to: its primary name plus any alias.
+
+    Names are whitespace-stripped, which defends against a stray space in the C
+    command tables (e.g. "clear-pcie-correctable-errors ") that would otherwise
+    produce a case label the argv word can never match.
+    """
+    names = [cmd["name"]]
+    if cmd.get("alias"):
+        names.append(cmd["alias"])
+    return [n for n in (s.strip() for s in names) if n]
+
+
 # Completion values for options the metadata carries none for. Keyed by long
 # option name, applied to every command with it, so only list values that are
 # uniform across all commands.
@@ -260,7 +273,8 @@ def emit_bash_plugin(out, commands, func, device_argpos):
     if globals_src:
         global_opts = list(command_options(globals_src, "global"))
         skip = "|".join(['"version"', '"help"'] +
-                        [f'"{c["name"]}"' for c in commands if not has_options(c)])
+                        [f'"{n}"' for c in commands if not has_options(c)
+                         for n in cmd_names(c)])
         words = bash_option_words(global_opts)
         out.write(f'\tcase "$1" in\n\t\t{skip})\n\t\t\t;;\n\t\t*)\n')
         out.write(f'\t\t\topts+="{words}"\n')
@@ -283,7 +297,8 @@ def emit_bash_plugin(out, commands, func, device_argpos):
         # Only globals? The shared '*)' clause already covers it; no clause needed.
         if not words and not value_clauses:
             continue
-        body += f'\t\t"{c["name"]}")\n\t\t\topts+="{words}"\n'
+        label = "|".join(f'"{n}"' for n in cmd_names(c))
+        body += f'\t\t{label})\n\t\t\topts+="{words}"\n'
         if value_clauses:
             body += '\t\t\tif [[ $completing_value -eq 1 ]]; then\n\t\t\t\tcase $opt in\n'
             body += value_clauses
@@ -315,13 +330,13 @@ def generate_bash(model, out):
               "\n"
               "\ttypeset -Ar _plugin_subcmds=(\n")
     for p in plugins(model):
-        names = " ".join(c["name"] for c in p["commands"])
+        names = " ".join(n for c in p["commands"] for n in cmd_names(c))
         out.write(f'\t\t[{p["name"]}]="{names}"\n')
     out.write("\t)\n\n\ttypeset -Ar _plugin_funcs=(\n")
     for p in plugins(model):
         out.write(f'\t\t[{p["name"]}]="{bash_func_name(p["name"])}"\n')
     out.write("\t)\n\n\tlocal -a _cmds=(\n")
-    cmds = ([c["name"] for c in builtin_commands(model)] +
+    cmds = ([n for c in builtin_commands(model) for n in cmd_names(c)] +
             [p["name"] for p in plugins(model)])
     out.write(wrap_words(cmds, "\t\t"))
     out.write("\n\t)\n\n"
