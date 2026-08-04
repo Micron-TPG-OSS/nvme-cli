@@ -906,8 +906,8 @@ static int netapp_smdevices(int argc, char **argv, struct command *acmd,
 {
 	const char *desc = "Display information about E-Series volumes.";
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
-	struct dirent **devices;
-	int num, i, ret, fmt;
+	__cleanup_dirents struct dirents devs = {};
+	int i, ret, fmt;
 	struct smdevice_info *smdevices;
 	char path[264];
 	char *devname = NULL;
@@ -931,10 +931,10 @@ static int netapp_smdevices(int argc, char **argv, struct command *acmd,
 		return -EINVAL;
 	}
 
-	num = scandir(dev_path, &devices, netapp_nvme_filter, alphasort);
-	if (num <= 0) {
+	devs.num = scandir(dev_path, &devs.ents, netapp_nvme_filter, alphasort);
+	if (devs.num <= 0) {
 		nvme_show_error("No smdevices detected");
-		return num;
+		return devs.num;
 	}
 
 	if (optind < argc)
@@ -957,15 +957,15 @@ static int netapp_smdevices(int argc, char **argv, struct command *acmd,
 		}
 	}
 
-	smdevices = calloc(num, sizeof(*smdevices));
+	smdevices = calloc(devs.num, sizeof(*smdevices));
 	if (!smdevices) {
 		nvme_show_error("Unable to allocate memory for devices");
 		return -ENOMEM;
 	}
 
-	for (i = 0; i < num; i++) {
+	for (i = 0; i < devs.num; i++) {
 		snprintf(path, sizeof(path), "%s%s", dev_path,
-			devices[i]->d_name);
+			devs.ents[i]->d_name);
 		ret = libnvme_open(ctx, path, &hdl);
 		if (ret) {
 			nvme_show_error("Unable to open %s: %s", path,
@@ -993,9 +993,6 @@ static int netapp_smdevices(int argc, char **argv, struct command *acmd,
 	} else
 		nvme_show_error("No smdevices detected");
 
-	for (i = 0; i < num; i++)
-		free(devices[i]);
-	free(devices);
 	free(smdevices);
 	return 0;
 }
@@ -1006,8 +1003,8 @@ static int netapp_ontapdevices(int argc, char **argv, struct command *acmd,
 {
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	const char *desc = "Display information about ONTAP devices.";
-	struct dirent **devices;
-	int num, i, ret, fmt;
+	__cleanup_dirents struct dirents devs = {};
+	int i, ret, fmt;
 	struct ontapdevice_info *ontapdevices;
 	char path[264];
 	char *devname = NULL;
@@ -1051,21 +1048,21 @@ static int netapp_ontapdevices(int argc, char **argv, struct command *acmd,
 		}
 	}
 
-	num = scandir(dev_path, &devices, netapp_nvme_filter, alphasort);
-	if (num <= 0) {
+	devs.num = scandir(dev_path, &devs.ents, netapp_nvme_filter, alphasort);
+	if (devs.num <= 0) {
 		nvme_show_error("No ontapdevices detected");
-		return num;
+		return devs.num;
 	}
 
-	ontapdevices = calloc(num, sizeof(*ontapdevices));
+	ontapdevices = calloc(devs.num, sizeof(*ontapdevices));
 	if (!ontapdevices) {
 		nvme_show_error("Unable to allocate memory for devices");
 		return -ENOMEM;
 	}
 
-	for (i = 0; i < num; i++) {
+	for (i = 0; i < devs.num; i++) {
 		snprintf(path, sizeof(path), "%s%s", dev_path,
-				devices[i]->d_name);
+				devs.ents[i]->d_name);
 		ret = libnvme_open(ctx, path, &hdl);
 		if (ret) {
 			nvme_show_error("Unable to open %s: %s", path,
@@ -1094,9 +1091,6 @@ static int netapp_ontapdevices(int argc, char **argv, struct command *acmd,
 	} else
 		nvme_show_error("No ontapdevices detected");
 
-	for (i = 0; i < num; i++)
-		free(devices[i]);
-	free(devices);
 	free(ontapdevices);
 	return 0;
 }
