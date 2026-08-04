@@ -45,6 +45,10 @@ _nvme_detect_value_completion() {
 		val="$cur"
 		completing_value=1
 	fi
+
+	# When the option word was captured unsplit (e.g. '--output-format='), drop
+	# the trailing '=' so $opt matches the '--name|-s)' clauses below.
+	opt="${opt%=}"
 }
 
 nvme_list_opts () {
