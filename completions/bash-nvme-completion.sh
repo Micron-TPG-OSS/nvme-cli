@@ -63,7 +63,7 @@ nvme_list_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -628,7 +628,7 @@ plugin_amzn_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -707,7 +707,7 @@ plugin_dapustor_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -783,7 +783,7 @@ plugin_dell_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -859,7 +859,7 @@ plugin_dera_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -930,7 +930,7 @@ plugin_fdp_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -1027,7 +1027,7 @@ plugin_huawei_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -1103,7 +1103,7 @@ plugin_ibm_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -1185,7 +1185,7 @@ plugin_innogrit_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -1256,7 +1256,7 @@ plugin_inspur_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -1327,7 +1327,7 @@ plugin_intel_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -1431,7 +1431,7 @@ plugin_mangoboost_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -1507,7 +1507,7 @@ plugin_memblaze_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -1620,7 +1620,7 @@ plugin_micron_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -1764,7 +1764,7 @@ plugin_netapp_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -1835,7 +1835,7 @@ plugin_nvidia_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -1911,7 +1911,7 @@ plugin_sndk_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -2037,7 +2037,7 @@ plugin_sfx_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -2147,7 +2147,7 @@ plugin_seagate_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -2242,7 +2242,7 @@ plugin_shannon_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -2341,7 +2341,7 @@ plugin_ssstc_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -2417,7 +2417,7 @@ plugin_toshiba_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -2510,7 +2510,7 @@ plugin_transcend_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -2581,7 +2581,7 @@ plugin_utils_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -2634,7 +2634,7 @@ plugin_virtium_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -2717,7 +2717,7 @@ plugin_wdc_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -2906,7 +2906,7 @@ plugin_ymtc_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -2982,7 +2982,7 @@ plugin_zns_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -3118,7 +3118,7 @@ plugin_nbft_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -3194,7 +3194,7 @@ plugin_keys_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -3291,7 +3291,7 @@ plugin_exclusion_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -3382,7 +3382,7 @@ plugin_registry_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -3464,7 +3464,7 @@ plugin_config_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -3580,7 +3580,7 @@ plugin_feat_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -3786,7 +3786,7 @@ plugin_lm_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -3907,7 +3907,7 @@ plugin_ocp_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -4147,7 +4147,7 @@ plugin_sed_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi
@@ -4217,7 +4217,7 @@ plugin_solidigm_opts () {
 	for (( i=0; i < ${#words[@]}-1; i++ )); do
 		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
 			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/* ]]; then
+			if [[ ${words[i]} == /dev/nvme* ]]; then
 				has_device=1
 			fi
 		fi

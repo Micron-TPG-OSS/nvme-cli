@@ -172,7 +172,7 @@ BASH_FUNC_PREAMBLE = '''\
 \tfor (( i=0; i < ${{#words[@]}}-1; i++ )); do
 \t\tif [[ ${{words[i]}} != -* ]] && [[ ${{words[i]}} != "=" ]]; then
 \t\t\t(( nonopt_args += 1 ))
-\t\t\tif [[ ${{words[i]}} == /dev/* ]]; then
+\t\t\tif [[ ${{words[i]}} == /dev/nvme* ]]; then
 \t\t\t\thas_device=1
 \t\t\tfi
 \t\tfi
