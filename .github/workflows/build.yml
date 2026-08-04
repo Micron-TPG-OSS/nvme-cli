@@ -333,10 +333,6 @@ jobs:
   windows-msys2-clangarm64:
     runs-on: windows-11-arm
     timeout-minutes: 60
-    # Advisory while the arm64 image and the clang build settle. Drop this
-    # once the job has been green for a while so it becomes a merge gate like
-    # windows-msys2-ucrt64.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
