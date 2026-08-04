@@ -1,50 +1,45 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# update-accessors.sh - Regenerate accessor files only when they change.
+# update-ctrl-sysfs.sh - Regenerate ctrl-sysfs.{h,c,i} only when they change;
+# report ctrl-sysfs.ld symbol drift instead of rewriting it.
 #
 # This file is part of libnvme.
-# Copyright (c) 2025, Dell Technologies Inc. or its subsidiaries.
+# Copyright (c) 2026, Dell Technologies Inc. or its subsidiaries.
 # Authors: Martin Belanger <Martin.Belanger@dell.com>
 #
 # Invoked via:
 #   meson compile -C <build-dir> update-accessors   (developer, updates files)
-#   meson compile -C <build-dir> check-accessors    (CI, read-only)
+#   meson compile -C <build-dir> update-accessors   (CI, read-only:
+#                                                     configure with
+#                                                     -Dcheck-accessors=true)
 #
 # It is NOT run during a normal build.
 #
-# The .h, .c, and .i files are updated automatically when the generator
-# produces different output.
-#
-# The .ld file is NOT updated automatically because its version section
-# label (e.g. LIBNVME_ACCESSORS_3, LIBNVMF_ACCESSORS_3) must be assigned by
-# the maintainer.  Instead, this script reports which symbols have been added
-# or removed so the maintainer knows exactly what to change.
-#
-# With --check (used by CI), the script is read-only: it never modifies the
-# source tree.  It exits non-zero if any .h/.c/.i file is out of date or if
-# the .ld symbol list has drifted.
+# Which version section a new symbol belongs to is a maintainer decision,
+# so ctrl-sysfs.ld is handled the same way as accessors.ld/
+# accessors-fabrics.ld: it is never rewritten automatically.
+# The generator runs into a scratch directory; .h/.c/.i are copied into the
+# tree when they differ, and .ld is only diffed, symbol by symbol.
 #
 # Arguments (supplied by the Meson run_target):
-#   $1             path to the python3 interpreter
-#   $2             path to generate_accessors.py
-#   $3             full path of the output .h file
-#   $4             full path of the output .c file
-#   $5             full path of the output .ld file
-#   [--check]             optional: CI mode; read-only, exit non-zero on drift
-#   [--swig-out F]        optional: full path of the SWIG fragment (.i file)
-#   [--dict-table-out F]  optional: full path of the dict-table header (.h file)
-#   $6 (or $8/10) ... one or more input headers scanned for
-#                  // !generate-accessors and // !generate-python structs
+#   $1   path to the python3 interpreter
+#   $2   path to generate_sysfs_accessors.py
+#   $3   path to sysfs_accessors_specs.py (CTRL_SYSFS input)
+#   $4   output directory for ctrl-sysfs.h/.c
+#   $5   output directory for ctrl-sysfs.ld
+#   $6   output directory for ctrl-sysfs.i
+#   [--check]   optional: CI mode; read-only, exit non-zero on drift
 
 set -euo pipefail
 
 PYTHON="${1:?missing python3 interpreter}"
 GENERATOR="${2:?missing generator script}"
-H_OUT="${3:?missing .h output path}"
-C_OUT="${4:?missing .c output path}"
-LD_OUT="${5:?missing .ld output path}"
-shift 5
+SPECS="${3:?missing sysfs_accessors_specs.py path}"
+OUT_DIR="${4:?missing output directory}"
+LD_OUT_DIR="${5:?missing ld output directory}"
+SWIG_OUT_DIR="${6:?missing swig output directory}"
+shift 6
 
 CHECK_MODE=0
 if [ "${1-}" = "--check" ]; then
@@ -52,38 +47,13 @@ if [ "${1-}" = "--check" ]; then
     shift
 fi
 
-SWIG_OUT=""
-if [ "${1-}" = "--swig-out" ]; then
-    SWIG_OUT="${2:?--swig-out requires a path argument}"
-    shift 2
-fi
-
-DICT_TABLE_OUT=""
-if [ "${1-}" = "--dict-table-out" ]; then
-    DICT_TABLE_OUT="${2:?--dict-table-out requires a path argument}"
-    shift 2
-fi
-
-if [ $# -eq 0 ]; then
-    echo "error: no input headers provided" >&2
-    exit 1
-fi
+H_OUT="$OUT_DIR/ctrl-sysfs.h"
+C_OUT="$OUT_DIR/ctrl-sysfs.c"
+LD_OUT="$LD_OUT_DIR/ctrl-sysfs.ld"
+I_OUT="$SWIG_OUT_DIR/ctrl-sysfs.i"
 
 TMPDIR_WORK=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_WORK"' EXIT
-
-LABEL=$(basename "$H_OUT")   # e.g. "accessors.h" or "nvmf-accessors.h"
-BASE="${LABEL%.h}"            # e.g. "accessors"    or "nvmf-accessors"
-
-TMP_H="$TMPDIR_WORK/${BASE}.h"
-TMP_C="$TMPDIR_WORK/${BASE}.c"
-TMP_LD="$TMPDIR_WORK/${BASE}.ld"
-TMP_I="$TMPDIR_WORK/${BASE}.i"
-if [ -n "$DICT_TABLE_OUT" ]; then
-    TMP_DT="$TMPDIR_WORK/$(basename "$DICT_TABLE_OUT")"
-else
-    TMP_DT="$TMPDIR_WORK/dict_table.h"
-fi
 
 # ---------------------------------------------------------------------------
 # Helper: update a source file atomically when content changes.
@@ -106,11 +76,10 @@ update_if_changed() {
 
 # ---------------------------------------------------------------------------
 # Helper (check mode): report whether a source file is current.
-# Sets DRIFT to a non-zero value if the file is stale.
 # ---------------------------------------------------------------------------
 check_if_current() {
-    local src="$1"   # newly generated file in TMPDIR_WORK
-    local dest="$2"  # committed file in the source tree
+    local src="$1"
+    local dest="$2"
 
     if [ -f "$dest" ] && cmp -s "$src" "$dest"; then
         printf "  up to date: %s\n" "$(basename "$dest")"
@@ -148,10 +117,13 @@ check_ld_drift() {
         return 0
     fi
 
-    echo "WARNING: $(realpath --relative-to=.. "$old_ld") needs manual attention."
+    echo "WARNING: $(realpath --relative-to=.. "$old_ld") needs manual" \
+         "attention."
     echo ""
     if [ -n "$added" ]; then
-        echo "  Symbols to ADD (new version section, e.g. <PREFIX>_ACCESSORS_X_Y):"
+        echo "  Symbols to ADD to LIBNVME_CTRL_SYSFS_3 (pre-3.0: existing"
+        echo "  section; after a stable release: new chained section, e.g."
+        echo "  LIBNVME_CTRL_SYSFS_3_1):"
         printf '%s\n' "$added" | sed 's/^/\t\t/' | sed 's/$/;/'
     fi
     if [ -n "$removed" ]; then
@@ -163,25 +135,19 @@ check_ld_drift() {
 }
 
 # ---------------------------------------------------------------------------
-# Run generator
+# Run generator into the scratch directory
 # ---------------------------------------------------------------------------
 echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-echo "--- ${BASE}: begin generation ---"
+echo "--- ctrl-sysfs: begin generation ---"
 echo ""
 
-SWIG_ARGS=()
-[ -n "$SWIG_OUT" ] && SWIG_ARGS=(--swig-out "$TMP_I")
+"$PYTHON" "$GENERATOR" --specs "$SPECS" --out-dir "$TMPDIR_WORK" \
+	--ld-out-dir "$TMPDIR_WORK" --swig-out-dir "$TMPDIR_WORK" >/dev/null
 
-DICT_TABLE_ARGS=()
-[ -n "$DICT_TABLE_OUT" ] && DICT_TABLE_ARGS=(--dict-table-out "$TMP_DT")
-
-"$PYTHON" "$GENERATOR" \
-    --h-out  "$TMP_H"  \
-    --c-out  "$TMP_C"  \
-    --ld-out "$TMP_LD" \
-    "${SWIG_ARGS[@]}"  \
-    "${DICT_TABLE_ARGS[@]}" \
-    "$@"
+TMP_H="$TMPDIR_WORK/ctrl-sysfs.h"
+TMP_C="$TMPDIR_WORK/ctrl-sysfs.c"
+TMP_LD="$TMPDIR_WORK/ctrl-sysfs.ld"
+TMP_I="$TMPDIR_WORK/ctrl-sysfs.i"
 
 if [ "$CHECK_MODE" -eq 1 ]; then
     # ------------------------------------------------------------------
@@ -191,17 +157,17 @@ if [ "$CHECK_MODE" -eq 1 ]; then
     DRIFT=0
     check_if_current "$TMP_H" "$H_OUT"
     check_if_current "$TMP_C" "$C_OUT"
-    [ -n "$SWIG_OUT" ]       && check_if_current "$TMP_I"  "$SWIG_OUT"
-    [ -n "$DICT_TABLE_OUT" ] && check_if_current "$TMP_DT" "$DICT_TABLE_OUT"
+    check_if_current "$TMP_I" "$I_OUT"
     echo ""
     check_ld_drift "$TMP_LD" "$LD_OUT" || DRIFT=$((DRIFT + 1))
     echo ""
     if [ "$DRIFT" -gt 0 ]; then
         echo "ERROR: generated files are out of sync with the source."
         echo "Run 'meson compile -C <build-dir> update-accessors' and commit."
-        echo "(.ld symbol changes require manual version-script edits; see WARNING above.)"
+        echo "(.ld symbol changes require manual version-script edits;" \
+             "see WARNING above.)"
         echo ""
-        echo "--- ${BASE}: check FAILED ---"
+        echo "--- ctrl-sysfs: check FAILED ---"
         echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
         echo ""
         exit 1
@@ -214,20 +180,19 @@ else
     CHANGED=0
     update_if_changed "$TMP_H" "$H_OUT"
     update_if_changed "$TMP_C" "$C_OUT"
-    [ -n "$SWIG_OUT" ]       && update_if_changed "$TMP_I"  "$SWIG_OUT"
-    [ -n "$DICT_TABLE_OUT" ] && update_if_changed "$TMP_DT" "$DICT_TABLE_OUT"
+    update_if_changed "$TMP_I" "$I_OUT"
     echo ""
     if [ "$CHANGED" -gt 0 ]; then
-        printf "%d file(s) updated in %s\n" "$CHANGED" "$(dirname "$H_OUT")"
+        printf "%d file(s) updated in %s\n" "$CHANGED" "$OUT_DIR"
         echo "Don't forget to commit the updated files."
     else
-        echo "All accessor source files are up to date."
+        echo "All ctrl-sysfs source files are up to date."
     fi
     echo ""
     check_ld_drift "$TMP_LD" "$LD_OUT" || true
 fi
 
 echo ""
-echo "--- ${BASE}: generation complete ---"
+echo "--- ctrl-sysfs: generation complete ---"
 echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 echo ""
