@@ -152,6 +152,10 @@ _nvme_detect_value_completion() {
 \t\tval="$cur"
 \t\tcompleting_value=1
 \tfi
+
+\t# When the option word was captured unsplit (e.g. '--output-format='), drop
+\t# the trailing '=' so $opt matches the '--name|-s)' clauses below.
+\topt="${opt%=}"
 }
 '''
 

@@ -400,6 +400,16 @@ else
     _check 1 "partial value filters for an unsplit '--opt=partial' token" "got '${COMPREPLY[*]}'"
 fi
 
+# Trailing space after an unsplit '--opt=' token: the previous word is the whole
+# '--output-format=' (with '='), so the value list must still appear -- the
+# detector has to strip the '=' before matching option names.
+run_completion_words nvme id-ctrl "--output-format=" ""
+if [[ " ${COMPREPLY[*]} " =~ normal.*json.*binary.*tabular ]]; then
+    _check 0 "value list appears after an unsplit '--opt= ' with trailing space" "got '${COMPREPLY[*]}'"
+else
+    _check 1 "value list appears after an unsplit '--opt= ' with trailing space" "got '${COMPREPLY[*]}'"
+fi
+
 # --sel is an enumerated option carried by feat's sub-commands. Its values come
 # from the generator's VALUE_HINTS table (the arg parser leaves --sel
 # unconstrained, so the command metadata carries no values). This also exercises
