@@ -146,6 +146,9 @@ if host_system == 'windows'
     bcrypt_dep = cc.find_library('bcrypt', required: true)
     setupapi_dep = cc.find_library('setupapi', required: true)
     cfgmgr32_dep = cc.find_library('cfgmgr32', required: true)
+    # clock_gettime() lives in winpthreads on MinGW. gcc's spec file links it
+    # implicitly, clang does not, so link it explicitly for both.
+    winpthread_dep = cc.find_library('winpthread', required: true)
 endif
 
 conf.set10(
@@ -632,6 +635,11 @@ if want_nvme
             kernel32_dep,
             bcrypt_dep,
         ]
+
+        if not is_static
+            # Static builds pull winpthread in explicitly below.
+            link_deps += [winpthread_dep]
+        endif
 
         if is_static
             # Keep these MinGW runtime dependencies in-process to avoid

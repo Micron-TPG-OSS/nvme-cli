@@ -127,6 +127,7 @@ if host_system == 'windows'
         bcrypt_dep,
         setupapi_dep,
         cfgmgr32_dep,
+        winpthread_dep,
     ]
 endif
 
