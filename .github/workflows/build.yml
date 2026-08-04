@@ -329,3 +329,45 @@ jobs:
           name: windows-msys2-ucrt64-logs
           path: |
             .build-ci/meson-logs/*.txt
+
+  windows-msys2-clangarm64:
+    runs-on: windows-11-arm
+    timeout-minutes: 60
+    # Advisory while the arm64 image and the clang build settle. Drop this
+    # once the job has been green for a while so it becomes a merge gate like
+    # windows-msys2-ucrt64.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
+        with:
+          msystem: CLANGARM64
+          update: true
+          install: >-
+            git
+            mingw-w64-clang-aarch64-clang
+            mingw-w64-clang-aarch64-pkgconf
+            mingw-w64-clang-aarch64-meson
+            mingw-w64-clang-aarch64-ninja
+            mingw-w64-clang-aarch64-ccache
+            mingw-w64-clang-aarch64-json-c
+            mingw-w64-clang-aarch64-python-jsonschema
+
+      - name: Build nvme-cli
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          which bash
+          bash --version
+          which git
+          git --version
+          clang --version
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          scripts/build.sh -b release -c /clangarm64/bin/clang
+
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: failure()
+        with:
+          name: windows-msys2-clangarm64-logs
+          path: |
+            .build-ci/meson-logs/*.txt
