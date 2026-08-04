@@ -300,6 +300,12 @@ expect_no_device \
     "a device already on the line is not offered again" \
     "nvme id-ctrl /dev/nvme0 "
 
+# A non-NVMe /dev/* path as an option value (e.g. --output-file /dev/null) is not
+# the device argument, so device injection must still happen.
+expect_device \
+    "a /dev/* option value is not mistaken for the device argument" \
+    "nvme telemetry-log --output-file /dev/null "
+
 # ---------------------------------------------------------------------------
 # Option-name completion
 # ---------------------------------------------------------------------------
