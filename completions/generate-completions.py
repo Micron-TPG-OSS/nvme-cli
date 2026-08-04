@@ -19,6 +19,10 @@ import json
 import sys
 
 
+# Metadata schema version this generator understands; reject anything else.
+SUPPORTED_SCHEMA_VERSION = 1
+
+
 # ---------------------------------------------------------------------------
 # Model access helpers
 # ---------------------------------------------------------------------------
@@ -395,6 +399,11 @@ def main():
     else:
         with open(args.input) as src:
             model = json.load(src)
+
+    version = model.get("schema_version")
+    if version != SUPPORTED_SCHEMA_VERSION:
+        ap.error(f"unsupported schema_version {version!r} "
+                 f"(expected {SUPPORTED_SCHEMA_VERSION})")
 
     out = open_out(args.bash)
     try:
