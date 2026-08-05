@@ -358,6 +358,13 @@ expect_device_words \
     "a /dev/nvme* value after a split '=' is not mistaken for the device" \
     nvme telemetry-log --output-file = /dev/nvme0 ""
 
+# And the unsplit-option form '--output-file=' as its own word: the trailing '='
+# must be stripped so the option still matches $valopts and its value is not
+# counted as the device.
+expect_device_words \
+    "a /dev/nvme* value after an unsplit '--opt=' token is not the device" \
+    nvme telemetry-log "--output-file=" /dev/nvme0 ""
+
 # ---------------------------------------------------------------------------
 # Option-name completion
 # ---------------------------------------------------------------------------

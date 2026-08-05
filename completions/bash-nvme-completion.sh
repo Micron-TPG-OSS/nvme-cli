@@ -679,7 +679,9 @@ nvme_list_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -768,7 +770,9 @@ plugin_amzn_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -854,7 +858,9 @@ plugin_dapustor_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -939,7 +945,9 @@ plugin_dell_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -1019,7 +1027,9 @@ plugin_dera_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -1133,7 +1143,9 @@ plugin_fdp_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -1218,7 +1230,9 @@ plugin_huawei_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -1310,7 +1324,9 @@ plugin_ibm_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -1390,7 +1406,9 @@ plugin_innogrit_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -1470,7 +1488,9 @@ plugin_inspur_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -1586,7 +1606,9 @@ plugin_intel_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -1671,7 +1693,9 @@ plugin_mangoboost_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -1799,7 +1823,9 @@ plugin_memblaze_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -1971,7 +1997,9 @@ plugin_micron_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -2051,7 +2079,9 @@ plugin_netapp_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -2136,7 +2166,9 @@ plugin_nvidia_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -2282,7 +2314,9 @@ plugin_sndk_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -2407,7 +2441,9 @@ plugin_sfx_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -2514,7 +2550,9 @@ plugin_seagate_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -2625,7 +2663,9 @@ plugin_shannon_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -2711,7 +2751,9 @@ plugin_ssstc_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -2815,7 +2857,9 @@ plugin_toshiba_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -2895,7 +2939,9 @@ plugin_transcend_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -2956,7 +3002,9 @@ plugin_utils_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -3049,7 +3097,9 @@ plugin_virtium_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -3264,7 +3314,9 @@ plugin_wdc_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -3350,7 +3402,9 @@ plugin_ymtc_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -3508,7 +3562,9 @@ plugin_zns_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -3594,7 +3650,9 @@ plugin_nbft_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -3708,7 +3766,9 @@ plugin_keys_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -3814,7 +3874,9 @@ plugin_exclusion_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -3908,7 +3970,9 @@ plugin_registry_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -4037,7 +4101,9 @@ plugin_config_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -4265,7 +4331,9 @@ plugin_feat_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -4402,7 +4470,9 @@ plugin_lm_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -4670,7 +4740,9 @@ plugin_ocp_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -4748,7 +4820,9 @@ plugin_sed_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
@@ -4882,7 +4956,9 @@ plugin_solidigm_opts () {
 			if [[ $i -gt 0 ]]; then
 				prevopt="${words[i-1]}"
 				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				[[ " $valopts " == *" $prevopt "* ]] && continue
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1

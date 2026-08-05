@@ -207,7 +207,9 @@ BASH_DEVICE_SCAN = '''\
 \t\t\tif [[ $i -gt 0 ]]; then
 \t\t\t\tprevopt="${{words[i-1]}}"
 \t\t\t\t[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${{words[i-2]}}"
-\t\t\t\t[[ " $valopts " == *" $prevopt "* ]] && continue
+\t\t\t\t# Strip a trailing '=' so an unsplit '--opt=' token still matches
+\t\t\t\t# $valopts (whose entries carry no '=').
+\t\t\t\t[[ " $valopts " == *" ${{prevopt%=}} "* ]] && continue
 \t\t\tfi
 \t\t\t(( nonopt_args += 1 ))
 \t\t\t[[ ${{words[i]}} == /dev/nvme* ]] && has_device=1
