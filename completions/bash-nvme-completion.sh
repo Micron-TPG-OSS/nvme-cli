@@ -11,19 +11,22 @@
 # Helper function to detect if we're completing an option's value.
 # Uses: $cur, $prev, $words, $cword (from _init_completion)
 # Sets: $opt (the option name), $val (partial value), $completing_value (0 or 1)
+# Known limitation: a value beginning with '-' (e.g. '--value -5') is
+# indistinguishable from an option name here and is treated as one, so its value
+# is not completed. Rare for nvme options and not worth the ambiguity to chase.
 _nvme_detect_value_completion() {
 	completing_value=0
 	opt=""
 	val=""
 
-	if [[ $cur == --*=* ]]; then
+	if [[ $cur == -*=* ]]; then
 		opt="${cur%%=*}"
 		val="${cur#*=}"
 		completing_value=1
-	elif [[ $cur == "=" ]] && [[ $prev == --* ]]; then
+	elif [[ $cur == "=" ]] && [[ $prev == -* ]]; then
 		opt="$prev"
 		completing_value=1
-	elif [[ $cur != -* ]] && [[ $cur != "" ]] && [[ $prev == "=" ]] && [[ ${words[$cword-2]} == --* ]]; then
+	elif [[ $cur != -* ]] && [[ $cur != "" ]] && [[ $prev == "=" ]] && [[ ${words[$cword-2]} == -* ]]; then
 		opt="${words[$cword-2]}"
 		val="$cur"
 		completing_value=1
@@ -57,23 +60,6 @@ nvme_list_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 2 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -680,10 +666,21 @@ nvme_list_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 2 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -713,23 +710,6 @@ plugin_amzn_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -768,10 +748,21 @@ plugin_amzn_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -801,23 +792,6 @@ plugin_dapustor_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -853,10 +827,21 @@ plugin_dapustor_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -886,23 +871,6 @@ plugin_dell_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -937,10 +905,21 @@ plugin_dell_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -971,23 +950,6 @@ plugin_dera_opts () {
 	local opt=""
 	local val=""
 
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
-
 	opts+=" "
 	vals+=" "
 
@@ -1016,10 +978,21 @@ plugin_dera_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -1049,23 +1022,6 @@ plugin_fdp_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -1129,10 +1085,21 @@ plugin_fdp_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -1162,23 +1129,6 @@ plugin_huawei_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -1213,10 +1163,21 @@ plugin_huawei_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -1246,23 +1207,6 @@ plugin_ibm_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -1304,10 +1248,21 @@ plugin_ibm_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -1338,23 +1293,6 @@ plugin_innogrit_opts () {
 	local opt=""
 	local val=""
 
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
-
 	opts+=" "
 	vals+=" "
 
@@ -1383,10 +1321,21 @@ plugin_innogrit_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -1417,23 +1366,6 @@ plugin_inspur_opts () {
 	local opt=""
 	local val=""
 
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
-
 	opts+=" "
 	vals+=" "
 
@@ -1462,10 +1394,21 @@ plugin_inspur_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -1495,23 +1438,6 @@ plugin_intel_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -1577,10 +1503,21 @@ plugin_intel_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -1610,23 +1547,6 @@ plugin_mangoboost_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -1661,10 +1581,21 @@ plugin_mangoboost_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -1694,23 +1625,6 @@ plugin_memblaze_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -1788,10 +1702,21 @@ plugin_memblaze_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -1821,23 +1746,6 @@ plugin_micron_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -1959,10 +1867,21 @@ plugin_micron_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -1993,23 +1912,6 @@ plugin_netapp_opts () {
 	local opt=""
 	local val=""
 
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
-
 	opts+=" "
 	vals+=" "
 
@@ -2038,10 +1940,21 @@ plugin_netapp_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -2071,23 +1984,6 @@ plugin_nvidia_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -2122,10 +2018,21 @@ plugin_nvidia_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -2155,23 +2062,6 @@ plugin_sndk_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -2267,10 +2157,21 @@ plugin_sndk_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -2300,23 +2201,6 @@ plugin_sfx_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -2391,10 +2275,21 @@ plugin_sfx_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -2424,23 +2319,6 @@ plugin_seagate_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -2497,10 +2375,21 @@ plugin_seagate_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -2530,23 +2419,6 @@ plugin_shannon_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -2607,10 +2479,21 @@ plugin_shannon_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -2640,23 +2523,6 @@ plugin_ssstc_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -2692,10 +2558,21 @@ plugin_ssstc_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -2725,23 +2602,6 @@ plugin_toshiba_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -2795,10 +2655,21 @@ plugin_toshiba_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -2829,23 +2700,6 @@ plugin_transcend_opts () {
 	local opt=""
 	local val=""
 
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
-
 	opts+=" "
 	vals+=" "
 
@@ -2874,10 +2728,21 @@ plugin_transcend_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -2908,23 +2773,6 @@ plugin_utils_opts () {
 	local opt=""
 	local val=""
 
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
-
 	opts+=" "
 	vals+=" "
 
@@ -2934,10 +2782,21 @@ plugin_utils_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -2967,23 +2826,6 @@ plugin_virtium_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -3026,10 +2868,21 @@ plugin_virtium_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -3059,23 +2912,6 @@ plugin_wdc_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -3240,10 +3076,21 @@ plugin_wdc_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -3273,23 +3120,6 @@ plugin_ymtc_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -3325,10 +3155,21 @@ plugin_ymtc_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -3358,23 +3199,6 @@ plugin_zns_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -3482,10 +3306,21 @@ plugin_zns_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -3515,23 +3350,6 @@ plugin_nbft_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -3567,10 +3385,21 @@ plugin_nbft_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -3600,23 +3429,6 @@ plugin_keys_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -3680,10 +3492,21 @@ plugin_keys_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -3713,23 +3536,6 @@ plugin_exclusion_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -3785,10 +3591,21 @@ plugin_exclusion_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -3818,23 +3635,6 @@ plugin_registry_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -3878,10 +3678,21 @@ plugin_registry_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -3911,23 +3722,6 @@ plugin_config_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -4006,10 +3800,21 @@ plugin_config_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -4039,23 +3844,6 @@ plugin_feat_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -4233,10 +4021,21 @@ plugin_feat_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -4266,23 +4065,6 @@ plugin_lm_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -4369,10 +4151,21 @@ plugin_lm_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -4402,23 +4195,6 @@ plugin_ocp_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -4636,10 +4412,21 @@ plugin_ocp_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -4670,23 +4457,6 @@ plugin_sed_opts () {
 	local opt=""
 	local val=""
 
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
-
 	opts+=" "
 	vals+=" "
 
@@ -4713,10 +4483,21 @@ plugin_sed_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then
@@ -4746,23 +4527,6 @@ plugin_solidigm_opts () {
 	local vals=""
 	local opt=""
 	local val=""
-
-	local nonopt_args=0
-	local has_device=0
-	local i
-	for (( i=0; i < ${#words[@]}-1; i++ )); do
-		if [[ ${words[i]} != -* ]] && [[ ${words[i]} != "=" ]]; then
-			(( nonopt_args += 1 ))
-			if [[ ${words[i]} == /dev/nvme* ]]; then
-				has_device=1
-			fi
-		fi
-	done
-
-	if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-	   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-		opts="/dev/nvme* "
-	fi
 
 	opts+=" "
 	vals+=" "
@@ -4846,10 +4610,21 @@ plugin_solidigm_opts () {
 
 	opts+=" -h --help"
 
-	# If we thought we were completing a value but $opt is not a value-taking
-	# option, it is a flag -- fall back to normal option completion.
 	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 		completing_value=0
+	fi
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			[[ $i -gt 0 ]] && [[ " $valopts " == *" ${words[i-1]} "* ]] && continue
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
 	fi
 
 	if [[ $completing_value -eq 1 ]]; then

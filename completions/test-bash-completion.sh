@@ -118,6 +118,21 @@ expect_match() {
     fi
 }
 
+# Like expect_match, but the command line is given as explicit COMP_WORDS: the
+# description, then the regex, then the words. Use this for '=' token splits that
+# the string-based parse_words would collapse (e.g. a bare '=' word).
+expect_match_words() {
+    local desc=$1 regex=$2
+    shift 2
+    run_completion_words "$@"
+    local got="${COMPREPLY[*]}"
+    if [[ "$got" =~ $regex ]]; then
+        _check 0 "$desc" "[$*] -> '$got'"
+    else
+        _check 1 "$desc" "[$*] expected /$regex/, got '$got'"
+    fi
+}
+
 # The completion injects the /dev/nvme* device glob. compgen -W pathname-expands
 # the glob, so the result is host-dependent: real devices (/dev/nvme0, ...) on a
 # host that has them, or the literal /dev/nvme* pattern on one that doesn't. Both
@@ -306,6 +321,12 @@ expect_device \
     "a /dev/* option value is not mistaken for the device argument" \
     "nvme telemetry-log --output-file /dev/null "
 
+# Even a /dev/nvme* path given as an option value is not the positional device
+# argument, so injection must still happen.
+expect_device \
+    "a /dev/nvme* option value is not mistaken for the device argument" \
+    "nvme telemetry-log --output-file /dev/nvme0 "
+
 # ---------------------------------------------------------------------------
 # Option-name completion
 # ---------------------------------------------------------------------------
@@ -397,44 +418,48 @@ expect_match \
     "nvme id-ctrl -o j" \
     "json"
 
+# nvme's getopt also accepts the short-option '=' form ('-o=json'). When bash
+# splits on '=', that arrives as '-o = [partial]'; the value list must appear
+# just as it does for the long-option '=' form.
+expect_match \
+    "the short-option '=' form lists values" \
+    "nvme id-ctrl -o=" \
+    "normal.*json.*binary.*tabular"
+
+expect_match \
+    "the short-option '=' form filters a partial value" \
+    "nvme id-ctrl -o=j" \
+    "json"
+
 # Depending on COMP_WORDBREAKS, bash may present 'nvme id-ctrl --output-format='
 # as three tokens ending in a bare '=' (option is the previous word) OR as a
 # single unsplit '--output-format=' token. The string helpers always split on
-# '=', so drive both forms explicitly with run_completion_words to prove the
-# value list appears either way.
-run_completion_words nvme feat power-meas --output-format =
-if [[ " ${COMPREPLY[*]} " =~ normal.*json.*binary.*tabular ]]; then
-    _check 0 "value list appears when '=' is the current word (split form)" "got '${COMPREPLY[*]}'"
-else
-    _check 1 "value list appears when '=' is the current word (split form)" "got '${COMPREPLY[*]}'"
-fi
+# '=', so drive both forms explicitly to prove the value list appears either way.
+expect_match_words \
+    "value list appears when '=' is the current word (split form)" \
+    "normal.*json.*binary.*tabular" \
+    nvme feat power-meas --output-format =
 
-run_completion_words nvme id-ctrl "--output-format="
-if [[ " ${COMPREPLY[*]} " =~ normal.*json.*binary.*tabular ]]; then
-    _check 0 "value list appears for an unsplit '--opt=' token" "got '${COMPREPLY[*]}'"
-else
-    _check 1 "value list appears for an unsplit '--opt=' token" "got '${COMPREPLY[*]}'"
-fi
+expect_match_words \
+    "value list appears for an unsplit '--opt=' token" \
+    "normal.*json.*binary.*tabular" \
+    nvme id-ctrl "--output-format="
 
 # Same unsplit form but with a partial value ('--output-format=j'), which occurs
 # when '=' is removed from COMP_WORDBREAKS. The partial must still filter the
 # value list down to the match.
-run_completion_words nvme id-ctrl "--output-format=j"
-if [[ " ${COMPREPLY[*]} " =~ json ]]; then
-    _check 0 "partial value filters for an unsplit '--opt=partial' token" "got '${COMPREPLY[*]}'"
-else
-    _check 1 "partial value filters for an unsplit '--opt=partial' token" "got '${COMPREPLY[*]}'"
-fi
+expect_match_words \
+    "partial value filters for an unsplit '--opt=partial' token" \
+    "json" \
+    nvme id-ctrl "--output-format=j"
 
 # Trailing space after an unsplit '--opt=' token: the previous word is the whole
 # '--output-format=' (with '='), so the value list must still appear -- the
 # detector has to strip the '=' before matching option names.
-run_completion_words nvme id-ctrl "--output-format=" ""
-if [[ " ${COMPREPLY[*]} " =~ normal.*json.*binary.*tabular ]]; then
-    _check 0 "value list appears after an unsplit '--opt= ' with trailing space" "got '${COMPREPLY[*]}'"
-else
-    _check 1 "value list appears after an unsplit '--opt= ' with trailing space" "got '${COMPREPLY[*]}'"
-fi
+expect_match_words \
+    "value list appears after an unsplit '--opt= ' with trailing space" \
+    "normal.*json.*binary.*tabular" \
+    nvme id-ctrl "--output-format=" ""
 
 # --sel is an enumerated option carried by feat's sub-commands. Its values come
 # from the generator's VALUE_HINTS table (the arg parser leaves --sel

@@ -37,11 +37,6 @@ def opt_word(opt):
     return "--" + opt["long"] + opt_suffix(opt)
 
 
-def flatten(s):
-    """Collapse whitespace so a multi-line description stays on one line."""
-    return " ".join((s or "").split())
-
-
 def has_options(cmd):
     """True if the command accepts any options."""
     return bool(cmd.get("options"))
@@ -121,19 +116,22 @@ BASH_HEADER = '''\
 # Helper function to detect if we're completing an option's value.
 # Uses: $cur, $prev, $words, $cword (from _init_completion)
 # Sets: $opt (the option name), $val (partial value), $completing_value (0 or 1)
+# Known limitation: a value beginning with '-' (e.g. '--value -5') is
+# indistinguishable from an option name here and is treated as one, so its value
+# is not completed. Rare for nvme options and not worth the ambiguity to chase.
 _nvme_detect_value_completion() {
 \tcompleting_value=0
 \topt=""
 \tval=""
 
-\tif [[ $cur == --*=* ]]; then
+\tif [[ $cur == -*=* ]]; then
 \t\topt="${cur%%=*}"
 \t\tval="${cur#*=}"
 \t\tcompleting_value=1
-\telif [[ $cur == "=" ]] && [[ $prev == --* ]]; then
+\telif [[ $cur == "=" ]] && [[ $prev == -* ]]; then
 \t\topt="$prev"
 \t\tcompleting_value=1
-\telif [[ $cur != -* ]] && [[ $cur != "" ]] && [[ $prev == "=" ]] && [[ ${words[$cword-2]} == --* ]]; then
+\telif [[ $cur != -* ]] && [[ $cur != "" ]] && [[ $prev == "=" ]] && [[ ${words[$cword-2]} == -* ]]; then
 \t\topt="${words[$cword-2]}"
 \t\tval="$cur"
 \t\tcompleting_value=1
@@ -171,23 +169,6 @@ BASH_FUNC_PREAMBLE = '''\
 \tlocal opt=""
 \tlocal val=""
 
-\tlocal nonopt_args=0
-\tlocal has_device=0
-\tlocal i
-\tfor (( i=0; i < ${{#words[@]}}-1; i++ )); do
-\t\tif [[ ${{words[i]}} != -* ]] && [[ ${{words[i]}} != "=" ]]; then
-\t\t\t(( nonopt_args += 1 ))
-\t\t\tif [[ ${{words[i]}} == /dev/nvme* ]]; then
-\t\t\t\thas_device=1
-\t\t\tfi
-\t\tfi
-\tdone
-
-\tif [[ $nonopt_args -ge {device_argpos} ]] && [[ $has_device -eq 0 ]] && \\
-\t   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-\t\topts="/dev/nvme* "
-\tfi
-
 \topts+=" "
 \tvals+=" "
 
@@ -196,15 +177,41 @@ BASH_FUNC_PREAMBLE = '''\
 \t_nvme_detect_value_completion
 '''
 
-BASH_FUNC_EPILOGUE = '''\
+# Emitted after the option cases: finish the option list and, if we thought we
+# were completing a value but $opt is a flag (not in $valopts), fall back to
+# normal option completion.
+BASH_OPTS_FINALIZE = '''\
 
 \topts+=" -h --help"
 
-\t# If we thought we were completing a value but $opt is not a value-taking
-\t# option, it is a flag -- fall back to normal option completion.
 \tif [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 \t\tcompleting_value=0
 \tfi
+'''
+
+# Emitted between the option cases and the epilogue. Offers the device argument
+# once enough positional words are present and none is already a device. A word
+# is positional only if it is not an option, not a bare '=', and not the value
+# of a preceding value-taking option (so '--output-file /dev/nvme0' does not
+# count the path as the device). {device_argpos} is the position at which the
+# device is expected (2 for builtins, 3 for plugin sub-commands).
+BASH_DEVICE_SCAN = '''\
+\tif [[ $completing_value -eq 0 ]]; then
+\t\tlocal nonopt_args=0 has_device=0 i
+\t\tfor (( i=0; i < ${{#words[@]}}-1; i++ )); do
+\t\t\t[[ ${{words[i]}} == -* || ${{words[i]}} == "=" ]] && continue
+\t\t\t[[ $i -gt 0 ]] && [[ " $valopts " == *" ${{words[i-1]}} "* ]] && continue
+\t\t\t(( nonopt_args += 1 ))
+\t\t\t[[ ${{words[i]}} == /dev/nvme* ]] && has_device=1
+\t\tdone
+\t\tif [[ $nonopt_args -ge {device_argpos} ]] && [[ $has_device -eq 0 ]] && \\
+\t\t   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+\t\t\topts="/dev/nvme* $opts"
+\t\tfi
+\tfi
+'''
+
+BASH_FUNC_EPILOGUE = '''\
 
 \tif [[ $completing_value -eq 1 ]]; then
 \t\tif [[ $vals != " " ]]; then
@@ -296,8 +303,25 @@ def bash_value_clause(opt):
             f"\t\t\t\t\t\t;;\n")
 
 
+def bash_option_body(opts):
+    """The 'opts+=', 'valopts+=' and value-switch lines shared by the global and
+    per-command clauses, indented three tabs. Returns '' when there is nothing
+    to emit."""
+    words = bash_option_words(opts)
+    out = f'\t\t\topts+="{words}"\n'
+    valwords = bash_valopt_words(opts)
+    if valwords:
+        out += f'\t\t\tvalopts+="{valwords}"\n'
+    clauses = "".join(bash_value_clause(o) for o in opts)
+    if clauses:
+        out += ('\t\t\tif [[ $completing_value -eq 1 ]]; then\n\t\t\t\tcase $opt in\n'
+                + clauses
+                + '\t\t\t\tesac\n\t\t\tfi\n')
+    return out
+
+
 def emit_bash_plugin(out, commands, func, device_argpos):
-    out.write(BASH_FUNC_PREAMBLE.format(func=func, device_argpos=device_argpos))
+    out.write(BASH_FUNC_PREAMBLE.format(func=func))
 
     # Shared clause: global options + value completion. version/help and commands
     # that accept no options at all match here as a no-op, so they are not
@@ -310,17 +334,8 @@ def emit_bash_plugin(out, commands, func, device_argpos):
         skip = "|".join(['"version"', '"help"'] +
                         [f'"{n}"' for c in commands if not has_options(c)
                          for n in cmd_names(c)])
-        words = bash_option_words(global_opts)
         out.write(f'\tcase "$1" in\n\t\t{skip})\n\t\t\t;;\n\t\t*)\n')
-        out.write(f'\t\t\topts+="{words}"\n')
-        valwords = bash_valopt_words(global_opts)
-        if valwords:
-            out.write(f'\t\t\tvalopts+="{valwords}"\n')
-        clauses = "".join(bash_value_clause(o) for o in global_opts)
-        if clauses:
-            out.write('\t\t\tif [[ $completing_value -eq 1 ]]; then\n\t\t\t\tcase $opt in\n')
-            out.write(clauses)
-            out.write('\t\t\t\tesac\n\t\t\tfi\n')
+        out.write(bash_option_body(global_opts))
         out.write('\t\t\t;;\n\tesac\n\n')
 
     # Per-command specific options, plus value clauses for any that carry values.
@@ -330,26 +345,21 @@ def emit_bash_plugin(out, commands, func, device_argpos):
         if not has_options(c):
             continue
         locals_ = list(command_options(c, "local"))
-        words = bash_option_words(locals_)
-        value_clauses = "".join(bash_value_clause(o) for o in locals_)
         # Only globals? The shared '*)' clause already covers it; no clause needed.
-        if not words and not value_clauses:
+        if not bash_option_words(locals_) and not any(
+                bash_value_clause(o) for o in locals_):
             continue
         label = "|".join(f'"{n}"' for n in cmd_names(c))
-        body += f'\t\t{label})\n\t\t\topts+="{words}"\n'
-        valwords = bash_valopt_words(locals_)
-        if valwords:
-            body += f'\t\t\tvalopts+="{valwords}"\n'
-        if value_clauses:
-            body += '\t\t\tif [[ $completing_value -eq 1 ]]; then\n\t\t\t\tcase $opt in\n'
-            body += value_clauses
-            body += '\t\t\t\tesac\n\t\t\tfi\n'
+        body += f'\t\t{label})\n'
+        body += bash_option_body(locals_)
         body += '\t\t\t;;\n'
     if body:
         out.write('\tcase "$1" in\n')
         out.write(body)
         out.write('\tesac\n')
 
+    out.write(BASH_OPTS_FINALIZE)
+    out.write(BASH_DEVICE_SCAN.format(device_argpos=device_argpos))
     out.write(BASH_FUNC_EPILOGUE)
 
 
