@@ -146,8 +146,39 @@ _nvme_detect_value_completion() {
 \tfi
 
 \t# When the option word was captured unsplit (e.g. '--output-format='), drop
-\t# the trailing '=' so $opt matches the '--name|-s)' clauses below.
+\t# the trailing '=' so $opt matches the option names below.
 \topt="${opt%=}"
+}
+
+# Complete an option's value from a known set. Called once per command with
+# alternating NAMES VALUES arguments: NAMES is the option's spellings
+# ('--output-format -o'), VALUES its value list. When completing the value of a
+# matching option, appends it to $vals. No-op unless completing a value.
+_nvme_opt_vals () {
+\t[[ $completing_value -eq 1 ]] || return 0
+\tlocal name
+\twhile (( $# >= 2 )); do
+\t\t# shellcheck disable=SC2086  # $1 is a space-separated spelling list
+\t\tfor name in $1; do
+\t\t\t[[ $opt == "$name" ]] && { vals+=" $2"; return 0; }
+\t\tdone
+\t\tshift 2
+\tdone
+}
+
+# Mark that an option's value is a filename/path. Called once per command with
+# each argument an option's spellings ('--firmware -f'). When completing the
+# value of a matching option, sets $wantfiles so 'complete -o default' offers
+# files. No-op unless completing a value.
+_nvme_opt_files () {
+\t[[ $completing_value -eq 1 ]] || return 0
+\tlocal names name
+\tfor names; do
+\t\t# shellcheck disable=SC2086  # $names is a space-separated spelling list
+\t\tfor name in $names; do
+\t\t\t[[ $opt == "$name" ]] && { wantfiles=1; return 0; }
+\t\tdone
+\tdone
 }
 '''
 
@@ -289,44 +320,42 @@ def opt_is_file(opt):
     return opt.get("metavar") in ("FILE", "DIRECTORY")
 
 
-def bash_value_clause(opt):
-    """A 'case $opt in' clause for an option whose value we can complete.
-
-    Emits a clause that sets $vals (known value set) or $wantfiles (file/path
-    argument). Returns '' for options with no completable value -- their value
-    branch offers nothing and suppresses the filename fallback.
-    """
+def opt_spellings(opt):
+    """An option's spellings as a space-separated string: '--long' or '--long -s'."""
     sel = "--" + opt["long"]
     if opt.get("short"):
-        sel += "|-" + opt["short"]
-    vals = opt.get("values")
-    if vals:
-        action = f"vals+=\" {' '.join(vals)}\""
-    elif opt_is_file(opt):
-        action = "wantfiles=1"
-    else:
-        return ""
-    return (f"\t\t\t\t\t{sel})\n"
-            f"\t\t\t\t\t\t{action}\n"
-            f"\t\t\t\t\t\t;;\n")
+        sel += " -" + opt["short"]
+    return sel
 
 
 def bash_option_body(opts):
-    """The 'opts+=', 'valopts+=' and value-switch lines for a command's option
-    case, indented three tabs. Returns '' when there is nothing to emit (no
-    option words and no value clauses)."""
+    """The 'opts+=', 'valopts+=' and value-completion lines for a command's
+    option case, indented three tabs. Returns '' when there is nothing to emit
+    (no option words and no value completion)."""
     words = bash_option_words(opts)
-    clauses = "".join(bash_value_clause(o) for o in opts)
-    if not words and not clauses:
+    val_opts = [o for o in opts if o.get("values")]
+    file_opts = [o for o in opts if not o.get("values") and opt_is_file(o)]
+    if not words and not val_opts and not file_opts:
         return ""
     out = f'\t\t\topts+="{words}"\n'
     valwords = bash_valopt_words(opts)
     if valwords:
         out += f'\t\t\tvalopts+="{valwords}"\n'
-    if clauses:
-        out += ('\t\t\tif [[ $completing_value -eq 1 ]]; then\n\t\t\t\tcase $opt in\n'
-                + clauses
-                + '\t\t\t\tesac\n\t\t\tfi\n')
+    if val_opts or file_opts:
+        out += "\n"
+    if val_opts:
+        pairs = [f'"{opt_spellings(o)}" "{" ".join(o["values"])}"' for o in val_opts]
+        if len(pairs) == 1:
+            out += f'\t\t\t_nvme_opt_vals {pairs[0]}\n'
+        else:
+            # Continuation lines align under the first argument: 3 tabs of body
+            # indent + len("_nvme_opt_vals ") spaces.
+            cont = "\t\t\t" + " " * len("_nvme_opt_vals ")
+            joined = f" \\\n{cont}".join(pairs)
+            out += f'\t\t\t_nvme_opt_vals {joined}\n'
+    if file_opts:
+        args = " ".join(f'"{opt_spellings(o)}"' for o in file_opts)
+        out += f'\t\t\t_nvme_opt_files {args}\n'
     return out
 
 
@@ -341,16 +370,16 @@ def emit_bash_command_group(out, commands, func, device_argpos):
     # command carrying its own list keeps the generator correct by construction
     # when the C command definitions change. version/help accept nothing and so
     # get no case; -h/--help is still appended for every command in the epilogue.
-    body = ""
+    clauses = []
     for c in commands:
         clause_body = bash_option_body(list(command_options(c)))
         if not clause_body:
             continue
         label = "|".join(f'"{n}"' for n in cmd_names(c))
-        body += f'\t\t{label})\n{clause_body}\t\t\t;;\n'
-    if body:
+        clauses.append(f'\t\t{label})\n{clause_body}\t\t\t;;\n')
+    if clauses:
         out.write('\tcase "$1" in\n')
-        out.write(body)
+        out.write("\n".join(clauses))
         out.write('\tesac\n')
 
     out.write(BASH_FUNC_EPILOGUE.format(device_argpos=device_argpos))

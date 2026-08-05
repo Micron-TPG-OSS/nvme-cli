@@ -50,8 +50,39 @@ _nvme_detect_value_completion() {
 	fi
 
 	# When the option word was captured unsplit (e.g. '--output-format='), drop
-	# the trailing '=' so $opt matches the '--name|-s)' clauses below.
+	# the trailing '=' so $opt matches the option names below.
 	opt="${opt%=}"
+}
+
+# Complete an option's value from a known set. Called once per command with
+# alternating NAMES VALUES arguments: NAMES is the option's spellings
+# ('--output-format -o'), VALUES its value list. When completing the value of a
+# matching option, appends it to $vals. No-op unless completing a value.
+_nvme_opt_vals () {
+	[[ $completing_value -eq 1 ]] || return 0
+	local name
+	while (( $# >= 2 )); do
+		# shellcheck disable=SC2086  # $1 is a space-separated spelling list
+		for name in $1; do
+			[[ $opt == "$name" ]] && { vals+=" $2"; return 0; }
+		done
+		shift 2
+	done
+}
+
+# Mark that an option's value is a filename/path. Called once per command with
+# each argument an option's spellings ('--firmware -f'). When completing the
+# value of a matching option, sets $wantfiles so 'complete -o default' offers
+# files. No-op unless completing a value.
+_nvme_opt_files () {
+	[[ $completing_value -eq 1 ]] || return 0
+	local names name
+	for names; do
+		# shellcheck disable=SC2086  # $names is a space-separated spelling list
+		for name in $names; do
+			[[ $opt == "$name" ]] && { wantfiles=1; return 0; }
+		done
+	done
 }
 
 _nvme_finish_completion () {
@@ -122,1689 +153,931 @@ nvme_list_opts () {
 		"list")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"list-subsys")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"id-ctrl")
 			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"id-ns")
 			opts+=" --namespace-id= -n --force --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"id-ns-granularity")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"id-ns-lba-format")
 			opts+=" --lba-format-index= -i --uuid-index= -U --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --lba-format-index -i --uuid-index -U --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"list-ns")
 			opts+=" --namespace-id= -n --csi= -y --all -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --csi -y --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"list-ctrl")
 			opts+=" --cntid= -c --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --cntid -c --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"nvm-id-ctrl")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"nvm-id-ns")
 			opts+=" --namespace-id= -n --uuid-index= -U --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --uuid-index -U --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"nvm-id-ns-lba-format")
 			opts+=" --lba-format-index= -i --uuid-index= -U --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --lba-format-index -i --uuid-index -U --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"primary-ctrl-caps")
 			opts+=" --cntlid= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --cntlid -c --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"list-secondary")
 			opts+=" --cntid= -c --num-entries= -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --cntid -c --num-entries -e --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"cmdset-ind-id-ns")
 			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"ns-descs")
 			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"id-nvmset")
 			opts+=" --nvmset_id= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --nvmset_id -i --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"id-uuid")
 			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"id-iocs")
 			opts+=" --controller-id= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --controller-id -c --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"id-domain")
 			opts+=" --dom-id= -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --dom-id -d --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"list-endgrp")
 			opts+=" --endgrp-id= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --endgrp-id -i --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"create-ns")
 			opts+=" --ish -I --nsze= -s --ncap= -c --flbas= -f --dps= -d --nmic= -m --anagrp-id= -a --nvmset-id= -i --endg-id= -e --block-size= -b --csi= -y --lbstm= -l --nphndls= -n --nsze-si= -S --ncap-si= -C --azr -z --rar= -r --ror= -O --rnumzrwa= -u --phndls= -p --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --nsze -s --ncap -c --flbas -f --dps -d --nmic -m --anagrp-id -a --nvmset-id -i --endg-id -e --block-size -b --csi -y --lbstm -l --nphndls -n --nsze-si -S --ncap-si -C --rar -r --ror -O --rnumzrwa -u --phndls -p --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"delete-ns")
 			opts+=" --ish -I --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"attach-ns")
 			opts+=" --ish -I --namespace-id= -n --controllers= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --controllers -c --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"detach-ns")
 			opts+=" --ish -I --namespace-id= -n --controllers= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --controllers -c --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-ns-id")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-log")
 			opts+=" --ish -I --namespace-id= -n --log-id= -i --log-len= -l --aen= -a --lpo= -L --lsp= -s --lsi= -S --rae -r --uuid-index= -U --raw-binary -b --csi= -y --ot -O --xfer-len= -x --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --log-id -i --log-len -l --aen -a --lpo -L --lsp -s --lsi -S --uuid-index -U --csi -y --xfer-len -x --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--log-id|-i)
-						vals+=" supported-log-pages error smart fw-slot changed-ns cmd-effects device-self-test telemetry-host telemetry-ctrl endurance-group predictable-lat-nvmset predictable-lat-agg ana persistent-event lba-status endurance-grp-evt media-unit-status supported-cap-config-list fid-supported-effects mi-cmd-supported-effects cmd-and-feat-lockdown boot-partition rotational-media-info dispersed-ns-participating-ns mgmt-addr-list phy-rx-eom reachability-groups reachability-associations changed-alloc-ns-list fdp-configs fdp-ruh-usage fdp-stats fdp-events discover host-discover ave-discover pull-model-ddc-req reservation sanitize zns-changed-zones"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--log-id -i" "supported-log-pages error smart fw-slot changed-ns cmd-effects device-self-test telemetry-host telemetry-ctrl endurance-group predictable-lat-nvmset predictable-lat-agg ana persistent-event lba-status endurance-grp-evt media-unit-status supported-cap-config-list fid-supported-effects mi-cmd-supported-effects cmd-and-feat-lockdown boot-partition rotational-media-info dispersed-ns-participating-ns mgmt-addr-list phy-rx-eom reachability-groups reachability-associations changed-alloc-ns-list fdp-configs fdp-ruh-usage fdp-stats fdp-events discover host-discover ave-discover pull-model-ddc-req reservation sanitize zns-changed-zones" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"telemetry-log")
 			opts+=" --output-file= -O --host-generate= -g --controller-init -c --data-area= -d --rae -r --mcda= -m --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-file -O --host-generate -g --data-area -d --mcda -m --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output-file -O"
 			;;
+
 		"fw-log")
 			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"changed-ns-list-log")
 			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"smart-log")
 			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"ana-log")
 			opts+=" --groups -g --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"error-log")
 			opts+=" --log-entries= -e --raw-binary -b --valid-entry -V --sqid= -S --status= -s --lba= -l --namespace-id= -n --trtype= -t --csi= -c --opcode= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --log-entries -e --sqid -S --status -s --lba -l --namespace-id -n --trtype -t --csi -c --opcode -O --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"effects-log")
 			opts+=" --raw-binary -b --csi= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --csi -c --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"endurance-log")
 			opts+=" --group-id= -g --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --group-id -g --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"predictable-lat-log")
 			opts+=" --nvmset-id= -i --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --nvmset-id -i --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"pred-lat-event-agg-log")
 			opts+=" --log-entries= -e --rae -r --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --log-entries -e --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"persistent-event-log")
 			opts+=" --action= -a --log_len= -l --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --action -a --log_len -l --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"endurance-event-agg-log")
 			opts+=" --log-entries= -e --rae -r --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --log-entries -e --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"lba-status-log")
 			opts+=" --rae -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"resv-notif-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"boot-part-log")
 			opts+=" --lsp= -s --output-file= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --lsp -s --output-file -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-f)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output-file -f"
 			;;
+
 		"phy-rx-eom-log")
 			opts+=" --lsp= -s --controller= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --lsp -s --controller -c --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-feature")
 			opts+=" --feature-id= -f --namespace-id= -n --sel= -s --data-len= -l --raw-binary -b --cdw11= -c --uuid-index= -U --changed -C --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --feature-id -f --namespace-id -n --sel -s --data-len -l --cdw11 -c --uuid-index -U --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--feature-id|-f)
-						vals+=" arbitration power-mgmt lba-range temp-thresh err-recovery volatile-wc num-queues irq-coalesce irq-config write-atomic async-event auto-pst host-mem-buf timestamp kato hctm nopsc rrl plm-config plm-window lba-sts-interval host-behavior sanitize endurance-evt-cfg iocs-profile spinup-control power-loss-signal perf-characteristics fdp fdp-events ns-admin-label key-value ctrl-data-queue emb-mgmt-ctrl-addr host-mgmt-agent-addr enh-ctrl-metadata ctrl-metadata ns-metadata sw-progress host-id resv-nf-mask resv-persist write-protect bp-write-protect"
-						;;
-					--sel|-s)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--feature-id -f" "arbitration power-mgmt lba-range temp-thresh err-recovery volatile-wc num-queues irq-coalesce irq-config write-atomic async-event auto-pst host-mem-buf timestamp kato hctm nopsc rrl plm-config plm-window lba-sts-interval host-behavior sanitize endurance-evt-cfg iocs-profile spinup-control power-loss-signal perf-characteristics fdp fdp-events ns-admin-label key-value ctrl-data-queue emb-mgmt-ctrl-addr host-mgmt-agent-addr enh-ctrl-metadata ctrl-metadata ns-metadata sw-progress host-id resv-nf-mask resv-persist write-protect bp-write-protect" \
+			               "--sel -s" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"device-self-test")
 			opts+=" --ish -I --namespace-id= -n --self-test-code= -s --wait -w --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --self-test-code -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"self-test-log")
 			opts+=" --dst-entries= -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --dst-entries -e --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"supported-log-pages")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"fid-support-effects-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"mi-cmd-support-effects-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"media-unit-stat-log")
 			opts+=" --domain-id= -d --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --domain-id -d --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"supported-cap-config-log")
 			opts+=" --domain-id= -d --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --domain-id -d --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"mgmt-addr-list-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"rotational-media-info-log")
 			opts+=" --endg-id= -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --endg-id -e --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"changed-alloc-ns-list-log")
 			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"dispersed-ns-participating-nss-log")
 			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"reachability-groups-log")
 			opts+=" --groups-only -g --rae -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"reachability-associations-log")
 			opts+=" --associations-only -a --rae -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"host-discovery-log")
 			opts+=" --all-host-entries -a --rae -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"ave-discovery-log")
 			opts+=" --rae -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"pull-model-ddc-req-log")
 			opts+=" --rae -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"power-measurement-log")
 			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-feature")
 			opts+=" --namespace-id= -n --feature-id= -f --value= -V --cdw12= -c --uuid-index= -U --data-len= -l --data= -d --save -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --feature-id -f --value -V --cdw12 -c --uuid-index -U --data-len -l --data -d --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--feature-id|-f)
-						vals+=" arbitration power-mgmt lba-range temp-thresh err-recovery volatile-wc num-queues irq-coalesce irq-config write-atomic async-event auto-pst host-mem-buf timestamp kato hctm nopsc rrl plm-config plm-window lba-sts-interval host-behavior sanitize endurance-evt-cfg iocs-profile spinup-control power-loss-signal perf-characteristics fdp fdp-events ns-admin-label key-value ctrl-data-queue emb-mgmt-ctrl-addr host-mgmt-agent-addr enh-ctrl-metadata ctrl-metadata ns-metadata sw-progress host-id resv-nf-mask resv-persist write-protect bp-write-protect"
-						;;
-					--data|-d)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--feature-id -f" "arbitration power-mgmt lba-range temp-thresh err-recovery volatile-wc num-queues irq-coalesce irq-config write-atomic async-event auto-pst host-mem-buf timestamp kato hctm nopsc rrl plm-config plm-window lba-sts-interval host-behavior sanitize endurance-evt-cfg iocs-profile spinup-control power-loss-signal perf-characteristics fdp fdp-events ns-admin-label key-value ctrl-data-queue emb-mgmt-ctrl-addr host-mgmt-agent-addr enh-ctrl-metadata ctrl-metadata ns-metadata sw-progress host-id resv-nf-mask resv-persist write-protect bp-write-protect" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--data -d"
 			;;
+
 		"set-property")
 			opts+=" --offset= -O --value= -V --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --offset -O --value -V --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-property")
 			opts+=" --offset= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --offset -O --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"format")
 			opts+=" --ish -I --namespace-id= -n --lbaf= -l --ses= -s --pi= -i --pil= -p --ms= -m --reset -r --force --block-size= -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --lbaf -l --ses -s --pi -i --pil -p --ms -m --block-size -b --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"fw-commit"|"fw-activate")
 			opts+=" --ish -I --slot= -s --action= -a --bpid= -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --slot -s --action -a --bpid -b --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--action|-a)
-						vals+=" replace replace-and-activate set-active replace-and-activate-immediate replace-boot-partition activate-boot-partition"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--action -a" "replace replace-and-activate set-active replace-and-activate-immediate replace-boot-partition activate-boot-partition" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"fw-download")
 			opts+=" --fw= -f --ish -I --xfer= -x --offset= -O --progress -p --ignore-ovr -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --fw -f --xfer -x --offset -O --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--fw|-f)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--fw -f"
 			;;
+
 		"admin-passthru")
 			opts+=" --opcode= -O --flags= -f --prefill= -p --rsvd= -R --namespace-id= -n --data-len= -l --metadata-len= -m --cdw2= -2 --cdw3= -3 --cdw10= -4 --cdw11= -5 --cdw12= -6 --cdw13= -7 --cdw14= -8 --cdw15= -9 --input-file= -i --metadata= -M --raw-binary -b --show-command -s --read -r --write -w --latency -T --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --opcode -O --flags -f --prefill -p --rsvd -R --namespace-id -n --data-len -l --metadata-len -m --cdw2 -2 --cdw3 -3 --cdw10 -4 --cdw11 -5 --cdw12 -6 --cdw13 -7 --cdw14 -8 --cdw15 -9 --input-file -i --metadata -M --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--input-file|-i)
-						wantfiles=1
-						;;
-					--metadata|-M)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--input-file -i" "--metadata -M"
 			;;
+
 		"io-passthru")
 			opts+=" --opcode= -O --flags= -f --prefill= -p --rsvd= -R --namespace-id= -n --data-len= -l --metadata-len= -m --cdw2= -2 --cdw3= -3 --cdw10= -4 --cdw11= -5 --cdw12= -6 --cdw13= -7 --cdw14= -8 --cdw15= -9 --input-file= -i --metadata= -M --raw-binary -b --show-command -s --read -r --write -w --latency -T --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --opcode -O --flags -f --prefill -p --rsvd -R --namespace-id -n --data-len -l --metadata-len -m --cdw2 -2 --cdw3 -3 --cdw10 -4 --cdw11 -5 --cdw12 -6 --cdw13 -7 --cdw14 -8 --cdw15 -9 --input-file -i --metadata -M --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--input-file|-i)
-						wantfiles=1
-						;;
-					--metadata|-M)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--input-file -i" "--metadata -M"
 			;;
+
 		"security-send")
 			opts+=" --ish -I --namespace-id= -n --file= -f --nssf= -N --secp= -p --spsp= -s --tl= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --file -f --nssf -N --secp -p --spsp -s --tl -t --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--file|-f)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--file -f"
 			;;
+
 		"security-recv")
 			opts+=" --ish -I --namespace-id= -n --size= -x --nssf= -N --secp= -p --spsp= -s --al= -t --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --size -x --nssf -N --secp -p --spsp -s --al -t --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-lba-status")
 			opts+=" --ish -I --namespace-id= -n --start-lba= -s --max-dw= -m --action= -a --range-len= -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-lba -s --max-dw -m --action -a --range-len -l --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"capacity-mgmt")
 			opts+=" --ish -I --operation= -O --element-id= -i --cap-lower= -l --cap-upper= -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --operation -O --element-id -i --cap-lower -l --cap-upper -u --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"resv-acquire")
 			opts+=" --namespace-id= -n --crkey= -c --prkey= -p --rtype= -t --racqa= -a --iekey -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --crkey -c --prkey -p --rtype -t --racqa -a --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"resv-register")
 			opts+=" --namespace-id= -n --crkey= -c --nrkey= -k --rrega= -r --cptpl= -p --iekey -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --crkey -c --nrkey -k --rrega -r --cptpl -p --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"resv-release")
 			opts+=" --namespace-id= -n --crkey= -c --rtype= -t --rrela= -a --iekey -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --crkey -c --rtype -t --rrela -a --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"resv-report")
 			opts+=" --namespace-id= -n --numd= -d --eds -e --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --numd -d --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"dsm")
 			opts+=" --namespace-id= -n --ctx-attrs= -a --blocks= -b --slbs= -s --ad -d --idw -w --idr -r --cdw11= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --ctx-attrs -a --blocks -b --slbs -s --cdw11 -c --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"copy")
 			opts+=" --namespace-id= -n --sdlba= -d --slbs= -s --blocks= -b --snsids= -N --sopts= -O --limited-retry -l --force-unit-access -f --prinfow= -p --prinfor= -P --ref-tag= -r --expected-ref-tags= -R --app-tag= -a --expected-app-tags= -A --app-tag-mask= -m --expected-app-tag-masks= -M --dir-type= -T --dir-spec= -S --format= -F --storage-tag= -t --storage-tag-check -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --sdlba -d --slbs -s --blocks -b --snsids -N --sopts -O --prinfow -p --prinfor -P --ref-tag -r --expected-ref-tags -R --app-tag -a --expected-app-tags -A --app-tag-mask -m --expected-app-tag-masks -M --dir-type -T --dir-spec -S --format -F --storage-tag -t --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"flush")
 			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"compare")
 			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --block-size= -b --data-size= -z --metadata-size= -y --ref-tag= -r --data= -d --metadata= -M --prinfo= -p --app-tag-mask= -m --app-tag= -a --storage-tag= -g --limited-retry -l --force-unit-access -f --storage-tag-check -C --dir-type= -T --dir-spec= -S --dsm= -D --show-command -V --latency -t --force --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-block -s --block-count -c --block-size -b --data-size -z --metadata-size -y --ref-tag -r --data -d --metadata -M --prinfo -p --app-tag-mask -m --app-tag -a --storage-tag -g --dir-type -T --dir-spec -S --dsm -D --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--data|-d)
-						wantfiles=1
-						;;
-					--metadata|-M)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--data -d" "--metadata -M"
 			;;
+
 		"read")
 			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --block-size= -b --data-size= -z --metadata-size= -y --ref-tag= -r --data= -d --metadata= -M --prinfo= -p --app-tag-mask= -m --app-tag= -a --storage-tag= -g --limited-retry -l --force-unit-access -f --storage-tag-check -C --dir-type= -T --dir-spec= -S --dsm= -D --show-command -V --latency -t --force --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-block -s --block-count -c --block-size -b --data-size -z --metadata-size -y --ref-tag -r --data -d --metadata -M --prinfo -p --app-tag-mask -m --app-tag -a --storage-tag -g --dir-type -T --dir-spec -S --dsm -D --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--data|-d)
-						wantfiles=1
-						;;
-					--metadata|-M)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--data -d" "--metadata -M"
 			;;
+
 		"write")
 			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --block-size= -b --data-size= -z --metadata-size= -y --ref-tag= -r --data= -d --metadata= -M --prinfo= -p --app-tag-mask= -m --app-tag= -a --storage-tag= -g --limited-retry -l --force-unit-access -f --storage-tag-check -C --dir-type= -T --dir-spec= -S --dsm= -D --show-command -V --latency -t --force --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-block -s --block-count -c --block-size -b --data-size -z --metadata-size -y --ref-tag -r --data -d --metadata -M --prinfo -p --app-tag-mask -m --app-tag -a --storage-tag -g --dir-type -T --dir-spec -S --dsm -D --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--data|-d)
-						wantfiles=1
-						;;
-					--metadata|-M)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--data -d" "--metadata -M"
 			;;
+
 		"write-zeroes")
 			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --dir-type= -T --deac -d --limited-retry -l --force-unit-access -f --prinfo= -p --ref-tag= -r --app-tag-mask= -m --app-tag= -a --storage-tag= -S --storage-tag-check -C --dir-spec= -D --namespace-zeroes -Z --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-block -s --block-count -c --dir-type -T --prinfo -p --ref-tag -r --app-tag-mask -m --app-tag -a --storage-tag -S --dir-spec -D --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"write-uncor")
 			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --dir-type= -T --dir-spec= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-block -s --block-count -c --dir-type -T --dir-spec -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"verify")
 			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --limited-retry -l --force-unit-access -f --prinfo= -p --ref-tag= -r --app-tag= -a --app-tag-mask= -m --storage-tag= -S --storage-tag-check -C --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-block -s --block-count -c --prinfo -p --ref-tag -r --app-tag -a --app-tag-mask -m --storage-tag -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"sanitize")
 			opts+=" --ish -I --no-dealloc -d --oipbp -i --owpass= -n --ause -u --sanact= -a --ovrpat= -p --emvs -e --wait -w --repeat= -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --owpass -n --sanact -a --ovrpat -p --repeat -r --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sanact|-a)
-						vals+=" exit-failure start-block-erase start-overwrite start-crypto-erase exit-media-verification"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sanact -a" "exit-failure start-block-erase start-overwrite start-crypto-erase exit-media-verification" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"sanitize-log")
 			opts+=" --rae -r --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"sanitize-ns")
 			opts+=" --ish -I --ause -u --sanact= -a --emvs -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sanact -a --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sanact|-a)
-						vals+=" exit-failure start-crypto-erase exit-media-verification"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sanact -a" "exit-failure start-crypto-erase exit-media-verification" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"reset")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"subsystem-reset")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"ns-rescan")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"show-regs")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-reg")
 			opts+=" --offset= -O --value= -V --mmio32 -m --intms= --intmc= --cc= --csts= --nssr= --aqa= --asq= --acq= --bprsel= --bpmbl= --cmbmsc= --nssd= --pmrctl= --pmrmscl= --pmrmscu= --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --offset -O --value -V --intms --intmc --cc --csts --nssr --aqa --asq --acq --bprsel --bpmbl --cmbmsc --nssd --pmrctl --pmrmscl --pmrmscu --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-reg")
 			opts+=" --offset= -O --cap --vs --cmbloc --cmbsz --bpinfo --cmbsts --cmbebs --cmbswtp --crto --pmrcap --pmrsts --pmrebs --pmrswtp --intms --intmc --cc --csts --nssr --aqa --asq --acq --bprsel --bpmbl --cmbmsc --nssd --pmrctl --pmrmscl --pmrmscu --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --offset -O --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"top")
 			opts+=" --delay= -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --delay -d --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"discover")
 			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --raw= -r --persistent -p --no-persistent --epcsd --no-epcsd --config= -J --force --nbft --no-nbft --owner= --nbft-path= --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --device -d --raw -r --config -J --owner --nbft-path --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--raw|-r)
-						wantfiles=1
-						;;
-					--config|-J)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--raw -r" "--config -J"
 			;;
+
 		"connect-all")
 			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --raw= -r --persistent -p --no-persistent --epcsd --no-epcsd --config= -J --force --nbft --no-nbft --owner= --nbft-path= --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --device -d --raw -r --config -J --owner --nbft-path --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--raw|-r)
-						wantfiles=1
-						;;
-					--config|-J)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--raw -r" "--config -J"
 			;;
+
 		"connect")
 			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --config= -J --owner= --devid-file= --idempotent --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --config -J --owner --devid-file --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--config|-J)
-						wantfiles=1
-						;;
-					--devid-file)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--config -J" "--devid-file"
 			;;
+
 		"disconnect")
 			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --exclude -x --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --device -d --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"disconnect-all")
 			opts+=" --transport= -t --owner= --force --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --transport -t --owner --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"dim")
 			opts+=" --nqn= -n --device= -d --task= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --nqn -n --device -d --task -t --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"gen-hostnqn")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"show-hostnqn")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"dir-receive")
 			opts+=" --namespace-id= -n --data-len= -l --raw-binary -b --dir-type= -D --dir-spec= -S --dir-oper= -O --req-resource= -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --data-len -l --dir-type -D --dir-spec -S --dir-oper -O --req-resource -r --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"dir-send")
 			opts+=" --namespace-id= -n --data-len= -l --dir-type= -D --target-dir= -T --dir-spec= -S --dir-oper= -O --endir= -e --raw-binary -b --input-file= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --data-len -l --dir-type -D --target-dir -T --dir-spec -S --dir-oper -O --endir -e --input-file -i --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--input-file|-i)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--input-file -i"
 			;;
+
 		"virt-mgmt")
 			opts+=" --cntlid= -c --rt= -r --act= -a --nr= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --cntlid -c --rt -r --act -a --nr -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"rpmb")
 			opts+=" --cmd= -c --msgfile= -f --keyfile= -g --key= -k --msg= -d --address= -o --blocks= -b --target= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --cmd -c --msgfile -f --keyfile -g --key -k --msg -d --address -o --blocks -b --target -t --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--msgfile|-f)
-						wantfiles=1
-						;;
-					--keyfile|-g)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--msgfile -f" "--keyfile -g"
 			;;
+
 		"lockdown")
 			opts+=" --ofi= -O --ifc= -f --prhbt= -p --scp= -s --uuid= -U --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --ofi -O --ifc -f --prhbt -p --scp -s --uuid -U --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"show-topology")
 			opts+=" --ranking= -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --ranking -r --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"io-mgmt-recv")
 			opts+=" --namespace-id= -n --mos= -s --mo= -m --data= -d --data-len= -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --mos -s --mo -m --data -d --data-len -l --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--data|-d)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--data -d"
 			;;
+
 		"io-mgmt-send")
 			opts+=" --namespace-id= -n --mos= -s --mo= -m --data= -d --data-len= -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --mos -s --mo -m --data -d --data-len -l --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--data|-d)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--data -d"
 			;;
+
 		"nvme-mi-recv")
 			opts+=" --opcode= -O --namespace-id= -n --data-len= -l --nmimt= -m --nmd0= -0 --nmd1= -1 --input-file= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --opcode -O --namespace-id -n --data-len -l --nmimt -m --nmd0 -0 --nmd1 -1 --input-file -i --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--input-file|-i)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--input-file -i"
 			;;
+
 		"nvme-mi-send")
 			opts+=" --opcode= -O --namespace-id= -n --data-len= -l --nmimt= -m --nmd0= -0 --nmd1= -1 --input-file= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --opcode -O --namespace-id -n --data-len -l --nmimt -m --nmd0 -0 --nmd1 -1 --input-file -i --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--input-file|-i)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--input-file -i"
 			;;
 	esac
 	_nvme_finish_completion "$1" 2
@@ -1827,30 +1100,17 @@ plugin_amzn_opts () {
 		"id-ctrl")
 			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"stats")
 			opts+=" --details -d --interval= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --interval -i --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -1873,16 +1133,9 @@ plugin_dapustor_opts () {
 		"smart-log-add")
 			opts+=" --namespace-id= -n --raw-binary -b --json -j --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -1905,16 +1158,9 @@ plugin_dell_opts () {
 		"id-ctrl")
 			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -1937,16 +1183,9 @@ plugin_dera_opts () {
 		"smart-log-add"|"stat")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -1969,114 +1208,65 @@ plugin_fdp_opts () {
 		"configs")
 			opts+=" --endgrp-id= -e --raw-binary -b --human-readable -H --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --endgrp-id -e --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"usage")
 			opts+=" --endgrp-id= -e --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --endgrp-id -e --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"stats")
 			opts+=" --endgrp-id= -e --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --endgrp-id -e --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"events")
 			opts+=" --endgrp-id= -e --host-events -E --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --endgrp-id -e --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"status")
 			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"update")
 			opts+=" --namespace-id= -n --pids= -p --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --pids -p --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-events")
 			opts+=" --namespace-id= -n --placement-handle= -p --enable -e --save -s --event-types= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --placement-handle -p --event-types -t --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"feature")
 			opts+=" --endgrp-id= -e --enable-conf-idx= -c --disable -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --endgrp-id -e --enable-conf-idx -c --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -2099,30 +1289,17 @@ plugin_huawei_opts () {
 		"list")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"id-ctrl")
 			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -2145,44 +1322,25 @@ plugin_ibm_opts () {
 		"crit-log")
 			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vpd")
 			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"persist-event-log")
 			opts+=" --action= -a --log_len= -l --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --action -a --log_len -l --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -2205,30 +1363,17 @@ plugin_innogrit_opts () {
 		"get-eventlog")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-cdump")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -2251,16 +1396,9 @@ plugin_inspur_opts () {
 		"nvme-vendor-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -2283,106 +1421,62 @@ plugin_intel_opts () {
 		"id-ctrl")
 			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"internal-log")
 			opts+=" --log= -l --region= -r --nlognum= -m --namespace-id= -n --output-file= -O --verbose-nlog -V --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --log -l --region -r --nlognum -m --namespace-id -n --output-file -O --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output-file -O"
 			;;
+
 		"lat-stats")
 			opts+=" --write -w --raw-binary -b --json -j --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-bucket-thresholds")
 			opts+=" --write -w --bucket-thresholds= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --bucket-thresholds -t --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"lat-stats-tracking")
 			opts+=" --enable -e --disable -d"
 			;;
+
 		"market-name")
 			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"smart-log-add")
 			opts+=" --namespace-id= -n --raw-binary -b --json -j --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"temp-stats")
 			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -2405,16 +1499,9 @@ plugin_mangoboost_opts () {
 		"id-ctrl")
 			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -2437,193 +1524,114 @@ plugin_memblaze_opts () {
 		"smart-log-add")
 			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-pm-status")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-pm-status")
 			opts+=" --value= -V --save -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --value -V --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"select-download")
 			opts+=" --fw= -f --select= -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --fw -f --select -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--fw|-f)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--fw -f"
 			;;
+
 		"lat-stats")
 			opts+=" --enable -e --disable -d"
 			;;
+
 		"lat-stats-print")
 			opts+=" --write -w --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"lat-log")
 			opts+=" --param= -p --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --param -p --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"lat-log-print")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"clear-error-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"smart-log-add-x")
 			opts+=" --raw-binary -b"
 			;;
+
 		"lat-set-feature-x")
 			opts+=" --sel-perf-log= -s --set-commands-mask= -m --set-read-threshold= -r --set-write-threshold= -w --set-trim-threshold= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sel-perf-log -s --set-commands-mask -m --set-read-threshold -r --set-write-threshold -w --set-trim-threshold -t --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"lat-get-feature-x")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"lat-stats-print-x")
 			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"lat-log-print-x")
 			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"perf-stats-print-x")
 			opts+=" --duration= -d --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --duration -d --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -2646,372 +1654,211 @@ plugin_micron_opts () {
 		"select-download")
 			opts+=" --fw= -f --select= -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --fw -f --select -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--fw|-f)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--fw -f"
 			;;
+
 		"vs-temperature-stats")
 			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-pcie-stats")
 			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"clear-pcie-correctable-errors")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-internal-log")
 			opts+=" --type= -t --package= -p --data_area= -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --type -t --package -p --data_area -d --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--package|-p)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--package -p"
 			;;
+
 		"vs-telemetry-controller-option")
 			opts+=" --option= -O --select= -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --option -O --select -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-nand-stats")
 			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-smart-ext-log")
 			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-drive-info")
 			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"plugin-version")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"cloud-SSD-plugin-version")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"log-page-directory")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-fw-activate-history")
 			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"latency-tracking")
 			opts+=" --option= -O --command= -c --threshold= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --option -O --command -c --threshold -t --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"latency-stats")
 			opts+=" --command= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --command -c --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"latency-logs")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-smart-add-log")
 			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"clear-fw-activate-history")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-smbus-option")
 			opts+=" --option= -O --value= -V --save= -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --option -O --value -V --save -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"cloud-boot-SSD-version")
 			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-device-waf")
 			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-cloud-log")
 			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-work-load-log")
 			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-vendor-telemetry-log")
 			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"smart-log")
 			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"id-ctrl")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -3034,30 +1881,17 @@ plugin_netapp_opts () {
 		"smdevices")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"ontapdevices")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -3080,16 +1914,9 @@ plugin_nvidia_opts () {
 		"id-ctrl")
 			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -3112,397 +1939,225 @@ plugin_sndk_opts () {
 		"vs-internal-log")
 			opts+=" --output-file= -O --transfer-size= -s --data-area= -d --type= -t --verbose -V --file-size= -f --offset= -e"
 			valopts+=" --output-file -O --transfer-size -s --data-area -d --type -t --file-size -f --offset -e"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-					--type|-t)
-						wantfiles=1
-						;;
-				esac
-			fi
+
+			_nvme_opt_files "--output-file -O" "--type -t"
 			;;
+
 		"vs-nand-stats")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-smart-add-log")
 			opts+=" --interval= -i --log-page-version= -l --log-page-mask= -p --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --interval -i --log-page-version -l --log-page-mask -p --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"clear-pcie-correctable-errors")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-drive-status")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"clear-assert-dump")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"drive-resize")
 			opts+=" --size= -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --size -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-fw-activate-history")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"clear-fw-activate-history")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-telemetry-controller-option")
 			opts+=" --disable -d --enable -e --status -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-error-reason-identifier")
 			opts+=" --log-id= -i --file= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --log-id -i --file -O --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--file|-O)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--file -O"
 			;;
+
 		"log-page-directory")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"namespace-resize")
 			opts+=" --namespace-id= -n --op-option= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --op-option -O --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-drive-info")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-temperature-stats")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"capabilities")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"cloud-SSD-plugin-version")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-pcie-stats")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-latency-monitor-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-error-recovery-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-dev-capabilities-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-unsupported-reqs-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"cloud-boot-SSD-version")
 			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-cloud-log")
 			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-hw-rev-log")
 			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-device-waf")
 			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-latency-monitor-feature")
 			opts+=" --active_bucket_timer_threshold= -t --active_threshold_a= -a --active_threshold_b= -b --active_threshold_c= -c --active_threshold_d= -d --active_latency_config= -f --active_latency_minimum_window= -w --debug_log_trigger_enable= -r --discard_debug_log= -l --latency_monitor_feature_enable= -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --active_bucket_timer_threshold -t --active_threshold_a -a --active_threshold_b -b --active_threshold_c -c --active_threshold_d -d --active_latency_config -f --active_latency_minimum_window -w --debug_log_trigger_enable -r --discard_debug_log -l --latency_monitor_feature_enable -e --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"cu-smart-log")
 			opts+=" --uuid-index= -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --uuid-index -u --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -3525,148 +2180,82 @@ plugin_sfx_opts () {
 		"smart-log-add")
 			opts+=" --namespace-id= -n --raw-binary -b --json -j --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"lat-stats")
 			opts+=" --write -w --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-bad-block")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"query-cap")
 			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"change-cap")
 			opts+=" --cap= -c --cap-byte= -z --force -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --cap -c --cap-byte -z --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-feature")
 			opts+=" --namespace-id= -n --feature-id= -f --value= -V --force -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --feature-id -f --value -V --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-feature")
 			opts+=" --namespace-id= -n --feature-id= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --feature-id -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"dump-evtlog")
 			opts+=" --file= -f --namespace_id= -n --storage_medium= -s --parse -p --output= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --file -f --namespace_id -n --storage_medium -s --output -O --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--file|-f)
-						wantfiles=1
-						;;
-					--output|-O)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--file -f" "--output -O"
 			;;
+
 		"expand-cap")
 			opts+=" --namespace_id= -n --namespace_size= -s --namespace_cap= -c --lbaf= -l --units= -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace_id -n --namespace_size -s --namespace_cap -c --lbaf -l --units -u --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"status")
 			opts+=" --json-print -j --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -3689,173 +2278,98 @@ plugin_seagate_opts () {
 		"vs-temperature-stats")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-log-page-sup")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-smart-add-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-pcie-stats")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"clear-pcie-correctable-errors")
 			opts+=" --save -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-host-tele")
 			opts+=" --namespace-id= -n --log_specific= -i --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --log_specific -i --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-ctrl-tele")
 			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-internal-log")
 			opts+=" --namespace-id= -n --dump-file= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --dump-file -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--dump-file|-f)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--dump-file -f"
 			;;
+
 		"vs-fw-activate-history")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"clear-fw-activate-history")
 			opts+=" --save -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"plugin-version")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"cloud-SSD-plugin-version")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -3878,64 +2392,35 @@ plugin_shannon_opts () {
 		"smart-log-add")
 			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-additioal-feature")
 			opts+=" --namespace-id= -n --feature-id= -f --value= -V --data-len= -l --data= -d --save -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --feature-id -f --value -V --data-len -l --data -d --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--data|-d)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--data -d"
 			;;
+
 		"get-additional-feature")
 			opts+=" --namespace-id= -n --feature-id= -f --sel= -s --data-len= -l --raw-binary -b --cdw11= -c --human-readable -H --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --feature-id -f --sel -s --data-len -l --cdw11 -c --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-s)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -s" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"id-ctrl")
 			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -3958,16 +2443,9 @@ plugin_ssstc_opts () {
 		"smart-log-add")
 			opts+=" --namespace-id= -n --raw-binary -b --json -j --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -3990,50 +2468,27 @@ plugin_toshiba_opts () {
 		"vs-smart-add-log")
 			opts+=" --namespace-id= -n --output-file= -O --log= -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-file -O --log -l --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output-file -O"
 			;;
+
 		"vs-internal-log")
 			opts+=" --output-file= -O --prev-log -p --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-file -O --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output-file -O"
 			;;
+
 		"clear-pcie-correctable-errors")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -4056,30 +2511,17 @@ plugin_transcend_opts () {
 		"healthvalue")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"badblock")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -4118,33 +2560,18 @@ plugin_virtium_opts () {
 		"save-smart-to-vtview-log")
 			opts+=" --run-time= -r --freq= -f --output-file= -O --test-name= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --run-time -r --freq -f --output-file -O --test-name -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output-file -O"
 			;;
+
 		"show-identify")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -4167,541 +2594,303 @@ plugin_wdc_opts () {
 		"cap-diag")
 			opts+=" --output-file= -O --transfer-size= -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-file -O --transfer-size -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output-file -O"
 			;;
+
 		"drive-log")
 			opts+=" --output-file= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-file -O --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output-file -O"
 			;;
+
 		"get-crash-dump")
 			opts+=" --output-file= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-file -O --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output-file -O"
 			;;
+
 		"get-pfail-dump")
 			opts+=" --output-file= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-file -O --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output-file -O"
 			;;
+
 		"id-ctrl")
 			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"purge")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"purge-monitor")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-internal-log")
 			opts+=" --output-file= -O --transfer-size= -s --data-area= -d --type= -t --verbose -V --file-size= -f --offset= -e"
 			valopts+=" --output-file -O --transfer-size -s --data-area -d --type -t --file-size -f --offset -e"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-					--type|-t)
-						wantfiles=1
-						;;
-				esac
-			fi
+
+			_nvme_opt_files "--output-file -O" "--type -t"
 			;;
+
 		"vs-nand-stats")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-smart-add-log")
 			opts+=" --interval= -i --log-page-version= -l --log-page-mask= -p --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --interval -i --log-page-version -l --log-page-mask -p --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"clear-pcie-correctable-errors")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"drive-essentials")
 			opts+=" --dir-name= -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --dir-name -d --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--dir-name|-d)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--dir-name -d"
 			;;
+
 		"get-drive-status")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"clear-assert-dump")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"drive-resize")
 			opts+=" --size= -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --size -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-fw-activate-history")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"clear-fw-activate-history")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"enc-get-log")
 			opts+=" --output-file= -O --transfer-size= -s --log-id= -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-file -O --transfer-size -s --log-id -l --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output-file -O"
 			;;
+
 		"vs-telemetry-controller-option")
 			opts+=" --disable -d --enable -e --status -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-error-reason-identifier")
 			opts+=" --log-id= -i --file= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --log-id -i --file -O --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--file|-O)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--file -O"
 			;;
+
 		"log-page-directory")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"namespace-resize")
 			opts+=" --namespace-id= -n --op-option= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --op-option -O --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-drive-info")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-temperature-stats")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"capabilities")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"cloud-SSD-plugin-version")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-pcie-stats")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-latency-monitor-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-error-recovery-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-dev-capabilities-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-unsupported-reqs-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"cloud-boot-SSD-version")
 			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-cloud-log")
 			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-hw-rev-log")
 			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-device-waf")
 			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-latency-monitor-feature")
 			opts+=" --active_bucket_timer_threshold= -t --active_threshold_a= -a --active_threshold_b= -b --active_threshold_c= -c --active_threshold_d= -d --active_latency_config= -f --active_latency_minimum_window= -w --debug_log_trigger_enable= -r --discard_debug_log= -l --latency_monitor_feature_enable= -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --active_bucket_timer_threshold -t --active_threshold_a -a --active_threshold_b -b --active_threshold_c -c --active_threshold_d -d --active_latency_config -f --active_latency_minimum_window -w --debug_log_trigger_enable -r --discard_debug_log -l --latency_monitor_feature_enable -e --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"cu-smart-log")
 			opts+=" --uuid-index= -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --uuid-index -u --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -4724,16 +2913,9 @@ plugin_ymtc_opts () {
 		"smart-log-add")
 			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -4756,224 +2938,124 @@ plugin_zns_opts () {
 		"list")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"id-ctrl")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"id-ns")
 			opts+=" --namespace-id= -n --vendor-specific -V --human-readable -H --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"report-zones")
 			opts+=" --namespace-id= -n --start-lba= -s --descs= -d --state= -S --verbose -V --extended -e --partial -p --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-lba -s --descs -d --state -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"reset-zone")
 			opts+=" --namespace-id= -n --start-lba= -s --select-all -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-lba -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"close-zone")
 			opts+=" --namespace-id= -n --start-lba= -s --select-all -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-lba -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"finish-zone")
 			opts+=" --namespace-id= -n --start-lba= -s --select-all -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-lba -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"open-zone")
 			opts+=" --namespace-id= -n --start-lba= -s --zrwaa -r --select-all -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-lba -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"offline-zone")
 			opts+=" --namespace-id= -n --start-lba= -s --select-all -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-lba -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-zone-desc")
 			opts+=" --namespace-id= -n --start-lba= -s --zrwaa -r --data= -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-lba -s --data -d --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--data|-d)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--data -d"
 			;;
+
 		"zrwa-flush-zone")
 			opts+=" --namespace-id= -n --lba= -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --lba -l --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"changed-zone-list")
 			opts+=" --namespace-id= -n --rae -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"zone-mgmt-recv")
 			opts+=" --namespace-id= -n --start-lba= -s --zra= -z --zrasf= -S --partial -p --data-len= -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-lba -s --zra -z --zrasf -S --data-len -l --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"zone-mgmt-send")
 			opts+=" --namespace-id= -n --start-lba= -s --zsaso -O --select-all -a --zsa= -z --data-len= -l --data= -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --start-lba -s --zsa -z --data-len -l --data -d --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--data|-d)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--data -d"
 			;;
+
 		"zone-append")
 			opts+=" --namespace-id= -n --zslba= -s --data-size= -z --metadata-size= -y --data= -d --metadata= -M --limited-retry -l --force-unit-access -f --prinfo= -p --piremap -P --latency -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --zslba -s --data-size -z --metadata-size -y --data -d --metadata -M --prinfo -p --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--data|-d)
-						wantfiles=1
-						;;
-					--metadata|-M)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--data -d" "--metadata -M"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -4996,16 +3078,9 @@ plugin_nbft_opts () {
 		"show")
 			opts+=" --subsystem -s --hfi -H --discovery -d --nbft-path= --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --nbft-path --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -5028,114 +3103,65 @@ plugin_keys_opts () {
 		"gen-kxchap")
 			opts+=" --secret= -s --key-length= -l --nqn= -n --hmac= -m --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --secret -s --key-length -l --nqn -n --hmac -m --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"check-kxchap")
 			opts+=" --keydata= -d --keyring= -k --keytype= -t --identity= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --keydata -d --keyring -k --keytype -t --identity -i --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"gen-tls")
 			opts+=" --keyring= -k --keytype= -t --hostnqn= -n --subsysnqn= -c --secret= -s --keyfile= -f --hmac= -m --identity= -I --insert -i --compat -C --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --keyring -k --keytype -t --hostnqn -n --subsysnqn -c --secret -s --keyfile -f --hmac -m --identity -I --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"check-tls")
 			opts+=" --keyring= -k --keytype= -t --hostnqn= -n --subsysnqn= -c --keydata= -d --identity= -I --compat -C --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --keyring -k --keytype -t --hostnqn -n --subsysnqn -c --keydata -d --identity -I --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"insert-tls")
 			opts+=" --keyring= -k --keytype= -t --hostnqn= -n --subsysnqn= -c --keydata= -d --keyfile= -f --identity= -I --compat -C --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --keyring -k --keytype -t --hostnqn -n --subsysnqn -c --keydata -d --keyfile -f --identity -I --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"import")
 			opts+=" --keyring= -k --keyfile= -f --keydata= -d --identity= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --keyring -k --keyfile -f --keydata -d --identity -i --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"export")
 			opts+=" --keyring= -k --keyfile= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --keyring -k --keyfile -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"revoke")
 			opts+=" --keyring= -k --keytype= -t --identity= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --keyring -k --keytype -t --identity -i --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -5158,86 +3184,49 @@ plugin_exclusion_opts () {
 		"create")
 			opts+=" --name= -N --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --name -N --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"delete")
 			opts+=" --name= -N --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --name -N --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"edit")
 			opts+=" --name= -N --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --name -N --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"list")
 			opts+=" --name= -N --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --name -N --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"add")
 			opts+=" --name= -N --entry= -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --name -N --entry -e --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"remove")
 			opts+=" --name= -N --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --name -N --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -5260,58 +3249,33 @@ plugin_registry_opts () {
 		"list")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"retrieve")
 			opts+=" --attr= -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --attr -a --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"update")
 			opts+=" --attr= -a --value= -V --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --attr -a --value -V --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"delete")
 			opts+=" --attr= -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --attr -a --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -5334,61 +3298,33 @@ plugin_config_opts () {
 		"validate")
 			opts+=" --config= -J"
 			valopts+=" --config -J"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--config|-J)
-						wantfiles=1
-						;;
-				esac
-			fi
+
+			_nvme_opt_files "--config -J"
 			;;
+
 		"show")
 			opts+=" --config= -J --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --config -J --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--config|-J)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--config -J"
 			;;
+
 		"convert")
 			opts+=" --config= -J --output= -o --force"
 			valopts+=" --config -J --output -o"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--config|-J)
-						wantfiles=1
-						;;
-					--output|-o)
-						wantfiles=1
-						;;
-				esac
-			fi
+
+			_nvme_opt_files "--config -J" "--output -o"
 			;;
+
 		"create")
 			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --discovery --persistent --no-persistent --epcsd --no-epcsd --host-symname= --output= --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --host-symname --output --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -5411,226 +3347,119 @@ plugin_feat_opts () {
 		"arbitration")
 			opts+=" --ab= -a --lpw= -l --mpw= -m --hpw= -H --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --ab -a --lpw -l --mpw -m --hpw -H --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"power-mgmt")
 			opts+=" --ps= -p --wh= -w --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --ps -p --wh -w --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"temp-thresh")
 			opts+=" --tmpth= -T --tmpsel= -m --thsel= -H --tmpthh= -M --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --tmpth -T --tmpsel -m --thsel -H --tmpthh -M --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"volatile-wc")
 			opts+=" --wce -w --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"num-queues")
 			opts+=" --nsqr= -n --ncqr= -c --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --nsqr -n --ncqr -c --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"timestamp")
 			opts+=" --tstmp= -t --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --tstmp -t --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"hctm")
 			opts+=" --tmt1= -t --tmt2= -T --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --tmt1 -t --tmt2 -T --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"host-behavior-support")
 			opts+=" --acre= -a --etdas= -e --lbafee= -l --hdisns= -H --cdfe= -c --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --acre -a --etdas -e --lbafee -l --hdisns -H --cdfe -c --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"perf-characteristics")
 			opts+=" --namespace-id= -n --attri= -a --rvspa -r --r4karl= -R --paid= -p --attrl= -A --vs-data= -V --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --attri -a --r4karl -R --paid -p --attrl -A --vs-data -V --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--vs-data|-V)
-						wantfiles=1
-						;;
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--vs-data -V"
 			;;
+
 		"power-limit")
 			opts+=" --plv= -p --pls= -l --uuid-index= -u --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --plv -p --pls -l --uuid-index -u --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"power-thresh")
 			opts+=" --ptv= -p --pts= -t --pmts= -m --ept= -e --uuid-index= -u --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --ptv -p --pts -t --pmts -m --ept -e --uuid-index -u --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"power-meas")
 			opts+=" --act= --pmts= --smt= --uuid-index= -u --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --act --pmts --smt --uuid-index -u --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"err-recovery")
 			opts+=" --nsid= -n --tler= -t --dulbe -d --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --nsid -n --tler -t --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -5653,115 +3482,62 @@ plugin_lm_opts () {
 		"create-cdq")
 			opts+=" --size= -s --cntlid= -c --queue-type= -q --consent --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --size -s --cntlid -c --queue-type -q --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"delete-cdq")
 			opts+=" --cdqid= -C --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --cdqid -C --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"track-send")
 			opts+=" --sel= -s --mos= -m --cdqid= -C --start --stop --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sel -s --mos -m --cdqid -C --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-s)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -s" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"migration-send")
 			opts+=" --sel= -s --cntlid= -c --stype= -t --dudmq -d --seq-ind= -S --csuuidi= -U --csvi= -V --uidx= -u --offset= -O --numd= -n --input-file= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sel -s --cntlid -c --stype -t --seq-ind -S --csuuidi -U --csvi -V --uidx -u --offset -O --numd -n --input-file -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-s)
-						vals+=" 0 1 2 3"
-						;;
-					--input-file|-f)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -s" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--input-file -f"
 			;;
+
 		"migration-recv")
 			opts+=" --sel= -s --cntlid= -c --csuuidi= -U --csvi= -V --uidx= -u --offset= -O --numd= -n --output-file= -f --human-readable -H --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sel -s --cntlid -c --csuuidi -U --csvi -V --uidx -u --offset -O --numd -n --output-file -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-s)
-						vals+=" 0 1 2 3"
-						;;
-					--output-file|-f)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -s" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output-file -f"
 			;;
+
 		"set-cdq")
 			opts+=" --cdqid= -C --hp= -H --tpt= -T --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --cdqid -C --hp -H --tpt -T --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-cdq")
 			opts+=" --cdqid= -C --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --cdqid -C --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -5784,464 +3560,255 @@ plugin_ocp_opts () {
 		"smart-add-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"latency-monitor-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-latency-monitor-feature")
 			opts+=" --active_bucket_timer_threshold= -t --active_threshold_a= -a --active_threshold_b= -b --active_threshold_c= -c --active_threshold_d= -d --active_latency_config= -f --active_latency_minimum_window= -w --debug_log_trigger_enable= -r --discard_debug_log= -l --latency_monitor_feature_enable= -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --active_bucket_timer_threshold -t --active_threshold_a -a --active_threshold_b -b --active_threshold_c -c --active_threshold_d -d --active_latency_config -f --active_latency_minimum_window -w --debug_log_trigger_enable -r --discard_debug_log -l --latency_monitor_feature_enable -e --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"internal-log")
 			opts+=" --telemetry-log= -l --string-log= -s --output-file= -f --data-area= -a --telemetry-type= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --telemetry-log -l --string-log -s --output-file -f --data-area -a --telemetry-type -t --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-f)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output-file -f"
 			;;
+
 		"clear-fw-activate-history")
 			opts+=" --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"eol-plp-failure-mode")
 			opts+=" --mode= -m --save -s --sel= -S --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --mode -m --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"clear-pcie-correctable-errors")
 			opts+=" --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"fw-activate-history")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"unsupported-reqs-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"error-recovery-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"device-capability-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-dssd-power-state-feature")
 			opts+=" --power-state= -p --save -s --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --power-state -p --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-dssd-power-state-feature")
 			opts+=" --sel= -S --all -a --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-plp-health-check-interval")
 			opts+=" --plp_health_interval= -p --save -s --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --plp_health_interval -p --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-plp-health-check-interval")
 			opts+=" --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"telemetry-string-log")
 			opts+=" --output-file= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-file -f --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-f)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--output-file -f"
 			;;
+
 		"set-telemetry-profile")
 			opts+=" --telemetry-profile-select= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --telemetry-profile-select -t --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-dssd-async-event-config")
 			opts+=" --enable-panic-notices -e --save -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-dssd-async-event-config")
 			opts+=" --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sel -S --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -S" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"tcg-configuration-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-error-injection")
 			opts+=" --sel= -s --no-uuid -n --all-ns -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sel -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-s)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -s" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-error-injection")
 			opts+=" --data= -d --number= -n --no-uuid -N --all-ns -a --type= -t --nrtdp= -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --data -d --number -n --type -t --nrtdp -r --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--data|-d)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--data -d"
 			;;
+
 		"get-enable-ieee1667-silo")
 			opts+=" --sel= -s --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sel -s --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-s)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -s" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"set-enable-ieee1667-silo")
 			opts+=" --enable -e --save -s --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"hardware-component-log")
 			opts+=" --comp-id= -i --list -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --comp-id -i --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--comp-id|-i)
-						vals+=" asic nand dram pmic pcb cap reg case sn country hw-rev born-on-date vendor"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--comp-id -i" "asic nand dram pmic pcb cap reg case sn country hw-rev born-on-date vendor" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-latency-monitor")
 			opts+=" --sel= -s --namespace-id= -n --no-uuid -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sel -s --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-s)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -s" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-clear-pcie-correctable-errors")
 			opts+=" --sel= -s --namespace-id= -n --no-uuid -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sel -s --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-s)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -s" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-telemetry-profile")
 			opts+=" --sel= -s --namespace-id= -n --no-uuid -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sel -s --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-s)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -s" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"persistent-event-log")
 			opts+=" --action= -a --log_len= -l --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --action -a --log_len -l --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"get-idle-wakeup-time")
 			opts+=" --sel= -s --namespace-id= -n --no-uuid -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --sel -s --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-s)
-						vals+=" 0 1 2 3"
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--sel -s" "0 1 2 3" \
+			               "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
@@ -6264,15 +3831,19 @@ plugin_sed_opts () {
 		"discover"|"1")
 			opts+=" --verbose -V --udev -u"
 			;;
+
 		"initialize")
 			opts+=" --read-only -r"
 			;;
+
 		"revert")
 			opts+=" --destructive -e --psid -p"
 			;;
+
 		"lock")
 			opts+=" --read-only -r --ask-key -k"
 			;;
+
 		"unlock")
 			opts+=" --read-only -r --ask-key -k"
 			;;
@@ -6297,235 +3868,131 @@ plugin_solidigm_opts () {
 		"id-ctrl")
 			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"smart-log-add")
 			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-smart-add-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-internal-log")
 			opts+=" --type= -t --dir-name= -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --type -t --dir-name -d --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--dir-name|-d)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--dir-name -d"
 			;;
+
 		"garbage-collect-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"market-log")
 			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"latency-tracking-log")
 			opts+=" --enable -e --disable -d --read -r --write -w --type= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --type -t --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"parse-telemetry-log")
 			opts+=" --host-generate= -g --controller-init -c --data-area= -d --config-file= -j --source-file= -s --jq-filter= -q --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --host-generate -g --data-area -d --config-file -j --source-file -s --jq-filter -q --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--config-file|-j)
-						wantfiles=1
-						;;
-					--source-file|-s)
-						wantfiles=1
-						;;
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
+			_nvme_opt_files "--config-file -j" "--source-file -s"
 			;;
+
 		"clear-pcie-correctable-errors")
 			opts+=" --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"clear-fw-activate-history")
 			opts+=" --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-fw-activate-history")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"log-page-directory")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"temp-stats")
 			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"vs-drive-info")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"cloud-SSDplugin-version")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
+
 		"workload-tracker")
 			opts+=" --uuid-index= -U --enable -e --disable -d --sample-time= -s --type= -t --run-time= -r --flush-freq= -f --wall-clock -w --trigger-field= -T --trigger-threshold= -V --trigger-on-delta -D --trigger-on-latency -L --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --uuid-index -U --sample-time -s --type -t --run-time -r --flush-freq -f --trigger-field -T --trigger-threshold -V --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
+
+			_nvme_opt_vals "--output-format -o" "normal json binary tabular" \
+			               "--output-format-version" "1 2"
 			;;
 	esac
 	_nvme_finish_completion "$1" 3
