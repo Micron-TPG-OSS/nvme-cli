@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
 # Unit tests for the generated bash completion (bash-nvme-completion.sh).
 #
 # Every test drives the real completion entry point, _nvme_subcmds, the same way
@@ -6,6 +8,10 @@
 # the resulting COMPREPLY and any compopt requests. Tests never call the
 # per-command opts functions directly -- routing to the correct builtin or
 # plugin handler is itself part of what we verify.
+
+# Programmable completion may be off in a non-interactive shell; the sourced
+# script's `complete` call needs it on to register without error.
+shopt -s progcomp
 
 source "$(dirname "$0")/bash-nvme-completion.sh"
 
@@ -133,22 +139,41 @@ expect_match_words() {
     fi
 }
 
-# The completion injects the /dev/nvme* device glob. compgen -W pathname-expands
-# the glob, so the result is host-dependent: real devices (/dev/nvme0, ...) on a
-# host that has them, or the literal /dev/nvme* pattern on one that doesn't. Both
-# match the glob pattern /dev/nvme*, so testing for that is deterministic either
-# way.
+# True if the current COMPREPLY contains a /dev/nvme* candidate. compgen -W
+# pathname-expands the glob, so the result is host-dependent: real devices
+# (/dev/nvme0, ...) on a host that has them, or the literal /dev/nvme* pattern on
+# one that doesn't. Both match the glob pattern /dev/nvme*, so testing for that
+# is deterministic either way.
+_compreply_has_device() {
+    local w
+    for w in "${COMPREPLY[@]}"; do
+        [[ "$w" == /dev/nvme* ]] && return 0
+    done
+    return 1
+}
+
+# The completion injects the /dev/nvme* device glob.
 expect_device() {
     local desc=$1 cmdline=$2
     run_completion "$cmdline"
-    local w
-    for w in "${COMPREPLY[@]}"; do
-        if [[ "$w" == /dev/nvme* ]]; then
-            _check 0 "$desc" "'$cmdline<TAB>' injected a device candidate ('$w')"
-            return
-        fi
-    done
-    _check 1 "$desc" "'$cmdline<TAB>' expected a /dev/nvme* candidate, got '${COMPREPLY[*]}'"
+    if _compreply_has_device; then
+        _check 0 "$desc" "'$cmdline<TAB>' injected a device candidate"
+    else
+        _check 1 "$desc" "'$cmdline<TAB>' expected a /dev/nvme* candidate, got '${COMPREPLY[*]}'"
+    fi
+}
+
+# Like expect_device, but the command line is given as explicit COMP_WORDS (for
+# '=' splits that parse_words would collapse). Args: desc, then the words.
+expect_device_words() {
+    local desc=$1
+    shift
+    run_completion_words "$@"
+    if _compreply_has_device; then
+        _check 0 "$desc" "[$*] injected a device candidate"
+    else
+        _check 1 "$desc" "[$*] expected a /dev/nvme* candidate, got '${COMPREPLY[*]}'"
+    fi
 }
 
 # The completion does NOT inject the device glob (commands that take no device).
@@ -326,6 +351,12 @@ expect_device \
 expect_device \
     "a /dev/nvme* option value is not mistaken for the device argument" \
     "nvme telemetry-log --output-file /dev/nvme0 "
+
+# Same, but the '=' value form split by bash into '--output-file = /dev/nvme0'.
+# The /dev/nvme0 must still be recognised as the option's value, not the device.
+expect_device_words \
+    "a /dev/nvme* value after a split '=' is not mistaken for the device" \
+    nvme telemetry-log --output-file = /dev/nvme0 ""
 
 # ---------------------------------------------------------------------------
 # Option-name completion

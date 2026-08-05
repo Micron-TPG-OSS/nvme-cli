@@ -192,20 +192,20 @@ BASH_OPTS_FINALIZE = '''\
 # Emitted between the option cases and the epilogue. Offers the device argument
 # once enough positional words are present and none is already a device. A word
 # is positional only if it is not an option, not a bare '=', and not the value
-# of a preceding value-taking option (so '--output-file /dev/nvme0' does not
-# count the path as the device). {device_argpos} is the position at which the
-# device is expected (2 for builtins, 3 for plugin sub-commands).
-#
-# The prev-word check only catches the '--opt val' form; a value reached through
-# a split bare '=' word ('--opt = val') is over-counted as positional. That is
-# harmless: injection is gated on has_device, not the count, so over-counting can
-# only offer the device one word early, never wrongly suppress it.
+# of a preceding value-taking option -- in either the '--opt val' or split
+# '--opt = val' form -- so e.g. '--output-file /dev/nvme0' does not count the
+# path as the device. {device_argpos} is the position at which the device is
+# expected (2 for builtins, 3 for plugin sub-commands).
 BASH_DEVICE_SCAN = '''\
 \tif [[ $completing_value -eq 0 ]]; then
-\t\tlocal nonopt_args=0 has_device=0 i
+\t\tlocal nonopt_args=0 has_device=0 i prevopt
 \t\tfor (( i=0; i < ${{#words[@]}}-1; i++ )); do
 \t\t\t[[ ${{words[i]}} == -* || ${{words[i]}} == "=" ]] && continue
-\t\t\t[[ $i -gt 0 ]] && [[ " $valopts " == *" ${{words[i-1]}} "* ]] && continue
+\t\t\t# The value-taking option this word might belong to: the previous word,
+\t\t\t# or the word before a split '=' ('--opt = val').
+\t\t\tprevopt="${{words[i-1]}}"
+\t\t\t[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${{words[i-2]}}"
+\t\t\t[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
 \t\t\t(( nonopt_args += 1 ))
 \t\t\t[[ ${{words[i]}} == /dev/nvme* ]] && has_device=1
 \t\tdone
