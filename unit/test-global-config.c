@@ -14,14 +14,19 @@
 
 #include <shr-assert.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+#include "fs-util.h"
+
 #include "../global-config.h"
 #include "../args.h"
+
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
 struct nvme_args nvme_args = {
 	.output_format = "normal",
@@ -30,13 +35,37 @@ struct nvme_args nvme_args = {
 	.supported_output_formats = NORMAL,
 };
 
+/*
+ * Where to put the throwaway .conf files. "/tmp" only exists on Windows
+ * if someone happens to have created it on the current drive, so honour
+ * the environment's temp directory first and keep /tmp as the fallback.
+ */
+static const char *temp_dir(void)
+{
+	static const char * const vars[] = { "TMPDIR", "TMP", "TEMP" };
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(vars); i++) {
+		const char *dir = getenv(vars[i]);
+
+		if (dir && *dir)
+			return dir;
+	}
+
+	return "/tmp";
+}
+
 static char *write_temp(const char *content)
 {
-	char *path = strdup("/tmp/nvme-cli-conf-test-XXXXXX");
+	char buf[PATH_MAX];
+	char *path;
 	int fd;
 
+	snprintf(buf, sizeof(buf), "%s/nvme-cli-conf-test-XXXXXX", temp_dir());
+	path = strdup(buf);
 	shr_assert(path);
-	fd = mkstemp(path);
+
+	fd = shr_mkstemp(path);
 	shr_assert(fd >= 0);
 	shr_assert(write(fd, content, strlen(content)) == (ssize_t)strlen(content));
 	close(fd);
