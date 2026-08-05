@@ -6377,7 +6377,7 @@ static int get_register_properties(struct libnvme_transport_handle *hdl, void **
 		if (nvme_status_equals(err, NVME_STATUS_TYPE_NVME, NVME_SC_INVALID_FIELD)) {
 			value = -1;
 		} else if (err) {
-			nvme_show_error("get-property: %s", libnvme_strerror(err));
+			nvme_show_error("get-property: %s", libnvme_strerror(-err));
 			free(bar);
 			return err;
 		} else {
@@ -10117,14 +10117,14 @@ static int discover_cmd(int argc, char **argv, struct command *acmd, struct plug
 {
 	const char *desc = "Send Get Log Page request to Discovery Controller.";
 
-	return fabrics_discovery(desc, argc, argv, false);
+	return fabrics_discover(desc, argc, argv, false);
 }
 
 static int connect_all_cmd(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
 	const char *desc = "Discover NVMeoF subsystems and connect to them";
 
-	return fabrics_discovery(desc, argc, argv, true);
+	return fabrics_discover(desc, argc, argv, true);
 }
 
 static int connect_cmd(int argc, char **argv, struct command *acmd, struct plugin *plugin)
@@ -10977,10 +10977,10 @@ static int get_reachability_associations_log(int argc, char **argv, struct comma
 }
 
 static int get_host_discovery(struct libnvme_transport_handle *hdl, bool allhoste, bool rae,
-			      struct nvme_host_discover_log **logp)
+			      struct nvme_host_discovery_log **logp)
 {
 	int err;
-	struct nvme_host_discover_log *log;
+	struct nvme_host_discovery_log *log;
 	__u64 log_len = sizeof(*log);
 	struct nvme_get_log_args args = {
 		.lid = NVME_LOG_LID_HOST_DISCOVERY,
@@ -11017,7 +11017,7 @@ static int get_host_discovery_log(int argc, char **argv, struct command *acmd, s
 	const char *allhoste = "All Host Entries";
 	nvme_print_flags_t flags;
 	int err;
-	__cleanup_libnvme_free struct nvme_host_discover_log *log = NULL;
+	__cleanup_libnvme_free struct nvme_host_discovery_log *log = NULL;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 
@@ -11057,10 +11057,11 @@ static int get_host_discovery_log(int argc, char **argv, struct command *acmd, s
 	return err;
 }
 
-static int get_ave_discovery(struct libnvme_transport_handle *hdl, bool rae, struct nvme_ave_discover_log **logp)
+static int get_ave_discovery(struct libnvme_transport_handle *hdl, bool rae,
+			     struct nvme_ave_discovery_log **logp)
 {
 	int err;
-	struct nvme_ave_discover_log *log;
+	struct nvme_ave_discovery_log *log;
 	__u64 log_len = sizeof(*log);
 	struct nvme_get_log_args args = {
 		.lid = NVME_LOG_LID_AVE_DISCOVERY,
@@ -11096,7 +11097,7 @@ static int get_ave_discovery_log(int argc, char **argv, struct command *acmd, st
 	nvme_print_flags_t flags;
 	int err;
 
-	__cleanup_libnvme_free struct nvme_ave_discover_log *log = NULL;
+	__cleanup_libnvme_free struct nvme_ave_discovery_log *log = NULL;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 

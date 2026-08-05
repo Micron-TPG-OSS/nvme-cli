@@ -29,7 +29,6 @@ struct libnvmf_hooks {
 
 	/* discovery hooks */
 	void (*discovery_log)(struct libnvmf_context *fctx,
-			bool connect,
 			struct nvmf_discovery_log *log,
 			uint64_t numrec, void *user_data);
 
@@ -38,7 +37,7 @@ struct libnvmf_hooks {
 
 struct libnvmf_context { // !generate-accessors:read=generated,write=generated
 	struct libnvme_global_ctx *ctx;
-	struct libnvmf_hooks hooks; // !access:read=none,write=none
+	struct libnvmf_hooks hooks;	// !access:read=none,write=none
 
 	/* NVMe controller parameters */
 	struct libnvme_ctrl_params ctrl_params; // !access:nested
@@ -51,18 +50,23 @@ struct libnvmf_context { // !generate-accessors:read=generated,write=generated
 	const char *device;
 	enum libnvmf_tristate persistent;
 	enum libnvmf_tristate epcsd;
-	const char *devid_file; // !access:write=custom
+	const char *devid_file;		// !access:write=custom
+
+	/* discovery invocation options */
+	bool connect;			// !access
+	bool force;			// !access
+	char *nbft_path;		// !access
 
 	/* host configuration */
-	char *hostnqn; // !access:write=custom
-	char *hostid;  // !access:write=custom
+	char *hostnqn;			// !access:write=custom
+	char *hostid;			// !access:write=custom
 
 	/* authentication and transport encryption configuration */
-	const char *hostkey;          // !access:write=custom
-	const char *ctrlkey;          // !access:write=custom
-	const char *keyring;          // !access:write=custom
-	char *tls_key;                // !access:write=custom
-	const char *tls_key_identity; // !access:write=custom
+	const char *hostkey;		// !access:write=custom
+	const char *ctrlkey;		// !access:write=custom
+	const char *keyring;		// !access:write=custom
+	char *tls_key;			// !access:write=custom
+	const char *tls_key_identity;	// !access:write=custom
 };
 
 /**
