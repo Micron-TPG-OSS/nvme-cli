@@ -12,6 +12,13 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
+/* The bit bucket: "/dev/null" doesn't exist on native Windows. */
+#ifdef _WIN32
+#define NULL_DEVICE "NUL"
+#else
+#define NULL_DEVICE "/dev/null"
+#endif
+
 const char *libnvme_strerror(int errnum);
 
 static int test_rc;
@@ -420,9 +427,11 @@ int main(void)
 
 	test_rc = 0;
 	setlocale(LC_NUMERIC, "C");
-	f = freopen("/dev/null", "w", stderr);
-	if (!f)
+	f = freopen(NULL_DEVICE, "w", stderr);
+	if (!f) {
 		printf("ERROR: reopening stderr failed: %s\n", libnvme_strerror(errno));
+		test_rc = 1;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(toval_tests); i++)
 		toval_test(&toval_tests[i]);
