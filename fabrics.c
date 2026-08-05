@@ -46,6 +46,8 @@
 
 #include <libnvme.h>
 
+#include <io-util.h>
+
 #ifdef NVME_HAVE_LIBKMOD
 #include <libkmod.h>
 #endif
@@ -144,25 +146,45 @@ void nvmf_args_to_params(struct libnvmf_params *params,
 
 static void save_discovery_log(char *raw, struct nvmf_discovery_log *log)
 {
-	uint64_t numrec = le64_to_cpu(log->numrec);
+	__cleanup_free char *path = NULL;
+	static unsigned int save_count;
 	int fd, len, ret;
+	uint64_t numrec;
 
-	fd = open(raw, O_CREAT | O_RDWR | O_TRUNC, 0600);
+	if (save_count) {
+		if (asprintf(&path, "%s.%u", raw, save_count) < 0) {
+			nvme_show_error("failed to allocate path for %s", raw);
+			return;
+		}
+	} else {
+		path = strdup(raw);
+		if (!path) {
+			nvme_show_error("failed to allocate path for %s", raw);
+			return;
+		}
+	}
+
+	fd = open(path, O_CREAT | O_RDWR | O_TRUNC, 0600);
 	if (fd < 0) {
-		nvme_show_error("failed to open %s: %s", raw, libnvme_strerror(errno));
+		nvme_show_error("failed to open %s: %s",
+			path, libnvme_strerror(errno));
 		return;
 	}
 
-	len = sizeof(struct nvmf_discovery_log) + numrec * sizeof(struct nvmf_disc_log_entry);
+	numrec = le64_to_cpu(log->numrec);
+	len = sizeof(struct nvmf_discovery_log) +
+		numrec * sizeof(struct nvmf_disc_log_entry);
 
-	ret = write(fd, log, len);
+	ret = shr_write_all(fd, log, len);
 	if (ret < 0)
 		nvme_show_error("failed to write to %s: %s",
-			raw, libnvme_strerror(errno));
+			path, libnvme_strerror(-ret));
 	else
-		nvme_show_verbose_info("Discovery log is saved to %s", raw);
+		nvme_show_verbose_info("Discovery log is saved to %s", path);
 
 	close(fd);
+
+	save_count++;
 }
 
 static int setup_common_context(struct libnvmf_context *fctx,
@@ -235,14 +257,14 @@ static void hook_already_connected(struct libnvmf_context *fctx,
 }
 
 static void hook_discovery_log(struct libnvmf_context *fctx,
-		bool connect, struct nvmf_discovery_log *log,
+		struct nvmf_discovery_log *log,
 		uint64_t numrec, void *user_data)
 {
 	struct hook_fabrics_data *hfd = user_data;
 
 	if (hfd->raw)
 		save_discovery_log(hfd->raw, log);
-	else if (!connect)
+	else if (!libnvmf_context_get_connect(fctx))
 		nvme_show_discovery_log(log, numrec, hfd->flags);
 }
 
@@ -455,7 +477,9 @@ static void consume_conn(const struct libnvmf_config_conn *conn,
 				MAX_DISC_RETRIES);
 		libnvmf_context_set_default_keep_alive_timeout(fctx,
 				NVMF_DEF_DISC_TMO);
-		err = libnvmf_discovery(st->ctx, fctx, st->connect, st->force);
+		libnvmf_context_set_connect(fctx, st->connect);
+		libnvmf_context_set_force(fctx, st->force);
+		err = libnvmf_discover(st->ctx, fctx);
 	} else {
 		err = libnvmf_connect(st->ctx, fctx);
 	}
@@ -755,7 +779,7 @@ static int check_ctrl_owner(struct libnvme_global_ctx *ctx,
 	return 1;
 }
 
-int fabrics_discovery(const char *desc, int argc, char **argv, bool connect)
+int fabrics_discover(const char *desc, int argc, char **argv, bool connect)
 {
 	__cleanup_free char *hnqn = NULL;
 	__cleanup_free char *hid = NULL;
@@ -867,12 +891,14 @@ int fabrics_discovery(const char *desc, int argc, char **argv, bool connect)
 	if (ret)
 		return ret;
 
+	libnvmf_context_set_connect(fctx, connect);
+	libnvmf_context_set_force(fctx, force);
+
 	if (epcsd)
 		libnvmf_context_set_epcsd(fctx, LIBNVMF_TRISTATE_TRUE);
 
 	if (no_epcsd)
 		libnvmf_context_set_epcsd(fctx, LIBNVMF_TRISTATE_FALSE);
-
 
 	if (persistent)
 		libnvmf_context_set_persistent(fctx, LIBNVMF_TRISTATE_TRUE);
@@ -882,8 +908,12 @@ int fabrics_discovery(const char *desc, int argc, char **argv, bool connect)
 
 	if (!device && !fa.transport && !fa.traddr) {
 		if (!nonbft) {
-			ret = libnvmf_discovery_nbft(ctx, fctx, connect,
-				nbft_path);
+			if (!nbft_path) {
+				nvme_show_error("no nbft_path set");
+				return -EINVAL;
+			}
+			libnvmf_context_set_nbft_path(fctx, nbft_path);
+			ret = libnvmf_discover_nbft(ctx, fctx);
 		}
 		if (!nbft && config_file)
 			ret = fabrics_discovery_config(ctx, config_file,
@@ -899,7 +929,7 @@ int fabrics_discovery(const char *desc, int argc, char **argv, bool connect)
 		if (ret)
 			return 0;
 
-		ret = libnvmf_discovery(ctx, fctx, connect, force);
+		ret = libnvmf_discover(ctx, fctx);
 	}
 
 	return ret;
@@ -1095,8 +1125,13 @@ do_connect:
 	if (idempotent && (ret == -EALREADY || ret == -ENVME_CONNECT_ALREADY))
 		ret = 0;
 	if (ret) {
-		nvme_show_error("failed to connect: %s",
-			libnvme_strerror(-ret));
+		/*
+		 * hook_already_connected() already reported the specific
+		 * reason; the generic message here would just overwrite it.
+		 */
+		if (ret != -EALREADY && ret != -ENVME_CONNECT_ALREADY)
+			nvme_show_error("failed to connect: %s",
+				libnvme_strerror(-ret));
 		return ret;
 	}
 
