@@ -124,6 +124,18 @@ expect_match() {
     fi
 }
 
+# The completion offers nothing matching <regex>.
+expect_no_match() {
+    local desc=$1 cmdline=$2 regex=$3
+    run_completion "$cmdline"
+    local got="${COMPREPLY[*]}"
+    if [[ "$got" =~ $regex ]]; then
+        _check 1 "$desc" "'$cmdline<TAB>' should not offer /$regex/, got '$got'"
+    else
+        _check 0 "$desc" "'$cmdline<TAB>' -> '$got'"
+    fi
+}
+
 # Like expect_match, but the command line is given as explicit COMP_WORDS: the
 # description, then the regex, then the words. Use this for '=' token splits that
 # the string-based parse_words would collapse (e.g. a bare '=' word).
@@ -388,6 +400,19 @@ expect_match \
 expect_match \
     "a partial option name completes to the full option" \
     "nvme id-ctrl --output-f" \
+    "--output-format"
+
+# Global options are offered per command, straight from the metadata -- so a
+# command that takes them gets them, and one that does not (e.g. intel
+# lat-stats-tracking) is not wrongly offered them.
+expect_match \
+    "a command with global options offers them" \
+    "nvme id-ctrl -" \
+    "--output-format"
+
+expect_no_match \
+    "a command without global options is not offered them" \
+    "nvme intel lat-stats-tracking -" \
     "--output-format"
 
 # An option that takes a value completes to 'name=' with no trailing space, so

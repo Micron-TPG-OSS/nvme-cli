@@ -37,17 +37,10 @@ def opt_word(opt):
     return "--" + opt["long"] + opt_suffix(opt)
 
 
-def has_options(cmd):
-    """True if the command accepts any options."""
-    return bool(cmd.get("options"))
-
-
 def cmd_names(cmd):
     """Every name a command answers to: its primary name plus any alias.
 
-    Names are whitespace-stripped, which defends against a stray space in the C
-    command tables (e.g. "clear-pcie-correctable-errors ") that would otherwise
-    produce a case label the argv word can never match.
+    Names are whitespace-stripped.
     """
     names = [cmd["name"]]
     if cmd.get("alias"):
@@ -65,16 +58,14 @@ VALUE_HINTS = {
     "sel": ["0", "1", "2", "3"],
 }
 
-# Top-level commands the dispatcher recognises but that dump-command-metadata
-# does not report: help and version are matched as literal strings in the C
-# dispatcher, not registered in any command table, so they never appear in the
-# metadata. Adding them there would mean hardcoding the same two names in the C
-# source, so we list them here instead.
+# help and version are matched as literal strings in the C dispatcher, not
+# registered in any command table, so dump-command-metadata never reports them.
+# Listed here since putting them in the metadata would just hardcode them in C.
 BUILTIN_COMMANDS = ["help", "version"]
 
 
-def command_options(cmd, scope="all"):
-    """Yield options, optionally filtered by scope ("all", "global", "local").
+def command_options(cmd):
+    """Yield a command's options (global and local alike).
 
     Hidden options are always skipped: they are accepted on the command line
     but suppressed from --help, so they should not be offered as completions.
@@ -82,15 +73,8 @@ def command_options(cmd, scope="all"):
     Options that have no enforced value set but do have a completion hint (see
     VALUE_HINTS) are yielded with that hint filled into "values".
     """
-    if scope not in ("all", "global", "local"):
-        raise ValueError(f"invalid scope: {scope!r}")
     for opt in cmd.get("options", []):
         if opt.get("hidden"):
-            continue
-        g = bool(opt.get("global"))
-        if scope == "global" and not g:
-            continue
-        if scope == "local" and g:
             continue
         if "values" not in opt and opt["long"] in VALUE_HINTS:
             opt = dict(opt, values=VALUE_HINTS[opt["long"]])
@@ -321,9 +305,9 @@ def bash_value_clause(opt):
 
 
 def bash_option_body(opts):
-    """The 'opts+=', 'valopts+=' and value-switch lines shared by the global and
-    per-command clauses, indented three tabs. Returns '' when there is nothing
-    to emit (no option words and no value clauses)."""
+    """The 'opts+=', 'valopts+=' and value-switch lines for a command's option
+    case, indented three tabs. Returns '' when there is nothing to emit (no
+    option words and no value clauses)."""
     words = bash_option_words(opts)
     clauses = "".join(bash_value_clause(o) for o in opts)
     if not words and not clauses:
@@ -342,30 +326,17 @@ def bash_option_body(opts):
 def emit_bash_plugin(out, commands, func, device_argpos):
     out.write(BASH_FUNC_PREAMBLE.format(func=func))
 
-    # Shared clause: global options + value completion. version/help and commands
-    # that accept no options at all match here as a no-op, so they are not
-    # offered the global options; every other command falls through to '*)'.
-    # Skipped entirely when nothing global exists to offer.
-    globals_src = next((c for c in commands
-                        if list(command_options(c, "global"))), None)
-    if globals_src:
-        global_opts = list(command_options(globals_src, "global"))
-        skip = "|".join(['"version"', '"help"'] +
-                        [f'"{n}"' for c in commands if not has_options(c)
-                         for n in cmd_names(c)])
-        out.write(f'\tcase "$1" in\n\t\t{skip})\n\t\t\t;;\n\t\t*)\n')
-        out.write(bash_option_body(global_opts))
-        out.write('\t\t\t;;\n\tesac\n\n')
-
-    # Per-command specific options, plus value clauses for any that carry values.
-    # Built up first so the enclosing case is omitted when no command has locals.
+    # One case per command, emitting exactly the options that command accepts
+    # (global and local together, straight from the metadata). This deliberately
+    # repeats the global options in every command rather than factoring them into
+    # a shared '*)' clause: global options are NOT uniform across commands (some
+    # take none), so a shared clause would offer options a command rejects. Each
+    # command carrying its own list keeps the generator correct by construction
+    # when the C command definitions change. version/help accept nothing and so
+    # get no case; -h/--help is still appended for every command in the epilogue.
     body = ""
     for c in commands:
-        if not has_options(c):
-            continue
-        locals_ = list(command_options(c, "local"))
-        clause_body = bash_option_body(locals_)
-        # Only globals? The shared '*)' clause already covers it; no clause needed.
+        clause_body = bash_option_body(list(command_options(c)))
         if not clause_body:
             continue
         label = "|".join(f'"{n}"' for n in cmd_names(c))

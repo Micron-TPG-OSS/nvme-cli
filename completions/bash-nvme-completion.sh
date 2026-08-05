@@ -68,9 +68,7 @@ nvme_list_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
+		"list")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -84,171 +82,592 @@ nvme_list_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
+		"list-subsys")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
 		"id-ctrl")
-			opts+=" --vendor-specific -V --raw-binary -b"
+			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"id-ns")
-			opts+=" --namespace-id= -n --force --vendor-specific -V --raw-binary -b"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --force --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"id-ns-granularity")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"id-ns-lba-format")
-			opts+=" --lba-format-index= -i --uuid-index= -U"
-			valopts+=" --lba-format-index -i --uuid-index -U"
+			opts+=" --lba-format-index= -i --uuid-index= -U --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --lba-format-index -i --uuid-index -U --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"list-ns")
-			opts+=" --namespace-id= -n --csi= -y --all -a"
-			valopts+=" --namespace-id -n --csi -y"
+			opts+=" --namespace-id= -n --csi= -y --all -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --csi -y --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"list-ctrl")
-			opts+=" --cntid= -c --namespace-id= -n"
-			valopts+=" --cntid -c --namespace-id -n"
+			opts+=" --cntid= -c --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --cntid -c --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"nvm-id-ctrl")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"nvm-id-ns")
-			opts+=" --namespace-id= -n --uuid-index= -U"
-			valopts+=" --namespace-id -n --uuid-index -U"
+			opts+=" --namespace-id= -n --uuid-index= -U --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --uuid-index -U --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"nvm-id-ns-lba-format")
-			opts+=" --lba-format-index= -i --uuid-index= -U"
-			valopts+=" --lba-format-index -i --uuid-index -U"
+			opts+=" --lba-format-index= -i --uuid-index= -U --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --lba-format-index -i --uuid-index -U --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"primary-ctrl-caps")
-			opts+=" --cntlid= -c"
-			valopts+=" --cntlid -c"
+			opts+=" --cntlid= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --cntlid -c --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"list-secondary")
-			opts+=" --cntid= -c --num-entries= -e"
-			valopts+=" --cntid -c --num-entries -e"
+			opts+=" --cntid= -c --num-entries= -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --cntid -c --num-entries -e --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"cmdset-ind-id-ns")
-			opts+=" --namespace-id= -n --raw-binary -b"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"ns-descs")
-			opts+=" --namespace-id= -n --raw-binary -b"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"id-nvmset")
-			opts+=" --nvmset_id= -i"
-			valopts+=" --nvmset_id -i"
+			opts+=" --nvmset_id= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --nvmset_id -i --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"id-uuid")
-			opts+=" --raw-binary -b"
+			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"id-iocs")
-			opts+=" --controller-id= -c"
-			valopts+=" --controller-id -c"
+			opts+=" --controller-id= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --controller-id -c --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"id-domain")
-			opts+=" --dom-id= -d"
-			valopts+=" --dom-id -d"
+			opts+=" --dom-id= -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --dom-id -d --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"list-endgrp")
-			opts+=" --endgrp-id= -i"
-			valopts+=" --endgrp-id -i"
+			opts+=" --endgrp-id= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --endgrp-id -i --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"create-ns")
-			opts+=" --ish -I --nsze= -s --ncap= -c --flbas= -f --dps= -d --nmic= -m --anagrp-id= -a --nvmset-id= -i --endg-id= -e --block-size= -b --csi= -y --lbstm= -l --nphndls= -n --nsze-si= -S --ncap-si= -C --azr -z --rar= -r --ror= -O --rnumzrwa= -u --phndls= -p"
-			valopts+=" --nsze -s --ncap -c --flbas -f --dps -d --nmic -m --anagrp-id -a --nvmset-id -i --endg-id -e --block-size -b --csi -y --lbstm -l --nphndls -n --nsze-si -S --ncap-si -C --rar -r --ror -O --rnumzrwa -u --phndls -p"
+			opts+=" --ish -I --nsze= -s --ncap= -c --flbas= -f --dps= -d --nmic= -m --anagrp-id= -a --nvmset-id= -i --endg-id= -e --block-size= -b --csi= -y --lbstm= -l --nphndls= -n --nsze-si= -S --ncap-si= -C --azr -z --rar= -r --ror= -O --rnumzrwa= -u --phndls= -p --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --nsze -s --ncap -c --flbas -f --dps -d --nmic -m --anagrp-id -a --nvmset-id -i --endg-id -e --block-size -b --csi -y --lbstm -l --nphndls -n --nsze-si -S --ncap-si -C --rar -r --ror -O --rnumzrwa -u --phndls -p --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"delete-ns")
-			opts+=" --ish -I --namespace-id= -n"
-			valopts+=" --namespace-id -n"
+			opts+=" --ish -I --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"attach-ns")
-			opts+=" --ish -I --namespace-id= -n --controllers= -c"
-			valopts+=" --namespace-id -n --controllers -c"
+			opts+=" --ish -I --namespace-id= -n --controllers= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --controllers -c --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"detach-ns")
-			opts+=" --ish -I --namespace-id= -n --controllers= -c"
-			valopts+=" --namespace-id -n --controllers -c"
+			opts+=" --ish -I --namespace-id= -n --controllers= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --controllers -c --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"get-ns-id")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"get-log")
-			opts+=" --ish -I --namespace-id= -n --log-id= -i --log-len= -l --aen= -a --lpo= -L --lsp= -s --lsi= -S --rae -r --uuid-index= -U --raw-binary -b --csi= -y --ot -O --xfer-len= -x"
-			valopts+=" --namespace-id -n --log-id -i --log-len -l --aen -a --lpo -L --lsp -s --lsi -S --uuid-index -U --csi -y --xfer-len -x"
+			opts+=" --ish -I --namespace-id= -n --log-id= -i --log-len= -l --aen= -a --lpo= -L --lsp= -s --lsi= -S --rae -r --uuid-index= -U --raw-binary -b --csi= -y --ot -O --xfer-len= -x --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --log-id -i --log-len -l --aen -a --lpo -L --lsp -s --lsi -S --uuid-index -U --csi -y --xfer-len -x --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--log-id|-i)
 						vals+=" supported-log-pages error smart fw-slot changed-ns cmd-effects device-self-test telemetry-host telemetry-ctrl endurance-group predictable-lat-nvmset predictable-lat-agg ana persistent-event lba-status endurance-grp-evt media-unit-status supported-cap-config-list fid-supported-effects mi-cmd-supported-effects cmd-and-feat-lockdown boot-partition rotational-media-info dispersed-ns-participating-ns mgmt-addr-list phy-rx-eom reachability-groups reachability-associations changed-alloc-ns-list fdp-configs fdp-ruh-usage fdp-stats fdp-events discover host-discover ave-discover pull-model-ddc-req reservation sanitize zns-changed-zones"
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"telemetry-log")
-			opts+=" --output-file= -O --host-generate= -g --controller-init -c --data-area= -d --rae -r --mcda= -m"
-			valopts+=" --output-file -O --host-generate -g --data-area -d --mcda -m"
+			opts+=" --output-file= -O --host-generate= -g --controller-init -c --data-area= -d --rae -r --mcda= -m --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-file -O --host-generate -g --data-area -d --mcda -m --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"fw-log")
-			opts+=" --raw-binary -b"
+			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"changed-ns-list-log")
-			opts+=" --raw-binary -b"
+			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"smart-log")
-			opts+=" --namespace-id= -n --raw-binary -b"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"ana-log")
-			opts+=" --groups -g"
+			opts+=" --groups -g --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"error-log")
-			opts+=" --log-entries= -e --raw-binary -b --valid-entry -V --sqid= -S --status= -s --lba= -l --namespace-id= -n --trtype= -t --csi= -c --opcode= -O"
-			valopts+=" --log-entries -e --sqid -S --status -s --lba -l --namespace-id -n --trtype -t --csi -c --opcode -O"
+			opts+=" --log-entries= -e --raw-binary -b --valid-entry -V --sqid= -S --status= -s --lba= -l --namespace-id= -n --trtype= -t --csi= -c --opcode= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --log-entries -e --sqid -S --status -s --lba -l --namespace-id -n --trtype -t --csi -c --opcode -O --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"effects-log")
-			opts+=" --raw-binary -b --csi= -c"
-			valopts+=" --csi -c"
+			opts+=" --raw-binary -b --csi= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --csi -c --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"endurance-log")
-			opts+=" --group-id= -g"
-			valopts+=" --group-id -g"
+			opts+=" --group-id= -g --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --group-id -g --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"predictable-lat-log")
-			opts+=" --nvmset-id= -i --raw-binary -b"
-			valopts+=" --nvmset-id -i"
+			opts+=" --nvmset-id= -i --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --nvmset-id -i --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"pred-lat-event-agg-log")
-			opts+=" --log-entries= -e --rae -r --raw-binary -b"
-			valopts+=" --log-entries -e"
+			opts+=" --log-entries= -e --rae -r --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --log-entries -e --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"persistent-event-log")
-			opts+=" --action= -a --log_len= -l --raw-binary -b"
-			valopts+=" --action -a --log_len -l"
+			opts+=" --action= -a --log_len= -l --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --action -a --log_len -l --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"endurance-event-agg-log")
-			opts+=" --log-entries= -e --rae -r --raw-binary -b"
-			valopts+=" --log-entries -e"
+			opts+=" --log-entries= -e --rae -r --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --log-entries -e --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"lba-status-log")
-			opts+=" --rae -r"
+			opts+=" --rae -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"resv-notif-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"boot-part-log")
-			opts+=" --lsp= -s --output-file= -f"
-			valopts+=" --lsp -s --output-file -f"
+			opts+=" --lsp= -s --output-file= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --lsp -s --output-file -f --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-f)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"phy-rx-eom-log")
-			opts+=" --lsp= -s --controller= -c"
-			valopts+=" --lsp -s --controller -c"
+			opts+=" --lsp= -s --controller= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --lsp -s --controller -c --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"get-feature")
-			opts+=" --feature-id= -f --namespace-id= -n --sel= -s --data-len= -l --raw-binary -b --cdw11= -c --uuid-index= -U --changed -C"
-			valopts+=" --feature-id -f --namespace-id -n --sel -s --data-len -l --cdw11 -c --uuid-index -U"
+			opts+=" --feature-id= -f --namespace-id= -n --sel= -s --data-len= -l --raw-binary -b --cdw11= -c --uuid-index= -U --changed -C --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --feature-id -f --namespace-id -n --sel -s --data-len -l --cdw11 -c --uuid-index -U --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--feature-id|-f)
@@ -257,57 +676,256 @@ nvme_list_opts () {
 					--sel|-s)
 						vals+=" 0 1 2 3"
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"device-self-test")
-			opts+=" --ish -I --namespace-id= -n --self-test-code= -s --wait -w"
-			valopts+=" --namespace-id -n --self-test-code -s"
+			opts+=" --ish -I --namespace-id= -n --self-test-code= -s --wait -w --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --self-test-code -s --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"self-test-log")
-			opts+=" --dst-entries= -e"
-			valopts+=" --dst-entries -e"
+			opts+=" --dst-entries= -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --dst-entries -e --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"supported-log-pages")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"fid-support-effects-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"mi-cmd-support-effects-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"media-unit-stat-log")
-			opts+=" --domain-id= -d --raw-binary -b"
-			valopts+=" --domain-id -d"
+			opts+=" --domain-id= -d --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --domain-id -d --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"supported-cap-config-log")
-			opts+=" --domain-id= -d --raw-binary -b"
-			valopts+=" --domain-id -d"
+			opts+=" --domain-id= -d --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --domain-id -d --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"mgmt-addr-list-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"rotational-media-info-log")
-			opts+=" --endg-id= -e"
-			valopts+=" --endg-id -e"
+			opts+=" --endg-id= -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --endg-id -e --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"changed-alloc-ns-list-log")
-			opts+=" --raw-binary -b"
+			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"dispersed-ns-participating-nss-log")
-			opts+=" --namespace-id= -n"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"reachability-groups-log")
-			opts+=" --groups-only -g --rae -r"
+			opts+=" --groups-only -g --rae -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"reachability-associations-log")
-			opts+=" --associations-only -a --rae -r"
+			opts+=" --associations-only -a --rae -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"host-discovery-log")
-			opts+=" --all-host-entries -a --rae -r"
+			opts+=" --all-host-entries -a --rae -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"ave-discovery-log")
-			opts+=" --rae -r"
+			opts+=" --rae -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"pull-model-ddc-req-log")
-			opts+=" --rae -r"
+			opts+=" --rae -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"power-measurement-log")
-			opts+=" --raw-binary -b"
+			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"set-feature")
-			opts+=" --namespace-id= -n --feature-id= -f --value= -V --cdw12= -c --uuid-index= -U --data-len= -l --data= -d --save -s"
-			valopts+=" --namespace-id -n --feature-id -f --value -V --cdw12 -c --uuid-index -U --data-len -l --data -d"
+			opts+=" --namespace-id= -n --feature-id= -f --value= -V --cdw12= -c --uuid-index= -U --data-len= -l --data= -d --save -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --feature-id -f --value -V --cdw12 -c --uuid-index -U --data-len -l --data -d --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--feature-id|-f)
@@ -316,46 +934,94 @@ nvme_list_opts () {
 					--data|-d)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"set-property")
-			opts+=" --offset= -O --value= -V"
-			valopts+=" --offset -O --value -V"
+			opts+=" --offset= -O --value= -V --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --offset -O --value -V --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"get-property")
-			opts+=" --offset= -O"
-			valopts+=" --offset -O"
+			opts+=" --offset= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --offset -O --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"format")
-			opts+=" --ish -I --namespace-id= -n --lbaf= -l --ses= -s --pi= -i --pil= -p --ms= -m --reset -r --force --block-size= -b"
-			valopts+=" --namespace-id -n --lbaf -l --ses -s --pi -i --pil -p --ms -m --block-size -b"
+			opts+=" --ish -I --namespace-id= -n --lbaf= -l --ses= -s --pi= -i --pil= -p --ms= -m --reset -r --force --block-size= -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --lbaf -l --ses -s --pi -i --pil -p --ms -m --block-size -b --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"fw-commit"|"fw-activate")
-			opts+=" --ish -I --slot= -s --action= -a --bpid= -b"
-			valopts+=" --slot -s --action -a --bpid -b"
+			opts+=" --ish -I --slot= -s --action= -a --bpid= -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --slot -s --action -a --bpid -b --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--action|-a)
 						vals+=" replace replace-and-activate set-active replace-and-activate-immediate replace-boot-partition activate-boot-partition"
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"fw-download")
-			opts+=" --fw= -f --ish -I --xfer= -x --offset= -O --progress -p --ignore-ovr -i"
-			valopts+=" --fw -f --xfer -x --offset -O"
+			opts+=" --fw= -f --ish -I --xfer= -x --offset= -O --progress -p --ignore-ovr -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --fw -f --xfer -x --offset -O --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--fw|-f)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"admin-passthru")
-			opts+=" --opcode= -O --flags= -f --prefill= -p --rsvd= -R --namespace-id= -n --data-len= -l --metadata-len= -m --cdw2= -2 --cdw3= -3 --cdw10= -4 --cdw11= -5 --cdw12= -6 --cdw13= -7 --cdw14= -8 --cdw15= -9 --input-file= -i --metadata= -M --raw-binary -b --show-command -s --read -r --write -w --latency -T"
-			valopts+=" --opcode -O --flags -f --prefill -p --rsvd -R --namespace-id -n --data-len -l --metadata-len -m --cdw2 -2 --cdw3 -3 --cdw10 -4 --cdw11 -5 --cdw12 -6 --cdw13 -7 --cdw14 -8 --cdw15 -9 --input-file -i --metadata -M"
+			opts+=" --opcode= -O --flags= -f --prefill= -p --rsvd= -R --namespace-id= -n --data-len= -l --metadata-len= -m --cdw2= -2 --cdw3= -3 --cdw10= -4 --cdw11= -5 --cdw12= -6 --cdw13= -7 --cdw14= -8 --cdw15= -9 --input-file= -i --metadata= -M --raw-binary -b --show-command -s --read -r --write -w --latency -T --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --opcode -O --flags -f --prefill -p --rsvd -R --namespace-id -n --data-len -l --metadata-len -m --cdw2 -2 --cdw3 -3 --cdw10 -4 --cdw11 -5 --cdw12 -6 --cdw13 -7 --cdw14 -8 --cdw15 -9 --input-file -i --metadata -M --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--input-file|-i)
@@ -363,13 +1029,19 @@ nvme_list_opts () {
 						;;
 					--metadata|-M)
 						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"io-passthru")
-			opts+=" --opcode= -O --flags= -f --prefill= -p --rsvd= -R --namespace-id= -n --data-len= -l --metadata-len= -m --cdw2= -2 --cdw3= -3 --cdw10= -4 --cdw11= -5 --cdw12= -6 --cdw13= -7 --cdw14= -8 --cdw15= -9 --input-file= -i --metadata= -M --raw-binary -b --show-command -s --read -r --write -w --latency -T"
-			valopts+=" --opcode -O --flags -f --prefill -p --rsvd -R --namespace-id -n --data-len -l --metadata-len -m --cdw2 -2 --cdw3 -3 --cdw10 -4 --cdw11 -5 --cdw12 -6 --cdw13 -7 --cdw14 -8 --cdw15 -9 --input-file -i --metadata -M"
+			opts+=" --opcode= -O --flags= -f --prefill= -p --rsvd= -R --namespace-id= -n --data-len= -l --metadata-len= -m --cdw2= -2 --cdw3= -3 --cdw10= -4 --cdw11= -5 --cdw12= -6 --cdw13= -7 --cdw14= -8 --cdw15= -9 --input-file= -i --metadata= -M --raw-binary -b --show-command -s --read -r --write -w --latency -T --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --opcode -O --flags -f --prefill -p --rsvd -R --namespace-id -n --data-len -l --metadata-len -m --cdw2 -2 --cdw3 -3 --cdw10 -4 --cdw11 -5 --cdw12 -6 --cdw13 -7 --cdw14 -8 --cdw15 -9 --input-file -i --metadata -M --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--input-file|-i)
@@ -378,63 +1050,175 @@ nvme_list_opts () {
 					--metadata|-M)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"security-send")
-			opts+=" --ish -I --namespace-id= -n --file= -f --nssf= -N --secp= -p --spsp= -s --tl= -t"
-			valopts+=" --namespace-id -n --file -f --nssf -N --secp -p --spsp -s --tl -t"
+			opts+=" --ish -I --namespace-id= -n --file= -f --nssf= -N --secp= -p --spsp= -s --tl= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --file -f --nssf -N --secp -p --spsp -s --tl -t --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--file|-f)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"security-recv")
-			opts+=" --ish -I --namespace-id= -n --size= -x --nssf= -N --secp= -p --spsp= -s --al= -t --raw-binary -b"
-			valopts+=" --namespace-id -n --size -x --nssf -N --secp -p --spsp -s --al -t"
+			opts+=" --ish -I --namespace-id= -n --size= -x --nssf= -N --secp= -p --spsp= -s --al= -t --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --size -x --nssf -N --secp -p --spsp -s --al -t --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"get-lba-status")
-			opts+=" --ish -I --namespace-id= -n --start-lba= -s --max-dw= -m --action= -a --range-len= -l"
-			valopts+=" --namespace-id -n --start-lba -s --max-dw -m --action -a --range-len -l"
+			opts+=" --ish -I --namespace-id= -n --start-lba= -s --max-dw= -m --action= -a --range-len= -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-lba -s --max-dw -m --action -a --range-len -l --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"capacity-mgmt")
-			opts+=" --ish -I --operation= -O --element-id= -i --cap-lower= -l --cap-upper= -u"
-			valopts+=" --operation -O --element-id -i --cap-lower -l --cap-upper -u"
+			opts+=" --ish -I --operation= -O --element-id= -i --cap-lower= -l --cap-upper= -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --operation -O --element-id -i --cap-lower -l --cap-upper -u --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"resv-acquire")
-			opts+=" --namespace-id= -n --crkey= -c --prkey= -p --rtype= -t --racqa= -a --iekey -i"
-			valopts+=" --namespace-id -n --crkey -c --prkey -p --rtype -t --racqa -a"
+			opts+=" --namespace-id= -n --crkey= -c --prkey= -p --rtype= -t --racqa= -a --iekey -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --crkey -c --prkey -p --rtype -t --racqa -a --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"resv-register")
-			opts+=" --namespace-id= -n --crkey= -c --nrkey= -k --rrega= -r --cptpl= -p --iekey -i"
-			valopts+=" --namespace-id -n --crkey -c --nrkey -k --rrega -r --cptpl -p"
+			opts+=" --namespace-id= -n --crkey= -c --nrkey= -k --rrega= -r --cptpl= -p --iekey -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --crkey -c --nrkey -k --rrega -r --cptpl -p --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"resv-release")
-			opts+=" --namespace-id= -n --crkey= -c --rtype= -t --rrela= -a --iekey -i"
-			valopts+=" --namespace-id -n --crkey -c --rtype -t --rrela -a"
+			opts+=" --namespace-id= -n --crkey= -c --rtype= -t --rrela= -a --iekey -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --crkey -c --rtype -t --rrela -a --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"resv-report")
-			opts+=" --namespace-id= -n --numd= -d --eds -e --raw-binary -b"
-			valopts+=" --namespace-id -n --numd -d"
+			opts+=" --namespace-id= -n --numd= -d --eds -e --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --numd -d --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"dsm")
-			opts+=" --namespace-id= -n --ctx-attrs= -a --blocks= -b --slbs= -s --ad -d --idw -w --idr -r --cdw11= -c"
-			valopts+=" --namespace-id -n --ctx-attrs -a --blocks -b --slbs -s --cdw11 -c"
+			opts+=" --namespace-id= -n --ctx-attrs= -a --blocks= -b --slbs= -s --ad -d --idw -w --idr -r --cdw11= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --ctx-attrs -a --blocks -b --slbs -s --cdw11 -c --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"copy")
-			opts+=" --namespace-id= -n --sdlba= -d --slbs= -s --blocks= -b --snsids= -N --sopts= -O --limited-retry -l --force-unit-access -f --prinfow= -p --prinfor= -P --ref-tag= -r --expected-ref-tags= -R --app-tag= -a --expected-app-tags= -A --app-tag-mask= -m --expected-app-tag-masks= -M --dir-type= -T --dir-spec= -S --format= -F --storage-tag= -t --storage-tag-check -c"
-			valopts+=" --namespace-id -n --sdlba -d --slbs -s --blocks -b --snsids -N --sopts -O --prinfow -p --prinfor -P --ref-tag -r --expected-ref-tags -R --app-tag -a --expected-app-tags -A --app-tag-mask -m --expected-app-tag-masks -M --dir-type -T --dir-spec -S --format -F --storage-tag -t"
+			opts+=" --namespace-id= -n --sdlba= -d --slbs= -s --blocks= -b --snsids= -N --sopts= -O --limited-retry -l --force-unit-access -f --prinfow= -p --prinfor= -P --ref-tag= -r --expected-ref-tags= -R --app-tag= -a --expected-app-tags= -A --app-tag-mask= -m --expected-app-tag-masks= -M --dir-type= -T --dir-spec= -S --format= -F --storage-tag= -t --storage-tag-check -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --sdlba -d --slbs -s --blocks -b --snsids -N --sopts -O --prinfow -p --prinfor -P --ref-tag -r --expected-ref-tags -R --app-tag -a --expected-app-tags -A --app-tag-mask -m --expected-app-tag-masks -M --dir-type -T --dir-spec -S --format -F --storage-tag -t --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"flush")
-			opts+=" --namespace-id= -n"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"compare")
-			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --block-size= -b --data-size= -z --metadata-size= -y --ref-tag= -r --data= -d --metadata= -M --prinfo= -p --app-tag-mask= -m --app-tag= -a --storage-tag= -g --limited-retry -l --force-unit-access -f --storage-tag-check -C --dir-type= -T --dir-spec= -S --dsm= -D --show-command -V --latency -t --force"
-			valopts+=" --namespace-id -n --start-block -s --block-count -c --block-size -b --data-size -z --metadata-size -y --ref-tag -r --data -d --metadata -M --prinfo -p --app-tag-mask -m --app-tag -a --storage-tag -g --dir-type -T --dir-spec -S --dsm -D"
+			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --block-size= -b --data-size= -z --metadata-size= -y --ref-tag= -r --data= -d --metadata= -M --prinfo= -p --app-tag-mask= -m --app-tag= -a --storage-tag= -g --limited-retry -l --force-unit-access -f --storage-tag-check -C --dir-type= -T --dir-spec= -S --dsm= -D --show-command -V --latency -t --force --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-block -s --block-count -c --block-size -b --data-size -z --metadata-size -y --ref-tag -r --data -d --metadata -M --prinfo -p --app-tag-mask -m --app-tag -a --storage-tag -g --dir-type -T --dir-spec -S --dsm -D --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
@@ -442,13 +1226,19 @@ nvme_list_opts () {
 						;;
 					--metadata|-M)
 						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"read")
-			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --block-size= -b --data-size= -z --metadata-size= -y --ref-tag= -r --data= -d --metadata= -M --prinfo= -p --app-tag-mask= -m --app-tag= -a --storage-tag= -g --limited-retry -l --force-unit-access -f --storage-tag-check -C --dir-type= -T --dir-spec= -S --dsm= -D --show-command -V --latency -t --force"
-			valopts+=" --namespace-id -n --start-block -s --block-count -c --block-size -b --data-size -z --metadata-size -y --ref-tag -r --data -d --metadata -M --prinfo -p --app-tag-mask -m --app-tag -a --storage-tag -g --dir-type -T --dir-spec -S --dsm -D"
+			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --block-size= -b --data-size= -z --metadata-size= -y --ref-tag= -r --data= -d --metadata= -M --prinfo= -p --app-tag-mask= -m --app-tag= -a --storage-tag= -g --limited-retry -l --force-unit-access -f --storage-tag-check -C --dir-type= -T --dir-spec= -S --dsm= -D --show-command -V --latency -t --force --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-block -s --block-count -c --block-size -b --data-size -z --metadata-size -y --ref-tag -r --data -d --metadata -M --prinfo -p --app-tag-mask -m --app-tag -a --storage-tag -g --dir-type -T --dir-spec -S --dsm -D --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
@@ -456,13 +1246,19 @@ nvme_list_opts () {
 						;;
 					--metadata|-M)
 						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"write")
-			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --block-size= -b --data-size= -z --metadata-size= -y --ref-tag= -r --data= -d --metadata= -M --prinfo= -p --app-tag-mask= -m --app-tag= -a --storage-tag= -g --limited-retry -l --force-unit-access -f --storage-tag-check -C --dir-type= -T --dir-spec= -S --dsm= -D --show-command -V --latency -t --force"
-			valopts+=" --namespace-id -n --start-block -s --block-count -c --block-size -b --data-size -z --metadata-size -y --ref-tag -r --data -d --metadata -M --prinfo -p --app-tag-mask -m --app-tag -a --storage-tag -g --dir-type -T --dir-spec -S --dsm -D"
+			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --block-size= -b --data-size= -z --metadata-size= -y --ref-tag= -r --data= -d --metadata= -M --prinfo= -p --app-tag-mask= -m --app-tag= -a --storage-tag= -g --limited-retry -l --force-unit-access -f --storage-tag-check -C --dir-type= -T --dir-spec= -S --dsm= -D --show-command -V --latency -t --force --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-block -s --block-count -c --block-size -b --data-size -z --metadata-size -y --ref-tag -r --data -d --metadata -M --prinfo -p --app-tag-mask -m --app-tag -a --storage-tag -g --dir-type -T --dir-spec -S --dsm -D --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
@@ -471,61 +1267,206 @@ nvme_list_opts () {
 					--metadata|-M)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"write-zeroes")
-			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --dir-type= -T --deac -d --limited-retry -l --force-unit-access -f --prinfo= -p --ref-tag= -r --app-tag-mask= -m --app-tag= -a --storage-tag= -S --storage-tag-check -C --dir-spec= -D --namespace-zeroes -Z"
-			valopts+=" --namespace-id -n --start-block -s --block-count -c --dir-type -T --prinfo -p --ref-tag -r --app-tag-mask -m --app-tag -a --storage-tag -S --dir-spec -D"
+			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --dir-type= -T --deac -d --limited-retry -l --force-unit-access -f --prinfo= -p --ref-tag= -r --app-tag-mask= -m --app-tag= -a --storage-tag= -S --storage-tag-check -C --dir-spec= -D --namespace-zeroes -Z --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-block -s --block-count -c --dir-type -T --prinfo -p --ref-tag -r --app-tag-mask -m --app-tag -a --storage-tag -S --dir-spec -D --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"write-uncor")
-			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --dir-type= -T --dir-spec= -S"
-			valopts+=" --namespace-id -n --start-block -s --block-count -c --dir-type -T --dir-spec -S"
+			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --dir-type= -T --dir-spec= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-block -s --block-count -c --dir-type -T --dir-spec -S --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"verify")
-			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --limited-retry -l --force-unit-access -f --prinfo= -p --ref-tag= -r --app-tag= -a --app-tag-mask= -m --storage-tag= -S --storage-tag-check -C"
-			valopts+=" --namespace-id -n --start-block -s --block-count -c --prinfo -p --ref-tag -r --app-tag -a --app-tag-mask -m --storage-tag -S"
+			opts+=" --namespace-id= -n --start-block= -s --block-count= -c --limited-retry -l --force-unit-access -f --prinfo= -p --ref-tag= -r --app-tag= -a --app-tag-mask= -m --storage-tag= -S --storage-tag-check -C --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-block -s --block-count -c --prinfo -p --ref-tag -r --app-tag -a --app-tag-mask -m --storage-tag -S --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"sanitize")
-			opts+=" --ish -I --no-dealloc -d --oipbp -i --owpass= -n --ause -u --sanact= -a --ovrpat= -p --emvs -e --wait -w --repeat= -r"
-			valopts+=" --owpass -n --sanact -a --ovrpat -p --repeat -r"
+			opts+=" --ish -I --no-dealloc -d --oipbp -i --owpass= -n --ause -u --sanact= -a --ovrpat= -p --emvs -e --wait -w --repeat= -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --owpass -n --sanact -a --ovrpat -p --repeat -r --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sanact|-a)
 						vals+=" exit-failure start-block-erase start-overwrite start-crypto-erase exit-media-verification"
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"sanitize-log")
-			opts+=" --rae -r --raw-binary -b"
+			opts+=" --rae -r --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"sanitize-ns")
-			opts+=" --ish -I --ause -u --sanact= -a --emvs -e"
-			valopts+=" --sanact -a"
+			opts+=" --ish -I --ause -u --sanact= -a --emvs -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sanact -a --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sanact|-a)
 						vals+=" exit-failure start-crypto-erase exit-media-verification"
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"reset")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"subsystem-reset")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"ns-rescan")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"show-regs")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"set-reg")
-			opts+=" --offset= -O --value= -V --mmio32 -m --intms= --intmc= --cc= --csts= --nssr= --aqa= --asq= --acq= --bprsel= --bpmbl= --cmbmsc= --nssd= --pmrctl= --pmrmscl= --pmrmscu="
-			valopts+=" --offset -O --value -V --intms --intmc --cc --csts --nssr --aqa --asq --acq --bprsel --bpmbl --cmbmsc --nssd --pmrctl --pmrmscl --pmrmscu"
+			opts+=" --offset= -O --value= -V --mmio32 -m --intms= --intmc= --cc= --csts= --nssr= --aqa= --asq= --acq= --bprsel= --bpmbl= --cmbmsc= --nssd= --pmrctl= --pmrmscl= --pmrmscu= --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --offset -O --value -V --intms --intmc --cc --csts --nssr --aqa --asq --acq --bprsel --bpmbl --cmbmsc --nssd --pmrctl --pmrmscl --pmrmscu --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"get-reg")
-			opts+=" --offset= -O --cap --vs --cmbloc --cmbsz --bpinfo --cmbsts --cmbebs --cmbswtp --crto --pmrcap --pmrsts --pmrebs --pmrswtp --intms --intmc --cc --csts --nssr --aqa --asq --acq --bprsel --bpmbl --cmbmsc --nssd --pmrctl --pmrmscl --pmrmscu"
-			valopts+=" --offset -O"
+			opts+=" --offset= -O --cap --vs --cmbloc --cmbsz --bpinfo --cmbsts --cmbebs --cmbswtp --crto --pmrcap --pmrsts --pmrebs --pmrswtp --intms --intmc --cc --csts --nssr --aqa --asq --acq --bprsel --bpmbl --cmbmsc --nssd --pmrctl --pmrmscl --pmrmscu --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --offset -O --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"top")
-			opts+=" --delay= -d"
-			valopts+=" --delay -d"
+			opts+=" --delay= -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --delay -d --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"discover")
-			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --raw= -r --persistent -p --no-persistent --epcsd --no-epcsd --config= -J --force --nbft --no-nbft --owner= --nbft-path="
-			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --device -d --raw -r --config -J --owner --nbft-path"
+			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --raw= -r --persistent -p --no-persistent --epcsd --no-epcsd --config= -J --force --nbft --no-nbft --owner= --nbft-path= --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --device -d --raw -r --config -J --owner --nbft-path --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--raw|-r)
@@ -533,13 +1474,19 @@ nvme_list_opts () {
 						;;
 					--config|-J)
 						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"connect-all")
-			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --raw= -r --persistent -p --no-persistent --epcsd --no-epcsd --config= -J --force --nbft --no-nbft --owner= --nbft-path="
-			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --device -d --raw -r --config -J --owner --nbft-path"
+			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --raw= -r --persistent -p --no-persistent --epcsd --no-epcsd --config= -J --force --nbft --no-nbft --owner= --nbft-path= --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --device -d --raw -r --config -J --owner --nbft-path --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--raw|-r)
@@ -548,12 +1495,18 @@ nvme_list_opts () {
 					--config|-J)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"connect")
-			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --config= -J --owner= --devid-file= --idempotent"
-			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --config -J --owner --devid-file"
+			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --config= -J --owner= --devid-file= --idempotent --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --config -J --owner --devid-file --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--config|-J)
@@ -562,43 +1515,133 @@ nvme_list_opts () {
 					--devid-file)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"disconnect")
-			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --exclude -x"
-			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --device -d"
+			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --device= -d --exclude -x --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --device -d --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"disconnect-all")
-			opts+=" --transport= -t --owner= --force"
-			valopts+=" --transport -t --owner"
+			opts+=" --transport= -t --owner= --force --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --transport -t --owner --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"dim")
-			opts+=" --nqn= -n --device= -d --task= -t"
-			valopts+=" --nqn -n --device -d --task -t"
+			opts+=" --nqn= -n --device= -d --task= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --nqn -n --device -d --task -t --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"gen-hostnqn")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"show-hostnqn")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"dir-receive")
-			opts+=" --namespace-id= -n --data-len= -l --raw-binary -b --dir-type= -D --dir-spec= -S --dir-oper= -O --req-resource= -r"
-			valopts+=" --namespace-id -n --data-len -l --dir-type -D --dir-spec -S --dir-oper -O --req-resource -r"
+			opts+=" --namespace-id= -n --data-len= -l --raw-binary -b --dir-type= -D --dir-spec= -S --dir-oper= -O --req-resource= -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --data-len -l --dir-type -D --dir-spec -S --dir-oper -O --req-resource -r --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"dir-send")
-			opts+=" --namespace-id= -n --data-len= -l --dir-type= -D --target-dir= -T --dir-spec= -S --dir-oper= -O --endir= -e --raw-binary -b --input-file= -i"
-			valopts+=" --namespace-id -n --data-len -l --dir-type -D --target-dir -T --dir-spec -S --dir-oper -O --endir -e --input-file -i"
+			opts+=" --namespace-id= -n --data-len= -l --dir-type= -D --target-dir= -T --dir-spec= -S --dir-oper= -O --endir= -e --raw-binary -b --input-file= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --data-len -l --dir-type -D --target-dir -T --dir-spec -S --dir-oper -O --endir -e --input-file -i --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--input-file|-i)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"virt-mgmt")
-			opts+=" --cntlid= -c --rt= -r --act= -a --nr= -n"
-			valopts+=" --cntlid -c --rt -r --act -a --nr -n"
+			opts+=" --cntlid= -c --rt= -r --act= -a --nr= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --cntlid -c --rt -r --act -a --nr -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"rpmb")
-			opts+=" --cmd= -c --msgfile= -f --keyfile= -g --key= -k --msg= -d --address= -o --blocks= -b --target= -t"
-			valopts+=" --cmd -c --msgfile -f --keyfile -g --key -k --msg -d --address -o --blocks -b --target -t"
+			opts+=" --cmd= -c --msgfile= -f --keyfile= -g --key= -k --msg= -d --address= -o --blocks= -b --target= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --cmd -c --msgfile -f --keyfile -g --key -k --msg -d --address -o --blocks -b --target -t --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--msgfile|-f)
@@ -607,57 +1650,107 @@ nvme_list_opts () {
 					--keyfile|-g)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"lockdown")
-			opts+=" --ofi= -O --ifc= -f --prhbt= -p --scp= -s --uuid= -U"
-			valopts+=" --ofi -O --ifc -f --prhbt -p --scp -s --uuid -U"
+			opts+=" --ofi= -O --ifc= -f --prhbt= -p --scp= -s --uuid= -U --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --ofi -O --ifc -f --prhbt -p --scp -s --uuid -U --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"show-topology")
-			opts+=" --ranking= -r"
-			valopts+=" --ranking -r"
+			opts+=" --ranking= -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --ranking -r --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"io-mgmt-recv")
-			opts+=" --namespace-id= -n --mos= -s --mo= -m --data= -d --data-len= -l"
-			valopts+=" --namespace-id -n --mos -s --mo -m --data -d --data-len -l"
+			opts+=" --namespace-id= -n --mos= -s --mo= -m --data= -d --data-len= -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --mos -s --mo -m --data -d --data-len -l --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
 						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"io-mgmt-send")
-			opts+=" --namespace-id= -n --mos= -s --mo= -m --data= -d --data-len= -l"
-			valopts+=" --namespace-id -n --mos -s --mo -m --data -d --data-len -l"
+			opts+=" --namespace-id= -n --mos= -s --mo= -m --data= -d --data-len= -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --mos -s --mo -m --data -d --data-len -l --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"nvme-mi-recv")
-			opts+=" --opcode= -O --namespace-id= -n --data-len= -l --nmimt= -m --nmd0= -0 --nmd1= -1 --input-file= -i"
-			valopts+=" --opcode -O --namespace-id -n --data-len -l --nmimt -m --nmd0 -0 --nmd1 -1 --input-file -i"
+			opts+=" --opcode= -O --namespace-id= -n --data-len= -l --nmimt= -m --nmd0= -0 --nmd1= -1 --input-file= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --opcode -O --namespace-id -n --data-len -l --nmimt -m --nmd0 -0 --nmd1 -1 --input-file -i --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--input-file|-i)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"nvme-mi-send")
-			opts+=" --opcode= -O --namespace-id= -n --data-len= -l --nmimt= -m --nmd0= -0 --nmd1= -1 --input-file= -i"
-			valopts+=" --opcode -O --namespace-id -n --data-len -l --nmimt -m --nmd0 -0 --nmd1 -1 --input-file -i"
+			opts+=" --opcode= -O --namespace-id= -n --data-len= -l --nmimt= -m --nmd0= -0 --nmd1= -1 --input-file= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --opcode -O --namespace-id -n --data-len -l --nmimt -m --nmd0 -0 --nmd1 -1 --input-file -i --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--input-file|-i)
 						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
@@ -727,10 +1820,8 @@ plugin_amzn_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+		"id-ctrl")
+			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
@@ -743,15 +1834,19 @@ plugin_amzn_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"id-ctrl")
-			opts+=" --vendor-specific -V --raw-binary -b"
-			;;
 		"stats")
-			opts+=" --details -d --interval= -i"
-			valopts+=" --interval -i"
+			opts+=" --details -d --interval= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --interval -i --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -818,11 +1913,9 @@ plugin_dapustor_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
-			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+		"smart-log-add")
+			opts+=" --namespace-id= -n --raw-binary -b --json -j --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -833,13 +1926,6 @@ plugin_dapustor_opts () {
 						;;
 				esac
 			fi
-			;;
-	esac
-
-	case "$1" in
-		"smart-log-add")
-			opts+=" --namespace-id= -n --raw-binary -b --json -j"
-			valopts+=" --namespace-id -n"
 			;;
 	esac
 
@@ -906,10 +1992,8 @@ plugin_dell_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+		"id-ctrl")
+			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
@@ -921,12 +2005,6 @@ plugin_dell_opts () {
 						;;
 				esac
 			fi
-			;;
-	esac
-
-	case "$1" in
-		"id-ctrl")
-			opts+=" --vendor-specific -V --raw-binary -b"
 			;;
 	esac
 
@@ -993,9 +2071,7 @@ plugin_dera_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
+		"smart-log-add"|"stat")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -1010,7 +2086,6 @@ plugin_dera_opts () {
 			fi
 			;;
 	esac
-
 
 	opts+=" -h --help"
 
@@ -1075,11 +2150,9 @@ plugin_fdp_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
-			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+		"configs")
+			opts+=" --endgrp-id= -e --raw-binary -b --human-readable -H --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --endgrp-id -e --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -1091,40 +2164,103 @@ plugin_fdp_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"configs")
-			opts+=" --endgrp-id= -e --raw-binary -b --human-readable -H"
-			valopts+=" --endgrp-id -e"
-			;;
 		"usage")
-			opts+=" --endgrp-id= -e --raw-binary -b"
-			valopts+=" --endgrp-id -e"
+			opts+=" --endgrp-id= -e --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --endgrp-id -e --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"stats")
-			opts+=" --endgrp-id= -e --raw-binary -b"
-			valopts+=" --endgrp-id -e"
+			opts+=" --endgrp-id= -e --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --endgrp-id -e --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"events")
-			opts+=" --endgrp-id= -e --host-events -E --raw-binary -b"
-			valopts+=" --endgrp-id -e"
+			opts+=" --endgrp-id= -e --host-events -E --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --endgrp-id -e --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"status")
-			opts+=" --namespace-id= -n --raw-binary -b"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"update")
-			opts+=" --namespace-id= -n --pids= -p"
-			valopts+=" --namespace-id -n --pids -p"
+			opts+=" --namespace-id= -n --pids= -p --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --pids -p --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"set-events")
-			opts+=" --namespace-id= -n --placement-handle= -p --enable -e --save -s --event-types= -t"
-			valopts+=" --namespace-id -n --placement-handle -p --event-types -t"
+			opts+=" --namespace-id= -n --placement-handle= -p --enable -e --save -s --event-types= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --placement-handle -p --event-types -t --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"feature")
-			opts+=" --endgrp-id= -e --enable-conf-idx= -c --disable -d"
-			valopts+=" --endgrp-id -e --enable-conf-idx -c"
+			opts+=" --endgrp-id= -e --enable-conf-idx= -c --disable -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --endgrp-id -e --enable-conf-idx -c --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -1191,9 +2327,7 @@ plugin_huawei_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
+		"list")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -1207,11 +2341,19 @@ plugin_huawei_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
 		"id-ctrl")
-			opts+=" --vendor-specific -V --raw-binary -b"
+			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -1278,10 +2420,8 @@ plugin_ibm_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+		"crit-log")
+			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
@@ -1294,18 +2434,33 @@ plugin_ibm_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"crit-log")
-			opts+=" --raw-binary -b"
-			;;
 		"vpd")
-			opts+=" --raw-binary -b"
+			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"persist-event-log")
-			opts+=" --action= -a --log_len= -l --raw-binary -b"
-			valopts+=" --action -a --log_len -l"
+			opts+=" --action= -a --log_len= -l --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --action -a --log_len -l --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -1372,9 +2527,21 @@ plugin_innogrit_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
+		"get-eventlog")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
-		*)
+		"get-cdump")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -1389,7 +2556,6 @@ plugin_innogrit_opts () {
 			fi
 			;;
 	esac
-
 
 	opts+=" -h --help"
 
@@ -1454,9 +2620,7 @@ plugin_inspur_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
+		"nvme-vendor-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -1471,7 +2635,6 @@ plugin_inspur_opts () {
 			fi
 			;;
 	esac
-
 
 	opts+=" -h --help"
 
@@ -1536,10 +2699,8 @@ plugin_intel_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+		"id-ctrl")
+			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
@@ -1552,42 +2713,95 @@ plugin_intel_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"id-ctrl")
-			opts+=" --vendor-specific -V --raw-binary -b"
-			;;
 		"internal-log")
-			opts+=" --log= -l --region= -r --nlognum= -m --namespace-id= -n --output-file= -O --verbose-nlog -V"
-			valopts+=" --log -l --region -r --nlognum -m --namespace-id -n --output-file -O"
+			opts+=" --log= -l --region= -r --nlognum= -m --namespace-id= -n --output-file= -O --verbose-nlog -V --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --log -l --region -r --nlognum -m --namespace-id -n --output-file -O --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"lat-stats")
-			opts+=" --write -w --raw-binary -b --json -j"
+			opts+=" --write -w --raw-binary -b --json -j --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"set-bucket-thresholds")
-			opts+=" --write -w --bucket-thresholds= -t"
-			valopts+=" --bucket-thresholds -t"
+			opts+=" --write -w --bucket-thresholds= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --bucket-thresholds -t --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"lat-stats-tracking")
 			opts+=" --enable -e --disable -d"
 			;;
 		"market-name")
-			opts+=" --raw-binary -b"
+			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"smart-log-add")
-			opts+=" --namespace-id= -n --raw-binary -b --json -j"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --raw-binary -b --json -j --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"temp-stats")
-			opts+=" --raw-binary -b"
+			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -1654,10 +2868,8 @@ plugin_mangoboost_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+		"id-ctrl")
+			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
@@ -1669,12 +2881,6 @@ plugin_mangoboost_opts () {
 						;;
 				esac
 			fi
-			;;
-	esac
-
-	case "$1" in
-		"id-ctrl")
-			opts+=" --vendor-specific -V --raw-binary -b"
 			;;
 	esac
 
@@ -1741,9 +2947,21 @@ plugin_memblaze_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
+		"smart-log-add")
+			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
-		*)
+		"get-pm-status")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -1757,24 +2975,33 @@ plugin_memblaze_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"smart-log-add")
-			opts+=" --namespace-id= -n --raw-binary -b"
-			valopts+=" --namespace-id -n"
-			;;
 		"set-pm-status")
-			opts+=" --value= -V --save -s"
-			valopts+=" --value -V"
+			opts+=" --value= -V --save -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --value -V --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"select-download")
-			opts+=" --fw= -f --select= -s"
-			valopts+=" --fw -f --select -s"
+			opts+=" --fw= -f --select= -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --fw -f --select -s --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--fw|-f)
 						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
@@ -1783,28 +3010,133 @@ plugin_memblaze_opts () {
 			opts+=" --enable -e --disable -d"
 			;;
 		"lat-stats-print")
-			opts+=" --write -w"
+			opts+=" --write -w --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"lat-log")
-			opts+=" --param= -p"
-			valopts+=" --param -p"
+			opts+=" --param= -p --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --param -p --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"lat-log-print")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"clear-error-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"smart-log-add-x")
 			opts+=" --raw-binary -b"
 			;;
 		"lat-set-feature-x")
-			opts+=" --sel-perf-log= -s --set-commands-mask= -m --set-read-threshold= -r --set-write-threshold= -w --set-trim-threshold= -t"
-			valopts+=" --sel-perf-log -s --set-commands-mask -m --set-read-threshold -r --set-write-threshold -w --set-trim-threshold -t"
+			opts+=" --sel-perf-log= -s --set-commands-mask= -m --set-read-threshold= -r --set-write-threshold= -w --set-trim-threshold= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sel-perf-log -s --set-commands-mask -m --set-read-threshold -r --set-write-threshold -w --set-trim-threshold -t --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"lat-get-feature-x")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"lat-stats-print-x")
-			opts+=" --raw-binary -b"
+			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"lat-log-print-x")
-			opts+=" --raw-binary -b"
+			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"perf-stats-print-x")
-			opts+=" --duration= -d --raw-binary -b"
-			valopts+=" --duration -d"
+			opts+=" --duration= -d --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --duration -d --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -1871,9 +3203,52 @@ plugin_micron_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
+		"select-download")
+			opts+=" --fw= -f --select= -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --fw -f --select -s --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--fw|-f)
+						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
-		*)
+		"vs-temperature-stats")
+			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-pcie-stats")
+			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"clear-pcie-correctable-errors")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -1887,98 +3262,316 @@ plugin_micron_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"select-download")
-			opts+=" --fw= -f --select= -s"
-			valopts+=" --fw -f --select -s"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--fw|-f)
-						wantfiles=1
-						;;
-				esac
-			fi
-			;;
-		"vs-temperature-stats")
-			opts+=" --format= -f"
-			valopts+=" --format -f"
-			;;
-		"vs-pcie-stats")
-			opts+=" --format= -f"
-			valopts+=" --format -f"
-			;;
 		"vs-internal-log")
-			opts+=" --type= -t --package= -p --data_area= -d"
-			valopts+=" --type -t --package -p --data_area -d"
+			opts+=" --type= -t --package= -p --data_area= -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --type -t --package -p --data_area -d --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--package|-p)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"vs-telemetry-controller-option")
-			opts+=" --option= -O --select= -s"
-			valopts+=" --option -O --select -s"
+			opts+=" --option= -O --select= -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --option -O --select -s --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-nand-stats")
-			opts+=" --format= -f"
-			valopts+=" --format -f"
+			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-smart-ext-log")
-			opts+=" --format= -f"
-			valopts+=" --format -f"
+			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-drive-info")
-			opts+=" --format= -f"
-			valopts+=" --format -f"
+			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"plugin-version")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"cloud-SSD-plugin-version")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"log-page-directory")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-fw-activate-history")
-			opts+=" --format= -f"
-			valopts+=" --format -f"
+			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"latency-tracking")
-			opts+=" --option= -O --command= -c --threshold= -t"
-			valopts+=" --option -O --command -c --threshold -t"
+			opts+=" --option= -O --command= -c --threshold= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --option -O --command -c --threshold -t --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"latency-stats")
-			opts+=" --command= -c"
-			valopts+=" --command -c"
+			opts+=" --command= -c --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --command -c --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"latency-logs")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-smart-add-log")
-			opts+=" --format= -f"
-			valopts+=" --format -f"
+			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"clear-fw-activate-history")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-smbus-option")
-			opts+=" --option= -O --value= -V --save= -s"
-			valopts+=" --option -O --value -V --save -s"
+			opts+=" --option= -O --value= -V --save= -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --option -O --value -V --save -s --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"cloud-boot-SSD-version")
-			opts+=" --format= -f"
-			valopts+=" --format -f"
+			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-device-waf")
-			opts+=" --format= -f"
-			valopts+=" --format -f"
+			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-cloud-log")
-			opts+=" --format= -f"
-			valopts+=" --format -f"
+			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-work-load-log")
-			opts+=" --format= -f"
-			valopts+=" --format -f"
+			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-vendor-telemetry-log")
-			opts+=" --format= -f"
-			valopts+=" --format -f"
+			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"smart-log")
-			opts+=" --format= -f"
-			valopts+=" --format -f"
+			opts+=" --format= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --format -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"id-ctrl")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -2045,9 +3638,21 @@ plugin_netapp_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
+		"smdevices")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
-		*)
+		"ontapdevices")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -2062,7 +3667,6 @@ plugin_netapp_opts () {
 			fi
 			;;
 	esac
-
 
 	opts+=" -h --help"
 
@@ -2127,10 +3731,8 @@ plugin_nvidia_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+		"id-ctrl")
+			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
@@ -2142,12 +3744,6 @@ plugin_nvidia_opts () {
 						;;
 				esac
 			fi
-			;;
-	esac
-
-	case "$1" in
-		"id-ctrl")
-			opts+=" --vendor-specific -V --raw-binary -b"
 			;;
 	esac
 
@@ -2214,25 +3810,6 @@ plugin_sndk_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
-			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
-			;;
-	esac
-
-	case "$1" in
 		"vs-internal-log")
 			opts+=" --output-file= -O --transfer-size= -s --data-area= -d --type= -t --verbose -V --file-size= -f --offset= -e"
 			valopts+=" --output-file -O --transfer-size -s --data-area -d --type -t --file-size -f --offset -e"
@@ -2247,55 +3824,386 @@ plugin_sndk_opts () {
 				esac
 			fi
 			;;
+		"vs-nand-stats")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
 		"vs-smart-add-log")
-			opts+=" --interval= -i --log-page-version= -l --log-page-mask= -p --namespace-id= -n"
-			valopts+=" --interval -i --log-page-version -l --log-page-mask -p --namespace-id -n"
+			opts+=" --interval= -i --log-page-version= -l --log-page-mask= -p --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --interval -i --log-page-version -l --log-page-mask -p --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"clear-pcie-correctable-errors")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"get-drive-status")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"clear-assert-dump")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"drive-resize")
-			opts+=" --size= -s"
-			valopts+=" --size -s"
+			opts+=" --size= -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --size -s --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-fw-activate-history")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"clear-fw-activate-history")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-telemetry-controller-option")
-			opts+=" --disable -d --enable -e --status -s"
+			opts+=" --disable -d --enable -e --status -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-error-reason-identifier")
-			opts+=" --log-id= -i --file= -O"
-			valopts+=" --log-id -i --file -O"
+			opts+=" --log-id= -i --file= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --log-id -i --file -O --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--file|-O)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"log-page-directory")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"namespace-resize")
-			opts+=" --namespace-id= -n --op-option= -O"
-			valopts+=" --namespace-id -n --op-option -O"
+			opts+=" --namespace-id= -n --op-option= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --op-option -O --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-drive-info")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-temperature-stats")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"capabilities")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"cloud-SSD-plugin-version")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-pcie-stats")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"get-latency-monitor-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"get-error-recovery-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"get-dev-capabilities-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"get-unsupported-reqs-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"cloud-boot-SSD-version")
-			opts+=" --namespace-id= -n"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-cloud-log")
-			opts+=" --namespace-id= -n"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-hw-rev-log")
-			opts+=" --namespace-id= -n"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-device-waf")
-			opts+=" --namespace-id= -n"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"set-latency-monitor-feature")
-			opts+=" --active_bucket_timer_threshold= -t --active_threshold_a= -a --active_threshold_b= -b --active_threshold_c= -c --active_threshold_d= -d --active_latency_config= -f --active_latency_minimum_window= -w --debug_log_trigger_enable= -r --discard_debug_log= -l --latency_monitor_feature_enable= -e"
-			valopts+=" --active_bucket_timer_threshold -t --active_threshold_a -a --active_threshold_b -b --active_threshold_c -c --active_threshold_d -d --active_latency_config -f --active_latency_minimum_window -w --debug_log_trigger_enable -r --discard_debug_log -l --latency_monitor_feature_enable -e"
+			opts+=" --active_bucket_timer_threshold= -t --active_threshold_a= -a --active_threshold_b= -b --active_threshold_c= -c --active_threshold_d= -d --active_latency_config= -f --active_latency_minimum_window= -w --debug_log_trigger_enable= -r --discard_debug_log= -l --latency_monitor_feature_enable= -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --active_bucket_timer_threshold -t --active_threshold_a -a --active_threshold_b -b --active_threshold_c -c --active_threshold_d -d --active_latency_config -f --active_latency_minimum_window -w --debug_log_trigger_enable -r --discard_debug_log -l --latency_monitor_feature_enable -e --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"cu-smart-log")
-			opts+=" --uuid-index= -u"
-			valopts+=" --uuid-index -u"
+			opts+=" --uuid-index= -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --uuid-index -u --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -2362,9 +4270,35 @@ plugin_sfx_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
+		"smart-log-add")
+			opts+=" --namespace-id= -n --raw-binary -b --json -j --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
-		*)
+		"lat-stats")
+			opts+=" --write -w --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"get-bad-block")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -2378,34 +4312,65 @@ plugin_sfx_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"smart-log-add")
-			opts+=" --namespace-id= -n --raw-binary -b --json -j"
-			valopts+=" --namespace-id -n"
-			;;
-		"lat-stats")
-			opts+=" --write -w --raw-binary -b"
-			;;
 		"query-cap")
-			opts+=" --raw-binary -b"
+			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"change-cap")
-			opts+=" --cap= -c --cap-byte= -z --force -f"
-			valopts+=" --cap -c --cap-byte -z"
+			opts+=" --cap= -c --cap-byte= -z --force -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --cap -c --cap-byte -z --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"set-feature")
-			opts+=" --namespace-id= -n --feature-id= -f --value= -V --force -s"
-			valopts+=" --namespace-id -n --feature-id -f --value -V"
+			opts+=" --namespace-id= -n --feature-id= -f --value= -V --force -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --feature-id -f --value -V --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"get-feature")
-			opts+=" --namespace-id= -n --feature-id= -f"
-			valopts+=" --namespace-id -n --feature-id -f"
+			opts+=" --namespace-id= -n --feature-id= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --feature-id -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"dump-evtlog")
-			opts+=" --file= -f --namespace_id= -n --storage_medium= -s --parse -p --output= -O"
-			valopts+=" --file -f --namespace_id -n --storage_medium -s --output -O"
+			opts+=" --file= -f --namespace_id= -n --storage_medium= -s --parse -p --output= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --file -f --namespace_id -n --storage_medium -s --output -O --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--file|-f)
@@ -2414,15 +4379,42 @@ plugin_sfx_opts () {
 					--output|-O)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"expand-cap")
-			opts+=" --namespace_id= -n --namespace_size= -s --namespace_cap= -c --lbaf= -l --units= -u"
-			valopts+=" --namespace_id -n --namespace_size -s --namespace_cap -c --lbaf -l --units -u"
+			opts+=" --namespace_id= -n --namespace_size= -s --namespace_cap= -c --lbaf= -l --units= -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace_id -n --namespace_size -s --namespace_cap -c --lbaf -l --units -u --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"status")
-			opts+=" --json-print -j"
+			opts+=" --json-print -j --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -2489,9 +4481,7 @@ plugin_seagate_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
+		"vs-temperature-stats")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -2505,33 +4495,162 @@ plugin_seagate_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
+		"vs-log-page-sup")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-smart-add-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-pcie-stats")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
 		"clear-pcie-correctable-errors")
-			opts+=" --save -s"
+			opts+=" --save -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"get-host-tele")
-			opts+=" --namespace-id= -n --log_specific= -i --raw-binary -b"
-			valopts+=" --namespace-id -n --log_specific -i"
+			opts+=" --namespace-id= -n --log_specific= -i --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --log_specific -i --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"get-ctrl-tele")
-			opts+=" --namespace-id= -n --raw-binary -b"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-internal-log")
-			opts+=" --namespace-id= -n --dump-file= -f"
-			valopts+=" --namespace-id -n --dump-file -f"
+			opts+=" --namespace-id= -n --dump-file= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --dump-file -f --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--dump-file|-f)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-fw-activate-history")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"clear-fw-activate-history")
-			opts+=" --save -s"
+			opts+=" --save -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"plugin-version")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"cloud-SSD-plugin-version")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -2598,11 +4717,9 @@ plugin_shannon_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
-			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+		"smart-log-add")
+			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -2614,37 +4731,53 @@ plugin_shannon_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"smart-log-add")
-			opts+=" --namespace-id= -n --raw-binary -b"
-			valopts+=" --namespace-id -n"
-			;;
 		"set-additioal-feature")
-			opts+=" --namespace-id= -n --feature-id= -f --value= -V --data-len= -l --data= -d --save -s"
-			valopts+=" --namespace-id -n --feature-id -f --value -V --data-len -l --data -d"
+			opts+=" --namespace-id= -n --feature-id= -f --value= -V --data-len= -l --data= -d --save -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --feature-id -f --value -V --data-len -l --data -d --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"get-additional-feature")
-			opts+=" --namespace-id= -n --feature-id= -f --sel= -s --data-len= -l --raw-binary -b --cdw11= -c --human-readable -H"
-			valopts+=" --namespace-id -n --feature-id -f --sel -s --data-len -l --cdw11 -c"
+			opts+=" --namespace-id= -n --feature-id= -f --sel= -s --data-len= -l --raw-binary -b --cdw11= -c --human-readable -H --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --feature-id -f --sel -s --data-len -l --cdw11 -c --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
 						vals+=" 0 1 2 3"
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"id-ctrl")
-			opts+=" --vendor-specific -V --raw-binary -b"
+			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -2711,11 +4844,9 @@ plugin_ssstc_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
-			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+		"smart-log-add")
+			opts+=" --namespace-id= -n --raw-binary -b --json -j --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -2726,13 +4857,6 @@ plugin_ssstc_opts () {
 						;;
 				esac
 			fi
-			;;
-	esac
-
-	case "$1" in
-		"smart-log-add")
-			opts+=" --namespace-id= -n --raw-binary -b --json -j"
-			valopts+=" --namespace-id -n"
 			;;
 	esac
 
@@ -2799,13 +4923,14 @@ plugin_toshiba_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
-			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+		"vs-smart-add-log")
+			opts+=" --namespace-id= -n --output-file= -O --log= -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-file -O --log -l --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
+					--output-file|-O)
+						wantfiles=1
+						;;
 					--output-format|-o)
 						vals+=" normal json binary tabular"
 						;;
@@ -2815,27 +4940,33 @@ plugin_toshiba_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"vs-smart-add-log")
-			opts+=" --namespace-id= -n --output-file= -O --log= -l"
-			valopts+=" --namespace-id -n --output-file -O --log -l"
+		"vs-internal-log")
+			opts+=" --output-file= -O --prev-log -p --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-file -O --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
-		"vs-internal-log")
-			opts+=" --output-file= -O --prev-log -p"
-			valopts+=" --output-file -O"
+		"clear-pcie-correctable-errors")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
-					--output-file|-O)
-						wantfiles=1
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
@@ -2905,9 +5036,21 @@ plugin_transcend_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
+		"healthvalue")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
-		*)
+		"badblock")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -2922,7 +5065,6 @@ plugin_transcend_opts () {
 			fi
 			;;
 	esac
-
 
 	opts+=" -h --help"
 
@@ -3050,13 +5192,14 @@ plugin_virtium_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
-			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+		"save-smart-to-vtview-log")
+			opts+=" --run-time= -r --freq= -f --output-file= -O --test-name= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --run-time -r --freq -f --output-file -O --test-name -n --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
+					--output-file|-O)
+						wantfiles=1
+						;;
 					--output-format|-o)
 						vals+=" normal json binary tabular"
 						;;
@@ -3066,16 +5209,16 @@ plugin_virtium_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"save-smart-to-vtview-log")
-			opts+=" --run-time= -r --freq= -f --output-file= -O --test-name= -n"
-			valopts+=" --run-time -r --freq -f --output-file -O --test-name -n"
+		"show-identify")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
-					--output-file|-O)
-						wantfiles=1
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
@@ -3145,9 +5288,89 @@ plugin_wdc_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
+		"cap-diag")
+			opts+=" --output-file= -O --transfer-size= -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-file -O --transfer-size -s --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-file|-O)
+						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
-		*)
+		"drive-log")
+			opts+=" --output-file= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-file -O --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-file|-O)
+						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"get-crash-dump")
+			opts+=" --output-file= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-file -O --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-file|-O)
+						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"get-pfail-dump")
+			opts+=" --output-file= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-file -O --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-file|-O)
+						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"id-ctrl")
+			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"purge")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -3161,55 +5384,19 @@ plugin_wdc_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"cap-diag")
-			opts+=" --output-file= -O --transfer-size= -s"
-			valopts+=" --output-file -O --transfer-size -s"
+		"purge-monitor")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
-					--output-file|-O)
-						wantfiles=1
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
-			;;
-		"drive-log")
-			opts+=" --output-file= -O"
-			valopts+=" --output-file -O"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-				esac
-			fi
-			;;
-		"get-crash-dump")
-			opts+=" --output-file= -O"
-			valopts+=" --output-file -O"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-				esac
-			fi
-			;;
-		"get-pfail-dump")
-			opts+=" --output-file= -O"
-			valopts+=" --output-file -O"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-file|-O)
-						wantfiles=1
-						;;
-				esac
-			fi
-			;;
-		"id-ctrl")
-			opts+=" --vendor-specific -V --raw-binary -b"
 			;;
 		"vs-internal-log")
 			opts+=" --output-file= -O --transfer-size= -s --data-area= -d --type= -t --verbose -V --file-size= -f --offset= -e"
@@ -3225,77 +5412,420 @@ plugin_wdc_opts () {
 				esac
 			fi
 			;;
+		"vs-nand-stats")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
 		"vs-smart-add-log")
-			opts+=" --interval= -i --log-page-version= -l --log-page-mask= -p --namespace-id= -n"
-			valopts+=" --interval -i --log-page-version -l --log-page-mask -p --namespace-id -n"
+			opts+=" --interval= -i --log-page-version= -l --log-page-mask= -p --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --interval -i --log-page-version -l --log-page-mask -p --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"clear-pcie-correctable-errors")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"drive-essentials")
-			opts+=" --dir-name= -d"
-			valopts+=" --dir-name -d"
+			opts+=" --dir-name= -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --dir-name -d --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--dir-name|-d)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"get-drive-status")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"clear-assert-dump")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"drive-resize")
-			opts+=" --size= -s"
-			valopts+=" --size -s"
+			opts+=" --size= -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --size -s --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-fw-activate-history")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"clear-fw-activate-history")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"enc-get-log")
-			opts+=" --output-file= -O --transfer-size= -s --log-id= -l"
-			valopts+=" --output-file -O --transfer-size -s --log-id -l"
+			opts+=" --output-file= -O --transfer-size= -s --log-id= -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-file -O --transfer-size -s --log-id -l --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-O)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"vs-telemetry-controller-option")
-			opts+=" --disable -d --enable -e --status -s"
+			opts+=" --disable -d --enable -e --status -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-error-reason-identifier")
-			opts+=" --log-id= -i --file= -O"
-			valopts+=" --log-id -i --file -O"
+			opts+=" --log-id= -i --file= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --log-id -i --file -O --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--file|-O)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"log-page-directory")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"namespace-resize")
-			opts+=" --namespace-id= -n --op-option= -O"
-			valopts+=" --namespace-id -n --op-option -O"
+			opts+=" --namespace-id= -n --op-option= -O --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --op-option -O --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-drive-info")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-temperature-stats")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"capabilities")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"cloud-SSD-plugin-version")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-pcie-stats")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"get-latency-monitor-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"get-error-recovery-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"get-dev-capabilities-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"get-unsupported-reqs-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"cloud-boot-SSD-version")
-			opts+=" --namespace-id= -n"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-cloud-log")
-			opts+=" --namespace-id= -n"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-hw-rev-log")
-			opts+=" --namespace-id= -n"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"vs-device-waf")
-			opts+=" --namespace-id= -n"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"set-latency-monitor-feature")
-			opts+=" --active_bucket_timer_threshold= -t --active_threshold_a= -a --active_threshold_b= -b --active_threshold_c= -c --active_threshold_d= -d --active_latency_config= -f --active_latency_minimum_window= -w --debug_log_trigger_enable= -r --discard_debug_log= -l --latency_monitor_feature_enable= -e"
-			valopts+=" --active_bucket_timer_threshold -t --active_threshold_a -a --active_threshold_b -b --active_threshold_c -c --active_threshold_d -d --active_latency_config -f --active_latency_minimum_window -w --debug_log_trigger_enable -r --discard_debug_log -l --latency_monitor_feature_enable -e"
+			opts+=" --active_bucket_timer_threshold= -t --active_threshold_a= -a --active_threshold_b= -b --active_threshold_c= -c --active_threshold_d= -d --active_latency_config= -f --active_latency_minimum_window= -w --debug_log_trigger_enable= -r --discard_debug_log= -l --latency_monitor_feature_enable= -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --active_bucket_timer_threshold -t --active_threshold_a -a --active_threshold_b -b --active_threshold_c -c --active_threshold_d -d --active_latency_config -f --active_latency_minimum_window -w --debug_log_trigger_enable -r --discard_debug_log -l --latency_monitor_feature_enable -e --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"cu-smart-log")
-			opts+=" --uuid-index= -u"
-			valopts+=" --uuid-index -u"
+			opts+=" --uuid-index= -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --uuid-index -u --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -3362,11 +5892,9 @@ plugin_ymtc_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
-			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+		"smart-log-add")
+			opts+=" --namespace-id= -n --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -3377,13 +5905,6 @@ plugin_ymtc_opts () {
 						;;
 				esac
 			fi
-			;;
-	esac
-
-	case "$1" in
-		"smart-log-add")
-			opts+=" --namespace-id= -n --raw-binary -b"
-			valopts+=" --namespace-id -n"
 			;;
 	esac
 
@@ -3450,9 +5971,7 @@ plugin_zns_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
+		"list")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -3466,74 +5985,197 @@ plugin_zns_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
+		"id-ctrl")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
 		"id-ns")
-			opts+=" --namespace-id= -n --vendor-specific -V --human-readable -H"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --vendor-specific -V --human-readable -H --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"report-zones")
-			opts+=" --namespace-id= -n --start-lba= -s --descs= -d --state= -S --verbose -V --extended -e --partial -p"
-			valopts+=" --namespace-id -n --start-lba -s --descs -d --state -S"
+			opts+=" --namespace-id= -n --start-lba= -s --descs= -d --state= -S --verbose -V --extended -e --partial -p --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-lba -s --descs -d --state -S --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"reset-zone")
-			opts+=" --namespace-id= -n --start-lba= -s --select-all -a"
-			valopts+=" --namespace-id -n --start-lba -s"
+			opts+=" --namespace-id= -n --start-lba= -s --select-all -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-lba -s --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"close-zone")
-			opts+=" --namespace-id= -n --start-lba= -s --select-all -a"
-			valopts+=" --namespace-id -n --start-lba -s"
+			opts+=" --namespace-id= -n --start-lba= -s --select-all -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-lba -s --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"finish-zone")
-			opts+=" --namespace-id= -n --start-lba= -s --select-all -a"
-			valopts+=" --namespace-id -n --start-lba -s"
+			opts+=" --namespace-id= -n --start-lba= -s --select-all -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-lba -s --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"open-zone")
-			opts+=" --namespace-id= -n --start-lba= -s --zrwaa -r --select-all -a"
-			valopts+=" --namespace-id -n --start-lba -s"
+			opts+=" --namespace-id= -n --start-lba= -s --zrwaa -r --select-all -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-lba -s --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"offline-zone")
-			opts+=" --namespace-id= -n --start-lba= -s --select-all -a"
-			valopts+=" --namespace-id -n --start-lba -s"
+			opts+=" --namespace-id= -n --start-lba= -s --select-all -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-lba -s --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"set-zone-desc")
-			opts+=" --namespace-id= -n --start-lba= -s --zrwaa -r --data= -d"
-			valopts+=" --namespace-id -n --start-lba -s --data -d"
+			opts+=" --namespace-id= -n --start-lba= -s --zrwaa -r --data= -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-lba -s --data -d --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
 						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"zrwa-flush-zone")
-			opts+=" --namespace-id= -n --lba= -l"
-			valopts+=" --namespace-id -n --lba -l"
+			opts+=" --namespace-id= -n --lba= -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --lba -l --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"changed-zone-list")
-			opts+=" --namespace-id= -n --rae -r"
-			valopts+=" --namespace-id -n"
+			opts+=" --namespace-id= -n --rae -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"zone-mgmt-recv")
-			opts+=" --namespace-id= -n --start-lba= -s --zra= -z --zrasf= -S --partial -p --data-len= -l"
-			valopts+=" --namespace-id -n --start-lba -s --zra -z --zrasf -S --data-len -l"
+			opts+=" --namespace-id= -n --start-lba= -s --zra= -z --zrasf= -S --partial -p --data-len= -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-lba -s --zra -z --zrasf -S --data-len -l --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"zone-mgmt-send")
-			opts+=" --namespace-id= -n --start-lba= -s --zsaso -O --select-all -a --zsa= -z --data-len= -l --data= -d"
-			valopts+=" --namespace-id -n --start-lba -s --zsa -z --data-len -l --data -d"
+			opts+=" --namespace-id= -n --start-lba= -s --zsaso -O --select-all -a --zsa= -z --data-len= -l --data= -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --start-lba -s --zsa -z --data-len -l --data -d --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"zone-append")
-			opts+=" --namespace-id= -n --zslba= -s --data-size= -z --metadata-size= -y --data= -d --metadata= -M --limited-retry -l --force-unit-access -f --prinfo= -p --piremap -P --latency -t"
-			valopts+=" --namespace-id -n --zslba -s --data-size -z --metadata-size -y --data -d --metadata -M --prinfo -p"
+			opts+=" --namespace-id= -n --zslba= -s --data-size= -z --metadata-size= -y --data= -d --metadata= -M --limited-retry -l --force-unit-access -f --prinfo= -p --piremap -P --latency -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --zslba -s --data-size -z --metadata-size -y --data -d --metadata -M --prinfo -p --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
@@ -3541,6 +6183,12 @@ plugin_zns_opts () {
 						;;
 					--metadata|-M)
 						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
@@ -3610,11 +6258,9 @@ plugin_nbft_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
-			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+		"show")
+			opts+=" --subsystem -s --hfi -H --discovery -d --nbft-path= --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --nbft-path --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -3625,13 +6271,6 @@ plugin_nbft_opts () {
 						;;
 				esac
 			fi
-			;;
-	esac
-
-	case "$1" in
-		"show")
-			opts+=" --subsystem -s --hfi -H --discovery -d --nbft-path="
-			valopts+=" --nbft-path"
 			;;
 	esac
 
@@ -3698,11 +6337,9 @@ plugin_keys_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
-			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+		"gen-kxchap")
+			opts+=" --secret= -s --key-length= -l --nqn= -n --hmac= -m --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --secret -s --key-length -l --nqn -n --hmac -m --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -3714,40 +6351,103 @@ plugin_keys_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"gen-kxchap")
-			opts+=" --secret= -s --key-length= -l --nqn= -n --hmac= -m"
-			valopts+=" --secret -s --key-length -l --nqn -n --hmac -m"
-			;;
 		"check-kxchap")
-			opts+=" --keydata= -d --keyring= -k --keytype= -t --identity= -i"
-			valopts+=" --keydata -d --keyring -k --keytype -t --identity -i"
+			opts+=" --keydata= -d --keyring= -k --keytype= -t --identity= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --keydata -d --keyring -k --keytype -t --identity -i --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"gen-tls")
-			opts+=" --keyring= -k --keytype= -t --hostnqn= -n --subsysnqn= -c --secret= -s --keyfile= -f --hmac= -m --identity= -I --insert -i --compat -C"
-			valopts+=" --keyring -k --keytype -t --hostnqn -n --subsysnqn -c --secret -s --keyfile -f --hmac -m --identity -I"
+			opts+=" --keyring= -k --keytype= -t --hostnqn= -n --subsysnqn= -c --secret= -s --keyfile= -f --hmac= -m --identity= -I --insert -i --compat -C --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --keyring -k --keytype -t --hostnqn -n --subsysnqn -c --secret -s --keyfile -f --hmac -m --identity -I --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"check-tls")
-			opts+=" --keyring= -k --keytype= -t --hostnqn= -n --subsysnqn= -c --keydata= -d --identity= -I --compat -C"
-			valopts+=" --keyring -k --keytype -t --hostnqn -n --subsysnqn -c --keydata -d --identity -I"
+			opts+=" --keyring= -k --keytype= -t --hostnqn= -n --subsysnqn= -c --keydata= -d --identity= -I --compat -C --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --keyring -k --keytype -t --hostnqn -n --subsysnqn -c --keydata -d --identity -I --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"insert-tls")
-			opts+=" --keyring= -k --keytype= -t --hostnqn= -n --subsysnqn= -c --keydata= -d --keyfile= -f --identity= -I --compat -C"
-			valopts+=" --keyring -k --keytype -t --hostnqn -n --subsysnqn -c --keydata -d --keyfile -f --identity -I"
+			opts+=" --keyring= -k --keytype= -t --hostnqn= -n --subsysnqn= -c --keydata= -d --keyfile= -f --identity= -I --compat -C --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --keyring -k --keytype -t --hostnqn -n --subsysnqn -c --keydata -d --keyfile -f --identity -I --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"import")
-			opts+=" --keyring= -k --keyfile= -f --keydata= -d --identity= -i"
-			valopts+=" --keyring -k --keyfile -f --keydata -d --identity -i"
+			opts+=" --keyring= -k --keyfile= -f --keydata= -d --identity= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --keyring -k --keyfile -f --keydata -d --identity -i --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"export")
-			opts+=" --keyring= -k --keyfile= -f"
-			valopts+=" --keyring -k --keyfile -f"
+			opts+=" --keyring= -k --keyfile= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --keyring -k --keyfile -f --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"revoke")
-			opts+=" --keyring= -k --keytype= -t --identity= -i"
-			valopts+=" --keyring -k --keytype -t --identity -i"
+			opts+=" --keyring= -k --keytype= -t --identity= -i --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --keyring -k --keytype -t --identity -i --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -3814,11 +6514,9 @@ plugin_exclusion_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
-			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+		"create")
+			opts+=" --name= -N --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --name -N --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -3830,32 +6528,75 @@ plugin_exclusion_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"create")
-			opts+=" --name= -N"
-			valopts+=" --name -N"
-			;;
 		"delete")
-			opts+=" --name= -N"
-			valopts+=" --name -N"
+			opts+=" --name= -N --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --name -N --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"edit")
-			opts+=" --name= -N"
-			valopts+=" --name -N"
+			opts+=" --name= -N --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --name -N --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"list")
-			opts+=" --name= -N"
-			valopts+=" --name -N"
+			opts+=" --name= -N --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --name -N --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"add")
-			opts+=" --name= -N --entry= -e"
-			valopts+=" --name -N --entry -e"
+			opts+=" --name= -N --entry= -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --name -N --entry -e --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"remove")
-			opts+=" --name= -N"
-			valopts+=" --name -N"
+			opts+=" --name= -N --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --name -N --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -3922,9 +6663,7 @@ plugin_registry_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
+		"list")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -3938,20 +6677,47 @@ plugin_registry_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
 		"retrieve")
-			opts+=" --attr= -a"
-			valopts+=" --attr -a"
+			opts+=" --attr= -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --attr -a --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"update")
-			opts+=" --attr= -a --value= -V"
-			valopts+=" --attr -a --value -V"
+			opts+=" --attr= -a --value= -V --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --attr -a --value -V --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"delete")
-			opts+=" --attr= -a"
-			valopts+=" --attr -a"
+			opts+=" --attr= -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --attr -a --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -4018,25 +6784,6 @@ plugin_config_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
-			valopts+=" --output-format -o --timeout --output-format-version --set-options"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--output-format|-o)
-						vals+=" normal json binary tabular"
-						;;
-					--output-format-version)
-						vals+=" 1 2"
-						;;
-				esac
-			fi
-			;;
-	esac
-
-	case "$1" in
 		"validate")
 			opts+=" --config= -J"
 			valopts+=" --config -J"
@@ -4049,12 +6796,18 @@ plugin_config_opts () {
 			fi
 			;;
 		"show")
-			opts+=" --config= -J"
-			valopts+=" --config -J"
+			opts+=" --config= -J --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --config -J --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--config|-J)
 						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
@@ -4074,12 +6827,18 @@ plugin_config_opts () {
 			fi
 			;;
 		"create")
-			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --discovery --persistent --no-persistent --epcsd --no-epcsd --host-symname= --output="
-			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --host-symname --output"
+			opts+=" --transport= -t --nqn= -n --traddr= -a --trsvcid= -s --host-traddr= -w --host-iface= -f --hostnqn= -q --hostid= -I --kxchap-secret= -S --kxchap-ctrl-secret= -C --keyring= --tls-key= --tls-key-identity= --nr-io-queues= -i --nr-write-queues= -W --nr-poll-queues= -P --queue-size= -Q --keep-alive-tmo= -k --reconnect-delay= -c --ctrl-loss-tmo= -l --fast_io_fail_tmo= -F --tos= -T --tls_key= --duplicate-connect -D --disable-sqflow --hdr-digest -g --data-digest -G --tls --concat --discovery --persistent --no-persistent --epcsd --no-epcsd --host-symname= --output= --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --transport -t --nqn -n --traddr -a --trsvcid -s --host-traddr -w --host-iface -f --hostnqn -q --hostid -I --kxchap-secret -S --kxchap-ctrl-secret -C --keyring --tls-key --tls-key-identity --nr-io-queues -i --nr-write-queues -W --nr-poll-queues -P --queue-size -Q --keep-alive-tmo -k --reconnect-delay -c --ctrl-loss-tmo -l --fast_io_fail_tmo -F --tos -T --tls_key --host-symname --output --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output)
 						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
@@ -4149,13 +6908,14 @@ plugin_feat_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
-			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+		"arbitration")
+			opts+=" --ab= -a --lpw= -l --mpw= -m --hpw= -H --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --ab -a --lpw -l --mpw -m --hpw -H --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
+					--sel|-S)
+						vals+=" 0 1 2 3"
+						;;
 					--output-format|-o)
 						vals+=" normal json binary tabular"
 						;;
@@ -4165,100 +6925,128 @@ plugin_feat_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"arbitration")
-			opts+=" --ab= -a --lpw= -l --mpw= -m --hpw= -H --save -s --sel= -S"
-			valopts+=" --ab -a --lpw -l --mpw -m --hpw -H --sel -S"
+		"power-mgmt")
+			opts+=" --ps= -p --wh= -w --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --ps -p --wh -w --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
 						;;
-				esac
-			fi
-			;;
-		"power-mgmt")
-			opts+=" --ps= -p --wh= -w --save -s --sel= -S"
-			valopts+=" --ps -p --wh -w --sel -S"
-			if [[ $completing_value -eq 1 ]]; then
-				case $opt in
-					--sel|-S)
-						vals+=" 0 1 2 3"
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"temp-thresh")
-			opts+=" --tmpth= -T --tmpsel= -m --thsel= -H --tmpthh= -M --save -s --sel= -S"
-			valopts+=" --tmpth -T --tmpsel -m --thsel -H --tmpthh -M --sel -S"
+			opts+=" --tmpth= -T --tmpsel= -m --thsel= -H --tmpthh= -M --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --tmpth -T --tmpsel -m --thsel -H --tmpthh -M --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"volatile-wc")
-			opts+=" --wce -w --save -s --sel= -S"
-			valopts+=" --sel -S"
+			opts+=" --wce -w --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"num-queues")
-			opts+=" --nsqr= -n --ncqr= -c --save -s --sel= -S"
-			valopts+=" --nsqr -n --ncqr -c --sel -S"
+			opts+=" --nsqr= -n --ncqr= -c --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --nsqr -n --ncqr -c --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"timestamp")
-			opts+=" --tstmp= -t --save -s --sel= -S"
-			valopts+=" --tstmp -t --sel -S"
+			opts+=" --tstmp= -t --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --tstmp -t --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"hctm")
-			opts+=" --tmt1= -t --tmt2= -T --save -s --sel= -S"
-			valopts+=" --tmt1 -t --tmt2 -T --sel -S"
+			opts+=" --tmt1= -t --tmt2= -T --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --tmt1 -t --tmt2 -T --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"host-behavior-support")
-			opts+=" --acre= -a --etdas= -e --lbafee= -l --hdisns= -H --cdfe= -c --save -s --sel= -S"
-			valopts+=" --acre -a --etdas -e --lbafee -l --hdisns -H --cdfe -c --sel -S"
+			opts+=" --acre= -a --etdas= -e --lbafee= -l --hdisns= -H --cdfe= -c --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --acre -a --etdas -e --lbafee -l --hdisns -H --cdfe -c --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"perf-characteristics")
-			opts+=" --namespace-id= -n --attri= -a --rvspa -r --r4karl= -R --paid= -p --attrl= -A --vs-data= -V --save -s --sel= -S"
-			valopts+=" --namespace-id -n --attri -a --r4karl -R --paid -p --attrl -A --vs-data -V --sel -S"
+			opts+=" --namespace-id= -n --attri= -a --rvspa -r --r4karl= -R --paid= -p --attrl= -A --vs-data= -V --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --attri -a --r4karl -R --paid -p --attrl -A --vs-data -V --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--vs-data|-V)
@@ -4267,49 +7055,79 @@ plugin_feat_opts () {
 					--sel|-S)
 						vals+=" 0 1 2 3"
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"power-limit")
-			opts+=" --plv= -p --pls= -l --uuid-index= -u --save -s --sel= -S"
-			valopts+=" --plv -p --pls -l --uuid-index -u --sel -S"
+			opts+=" --plv= -p --pls= -l --uuid-index= -u --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --plv -p --pls -l --uuid-index -u --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"power-thresh")
-			opts+=" --ptv= -p --pts= -t --pmts= -m --ept= -e --uuid-index= -u --save -s --sel= -S"
-			valopts+=" --ptv -p --pts -t --pmts -m --ept -e --uuid-index -u --sel -S"
+			opts+=" --ptv= -p --pts= -t --pmts= -m --ept= -e --uuid-index= -u --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --ptv -p --pts -t --pmts -m --ept -e --uuid-index -u --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"power-meas")
-			opts+=" --act= --pmts= --smt= --uuid-index= -u --save -s --sel= -S"
-			valopts+=" --act --pmts --smt --uuid-index -u --sel -S"
+			opts+=" --act= --pmts= --smt= --uuid-index= -u --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --act --pmts --smt --uuid-index -u --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"err-recovery")
-			opts+=" --nsid= -n --tler= -t --dulbe -d --save -s --sel= -S"
-			valopts+=" --nsid -n --tler -t --sel -S"
+			opts+=" --nsid= -n --tler= -t --dulbe -d --save -s --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --nsid -n --tler -t --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
@@ -4379,11 +7197,9 @@ plugin_lm_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
-			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
-			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+		"create-cdq")
+			opts+=" --size= -s --cntlid= -c --queue-type= -q --consent --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --size -s --cntlid -c --queue-type -q --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-format|-o)
@@ -4395,31 +7211,40 @@ plugin_lm_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"create-cdq")
-			opts+=" --size= -s --cntlid= -c --queue-type= -q --consent"
-			valopts+=" --size -s --cntlid -c --queue-type -q"
-			;;
 		"delete-cdq")
-			opts+=" --cdqid= -C"
-			valopts+=" --cdqid -C"
+			opts+=" --cdqid= -C --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --cdqid -C --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"track-send")
-			opts+=" --sel= -s --mos= -m --cdqid= -C --start --stop"
-			valopts+=" --sel -s --mos -m --cdqid -C"
+			opts+=" --sel= -s --mos= -m --cdqid= -C --start --stop --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sel -s --mos -m --cdqid -C --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
 						vals+=" 0 1 2 3"
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"migration-send")
-			opts+=" --sel= -s --cntlid= -c --stype= -t --dudmq -d --seq-ind= -S --csuuidi= -U --csvi= -V --uidx= -u --offset= -O --numd= -n --input-file= -f"
-			valopts+=" --sel -s --cntlid -c --stype -t --seq-ind -S --csuuidi -U --csvi -V --uidx -u --offset -O --numd -n --input-file -f"
+			opts+=" --sel= -s --cntlid= -c --stype= -t --dudmq -d --seq-ind= -S --csuuidi= -U --csvi= -V --uidx= -u --offset= -O --numd= -n --input-file= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sel -s --cntlid -c --stype -t --seq-ind -S --csuuidi -U --csvi -V --uidx -u --offset -O --numd -n --input-file -f --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
@@ -4428,12 +7253,18 @@ plugin_lm_opts () {
 					--input-file|-f)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"migration-recv")
-			opts+=" --sel= -s --cntlid= -c --csuuidi= -U --csvi= -V --uidx= -u --offset= -O --numd= -n --output-file= -f --human-readable -H"
-			valopts+=" --sel -s --cntlid -c --csuuidi -U --csvi -V --uidx -u --offset -O --numd -n --output-file -f"
+			opts+=" --sel= -s --cntlid= -c --csuuidi= -U --csvi= -V --uidx= -u --offset= -O --numd= -n --output-file= -f --human-readable -H --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sel -s --cntlid -c --csuuidi -U --csvi -V --uidx -u --offset -O --numd -n --output-file -f --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
@@ -4442,16 +7273,42 @@ plugin_lm_opts () {
 					--output-file|-f)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"set-cdq")
-			opts+=" --cdqid= -C --hp= -H --tpt= -T"
-			valopts+=" --cdqid -C --hp -H --tpt -T"
+			opts+=" --cdqid= -C --hp= -H --tpt= -T --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --cdqid -C --hp -H --tpt -T --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"get-cdq")
-			opts+=" --cdqid= -C"
-			valopts+=" --cdqid -C"
+			opts+=" --cdqid= -C --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --cdqid -C --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
@@ -4518,9 +7375,7 @@ plugin_ocp_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
-			;;
-		*)
+		"smart-add-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -4534,191 +7389,450 @@ plugin_ocp_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
+		"latency-monitor-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
 		"set-latency-monitor-feature")
-			opts+=" --active_bucket_timer_threshold= -t --active_threshold_a= -a --active_threshold_b= -b --active_threshold_c= -c --active_threshold_d= -d --active_latency_config= -f --active_latency_minimum_window= -w --debug_log_trigger_enable= -r --discard_debug_log= -l --latency_monitor_feature_enable= -e"
-			valopts+=" --active_bucket_timer_threshold -t --active_threshold_a -a --active_threshold_b -b --active_threshold_c -c --active_threshold_d -d --active_latency_config -f --active_latency_minimum_window -w --debug_log_trigger_enable -r --discard_debug_log -l --latency_monitor_feature_enable -e"
+			opts+=" --active_bucket_timer_threshold= -t --active_threshold_a= -a --active_threshold_b= -b --active_threshold_c= -c --active_threshold_d= -d --active_latency_config= -f --active_latency_minimum_window= -w --debug_log_trigger_enable= -r --discard_debug_log= -l --latency_monitor_feature_enable= -e --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --active_bucket_timer_threshold -t --active_threshold_a -a --active_threshold_b -b --active_threshold_c -c --active_threshold_d -d --active_latency_config -f --active_latency_minimum_window -w --debug_log_trigger_enable -r --discard_debug_log -l --latency_monitor_feature_enable -e --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"internal-log")
-			opts+=" --telemetry-log= -l --string-log= -s --output-file= -f --data-area= -a --telemetry-type= -t"
-			valopts+=" --telemetry-log -l --string-log -s --output-file -f --data-area -a --telemetry-type -t"
+			opts+=" --telemetry-log= -l --string-log= -s --output-file= -f --data-area= -a --telemetry-type= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --telemetry-log -l --string-log -s --output-file -f --data-area -a --telemetry-type -t --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-f)
 						wantfiles=1
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"clear-fw-activate-history")
-			opts+=" --no-uuid -n"
+			opts+=" --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"eol-plp-failure-mode")
-			opts+=" --mode= -m --save -s --sel= -S --no-uuid -n"
-			valopts+=" --mode -m --sel -S"
+			opts+=" --mode= -m --save -s --sel= -S --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --mode -m --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"clear-pcie-correctable-errors")
-			opts+=" --no-uuid -n"
+			opts+=" --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"fw-activate-history")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"unsupported-reqs-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"error-recovery-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"device-capability-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"set-dssd-power-state-feature")
-			opts+=" --power-state= -p --save -s --no-uuid -n"
-			valopts+=" --power-state -p"
+			opts+=" --power-state= -p --save -s --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --power-state -p --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"get-dssd-power-state-feature")
-			opts+=" --sel= -S --all -a --no-uuid -n"
-			valopts+=" --sel -S"
+			opts+=" --sel= -S --all -a --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"set-plp-health-check-interval")
-			opts+=" --plp_health_interval= -p --save -s --no-uuid -n"
-			valopts+=" --plp_health_interval -p"
+			opts+=" --plp_health_interval= -p --save -s --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --plp_health_interval -p --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"get-plp-health-check-interval")
-			opts+=" --sel= -S"
-			valopts+=" --sel -S"
+			opts+=" --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"telemetry-string-log")
-			opts+=" --output-file= -f"
-			valopts+=" --output-file -f"
+			opts+=" --output-file= -f --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-file -f --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--output-file|-f)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"set-telemetry-profile")
-			opts+=" --telemetry-profile-select= -t"
-			valopts+=" --telemetry-profile-select -t"
+			opts+=" --telemetry-profile-select= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --telemetry-profile-select -t --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"set-dssd-async-event-config")
-			opts+=" --enable-panic-notices -e --save -s"
+			opts+=" --enable-panic-notices -e --save -s --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"get-dssd-async-event-config")
-			opts+=" --sel= -S"
-			valopts+=" --sel -S"
+			opts+=" --sel= -S --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sel -S --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-S)
 						vals+=" 0 1 2 3"
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"tcg-configuration-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"get-error-injection")
-			opts+=" --sel= -s --no-uuid -n --all-ns -a"
-			valopts+=" --sel -s"
+			opts+=" --sel= -s --no-uuid -n --all-ns -a --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sel -s --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"set-error-injection")
-			opts+=" --data= -d --number= -n --no-uuid -N --all-ns -a --type= -t --nrtdp= -r"
-			valopts+=" --data -d --number -n --type -t --nrtdp -r"
+			opts+=" --data= -d --number= -n --no-uuid -N --all-ns -a --type= -t --nrtdp= -r --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --data -d --number -n --type -t --nrtdp -r --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--data|-d)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"get-enable-ieee1667-silo")
-			opts+=" --sel= -s --no-uuid -n"
-			valopts+=" --sel -s"
+			opts+=" --sel= -s --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sel -s --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"set-enable-ieee1667-silo")
-			opts+=" --enable -e --save -s --no-uuid -n"
+			opts+=" --enable -e --save -s --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"hardware-component-log")
-			opts+=" --comp-id= -i --list -l"
-			valopts+=" --comp-id -i"
+			opts+=" --comp-id= -i --list -l --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --comp-id -i --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--comp-id|-i)
 						vals+=" asic nand dram pmic pcb cap reg case sn country hw-rev born-on-date vendor"
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"get-latency-monitor")
-			opts+=" --sel= -s --namespace-id= -n --no-uuid -u"
-			valopts+=" --sel -s --namespace-id -n"
+			opts+=" --sel= -s --namespace-id= -n --no-uuid -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sel -s --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"get-clear-pcie-correctable-errors")
-			opts+=" --sel= -s --namespace-id= -n --no-uuid -u"
-			valopts+=" --sel -s --namespace-id -n"
+			opts+=" --sel= -s --namespace-id= -n --no-uuid -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sel -s --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
 			;;
 		"get-telemetry-profile")
-			opts+=" --sel= -s --namespace-id= -n --no-uuid -u"
-			valopts+=" --sel -s --namespace-id -n"
+			opts+=" --sel= -s --namespace-id= -n --no-uuid -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sel -s --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
 						vals+=" 0 1 2 3"
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"persistent-event-log")
-			opts+=" --action= -a --log_len= -l --raw-binary -b"
-			valopts+=" --action -a --log_len -l"
+			opts+=" --action= -a --log_len= -l --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --action -a --log_len -l --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"get-idle-wakeup-time")
-			opts+=" --sel= -s --namespace-id= -n --no-uuid -u"
-			valopts+=" --sel -s --namespace-id -n"
+			opts+=" --sel= -s --namespace-id= -n --no-uuid -u --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --sel -s --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--sel|-s)
 						vals+=" 0 1 2 3"
+						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
 						;;
 				esac
 			fi
@@ -4868,9 +7982,35 @@ plugin_solidigm_opts () {
 	local wantfiles=0
 	_nvme_detect_value_completion
 	case "$1" in
-		"version"|"help")
+		"id-ctrl")
+			opts+=" --vendor-specific -V --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
-		*)
+		"smart-log-add")
+			opts+=" --namespace-id= -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --namespace-id -n --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-smart-add-log")
 			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
 			valopts+=" --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
@@ -4884,37 +8024,68 @@ plugin_solidigm_opts () {
 				esac
 			fi
 			;;
-	esac
-
-	case "$1" in
-		"id-ctrl")
-			opts+=" --vendor-specific -V --raw-binary -b"
-			;;
-		"smart-log-add")
-			opts+=" --namespace-id= -n"
-			valopts+=" --namespace-id -n"
-			;;
 		"vs-internal-log")
-			opts+=" --type= -t --dir-name= -d"
-			valopts+=" --type -t --dir-name -d"
+			opts+=" --type= -t --dir-name= -d --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --type -t --dir-name -d --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--dir-name|-d)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"garbage-collect-log")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"market-log")
-			opts+=" --raw-binary -b"
+			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"latency-tracking-log")
-			opts+=" --enable -e --disable -d --read -r --write -w --type= -t"
-			valopts+=" --type -t"
+			opts+=" --enable -e --disable -d --read -r --write -w --type= -t --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --type -t --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"parse-telemetry-log")
-			opts+=" --host-generate= -g --controller-init -c --data-area= -d --config-file= -j --source-file= -s --jq-filter= -q"
-			valopts+=" --host-generate -g --data-area -d --config-file -j --source-file -s --jq-filter -q"
+			opts+=" --host-generate= -g --controller-init -c --data-area= -d --config-file= -j --source-file= -s --jq-filter= -q --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --host-generate -g --data-area -d --config-file -j --source-file -s --jq-filter -q --output-format -o --timeout --output-format-version --set-options"
 			if [[ $completing_value -eq 1 ]]; then
 				case $opt in
 					--config-file|-j)
@@ -4923,21 +8094,126 @@ plugin_solidigm_opts () {
 					--source-file|-s)
 						wantfiles=1
 						;;
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
 				esac
 			fi
 			;;
 		"clear-pcie-correctable-errors")
-			opts+=" --no-uuid -n"
+			opts+=" --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"clear-fw-activate-history")
-			opts+=" --no-uuid -n"
+			opts+=" --no-uuid -n --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-fw-activate-history")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"log-page-directory")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"temp-stats")
-			opts+=" --raw-binary -b"
+			opts+=" --raw-binary -b --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"vs-drive-info")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
+			;;
+		"cloud-SSDplugin-version")
+			opts+=" --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 		"workload-tracker")
-			opts+=" --uuid-index= -U --enable -e --disable -d --sample-time= -s --type= -t --run-time= -r --flush-freq= -f --wall-clock -w --trigger-field= -T --trigger-threshold= -V --trigger-on-delta -D --trigger-on-latency -L"
-			valopts+=" --uuid-index -U --sample-time -s --type -t --run-time -r --flush-freq -f --trigger-field -T --trigger-threshold -V"
+			opts+=" --uuid-index= -U --enable -e --disable -d --sample-time= -s --type= -t --run-time= -r --flush-freq= -f --wall-clock -w --trigger-field= -T --trigger-threshold= -V --trigger-on-delta -D --trigger-on-latency -L --verbose -v --quiet --output-format= -o --timeout= --dry-run --no-retries --no-ioctl-probing --output-format-version= --set-options="
+			valopts+=" --uuid-index -U --sample-time -s --type -t --run-time -r --flush-freq -f --trigger-field -T --trigger-threshold -V --output-format -o --timeout --output-format-version --set-options"
+			if [[ $completing_value -eq 1 ]]; then
+				case $opt in
+					--output-format|-o)
+						vals+=" normal json binary tabular"
+						;;
+					--output-format-version)
+						vals+=" 1 2"
+						;;
+				esac
+			fi
 			;;
 	esac
 
