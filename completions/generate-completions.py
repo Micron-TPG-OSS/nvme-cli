@@ -195,6 +195,11 @@ BASH_OPTS_FINALIZE = '''\
 # of a preceding value-taking option (so '--output-file /dev/nvme0' does not
 # count the path as the device). {device_argpos} is the position at which the
 # device is expected (2 for builtins, 3 for plugin sub-commands).
+#
+# The prev-word check only catches the '--opt val' form; a value reached through
+# a split bare '=' word ('--opt = val') is over-counted as positional. That is
+# harmless: injection is gated on has_device, not the count, so over-counting can
+# only offer the device one word early, never wrongly suppress it.
 BASH_DEVICE_SCAN = '''\
 \tif [[ $completing_value -eq 0 ]]; then
 \t\tlocal nonopt_args=0 has_device=0 i
@@ -306,13 +311,15 @@ def bash_value_clause(opt):
 def bash_option_body(opts):
     """The 'opts+=', 'valopts+=' and value-switch lines shared by the global and
     per-command clauses, indented three tabs. Returns '' when there is nothing
-    to emit."""
+    to emit (no option words and no value clauses)."""
     words = bash_option_words(opts)
+    clauses = "".join(bash_value_clause(o) for o in opts)
+    if not words and not clauses:
+        return ""
     out = f'\t\t\topts+="{words}"\n'
     valwords = bash_valopt_words(opts)
     if valwords:
         out += f'\t\t\tvalopts+="{valwords}"\n'
-    clauses = "".join(bash_value_clause(o) for o in opts)
     if clauses:
         out += ('\t\t\tif [[ $completing_value -eq 1 ]]; then\n\t\t\t\tcase $opt in\n'
                 + clauses
@@ -345,14 +352,12 @@ def emit_bash_plugin(out, commands, func, device_argpos):
         if not has_options(c):
             continue
         locals_ = list(command_options(c, "local"))
+        clause_body = bash_option_body(locals_)
         # Only globals? The shared '*)' clause already covers it; no clause needed.
-        if not bash_option_words(locals_) and not any(
-                bash_value_clause(o) for o in locals_):
+        if not clause_body:
             continue
         label = "|".join(f'"{n}"' for n in cmd_names(c))
-        body += f'\t\t{label})\n'
-        body += bash_option_body(locals_)
-        body += '\t\t\t;;\n'
+        body += f'\t\t{label})\n{clause_body}\t\t\t;;\n'
     if body:
         out.write('\tcase "$1" in\n')
         out.write(body)
