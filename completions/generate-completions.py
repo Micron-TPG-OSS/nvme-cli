@@ -202,10 +202,13 @@ BASH_DEVICE_SCAN = '''\
 \t\tfor (( i=0; i < ${{#words[@]}}-1; i++ )); do
 \t\t\t[[ ${{words[i]}} == -* || ${{words[i]}} == "=" ]] && continue
 \t\t\t# The value-taking option this word might belong to: the previous word,
-\t\t\t# or the word before a split '=' ('--opt = val').
-\t\t\tprevopt="${{words[i-1]}}"
-\t\t\t[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${{words[i-2]}}"
-\t\t\t[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+\t\t\t# or the word before a split '=' ('--opt = val'). Guard the index so a
+\t\t\t# negative subscript is never evaluated (an error on bash < 4.3).
+\t\t\tif [[ $i -gt 0 ]]; then
+\t\t\t\tprevopt="${{words[i-1]}}"
+\t\t\t\t[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${{words[i-2]}}"
+\t\t\t\t[[ " $valopts " == *" $prevopt "* ]] && continue
+\t\t\tfi
 \t\t\t(( nonopt_args += 1 ))
 \t\t\t[[ ${{words[i]}} == /dev/nvme* ]] && has_device=1
 \t\tdone

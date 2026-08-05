@@ -674,10 +674,13 @@ nvme_list_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -760,10 +763,13 @@ plugin_amzn_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -843,10 +849,13 @@ plugin_dapustor_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -925,10 +934,13 @@ plugin_dell_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -1002,10 +1014,13 @@ plugin_dera_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -1113,10 +1128,13 @@ plugin_fdp_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -1195,10 +1213,13 @@ plugin_huawei_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -1284,10 +1305,13 @@ plugin_ibm_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -1361,10 +1385,13 @@ plugin_innogrit_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -1438,10 +1465,13 @@ plugin_inspur_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -1551,10 +1581,13 @@ plugin_intel_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -1633,10 +1666,13 @@ plugin_mangoboost_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -1758,10 +1794,13 @@ plugin_memblaze_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -1927,10 +1966,13 @@ plugin_micron_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -2004,10 +2046,13 @@ plugin_netapp_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -2086,10 +2131,13 @@ plugin_nvidia_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -2229,10 +2277,13 @@ plugin_sndk_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -2351,10 +2402,13 @@ plugin_sfx_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -2455,10 +2509,13 @@ plugin_seagate_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -2563,10 +2620,13 @@ plugin_shannon_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -2646,10 +2706,13 @@ plugin_ssstc_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -2747,10 +2810,13 @@ plugin_toshiba_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -2824,10 +2890,13 @@ plugin_transcend_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -2882,10 +2951,13 @@ plugin_utils_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -2972,10 +3044,13 @@ plugin_virtium_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -3184,10 +3259,13 @@ plugin_wdc_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -3267,10 +3345,13 @@ plugin_ymtc_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -3422,10 +3503,13 @@ plugin_zns_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -3505,10 +3589,13 @@ plugin_nbft_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -3616,10 +3703,13 @@ plugin_keys_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -3719,10 +3809,13 @@ plugin_exclusion_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -3810,10 +3903,13 @@ plugin_registry_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -3936,10 +4032,13 @@ plugin_config_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -4161,10 +4260,13 @@ plugin_feat_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -4295,10 +4397,13 @@ plugin_lm_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -4560,10 +4665,13 @@ plugin_ocp_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -4635,10 +4743,13 @@ plugin_sed_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
@@ -4766,10 +4877,13 @@ plugin_solidigm_opts () {
 		for (( i=0; i < ${#words[@]}-1; i++ )); do
 			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
 			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val').
-			prevopt="${words[i-1]}"
-			[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-			[[ $i -gt 0 ]] && [[ " $valopts " == *" $prevopt "* ]] && continue
+			# or the word before a split '=' ('--opt = val'). Guard the index so a
+			# negative subscript is never evaluated (an error on bash < 4.3).
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				[[ " $valopts " == *" $prevopt "* ]] && continue
+			fi
 			(( nonopt_args += 1 ))
 			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 		done
