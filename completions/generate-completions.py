@@ -65,6 +65,13 @@ VALUE_HINTS = {
     "sel": ["0", "1", "2", "3"],
 }
 
+# Top-level commands the dispatcher recognises but that dump-command-metadata
+# does not report: help and version are matched as literal strings in the C
+# dispatcher, not registered in any command table, so they never appear in the
+# metadata. Adding them there would mean hardcoding the same two names in the C
+# source, so we list them here instead.
+BUILTIN_COMMANDS = ["help", "version"]
+
 
 def command_options(cmd, scope="all"):
     """Yield options, optionally filtered by scope ("all", "global", "local").
@@ -398,7 +405,8 @@ def generate_bash(model, out):
         out.write(f'\t\t[{p["name"]}]="{bash_func_name(p["name"])}"\n')
     out.write("\t)\n\n\tlocal -a _cmds=(\n")
     cmds = ([n for c in builtin_commands(model) for n in cmd_names(c)] +
-            [p["name"] for p in plugins(model)])
+            [p["name"] for p in plugins(model)] +
+            BUILTIN_COMMANDS)
     out.write(wrap_words(cmds, "\t\t"))
     out.write("\n\t)\n\n"
               "\tlocal func subcmd\n"

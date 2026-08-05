@@ -286,6 +286,18 @@ expect_match \
     "nvme fw-activate --" \
     "--action"
 
+# help and version are dispatcher built-ins (not in the metadata) but are still
+# completable top-level commands.
+expect_match \
+    "top-level list includes the help built-in" \
+    "nvme he" \
+    "help"
+
+expect_match \
+    "top-level list includes the version built-in" \
+    "nvme ver" \
+    "version"
+
 # ---------------------------------------------------------------------------
 # Plugin sub-command dispatch
 # ---------------------------------------------------------------------------

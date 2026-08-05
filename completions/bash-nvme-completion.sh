@@ -5101,7 +5101,8 @@ _nvme_subcmds () {
 		nvme-mi-recv nvme-mi-send amzn dapustor dell dera fdp huawei ibm
 		innogrit inspur intel mangoboost memblaze micron netapp nvidia sndk
 		sfx seagate shannon ssstc toshiba transcend utils virtium wdc ymtc zns
-		nbft keys exclusion registry config feat lm ocp sed solidigm
+		nbft keys exclusion registry config feat lm ocp sed solidigm help
+		version
 	)
 
 	local func subcmd
