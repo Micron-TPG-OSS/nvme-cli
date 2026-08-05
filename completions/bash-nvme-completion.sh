@@ -54,6 +54,57 @@ _nvme_detect_value_completion() {
 	opt="${opt%=}"
 }
 
+_nvme_finish_completion () {
+	opts+=" -h --help"
+
+	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
+		completing_value=0
+	fi
+
+	if [[ $completing_value -eq 0 ]]; then
+		local nonopt_args=0 has_device=0 i prevopt
+		for (( i=0; i < ${#words[@]}-1; i++ )); do
+			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+			# Skip words[i] if it is the value of a preceding value-taking option.
+			# That option is the previous word ('--opt val'), or the word before a
+			# split '=' ('--opt = val').
+			if [[ $i -gt 0 ]]; then
+				prevopt="${words[i-1]}"
+				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
+				# Strip a trailing '=' so an unsplit '--opt=' token still matches
+				# $valopts (whose entries carry no '=').
+				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
+			fi
+			(( nonopt_args += 1 ))
+			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
+		done
+		if [[ $nonopt_args -ge $2 ]] && [[ $has_device -eq 0 ]] && \
+		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
+			opts="/dev/nvme* $opts"
+		fi
+	fi
+
+	if [[ $completing_value -eq 1 ]]; then
+		if [[ $vals != " " ]]; then
+			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
+		elif [[ $wantfiles -eq 1 ]]; then
+			: # value is a filename; let 'complete -o default' offer files
+		else
+			# No candidate values (e.g. a NUM or free-form string); offer
+			# nothing and suppress the filename fallback.
+			compopt +o default
+		fi
+	else
+		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
+		# Suppress the trailing space only when the sole completion ends in '=',
+		# so the user can type the value immediately. With more than one candidate
+		# bash appends nothing, so nospace must not fire.
+		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
+	fi
+
+	return 0
+}
+
 nvme_list_opts () {
 	local opts=""
 	local valopts=""
@@ -1756,54 +1807,7 @@ nvme_list_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 2 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 2
 }
 
 plugin_amzn_opts () {
@@ -1849,54 +1853,7 @@ plugin_amzn_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_dapustor_opts () {
@@ -1928,54 +1885,7 @@ plugin_dapustor_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_dell_opts () {
@@ -2007,54 +1917,7 @@ plugin_dell_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_dera_opts () {
@@ -2086,54 +1949,7 @@ plugin_dera_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_fdp_opts () {
@@ -2263,54 +2079,7 @@ plugin_fdp_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_huawei_opts () {
@@ -2356,54 +2125,7 @@ plugin_huawei_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_ibm_opts () {
@@ -2463,54 +2185,7 @@ plugin_ibm_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_innogrit_opts () {
@@ -2556,54 +2231,7 @@ plugin_innogrit_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_inspur_opts () {
@@ -2635,54 +2263,7 @@ plugin_inspur_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_intel_opts () {
@@ -2804,54 +2385,7 @@ plugin_intel_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_mangoboost_opts () {
@@ -2883,54 +2417,7 @@ plugin_mangoboost_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_memblaze_opts () {
@@ -3139,54 +2626,7 @@ plugin_memblaze_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_micron_opts () {
@@ -3574,54 +3014,7 @@ plugin_micron_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_netapp_opts () {
@@ -3667,54 +3060,7 @@ plugin_netapp_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_nvidia_opts () {
@@ -3746,54 +3092,7 @@ plugin_nvidia_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_sndk_opts () {
@@ -4206,54 +3505,7 @@ plugin_sndk_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_sfx_opts () {
@@ -4417,54 +3669,7 @@ plugin_sfx_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_seagate_opts () {
@@ -4653,54 +3858,7 @@ plugin_seagate_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_shannon_opts () {
@@ -4780,54 +3938,7 @@ plugin_shannon_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_ssstc_opts () {
@@ -4859,54 +3970,7 @@ plugin_ssstc_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_toshiba_opts () {
@@ -4972,54 +4036,7 @@ plugin_toshiba_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_transcend_opts () {
@@ -5065,54 +4082,7 @@ plugin_transcend_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_utils_opts () {
@@ -5128,54 +4098,7 @@ plugin_utils_opts () {
 	local completing_value=0
 	local wantfiles=0
 	_nvme_detect_value_completion
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_virtium_opts () {
@@ -5224,54 +4147,7 @@ plugin_virtium_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_wdc_opts () {
@@ -5828,54 +4704,7 @@ plugin_wdc_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_ymtc_opts () {
@@ -5907,54 +4736,7 @@ plugin_ymtc_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_zns_opts () {
@@ -6194,54 +4976,7 @@ plugin_zns_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_nbft_opts () {
@@ -6273,54 +5008,7 @@ plugin_nbft_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_keys_opts () {
@@ -6450,54 +5138,7 @@ plugin_keys_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_exclusion_opts () {
@@ -6599,54 +5240,7 @@ plugin_exclusion_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_registry_opts () {
@@ -6720,54 +5314,7 @@ plugin_registry_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_config_opts () {
@@ -6844,54 +5391,7 @@ plugin_config_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_feat_opts () {
@@ -7133,54 +5633,7 @@ plugin_feat_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_lm_opts () {
@@ -7311,54 +5764,7 @@ plugin_lm_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_ocp_opts () {
@@ -7838,54 +6244,7 @@ plugin_ocp_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_sed_opts () {
@@ -7918,54 +6277,7 @@ plugin_sed_opts () {
 			opts+=" --read-only -r --ask-key -k"
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 plugin_solidigm_opts () {
@@ -8216,54 +6528,7 @@ plugin_solidigm_opts () {
 			fi
 			;;
 	esac
-
-	opts+=" -h --help"
-
-	if [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
-		completing_value=0
-	fi
-	if [[ $completing_value -eq 0 ]]; then
-		local nonopt_args=0 has_device=0 i prevopt
-		for (( i=0; i < ${#words[@]}-1; i++ )); do
-			[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
-			# The value-taking option this word might belong to: the previous word,
-			# or the word before a split '=' ('--opt = val'). Guard the index so a
-			# negative subscript is never evaluated (an error on bash < 4.3).
-			if [[ $i -gt 0 ]]; then
-				prevopt="${words[i-1]}"
-				[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
-				# Strip a trailing '=' so an unsplit '--opt=' token still matches
-				# $valopts (whose entries carry no '=').
-				[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
-			fi
-			(( nonopt_args += 1 ))
-			[[ ${words[i]} == /dev/nvme* ]] && has_device=1
-		done
-		if [[ $nonopt_args -ge 3 ]] && [[ $has_device -eq 0 ]] && \
-		   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
-			opts="/dev/nvme* $opts"
-		fi
-	fi
-
-	if [[ $completing_value -eq 1 ]]; then
-		if [[ $vals != " " ]]; then
-			COMPREPLY+=( $( compgen -W "$vals" -- "$val" ) )
-		elif [[ $wantfiles -eq 1 ]]; then
-			: # value is a filename; let 'complete -o default' offer files
-		else
-			# No candidate values (e.g. a NUM or free-form string); offer
-			# nothing and suppress the filename fallback.
-			compopt +o default
-		fi
-	else
-		COMPREPLY+=( $( compgen -W "$opts" -- "$cur" ) )
-		# Suppress the trailing space only when the sole completion ends in '=',
-		# so the user can type the value immediately. With more than one candidate
-		# bash appends nothing, so nospace must not fire.
-		[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == *= ]] && compopt -o nospace
-	fi
-
-	return 0
+	_nvme_finish_completion "$1" 3
 }
 
 _nvme_subcmds () {

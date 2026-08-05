@@ -168,51 +168,50 @@ BASH_FUNC_PREAMBLE = '''\
 \t_nvme_detect_value_completion
 '''
 
-# Emitted after the option cases: finish the option list and, if we thought we
-# were completing a value but $opt is a flag (not in $valopts), fall back to
-# normal option completion.
-BASH_OPTS_FINALIZE = '''\
+# Shared tail for every command-group function. Each function fills in the
+# per-command $opts/$valopts/$vals via its own case statement, then calls this
+# to finish: append -h/--help, offer the device argument when appropriate, and
+# emit COMPREPLY. Reads the caller's locals (opts, valopts, vals, val, opt,
+# completing_value, wantfiles, words, cur, COMPREPLY) via bash dynamic scoping,
+# the same mechanism _nvme_detect_value_completion relies on. $1 is the command
+# name; $2 is the position at which the device argument is expected (2 for
+# builtins, 3 for plugin sub-commands).
+#
+# A word counts as a positional argument only if it is not an option, not a bare
+# '=', and not the value of a preceding value-taking option -- in either the
+# '--opt val' or split '--opt = val' form -- so e.g. '--output-file /dev/nvme0'
+# does not count the path as the device.
+BASH_FINISH_FUNC = '''\
 
+_nvme_finish_completion () {
 \topts+=" -h --help"
 
 \tif [[ $completing_value -eq 1 ]] && [[ " $valopts " != *" $opt "* ]]; then
 \t\tcompleting_value=0
 \tfi
-'''
 
-# Emitted between the option cases and the epilogue. Offers the device argument
-# once enough positional words are present and none is already a device. A word
-# is positional only if it is not an option, not a bare '=', and not the value
-# of a preceding value-taking option -- in either the '--opt val' or split
-# '--opt = val' form -- so e.g. '--output-file /dev/nvme0' does not count the
-# path as the device. {device_argpos} is the position at which the device is
-# expected (2 for builtins, 3 for plugin sub-commands).
-BASH_DEVICE_SCAN = '''\
 \tif [[ $completing_value -eq 0 ]]; then
 \t\tlocal nonopt_args=0 has_device=0 i prevopt
-\t\tfor (( i=0; i < ${{#words[@]}}-1; i++ )); do
-\t\t\t[[ ${{words[i]}} == -* || ${{words[i]}} == "=" ]] && continue
-\t\t\t# The value-taking option this word might belong to: the previous word,
-\t\t\t# or the word before a split '=' ('--opt = val'). Guard the index so a
-\t\t\t# negative subscript is never evaluated (an error on bash < 4.3).
+\t\tfor (( i=0; i < ${#words[@]}-1; i++ )); do
+\t\t\t[[ ${words[i]} == -* || ${words[i]} == "=" ]] && continue
+\t\t\t# Skip words[i] if it is the value of a preceding value-taking option.
+\t\t\t# That option is the previous word ('--opt val'), or the word before a
+\t\t\t# split '=' ('--opt = val').
 \t\t\tif [[ $i -gt 0 ]]; then
-\t\t\t\tprevopt="${{words[i-1]}}"
-\t\t\t\t[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${{words[i-2]}}"
+\t\t\t\tprevopt="${words[i-1]}"
+\t\t\t\t[[ $i -ge 2 && $prevopt == "=" ]] && prevopt="${words[i-2]}"
 \t\t\t\t# Strip a trailing '=' so an unsplit '--opt=' token still matches
 \t\t\t\t# $valopts (whose entries carry no '=').
-\t\t\t\t[[ " $valopts " == *" ${{prevopt%=}} "* ]] && continue
+\t\t\t\t[[ " $valopts " == *" ${prevopt%=} "* ]] && continue
 \t\t\tfi
 \t\t\t(( nonopt_args += 1 ))
-\t\t\t[[ ${{words[i]}} == /dev/nvme* ]] && has_device=1
+\t\t\t[[ ${words[i]} == /dev/nvme* ]] && has_device=1
 \t\tdone
-\t\tif [[ $nonopt_args -ge {device_argpos} ]] && [[ $has_device -eq 0 ]] && \\
+\t\tif [[ $nonopt_args -ge $2 ]] && [[ $has_device -eq 0 ]] && \\
 \t\t   [[ "$1" != "help" ]] && [[ "$1" != "version" ]]; then
 \t\t\topts="/dev/nvme* $opts"
 \t\tfi
 \tfi
-'''
-
-BASH_FUNC_EPILOGUE = '''\
 
 \tif [[ $completing_value -eq 1 ]]; then
 \t\tif [[ $vals != " " ]]; then
@@ -234,6 +233,14 @@ BASH_FUNC_EPILOGUE = '''\
 
 \treturn 0
 }
+'''
+
+# Tail of each command-group function: hand off to the shared finisher. $1 is
+# the command name (already this function's first parameter); {device_argpos} is
+# baked in per group.
+BASH_FUNC_EPILOGUE = '''\
+\t_nvme_finish_completion "$1" {device_argpos}
+}}
 '''
 
 
@@ -323,7 +330,7 @@ def bash_option_body(opts):
     return out
 
 
-def emit_bash_plugin(out, commands, func, device_argpos):
+def emit_bash_command_group(out, commands, func, device_argpos):
     out.write(BASH_FUNC_PREAMBLE.format(func=func))
 
     # One case per command, emitting exactly the options that command accepts
@@ -346,9 +353,7 @@ def emit_bash_plugin(out, commands, func, device_argpos):
         out.write(body)
         out.write('\tesac\n')
 
-    out.write(BASH_OPTS_FINALIZE)
-    out.write(BASH_DEVICE_SCAN.format(device_argpos=device_argpos))
-    out.write(BASH_FUNC_EPILOGUE)
+    out.write(BASH_FUNC_EPILOGUE.format(device_argpos=device_argpos))
 
 
 def bash_func_name(plugin):
@@ -357,10 +362,11 @@ def bash_func_name(plugin):
 
 def generate_bash(model, out):
     out.write(BASH_HEADER)
+    out.write(BASH_FINISH_FUNC)
 
-    emit_bash_plugin(out, builtin_commands(model), "nvme_list_opts", 2)
+    emit_bash_command_group(out, builtin_commands(model), "nvme_list_opts", 2)
     for p in plugins(model):
-        emit_bash_plugin(out, p["commands"], bash_func_name(p["name"]), 3)
+        emit_bash_command_group(out, p["commands"], bash_func_name(p["name"]), 3)
 
     # Dispatcher.
     out.write("\n_nvme_subcmds () {\n"
