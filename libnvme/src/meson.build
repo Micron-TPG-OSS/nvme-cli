@@ -142,15 +142,22 @@ nvmf_accessors_ld = meson.current_source_dir() / 'accessors-fabrics.ld'
 ctrl_sysfs_ld = meson.current_source_dir() / 'ctrl-sysfs.ld'
 
 # Version scripts filter the exported symbols. GNU ld honours
-# --version-script for PE/COFF too, but LLVM's lld-link does not accept the
-# option at all, so the MSYS2 CLANG64/CLANGARM64 environments cannot use
-# them. Fall back to exporting everything there; -fvisibility=hidden below
-# is a no-op for PE, where auto-export is the default.
+# --version-script for PE/COFF too, but LLVM's lld does not accept the option
+# at all, so the MSYS2 CLANG64/CLANGARM64 environments cannot use them.
+#
+# Dropping them does not lose the public API: it is annotated with
+# __shr_public (visibility("default")), which clang honours on PE, so
+# -fvisibility=hidden below still keeps libnvme's own internals unexported.
+# What is lost is the filtering of symbols pulled in from static libraries
+# (mingw's GUID/CLSID constants and similar), which PE auto-export then adds
+# to the export table. Those extra exports are inert - nothing links against
+# them - so this is a cosmetically larger export table, not an ABI change.
 want_version_scripts = cc.has_link_argument(
     '-Wl,--version-script=@0@'.format(nvme_ld)
 )
 if not want_version_scripts
-    message('Linker does not support --version-script; exporting all symbols')
+    message('Linker does not support --version-script; ' +
+            'exporting extra symbols from static libraries')
 endif
 
 link_args = []
