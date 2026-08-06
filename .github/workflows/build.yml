@@ -330,6 +330,13 @@ jobs:
           path: |
             .build-ci/meson-logs/*.txt
 
+  # This job uses clang rather than gcc because MSYS2 has no gcc toolchain for
+  # native Windows-on-ARM64: CLANGARM64 is its only aarch64 environment, and
+  # gcc's aarch64-w64-mingw32 target exists only as an experimental
+  # cross-compiler (mingw-w64-cross-mingwarm64-gcc, still versioned 15.0.1dev).
+  # Note that "pacman -S mingw-w64-clang-aarch64-gcc" does resolve, but it is a
+  # virtual package satisfied by mingw-w64-clang-aarch64-gcc-compat, which only
+  # installs gcc-named aliases for clang -- not a second compiler.
   windows-msys2-clangarm64:
     runs-on: windows-11-arm
     timeout-minutes: 60
