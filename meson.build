@@ -51,16 +51,16 @@ host_system = host_machine.system()
 # dependencies are present. Also, -Dpython=enabled forces -Dlibnvme=enabled.
 want_nvme = get_option('nvme').disabled() == false
 want_libnvme = get_option('libnvme').disabled() == false
-want_fabrics = get_option('fabrics').disabled() == false and host_system != 'windows'
-want_mi = get_option('mi').disabled() == false and host_system != 'windows'
-want_top = get_option('top').disabled() == false and host_system != 'windows'
-want_discoverd = get_option('nvme-discoverd').disabled() == false and want_fabrics and host_system != 'windows'
+want_fabrics = get_option('fabrics').disabled() == false and host_system == 'linux'
+want_mi = get_option('mi').disabled() == false and host_system == 'linux'
+want_top = get_option('top').disabled() == false and host_system == 'linux'
+want_discoverd = get_option('nvme-discoverd').disabled() == false and want_fabrics and host_system == 'linux'
 want_nvmf_autoconnect = get_option('nvmf-autoconnect').disabled() == false
 want_deprecated_cmds = get_option('deprecated-cmds').disabled() == false
 want_json_c = get_option('json-c').disabled() == false
-want_libkmod = get_option('libkmod').disabled() == false and host_system != 'windows'
+want_libkmod = get_option('libkmod').disabled() == false and host_system == 'linux'
 want_tests = get_option('tests')
-want_examples = get_option('examples') and host_system != 'windows'
+want_examples = get_option('examples') and host_system == 'linux'
 want_docs = get_option('docs')
 want_docs_build = get_option('docs-build')
 
@@ -75,11 +75,31 @@ else
         want_libnvme = true
     endif
 
-    python3 = import('python').find_installation('python3')
-    py3_dep = python3.dependency(required: feature_python.enabled())
-    swig = find_program('swig', required: feature_python.enabled())
-    header_found = cc.has_header('Python.h', dependencies: py3_dep, required: feature_python.enabled())
-    want_python = want_libnvme and py3_dep.found() and swig.found() and header_found
+    python3 = import('python').find_installation(
+        'python3',
+        required: feature_python.enabled()
+    )
+
+    if python3.found()
+        py3_dep = python3.dependency(required: feature_python.enabled())
+        swig = find_program('swig', required: feature_python.enabled())
+        header_found = cc.has_header(
+            'Python.h',
+            dependencies: py3_dep,
+            required: feature_python.enabled()
+        )
+    else
+        py3_dep = dependency('', required: false)
+        swig = disabler()
+        header_found = false
+    endif
+
+    want_python = (
+        want_libnvme and
+        py3_dep.found() and
+        swig.found() and
+        header_found
+    )
 endif
 
 # Bump this only when making an ABI-incompatible change.
@@ -118,19 +138,27 @@ requires = ''
 
 version_tag = get_option('version-tag')
 if version_tag != ''
-    conf.set('GIT_VERSION', '"@0@"'.format(version_tag))
+    git_version = version_tag
 else
-    # Find the path to bash and use it so we don't pick up the WSL bash in Windows.
-    bash_prog = find_program('bash', required: true)
-    r = run_command(
-        bash_prog,
-        files('scripts/meson-vcs-tag.sh'),
-        meson.current_source_dir(),
-        meson.project_version(),
-        check: true,
-    )
-    conf.set('GIT_VERSION', '"@0@"'.format(r.stdout().strip()))
+    git_version = meson.project_version()
+
+    git = find_program('git', required: false)
+    if git.found() and fs.exists(meson.current_source_dir() / '.git')
+        r = run_command(
+            git,
+            '-C', meson.current_source_dir(),
+            'describe',
+            '--abbrev=7',
+            '--dirty=+',
+            check: false,
+        )
+
+        if r.returncode() == 0
+            git_version = r.stdout().strip().replace('^v', '')
+        endif
+    endif
 endif
+conf.set('GIT_VERSION', '"@0@"'.format(git_version))
 
 conf.set('SYSCONFDIR', '"@0@"'.format(sysconfdir))
 conf.set('RUNDIR', '"@0@"'.format(rundir))
@@ -586,13 +614,13 @@ if want_nvme
         'nvme.c',
         'plugin.c',
     ]
-    if host_system == 'windows'
-        sources += [
-            'nvme-pci-ids-win.c',
-        ]
-    else
+    if host_system == 'linux'
         sources += [
             'nvme-pci-ids-linux.c',
+        ]
+    elif host_system == 'windows'
+        sources += [
+            'nvme-pci-ids-win.c',
         ]
     endif
 
@@ -668,7 +696,7 @@ if want_nvme
         )
     endif
 
-    if host_system != 'windows'
+    if host_system == 'linux'
         subdir('unit')
     endif
     subdir('unit-py')
@@ -782,7 +810,7 @@ if want_nvme
     subdir('Documentation')
 endif
 
-if host_system != 'windows'
+if host_system == 'linux'
     valgrind_cmd = [
         'valgrind',
         '--leak-check=full',
