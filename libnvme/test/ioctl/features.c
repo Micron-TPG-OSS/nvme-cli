@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <string.h>
 
 #include <libnvme.h>
 
@@ -1471,6 +1472,12 @@ static void test_set_status_code_error(void)
 		.cdw11 = EVENTS,
 		.result = TEST_RESULT,
 		.err = TEST_SC,
+		/*
+		 * Set Features reports failure through get_errno_from_error(),
+		 * which has no NVMe status codes to return, so the status is
+		 * lost and only the errno survives.
+		 */
+		.win_err = -EIO,
 	};
 	struct libnvme_passthru_cmd cmd;
 	int err;
@@ -1479,10 +1486,11 @@ static void test_set_status_code_error(void)
 	nvme_init_set_features_async_event(&cmd, false, EVENTS);
 	err = libnvme_exec_admin_passthru(test_hdl, &cmd);
 	end_mock_cmds();
-	check(err == TEST_SC, "got error %d, expected %d", err, TEST_SC);
-	check(cmd.result == TEST_RESULT,
-	      "got result %" PRIu64 ", expected %" PRIu32,
-	      (uint64_t)cmd.result, TEST_RESULT);
+	check(err == mock_err(&mock_admin_cmd), "got error %d, expected %d",
+	      err, mock_err(&mock_admin_cmd));
+	check(cmd.result == mock_result(&mock_admin_cmd),
+	      "got result %" PRIu64 ", expected %" PRIu64,
+	      (uint64_t)cmd.result, mock_result(&mock_admin_cmd));
 }
 
 static void test_set_kernel_error(void)
@@ -1520,6 +1528,13 @@ static void test_get_status_code_error(void)
 		.cdw10 = TEST_SEL << 8 | NVME_FEAT_FID_KATO,
 		.result = TEST_RESULT,
 		.err = TEST_SC,
+		/*
+		 * Get Features is the one path that recovers an NVMe status
+		 * from a Win32 error: get_features_status() turns
+		 * ERROR_IO_DEVICE back into INVALID_FIELD. It adds DNR, which
+		 * the original status did not carry.
+		 */
+		.win_err = TEST_SC | NVME_SC_DNR,
 	};
 	struct libnvme_passthru_cmd cmd;
 	int err;
@@ -1528,10 +1543,11 @@ static void test_get_status_code_error(void)
 	nvme_init_get_features_kato(&cmd, TEST_SEL);
 	err = libnvme_exec_admin_passthru(test_hdl, &cmd);
 	end_mock_cmds();
-	check(err == TEST_SC, "got error %d, expected %d", err, TEST_SC);
-	check(cmd.result == TEST_RESULT,
-	      "got result %" PRIu64 ", expected %" PRIu32,
-	      (uint64_t)cmd.result, TEST_RESULT);
+	check(err == mock_err(&mock_admin_cmd), "got error %d, expected %d",
+	      err, mock_err(&mock_admin_cmd));
+	check(cmd.result == mock_result(&mock_admin_cmd),
+	      "got result %" PRIu64 ", expected %" PRIu64,
+	      (uint64_t)cmd.result, mock_result(&mock_admin_cmd));
 }
 
 static void test_get_kernel_error(void)
@@ -1541,6 +1557,13 @@ static void test_get_kernel_error(void)
 		.cdw10 = TEST_SEL << 8 | NVME_FEAT_FID_NUM_QUEUES,
 		.result = 0,
 		.err = -EBUSY,
+		/*
+		 * There is no Win32 error that get_errno_from_error() turns
+		 * back into EBUSY, so the driver has no way to report this and
+		 * the errno cannot survive the round trip. Any unrecognised
+		 * error becomes EIO.
+		 */
+		.win_err = -EIO,
 	};
 	struct libnvme_passthru_cmd cmd;
 	int err;
@@ -1549,7 +1572,8 @@ static void test_get_kernel_error(void)
 	nvme_init_get_features_num_queues(&cmd, TEST_SEL);
 	err = libnvme_exec_admin_passthru(test_hdl, &cmd);
 	end_mock_cmds();
-	check(err == -EBUSY, "got error %d, expected -EBUSY", err);
+	check(err == mock_err(&mock_admin_cmd), "got error %d, expected %d",
+	      err, mock_err(&mock_admin_cmd));
 	check(!cmd.result,
 		"result unexpectedly set to %" PRIu64, (uint64_t)cmd.result);
 }
@@ -1575,7 +1599,8 @@ static void test_lm_set_features_ctrl_data_queue(void)
 		hp, tpt, etpt);
 	err = libnvme_exec_admin_passthru(test_hdl, &cmd);
 	end_mock_cmds();
-	check(err == 0, "set features returned error %d, errno %m", err);
+	check(err == 0, "set features returned error %d, errno %s",
+	      err, strerror(errno));
 	check(cmd.result == TEST_RESULT,
 	      "got result %" PRIu64 ", expected %" PRIu32,
 	      (uint64_t)cmd.result, TEST_RESULT);
@@ -1602,7 +1627,8 @@ static void test_lm_get_features_ctrl_data_queue(void)
 		TEST_CDQID, &data);
 	err = libnvme_exec_admin_passthru(test_hdl, &cmd);
 	end_mock_cmds();
-	check(err == 0, "get features returned error %d, errno %m", err);
+	check(err == 0, "get features returned error %d, errno %s",
+	      err, strerror(errno));
 	check(cmd.result == TEST_RESULT,
 	      "got result %" PRIu64 ", expected %" PRIu32,
 	      (uint64_t)cmd.result, TEST_RESULT);

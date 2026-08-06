@@ -296,8 +296,11 @@ if want_fabrics
     test('libnvme - util', test_util)
 endif
 
-if host_system == 'linux'
+if host_system == 'linux' or host_system == 'windows'
     subdir('ioctl')
+endif
+
+if host_system == 'linux'
     subdir('sysfs')
     if want_fabrics
         subdir('nbft')
