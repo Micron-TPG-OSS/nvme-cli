@@ -155,10 +155,6 @@ ctrl_sysfs_ld = meson.current_source_dir() / 'ctrl-sysfs.ld'
 want_version_scripts = cc.has_link_argument(
     '-Wl,--version-script=@0@'.format(nvme_ld)
 )
-if not want_version_scripts
-    message('Linker does not support --version-script; ' +
-            'exporting extra symbols from static libraries')
-endif
 
 link_args = []
 if want_version_scripts
