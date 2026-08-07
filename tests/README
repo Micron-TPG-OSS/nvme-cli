@@ -49,3 +49,26 @@ Running testcases with framework
 
     2. Running all the testcases (in the build root directory) :-
        $ meson test -C .build
+
+    3. Running only the core hardware testcases :-
+       $ meson test -C .build --suite core
+
+       Note that a bare "--suite nvme-cli" matches the project name and so
+       selects every test, including the vendor plugin suites.
+
+Guarding against running on the wrong drive
+-------------------------------------------
+    Because these tests are destructive, config.json accepts an optional
+    "allowed_serials" list. When present, setUp compares it against the
+    serial number reported by "nvme id-ctrl" and aborts the testcase if the
+    drive is not listed, so that a stale or mistyped controller path cannot
+    wipe an unintended device:
+
+        {
+          "controller": "/dev/nvme0",
+          "ns1": "/dev/nvme0n1",
+          "log_dir": "nvmetests",
+          "allowed_serials": ["SERIAL_OF_TEST_DRIVE"]
+        }
+
+    Omitting the key (the default) disables the check.

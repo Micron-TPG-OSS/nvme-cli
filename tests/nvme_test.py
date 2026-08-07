@@ -118,6 +118,7 @@ class TestNVMe(TestNVMeBase):
         self.ns1 = "XXX"
         self.test_log_dir = "XXX"
         self.do_validate_pci_device = True
+        self.allowed_serials = []
         self.default_nsid = 0x1
         self.flbas = 0
         self.ns_dps = 0
@@ -128,6 +129,7 @@ class TestNVMe(TestNVMeBase):
         self.load_config()
         if self.do_validate_pci_device:
             self.validate_pci_device()
+        self.validate_allowed_serial()
         self.ns_mgmt_supported = self.get_ns_mgmt_support()
         if self.ns_mgmt_supported:
             self.create_and_attach_default_ns()
@@ -189,6 +191,31 @@ class TestNVMe(TestNVMeBase):
         err = self.run_cmd(cmd).returncode
         self.assertEqual(err, 0, "ERROR : Only NVMe PCI subsystem is supported")
 
+    def validate_allowed_serial(self):
+        """ Abort unless the drive under test is explicitly allowlisted.
+
+            Several testcases are destructive: they delete and recreate
+            namespaces, reformat the drive, or write to LBA 0. When
+            'allowed_serials' is present in config.json, the serial number
+            reported by id-ctrl must appear in it, so that a mis-configured
+            controller path cannot silently take out the wrong drive.
+
+            The check is opt-in: with no 'allowed_serials' key the tests
+            behave exactly as before.
+            - Args:
+                - None
+            - Returns:
+                - None
+        """
+        if not self.allowed_serials:
+            return
+
+        serial = self.get_id_ctrl_field_value("sn").strip()
+        self.assertIn(serial, self.allowed_serials,
+                      f"ERROR : refusing to run destructive tests on "
+                      f"{self.ctrl} (serial {serial!r}): not listed in "
+                      f"'allowed_serials'")
+
     def load_config(self):
         """ Load Basic test configuration.
             - Args:
@@ -204,6 +231,9 @@ class TestNVMe(TestNVMeBase):
             self.nvme_bin = config.get('nvme_bin', self.nvme_bin)
             self.do_validate_pci_device = config.get(
                 'do_validate_pci_device', self.do_validate_pci_device)
+            self.allowed_serials = [
+                s.strip() for s in config.get('allowed_serials', [])
+            ]
             self.clear_log_dir = False
 
             log_level_str = config.get('log_level',
