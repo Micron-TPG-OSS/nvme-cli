@@ -44,6 +44,15 @@ class TestNVMeCopy(TestNVMe):
     def setUp(self):
         """ Pre Section for TestNVMeCopy """
         super().setUp()
+        # Gate before reading ocfs: a controller may well advertise copy
+        # support that the host cannot reach. libnvme's Windows backend
+        # (libnvme_exec_io_passthru() in ioctl-win.c) implements only
+        # flush/write/read, compare on WinPE, and the vendor-specific
+        # opcodes; nvme_cmd_copy falls through to -ENOTSUP. Without this the
+        # capability probes below pass and the copy command then fails with
+        # "NVMe Copy: not supported".
+        if self.is_windows():
+            self.skipTest("Copy command not supported by Windows")
         self.ocfs = self.get_ocfs()
         self.original_cdfe = None
         self._refresh_ns_copy_limits()
