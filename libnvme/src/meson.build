@@ -17,6 +17,8 @@ sources = [
 if host_system == 'linux'
     sources += [
         'nvme/ctrl-sysfs-custom-linux.c',
+        'nvme/path-sysfs-custom-linux.c',
+        'nvme/ns-sysfs-custom-linux.c',
         'nvme/ioctl-linux.c',
         'nvme/lib-linux.c',
         'nvme/mem-linux.c',
@@ -27,6 +29,8 @@ elif host_system == 'windows'
     sources += [
         'nvme/ctrl-map.c',
         'nvme/ctrl-sysfs-custom-win.c',
+        'nvme/path-sysfs-custom-win.c',
+        'nvme/ns-sysfs-custom-win.c',
         'nvme/ioctl-win.c',
         'nvme/lib-win.c',
         'nvme/mem-win.c',
@@ -37,6 +41,8 @@ endif
 headers = [
     'nvme/accessors.h',
     'nvme/ctrl-sysfs.h',
+    'nvme/path-sysfs.h',
+    'nvme/ns-sysfs.h',
     'nvme/endian.h',
     'nvme/ioctl.h',
     'nvme/lib-types.h',
@@ -130,6 +136,7 @@ if host_system == 'windows'
         bcrypt_dep,
         setupapi_dep,
         cfgmgr32_dep,
+        winpthread_dep,
     ]
 endif
 
@@ -139,26 +146,48 @@ mi_ld = meson.current_source_dir() / 'libnvme-mi.ld'
 accessors_ld = meson.current_source_dir() / 'accessors.ld'
 nvmf_accessors_ld = meson.current_source_dir() / 'accessors-fabrics.ld'
 ctrl_sysfs_ld = meson.current_source_dir() / 'ctrl-sysfs.ld'
+path_sysfs_ld = meson.current_source_dir() / 'path-sysfs.ld'
+ns_sysfs_ld = meson.current_source_dir() / 'ns-sysfs.ld'
 
-link_args = [
-    '-Wl,--version-script=@0@'.format(nvme_ld),
-    '-Wl,--version-script=@0@'.format(accessors_ld),
-    '-Wl,--version-script=@0@'.format(ctrl_sysfs_ld),
-]
+# Version scripts filter the exported symbols. GNU ld honours --version-script
+# for PE/COFF too, but LLVM's lld does not accept the option at all, so the
+# MSYS2 CLANG64/CLANGARM64 environments cannot use them.
+#
+# Dropping them does not lose the public API. It is annotated with __shr_public
+# (visibility("default")), which clang honours on PE. So -fvisibility=hidden
+# below still keeps libnvme's own internals unexported. What is lost is the
+# filtering of symbols pulled in from static libraries, which PE auto-export
+# then adds to the export table. 
+want_version_scripts = cc.has_link_argument(
+    '-Wl,--version-script=@0@'.format(nvme_ld)
+)
+
+link_args = []
+if want_version_scripts
+    link_args += [
+        '-Wl,--version-script=@0@'.format(nvme_ld),
+        '-Wl,--version-script=@0@'.format(accessors_ld),
+        '-Wl,--version-script=@0@'.format(ctrl_sysfs_ld),
+        '-Wl,--version-script=@0@'.format(path_sysfs_ld),
+        '-Wl,--version-script=@0@'.format(ns_sysfs_ld),
+    ]
+endif
 
 libconf = configuration_data()
 if want_fabrics
-    link_args += [
-        '-Wl,--version-script=@0@'.format(nvmf_ld),
-        '-Wl,--version-script=@0@'.format(nvmf_accessors_ld),
-    ]
+    if want_version_scripts
+        link_args += [
+            '-Wl,--version-script=@0@'.format(nvmf_ld),
+            '-Wl,--version-script=@0@'.format(nvmf_accessors_ld),
+        ]
+    endif
     libconf.set('FABRICS_INCLUDE',
                 fs.read('fabrics-includes.h.in').strip())
 else
     libconf.set('FABRICS_INCLUDE', '')
 endif
 
-if want_mi
+if want_mi and want_version_scripts
     link_args += [
         '-Wl,--version-script=@0@'.format(mi_ld),
     ]

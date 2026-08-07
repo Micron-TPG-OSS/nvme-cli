@@ -4754,7 +4754,7 @@ static int wait_self_test(struct libnvme_transport_handle *hdl)
 
 	err = nvme_identify_ctrl(hdl, ctrl);
 	if (err) {
-		nvme_show_error("identify-ctrl: %s", libnvme_strerror(err));
+		nvme_show_err(err, "identify-ctrl");
 		return err;
 	}
 
@@ -10730,7 +10730,7 @@ static int get_log_offset(struct libnvme_transport_handle *hdl,
 	if (!*log)
 		return -ENOMEM;
 
-	args->log = *log + args->lpo;
+	args->log = (char *)*log + args->lpo;
 
 	nvme_init_get_log(&cmd, args->nsid, args->lid,
 			  args->csi, args->log, args->len);

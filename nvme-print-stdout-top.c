@@ -430,6 +430,10 @@ static int stdout_top_print_path_health(FILE *stream, libnvme_subsystem_t s)
 	fprintf(stream, "\n------------ Path Health -------------\n\n");
 	libnvme_subsystem_for_each_ns(s, n) {
 		libnvme_namespace_for_each_path(n, p) {
+			const char *ana_state;
+			long command_retry_count;
+			long multipath_failover_count;
+			long command_error_count;
 
 			row = table_get_row_id(t);
 			if (row < 0) {
@@ -437,18 +441,26 @@ static int stdout_top_print_path_health(FILE *stream, libnvme_subsystem_t s)
 				goto free_tbl;
 			}
 
+			libnvme_path_get_ana_state(p, &ana_state, "");
+			libnvme_path_get_command_retry_count(p,
+					&command_retry_count, 0);
+			libnvme_path_get_multipath_failover_count(p,
+					&multipath_failover_count, 0);
+			libnvme_path_get_command_error_count(p,
+					&command_error_count, 0);
+
 			col = -1;
 
 			table_set_value_str(t, ++col, row,
 			    libnvme_path_get_name(p), LEFT);
 			table_set_value_str(t, ++col, row,
-			    libnvme_path_get_ana_state(p), LEFT);
+			    ana_state, LEFT);
 			table_set_value_long(t, ++col, row,
-			    libnvme_path_get_command_retry_count(p), LEFT);
+			    command_retry_count, LEFT);
 			table_set_value_long(t, ++col, row,
-			    libnvme_path_get_multipath_failover_count(p), LEFT);
+			    multipath_failover_count, LEFT);
 			table_set_value_int(t, ++col, row,
-			    libnvme_path_get_command_error_count(p), LEFT);
+			    command_error_count, LEFT);
 
 			table_add_row(t, row);
 		}
@@ -650,6 +662,8 @@ static int stdout_top_print_ns_stat(FILE *stream, libnvme_subsystem_t s)
 	fprintf(stream, "----------- Namespace Stat -----------\n\n");
 	libnvme_subsystem_for_each_ctrl(s, c) {
 		libnvme_ctrl_for_each_ns(c, n) {
+			long command_retry_count, command_error_count;
+
 			r_iops = r_lat = r_bw = 0;
 			w_iops = w_lat = w_bw = 0;
 			util = inflights = 0;
@@ -686,10 +700,14 @@ static int stdout_top_print_ns_stat(FILE *stream, libnvme_subsystem_t s)
 					libnvme_ns_get_nsid(n), LEFT);
 			table_set_value_str(t, ++col, row,
 					libnvme_ctrl_get_name(c), LEFT);
+			libnvme_ns_get_command_retry_count(n,
+					&command_retry_count, 0);
+			libnvme_ns_get_command_error_count(n,
+					&command_error_count, 0);
 			table_set_value_long(t, ++col, row,
-				libnvme_ns_get_command_retry_count(n), LEFT);
+				command_retry_count, LEFT);
 			table_set_value_long(t, ++col, row,
-				libnvme_ns_get_command_error_count(n), LEFT);
+				command_error_count, LEFT);
 			table_set_value_str(t, ++col, row, r_iops_str, LEFT);
 			table_set_value_str(t, ++col, row, w_iops_str, LEFT);
 			table_set_value_str(t, ++col, row, r_clat_str, LEFT);
@@ -752,6 +770,9 @@ static int stdout_top_print_nshead_stat(FILE *stream, libnvme_subsystem_t s)
 
 	fprintf(stream, "------------ NSHead Stat -------------\n\n");
 	libnvme_subsystem_for_each_ns(s, n) {
+		long io_requeue_no_usable_path_count;
+		long io_fail_no_available_path_count;
+
 		npaths = 0;
 		r_iops = r_lat = r_bw = 0;
 		w_iops = w_lat = w_bw = 0;
@@ -789,10 +810,14 @@ static int stdout_top_print_nshead_stat(FILE *stream, libnvme_subsystem_t s)
 		table_set_value_int(t, ++col, row, libnvme_ns_get_nsid(n),
 				LEFT);
 		table_set_value_int(t, ++col, row, npaths, LEFT);
+		libnvme_ns_get_io_requeue_no_usable_path_count(n,
+				&io_requeue_no_usable_path_count, 0);
+		libnvme_ns_get_io_fail_no_available_path_count(n,
+				&io_fail_no_available_path_count, 0);
 		table_set_value_long(t, ++col, row,
-		    libnvme_ns_get_io_requeue_no_usable_path_count(n), LEFT);
+		    io_requeue_no_usable_path_count, LEFT);
 		table_set_value_long(t, ++col, row,
-		    libnvme_ns_get_io_fail_no_available_path_count(n), LEFT);
+		    io_fail_no_available_path_count, LEFT);
 		table_set_value_str(t, ++col, row, r_iops_str, LEFT);
 		table_set_value_str(t, ++col, row, w_iops_str, LEFT);
 		table_set_value_str(t, ++col, row, r_clat_str, LEFT);
@@ -913,12 +938,20 @@ static int stdout_top_print_path_perf(FILE *stream, libnvme_subsystem_t s)
 			table_set_value_str(t, ++col, row,
 					libnvme_path_get_name(p), LEFT);
 
-			if (!strcmp(iopolicy, "numa"))
+			if (!strcmp(iopolicy, "numa")) {
+				const char *numa_nodes;
+
+				libnvme_path_get_numa_nodes(p, &numa_nodes, "");
 				table_set_value_str(t, ++col, row,
-				    libnvme_path_get_numa_nodes(p), CENTERED);
-			else if (!strcmp(iopolicy, "queue-depth"))
+				    numa_nodes, CENTERED);
+			} else if (!strcmp(iopolicy, "queue-depth")) {
+				int queue_depth;
+
+				libnvme_path_get_queue_depth(p, &queue_depth,
+							      0);
 				table_set_value_int(t, ++col, row,
-				    libnvme_path_get_queue_depth(p), CENTERED);
+				    queue_depth, CENTERED);
+			}
 
 			table_set_value_str(t, ++col, row,
 					libnvme_ctrl_get_name(c), LEFT);
