@@ -94,6 +94,7 @@ jobs:
           update: true
           install: >-
             git
+            zip
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-pkgconf
             mingw-w64-ucrt-x86_64-meson
