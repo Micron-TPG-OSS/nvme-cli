@@ -42,6 +42,7 @@ usage() {
     echo "  nofabrics           build without fabrics support, run unit tests"
     echo "  libnvme             build only libnvme"
     echo "  tests               build for nightly build"
+    echo "  hwtests             build for nightly build, with plugin tests"
     echo ""
     echo "configs with muon:"
     echo "  [default]           minimal static build"
@@ -301,6 +302,19 @@ config_meson_tests() {
         --werror                                \
         --buildtype="${BUILDTYPE}"              \
         -Dnvme-tests=true                       \
+        "${BUILDDIR}"
+}
+
+# Same as "tests" but additionally enables the vendor plugin test suites.
+# Used by the hardware-in-the-loop nightly runs. Callers must populate
+# tests/config.json with the controller/namespace under test before invoking
+# this, because the default build/test hooks run the suites straight away.
+config_meson_hwtests() {
+    CC="${CC}" "${MESON}" setup                 \
+        --werror                                \
+        --buildtype="${BUILDTYPE}"              \
+        -Dnvme-tests=true                       \
+        -Dplugin-tests=micron,ocp               \
         "${BUILDDIR}"
 }
 
