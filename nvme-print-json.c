@@ -2675,14 +2675,16 @@ static unsigned int json_print_nvme_subsystem_multipath(libnvme_subsystem_t s, j
 	libnvme_namespace_for_each_path(n, p) {
 		struct json_object *path_attrs;
 		libnvme_ctrl_t c = libnvme_path_get_ctrl(p);
+		const char *ana_state;
 
+		libnvme_path_get_ana_state(p, &ana_state, NULL);
 		path_attrs = json_create_object();
 		obj_add_str(path_attrs, "Name", libnvme_ctrl_get_name(c));
 		obj_add_str(path_attrs, "Transport", libnvme_ctrl_get_transport(c));
 		obj_add_str(path_attrs, "Address", libnvme_ctrl_get_address(c));
 		obj_add_ctrl_address_details(path_attrs, "AddressDetails", c);
 		obj_add_str(path_attrs, "State", libnvme_ctrl_get_state(c));
-		obj_add_str(path_attrs, "ANAState", libnvme_path_get_ana_state(p));
+		obj_add_str(path_attrs, "ANAState", ana_state);
 		array_add_obj(paths, path_attrs);
 		i++;
 	}
@@ -4580,16 +4582,20 @@ static void json_print_detail_list_multipath(libnvme_subsystem_t s,
 	libnvme_subsystem_for_each_ns(s, n) {
 		struct json_object *jns = json_create_object();
 		struct json_object *jpaths = json_create_array();
+		int lba;
+		uint64_t lba_count, nsze, nuse;
 
-		int lba = libnvme_ns_get_lba_size(n);
-		uint64_t nsze = libnvme_ns_get_lba_count(n) * lba;
-		uint64_t nuse = libnvme_ns_get_lba_util(n) * lba;
+		libnvme_ns_get_lba_size(n, &lba, 0);
+		libnvme_ns_get_lba_count(n, &lba_count, 0);
+		nsze = lba_count * lba;
+		libnvme_ns_get_lba_util(n, &nuse, 0);
+		nuse *= lba;
 
 		obj_add_str(jns, "NameSpace", libnvme_ns_get_name(n));
 		obj_add_str(jns, "Generic", libnvme_ns_get_generic_name(n));
 		obj_add_int(jns, "NSID", libnvme_ns_get_nsid(n));
 		obj_add_uint64(jns, "UsedBytes", nuse);
-		obj_add_uint64(jns, "MaximumLBA", libnvme_ns_get_lba_count(n));
+		obj_add_uint64(jns, "MaximumLBA", lba_count);
 		obj_add_uint64(jns, "PhysicalSize", nsze);
 		obj_add_int(jns, "SectorSize", lba);
 
@@ -4601,9 +4607,11 @@ static void json_print_detail_list_multipath(libnvme_subsystem_t s,
 			const char *serial;
 			const char *model;
 			const char *firmware;
+			const char *ana_state;
 
+			libnvme_path_get_ana_state(p, &ana_state, NULL);
 			obj_add_str(jpath, "Path", libnvme_path_get_name(p));
-			obj_add_str(jpath, "ANAState", libnvme_path_get_ana_state(p));
+			obj_add_str(jpath, "ANAState", ana_state);
 
 			/*
 			 * For multipath, each path maps to one controller.
@@ -4668,15 +4676,20 @@ static void json_print_detail_list(libnvme_subsystem_t s, struct json_object *js
 
 		libnvme_ctrl_for_each_ns(c, n) {
 			struct json_object *jns = json_create_object();
-			int lba = libnvme_ns_get_lba_size(n);
-			uint64_t nsze = libnvme_ns_get_lba_count(n) * lba;
-			uint64_t nuse = libnvme_ns_get_lba_util(n) * lba;
+			int lba;
+			uint64_t lba_count, nsze, nuse;
+
+			libnvme_ns_get_lba_size(n, &lba, 0);
+			libnvme_ns_get_lba_count(n, &lba_count, 0);
+			nsze = lba_count * lba;
+			libnvme_ns_get_lba_util(n, &nuse, 0);
+			nuse *= lba;
 
 			obj_add_str(jns, "NameSpace", libnvme_ns_get_name(n));
 			obj_add_str(jns, "Generic", libnvme_ns_get_generic_name(n));
 			obj_add_int(jns, "NSID", libnvme_ns_get_nsid(n));
 			obj_add_uint64(jns, "UsedBytes", nuse);
-			obj_add_uint64(jns, "MaximumLBA", libnvme_ns_get_lba_count(n));
+			obj_add_uint64(jns, "MaximumLBA", lba_count);
 			obj_add_uint64(jns, "PhysicalSize", nsze);
 			obj_add_int(jns, "SectorSize", lba);
 
@@ -4786,15 +4799,22 @@ static void json_detail_list(struct libnvme_global_ctx *ctx)
 
 				libnvme_ctrl_for_each_ns(c, n) {
 					struct json_object *jns = json_create_object();
-					int lba = libnvme_ns_get_lba_size(n);
-					uint64_t nsze = libnvme_ns_get_lba_count(n) * lba;
-					uint64_t nuse = libnvme_ns_get_lba_util(n) * lba;
+					int lba;
+					uint64_t lba_count, nsze, nuse;
+
+					libnvme_ns_get_lba_size(n, &lba, 0);
+					libnvme_ns_get_lba_count(n,
+							&lba_count, 0);
+					nsze = lba_count * lba;
+					libnvme_ns_get_lba_util(n, &nuse, 0);
+					nuse *= lba;
 
 					obj_add_str(jns, "NameSpace", libnvme_ns_get_name(n));
 					obj_add_str(jns, "Generic", libnvme_ns_get_generic_name(n));
 					obj_add_int(jns, "NSID", libnvme_ns_get_nsid(n));
 					obj_add_uint64(jns, "UsedBytes", nuse);
-					obj_add_uint64(jns, "MaximumLBA", libnvme_ns_get_lba_count(n));
+					obj_add_uint64(jns, "MaximumLBA",
+							lba_count);
 					obj_add_uint64(jns, "PhysicalSize", nsze);
 					obj_add_int(jns, "SectorSize", lba);
 
@@ -4804,9 +4824,13 @@ static void json_detail_list(struct libnvme_global_ctx *ctx)
 
 				libnvme_ctrl_for_each_path(c, p) {
 					struct json_object *jpath = json_create_object();
+					const char *ana_state;
 
+					libnvme_path_get_ana_state(p,
+							&ana_state, NULL);
 					obj_add_str(jpath, "Path", libnvme_path_get_name(p));
-					obj_add_str(jpath, "ANAState", libnvme_path_get_ana_state(p));
+					obj_add_str(jpath, "ANAState",
+							ana_state);
 
 					array_add_obj(jpaths, jpath);
 				}
@@ -4818,16 +4842,20 @@ static void json_detail_list(struct libnvme_global_ctx *ctx)
 
 			libnvme_subsystem_for_each_ns(s, n) {
 				struct json_object *jns = json_create_object();
+				int lba;
+				uint64_t lba_count, nsze, nuse;
 
-				int lba = libnvme_ns_get_lba_size(n);
-				uint64_t nsze = libnvme_ns_get_lba_count(n) * lba;
-				uint64_t nuse = libnvme_ns_get_lba_util(n) * lba;
+				libnvme_ns_get_lba_size(n, &lba, 0);
+				libnvme_ns_get_lba_count(n, &lba_count, 0);
+				nsze = lba_count * lba;
+				libnvme_ns_get_lba_util(n, &nuse, 0);
+				nuse *= lba;
 
 				obj_add_str(jns, "NameSpace", libnvme_ns_get_name(n));
 				obj_add_str(jns, "Generic", libnvme_ns_get_generic_name(n));
 				obj_add_int(jns, "NSID", libnvme_ns_get_nsid(n));
 				obj_add_uint64(jns, "UsedBytes", nuse);
-				obj_add_uint64(jns, "MaximumLBA", libnvme_ns_get_lba_count(n));
+				obj_add_uint64(jns, "MaximumLBA", lba_count);
 				obj_add_uint64(jns, "PhysicalSize", nsze);
 				obj_add_int(jns, "SectorSize", lba);
 
@@ -4850,9 +4878,14 @@ static struct json_object *json_list_item_obj(libnvme_ns_t n)
 	struct json_object *r = json_create_object();
 	char devname[NAME_LEN] = { 0 };
 	char genname[NAME_LEN] = { 0 };
-	int lba = libnvme_ns_get_lba_size(n);
-	uint64_t nsze = libnvme_ns_get_lba_count(n) * lba;
-	uint64_t nuse = libnvme_ns_get_lba_util(n) * lba;
+	int lba;
+	uint64_t lba_count, nsze, nuse;
+
+	libnvme_ns_get_lba_size(n, &lba, 0);
+	libnvme_ns_get_lba_count(n, &lba_count, 0);
+	nsze = lba_count * lba;
+	libnvme_ns_get_lba_util(n, &nuse, 0);
+	nuse *= lba;
 
 	nvme_dev_full_path(n, devname, sizeof(devname));
 	nvme_generic_full_path(n, genname, sizeof(genname));
@@ -4864,7 +4897,7 @@ static struct json_object *json_list_item_obj(libnvme_ns_t n)
 	obj_add_str(r, "ModelNumber", libnvme_ns_get_model(n));
 	obj_add_str(r, "SerialNumber", libnvme_ns_get_serial(n));
 	obj_add_uint64(r, "UsedBytes", nuse);
-	obj_add_uint64(r, "MaximumLBA", libnvme_ns_get_lba_count(n));
+	obj_add_uint64(r, "MaximumLBA", lba_count);
 	obj_add_uint64(r, "PhysicalSize", nsze);
 	obj_add_int(r, "SectorSize", lba);
 
@@ -4935,22 +4968,32 @@ static unsigned int json_subsystem_topology_multipath(libnvme_subsystem_t s,
 			struct json_object *path_attrs;
 			struct json_object *ctrls, *ctrl_attrs;
 			libnvme_ctrl_t c;
+			const char *ana_state;
 
+			libnvme_path_get_ana_state(p, &ana_state, NULL);
 			path_attrs = json_create_object();
 			obj_add_str(path_attrs, "Path", libnvme_path_get_name(p));
-			obj_add_str(path_attrs, "ANAState", libnvme_path_get_ana_state(p));
+			obj_add_str(path_attrs, "ANAState", ana_state);
 
 			/*
 			 * For iopolicy numa exclude "Qdepth", for iopolicy
 			 * queue-depth exclude "NUMANodes" and for iopolicy
 			 * round-robin exclude both "Qdepth" and "NUMANodes".
 			 */
-			if (!strcmp(iopolicy, "numa"))
+			if (!strcmp(iopolicy, "numa")) {
+				const char *numa_nodes;
+
+				libnvme_path_get_numa_nodes(p, &numa_nodes,
+							     NULL);
 				obj_add_str(path_attrs, "NUMANodes",
-						libnvme_path_get_numa_nodes(p));
-			else if (!strcmp(iopolicy, "queue-depth"))
-				obj_add_int(path_attrs, "Qdepth",
-						libnvme_path_get_queue_depth(p));
+						numa_nodes);
+			} else if (!strcmp(iopolicy, "queue-depth")) {
+				int queue_depth;
+
+				libnvme_path_get_queue_depth(p, &queue_depth,
+							      0);
+				obj_add_int(path_attrs, "Qdepth", queue_depth);
+			}
 
 			c = libnvme_path_get_ctrl(p);
 			ctrls = json_create_array();

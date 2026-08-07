@@ -64,12 +64,8 @@ LIBNVME_3 {
 		libnvme_next_host;
 		libnvme_next_subsystem;
 		libnvme_ns_compare;
-		libnvme_ns_copy_uuid;
 		libnvme_ns_flush;
-		libnvme_ns_get_command_error_count;
-		libnvme_ns_get_command_retry_count;
 		libnvme_ns_get_ctrl;
-		libnvme_ns_get_io_fail_no_available_path_count;
 		libnvme_ns_get_firmware;
 		libnvme_ns_get_inflights;
 		libnvme_ns_get_io_ticks;
@@ -77,7 +73,6 @@ LIBNVME_3 {
 		libnvme_ns_get_read_ios;
 		libnvme_ns_get_read_sectors;
 		libnvme_ns_get_read_ticks;
-		libnvme_ns_get_io_requeue_no_usable_path_count;
 		libnvme_ns_get_serial;
 		libnvme_ns_get_stat_interval;
 		libnvme_ns_get_subsystem;
@@ -93,16 +88,10 @@ LIBNVME_3 {
 		libnvme_ns_write_uncorrectable;
 		libnvme_ns_write_zeros;
 		libnvme_open;
-		libnvme_path_get_ana_state;
-		libnvme_path_get_command_error_count;
-		libnvme_path_get_command_retry_count;
 		libnvme_path_get_ctrl;
 		libnvme_path_get_inflights;
 		libnvme_path_get_io_ticks;
-		libnvme_path_get_multipath_failover_count;
 		libnvme_path_get_ns;
-		libnvme_path_get_numa_nodes;
-		libnvme_path_get_queue_depth;
 		libnvme_path_get_read_ios;
 		libnvme_path_get_read_sectors;
 		libnvme_path_get_read_ticks;

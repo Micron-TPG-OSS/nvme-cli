@@ -1277,7 +1277,9 @@ static unsigned int stdout_subsystem_multipath(libnvme_subsystem_t s)
 
 	libnvme_namespace_for_each_path(n, p) {
 		libnvme_ctrl_t c = libnvme_path_get_ctrl(p);
-		const char *ana_state = ana_state = libnvme_path_get_ana_state(p);
+		const char *ana_state;
+
+		libnvme_path_get_ana_state(p, &ana_state, "");
 
 		printf(" +- %s %s %s %s %s\n",
 			libnvme_ctrl_get_name(c),
@@ -1961,22 +1963,22 @@ static void stdout_id_ctrl_cmic(__u8 cmic)
 static void stdout_id_ctrl_oaes(__le32 ctrl_oaes)
 {
 	__u32 oaes = le32_to_cpu(ctrl_oaes);
-	__u32 dlpcn = (oaes & NVME_CTRL_OAES_DL) >> 31;
+	__u32 dlpcn = NVME_CTRL_OAES_DLPCN(oaes);
 	__u32 rsvd28 = (oaes & 0x70000000) >> 28;
-	__u32 zdcn = (oaes & NVME_CTRL_OAES_ZD) >> 27;
+	__u32 zdcn = NVME_CTRL_OAES_ZDCN(oaes);
 	__u32 rsvd20 = (oaes & 0x7fe0000) >> 20;
-	__u32 ansan = (oaes & NVME_CTRL_OAES_ANSAN) >> 19;
+	__u32 ansan = NVME_CTRL_OAES_ANSAN(oaes);
 	__u32 rsvd18 = (oaes >> 18) & 0x1;
-	__u32 rgcns = (oaes & NVME_CTRL_OAES_RGCNS) >> 17;
-	__u32 tthr = (oaes & NVME_CTRL_OAES_TTH) >> 16;
-	__u32 normal_shn = (oaes & NVME_CTRL_OAES_NS) >> 15;
-	__u32 egealpcn = (oaes & NVME_CTRL_OAES_EGE) >> 14;
-	__u32 lbasin = (oaes & NVME_CTRL_OAES_LBAS) >> 13;
-	__u32 plealcn = (oaes & NVME_CTRL_OAES_PLEA) >> 12;
-	__u32 anacn = (oaes & NVME_CTRL_OAES_ANA) >> 11;
+	__u32 rgcns = NVME_CTRL_OAES_RGCNS(oaes);
+	__u32 tthr = NVME_CTRL_OAES_TTHR(oaes);
+	__u32 normal_shn = NVME_CTRL_OAES_NNVMSS(oaes);
+	__u32 egealpcn = NVME_CTRL_OAES_EGEALPCN(oaes);
+	__u32 lbasin = NVME_CTRL_OAES_LBASIAN(oaes);
+	__u32 plealcn = NVME_CTRL_OAES_PLEALCN(oaes);
+	__u32 anacn = NVME_CTRL_OAES_ANACN(oaes);
 	__u32 rsvd10 = (oaes >> 10) & 0x1;
-	__u32 fan = (oaes & NVME_CTRL_OAES_FA) >> 9;
-	__u32 nace = (oaes & NVME_CTRL_OAES_NA) >> 8;
+	__u32 fan = NVME_CTRL_OAES_FAN(oaes);
+	__u32 nace = NVME_CTRL_OAES_NAN(oaes);
 	__u32 rsvd0 = oaes & 0xFF;
 
 	printf("  [31:31] : %#x\tDiscovery Log Change Notice %sSupported\n",
@@ -2210,18 +2212,18 @@ static void stdout_id_ctrl_oacs(__le16 ctrl_oacs)
 {
 	__u16 oacs = le16_to_cpu(ctrl_oacs);
 	__u16 rsvd = (oacs & 0xF000) >> 12;
-	__u16 hmlms = (oacs & 0x800) >> 11;
-	__u16 lock = (oacs & NVME_CTRL_OACS_CMD_FEAT_LD) >> 10;
-	__u16 glbas = (oacs & NVME_CTRL_OACS_LBA_STATUS) >> 9;
-	__u16 dbc = (oacs & NVME_CTRL_OACS_DBBUF_CFG) >> 8;
-	__u16 vir = (oacs & NVME_CTRL_OACS_VIRT_MGMT) >> 7;
-	__u16 nmi = (oacs & NVME_CTRL_OACS_NVME_MI) >> 6;
-	__u16 dir = (oacs & NVME_CTRL_OACS_DIRECTIVES) >> 5;
-	__u16 sft = (oacs & NVME_CTRL_OACS_SELF_TEST) >> 4;
-	__u16 nsm = (oacs & NVME_CTRL_OACS_NS_MGMT) >> 3;
-	__u16 fwc = (oacs & NVME_CTRL_OACS_FW) >> 2;
-	__u16 fmt = (oacs & NVME_CTRL_OACS_FORMAT) >> 1;
-	__u16 sec = oacs & NVME_CTRL_OACS_SECURITY;
+	__u16 hmlms = NVME_CTRL_OACS_HMLMS(oacs);
+	__u16 lock = NVME_CTRL_OACS_CFLS(oacs);
+	__u16 glbas = NVME_CTRL_OACS_GLSS(oacs);
+	__u16 dbc = NVME_CTRL_OACS_DBCS(oacs);
+	__u16 vir = NVME_CTRL_OACS_VMS_M(oacs);
+	__u16 nmi = NVME_CTRL_OACS_NSRS(oacs);
+	__u16 dir = NVME_CTRL_OACS_DIRS(oacs);
+	__u16 sft = NVME_CTRL_OACS_DSTS(oacs);
+	__u16 nsm = NVME_CTRL_OACS_NMS_M(oacs);
+	__u16 fwc = NVME_CTRL_OACS_FWDS(oacs);
+	__u16 fmt = NVME_CTRL_OACS_FNVMS(oacs);
+	__u16 sec = NVME_CTRL_OACS_SSRS(oacs);
 
 	if (rsvd)
 		printf(" [15:12] : %#x\tReserved\n", rsvd);
@@ -2389,8 +2391,8 @@ void stdout_id_ctrl_rpmbs(__le32 ctrl_rpmbs)
 static void stdout_id_ctrl_dsto(__u8 dsto)
 {
 	__u8 rsvd2 = (dsto & 0xfc) >> 2;
-	__u8 hirs = (dsto & 0x2) >> 1;
-	__u8 sdso = dsto & 0x1;
+	__u8 hirs = NVME_CTRL_DSTO_HIRS(dsto);
+	__u8 sdso = NVME_CTRL_DSTO_SDSO(dsto);
 
 	if (rsvd2)
 		printf("  [7:2] : %#x\tReserved\n", rsvd2);
@@ -2435,12 +2437,12 @@ static void stdout_id_ctrl_sanicap(__le32 ctrl_sanicap)
 {
 	__u32 sanicap = le32_to_cpu(ctrl_sanicap);
 	__u32 rsvd4 = (sanicap & 0x1FFFFFF0) >> 4;
-	__u32 vers = (sanicap & 0x8) >> 3;
-	__u32 ows = (sanicap & 0x4) >> 2;
-	__u32 bes = (sanicap & 0x2) >> 1;
-	__u32 ces = sanicap & 0x1;
-	__u32 ndi = (sanicap & 0x20000000) >> 29;
-	__u32 nodmmas = (sanicap & 0xC0000000) >> 30;
+	__u32 vers = NVME_CTRL_SANICAP_NVERS(sanicap);
+	__u32 ows = NVME_CTRL_SANICAP_OWS(sanicap);
+	__u32 bes = NVME_CTRL_SANICAP_BES(sanicap);
+	__u32 ces = NVME_CTRL_SANICAP_CES(sanicap);
+	__u32 ndi = NVME_CTRL_SANICAP_NDI(sanicap);
+	__u32 nodmmas = NVME_CTRL_SANICAP_NODMMAS(sanicap);
 
 	static const char * const modifies_media[] = {
 		"Additional media modification after sanitize operation completes successfully is not defined",
@@ -2498,8 +2500,8 @@ static void stdout_id_ctrl_anacap(__u8 anacap)
 static void stdout_id_ctrl_kpioc(__u8 ctrl_kpioc)
 {
 	__u8 rsvd2 = (ctrl_kpioc >> 2);
-	__u8 kpiosc = NVME_GET(ctrl_kpioc, CTRL_KPIOC_KPIOSC);
-	__u8 kpios = NVME_GET(ctrl_kpioc, CTRL_KPIOC_KPIOS);
+	__u8 kpiosc = NVME_CTRL_KPIOC_KPIOSC(ctrl_kpioc);
+	__u8 kpios = NVME_CTRL_KPIOC_KPIOS(ctrl_kpioc);
 
 	if (rsvd2)
 		printf(" [7:2] : %#x\tReserved\n", rsvd2);
@@ -2540,8 +2542,8 @@ static void stdout_id_ctrl_cdpa(__le16 ctrl_cdpa)
 static void stdout_id_ctrl_ipmsr(__le16 ctrl_ipmsr)
 {
 	__u16 ipmsr = le16_to_cpu(ctrl_ipmsr);
-	__u16 srs = NVME_GET(ipmsr, CTRL_IPMSR_SRS);
-	__u16 srv = NVME_GET(ipmsr, CTRL_IPMSR_SRV);
+	__u16 srs = NVME_CTRL_IPMSR_SRS(ipmsr);
+	__u16 srv = NVME_CTRL_IPMSR_SRV(ipmsr);
 
 	printf("  [15:8] : %#x\tSample Rate Scale (%s)\n", srs,
 		nvme_ipmsr_srs_to_string(srs));
@@ -2635,10 +2637,10 @@ static void stdout_id_ctrl_fuses(__le16 ctrl_fuses)
 static void stdout_id_ctrl_fna(__u8 fna)
 {
 	__u8 rsvd = (fna & 0xF0) >> 4;
-	__u8 bcnsid = (fna & NVME_CTRL_FNA_NSID_FFFFFFFF) >> 3;
-	__u8 cese = (fna & NVME_CTRL_FNA_CRYPTO_ERASE) >> 2;
-	__u8 cens = (fna & NVME_CTRL_FNA_SEC_ALL_NAMESPACES) >> 1;
-	__u8 fmns = fna & NVME_CTRL_FNA_FMT_ALL_NAMESPACES;
+	__u8 bcnsid = NVME_CTRL_FNA_NSID_ALL_F(fna);
+	__u8 cese = NVME_CTRL_FNA_CES(fna);
+	__u8 cens = NVME_CTRL_FNA_SEC_ALL_NS(fna);
+	__u8 fmns = NVME_CTRL_FNA_FMT_ALL_NS(fna);
 
 	if (rsvd)
 		printf("  [7:4] : %#x\tReserved\n", rsvd);
@@ -2779,9 +2781,9 @@ static void stdout_id_ctrl_sgls(__le32 ctrl_sgls)
 static void stdout_id_ctrl_trattr(__u8 ctrl_trattr)
 {
 	__u8 rsvd3 = (ctrl_trattr >> 3);
-	__u8 mrtll = NVME_GET(ctrl_trattr, CTRL_TRATTR_MRTLL);
-	__u8 tudcs = NVME_GET(ctrl_trattr, CTRL_TRATTR_TUDCS);
-	__u8 thmcs = NVME_GET(ctrl_trattr, CTRL_TRATTR_THMCS);
+	__u8 mrtll = NVME_CTRL_TRATTR_MRTLL(ctrl_trattr);
+	__u8 tudcs = NVME_CTRL_TRATTR_TUDCS(ctrl_trattr);
+	__u8 thmcs = NVME_CTRL_TRATTR_THMCS(ctrl_trattr);
 
 	if (rsvd3)
 		printf(" [7:3] : %#x\tReserved\n", rsvd3);
@@ -2937,8 +2939,8 @@ static void stdout_id_ns_dpc(__u8 dpc)
 static void stdout_id_ns_dps(__u8 dps)
 {
 	__u8 rsvd = (dps & 0xF0) >> 4;
-	__u8 pif8 = (dps & 0x8) >> 3;
-	__u8 pit = dps & 0x7;
+	__u8 pif8 = NVME_NS_DPS_PI_FIRST(dps);
+	__u8 pit = NVME_NS_DPS_PI(dps);
 
 	if (rsvd)
 		printf("  [7:4] : %#x\tReserved\n", rsvd);
@@ -3672,8 +3674,8 @@ static void stdout_id_ctrl(struct nvme_id_ctrl *ctrl, const char *product_name,
 static void stdout_id_ctrl_nvm_kpiocap(__u8 kpiocap)
 {
 	__u8 rsvd2 = (kpiocap & 0xfc) >> 2;
-	__u8 kpiosc = (kpiocap & 0x2) >> 1;
-	__u8 kpios = kpiocap & 0x1;
+	__u8 kpiosc = NVME_CTRL_KPIOC_KPIOSC(kpiocap);
+	__u8 kpios = NVME_CTRL_KPIOC_KPIOS(kpiocap);
 
 	if (rsvd2)
 		printf("  [7:2] : %#x\tReserved\n", rsvd2);
@@ -4685,17 +4687,17 @@ static void stdout_smart_log(struct nvme_smart_log *smart, unsigned int nsid, co
 
 	if (human) {
 		printf("      Available Spare[0]             : %d\n",
-		       smart->critical_warning & 0x01);
+		       NVME_SMART_CW_ASCBT(smart->critical_warning));
 		printf("      Temp. Threshold[1]             : %d\n",
-		       (smart->critical_warning & 0x02) >> 1);
+		       NVME_SMART_CW_TTC(smart->critical_warning));
 		printf("      NVM subsystem Reliability[2]   : %d\n",
-		       (smart->critical_warning & 0x04) >> 2);
+		       NVME_SMART_CW_NDR(smart->critical_warning));
 		printf("      Read-only[3]                   : %d\n",
-		       (smart->critical_warning & 0x08) >> 3);
+		       NVME_SMART_CW_AMRO(smart->critical_warning));
 		printf("      Volatile mem. backup failed[4] : %d\n",
-		       (smart->critical_warning & 0x10) >> 4);
+		       NVME_SMART_CW_VMBF(smart->critical_warning));
 		printf("      Persistent Mem. RO[5]          : %d\n",
-		       (smart->critical_warning & 0x20) >> 5);
+		       NVME_SMART_CW_PMRRO(smart->critical_warning));
 	}
 
 	printf("temperature				: %s (%u K, %s)\n",
@@ -5743,21 +5745,31 @@ static void list_item(libnvme_ns_t n, struct table *t)
 {
 	char usage[128] = { 0 }, format[128] = { 0 };
 	char devname[128] = { 0 }; char genname[128] = { 0 };
-
-	long long lba = libnvme_ns_get_lba_size(n);
-	double nsze = libnvme_ns_get_lba_count(n) * lba;
-	double nuse = libnvme_ns_get_lba_util(n) * lba;
-
-	const char *s_suffix = suffix_si_get(&nsze);
-	const char *u_suffix = suffix_si_get(&nuse);
-	const char *l_suffix = suffix_binary_get(&lba);
+	int lba_size, meta_size;
+	uint64_t lba_count, lba_util;
+	long long lba;
+	double nsze, nuse;
+	const char *s_suffix, *u_suffix, *l_suffix;
 	char ns[STR_LEN];
 	int row;
+
+	libnvme_ns_get_lba_size(n, &lba_size, 0);
+	libnvme_ns_get_lba_count(n, &lba_count, 0);
+	libnvme_ns_get_lba_util(n, &lba_util, 0);
+	libnvme_ns_get_meta_size(n, &meta_size, 0);
+
+	lba = lba_size;
+	nsze = lba_count * lba;
+	nuse = lba_util * lba;
+
+	s_suffix = suffix_si_get(&nsze);
+	u_suffix = suffix_si_get(&nuse);
+	l_suffix = suffix_binary_get(&lba);
 
 	snprintf(usage, sizeof(usage), "%6.2f %2sB / %6.2f %2sB", nuse,
 		u_suffix, nsze, s_suffix);
 	snprintf(format, sizeof(format), "%3.0f %2sB + %2d B", (double)lba,
-		l_suffix, libnvme_ns_get_meta_size(n));
+		l_suffix, meta_size);
 
 	stdout_dev_full_path(n, devname, sizeof(devname));
 	stdout_generic_full_path(n, genname, sizeof(genname));
@@ -5863,21 +5875,31 @@ static void stdout_ns_details(libnvme_ns_t n)
 {
 	char usage[128] = { 0 }, format[128] = { 0 }, usage_binary[128] = { 0 };
 	char devname[128] = { 0 }, genname[128] = { 0 };
-
-	long long lba = libnvme_ns_get_lba_size(n);
-	double nsze = libnvme_ns_get_lba_count(n) * lba;
-	double nuse = libnvme_ns_get_lba_util(n) * lba;
-	double nsze_binary = nsze, nuse_binary = nuse;
-
-	const char *s_suffix = suffix_si_get(&nsze);
-	const char *u_suffix = suffix_si_get(&nuse);
-	const char *l_suffix = suffix_binary_get(&lba);
-
+	int lba_size, meta_size;
+	uint64_t lba_count, lba_util;
+	long long lba;
+	double nsze, nuse;
+	double nsze_binary, nuse_binary;
+	const char *s_suffix, *u_suffix, *l_suffix;
 	const char *s_suffix_binary, *u_suffix_binary;
 
+	libnvme_ns_get_lba_size(n, &lba_size, 0);
+	libnvme_ns_get_lba_count(n, &lba_count, 0);
+	libnvme_ns_get_lba_util(n, &lba_util, 0);
+	libnvme_ns_get_meta_size(n, &meta_size, 0);
+
+	lba = lba_size;
+	nsze = lba_count * lba;
+	nuse = lba_util * lba;
+	nsze_binary = nsze;
+	nuse_binary = nuse;
+
+	s_suffix = suffix_si_get(&nsze);
+	u_suffix = suffix_si_get(&nuse);
+	l_suffix = suffix_binary_get(&lba);
+
 	sprintf(usage, "%6.2f %1sB / %6.2f %1sB", nuse, u_suffix, nsze, s_suffix);
-	sprintf(format, "%3.0f %2sB + %2d B", (double)lba, l_suffix,
-		libnvme_ns_get_meta_size(n));
+	sprintf(format, "%3.0f %2sB + %2d B", (double)lba, l_suffix, meta_size);
 
 	s_suffix_binary = suffix_dbinary_get(&nsze_binary);
 	u_suffix_binary = suffix_dbinary_get(&nuse_binary);
@@ -6145,7 +6167,12 @@ static void stdout_tabular_subsystem_topology_multipath(libnvme_subsystem_t s)
 	libnvme_subsystem_for_each_ns(s, n) {
 		first = true;
 		libnvme_namespace_for_each_path(n, p) {
+			const char *ana_state;
+			int queue_depth;
+			const char *numa_nodes;
+
 			c = libnvme_path_get_ctrl(p);
+			libnvme_path_get_ana_state(p, &ana_state, "");
 
 			/*
 			 * For the first row we print actual NSHead name,
@@ -6163,19 +6190,23 @@ static void stdout_tabular_subsystem_topology_multipath(libnvme_subsystem_t s)
 
 			snprintf(nsid, sizeof(nsid), "%u", libnvme_ns_get_nsid(n));
 
-			if (!strcmp(iopolicy, "numa"))
+			if (!strcmp(iopolicy, "numa")) {
+				libnvme_path_get_numa_nodes(p, &numa_nodes, "");
 				snprintf(iopolicy_info, sizeof(iopolicy_info),
-					"%s", libnvme_path_get_numa_nodes(p));
-			else if (!strcmp(iopolicy, "queue-depth"))
+					"%s", numa_nodes);
+			} else if (!strcmp(iopolicy, "queue-depth")) {
+				libnvme_path_get_queue_depth(p, &queue_depth,
+							      0);
 				snprintf(iopolicy_info, sizeof(iopolicy_info),
-					"%d", libnvme_path_get_queue_depth(p));
+					"%d", queue_depth);
+			}
 
 			ret = subsystem_topology_multipath_add_row(t,
 						    iopolicy,
 						    nshead,
 						    nsid,
 						    libnvme_path_get_name(p),
-						    libnvme_path_get_ana_state(p),
+						    ana_state,
 						    iopolicy_info,
 						    libnvme_ctrl_get_name(c),
 						    libnvme_ctrl_get_transport(c),
@@ -6234,14 +6265,17 @@ static void stdout_subsystem_topology_multipath(libnvme_subsystem_t s,
 			printf(" \\\n");
 
 			libnvme_namespace_for_each_path(n, p) {
+				const char *ana_state;
+
 				c = libnvme_path_get_ctrl(p);
+				libnvme_path_get_ana_state(p, &ana_state, "");
 
 				printf("  +- %s %s %s %s %s\n",
 				       libnvme_ctrl_get_name(c),
 				       libnvme_ctrl_get_transport(c),
 				       libnvme_ctrl_get_address(c),
 				       libnvme_ctrl_get_state(c),
-				       libnvme_path_get_ana_state(p));
+				       ana_state);
 			}
 		}
 	} else if (ranking == NVME_CLI_TOPO_CTRL) {
@@ -6255,13 +6289,17 @@ static void stdout_subsystem_topology_multipath(libnvme_subsystem_t s,
 
 			libnvme_subsystem_for_each_ns(s, n) {
 				libnvme_namespace_for_each_path(n, p) {
+					const char *ana_state;
+
 					if (libnvme_path_get_ctrl(p) != c)
 						continue;
 
+					libnvme_path_get_ana_state(p,
+							&ana_state, "");
 					printf("  +- ns %d %s %s\n",
 					       libnvme_ns_get_nsid(n),
 					       libnvme_ctrl_get_state(c),
-					       libnvme_path_get_ana_state(p));
+					       ana_state);
 				}
 			}
 		}
@@ -6273,31 +6311,42 @@ static void stdout_subsystem_topology_multipath(libnvme_subsystem_t s,
 					libnvme_ns_get_nsid(n));
 			printf(" \\\n");
 			libnvme_namespace_for_each_path(n, p) {
+				const char *ana_state;
+
 				c = libnvme_path_get_ctrl(p);
+				libnvme_path_get_ana_state(p, &ana_state, "");
 
 				if (!strcmp(iopolicy, "numa")) {
+					const char *numa_nodes;
+
 					/*
 					 * For iopolicy numa, exclude printing
 					 * qdepth.
 					 */
+					libnvme_path_get_numa_nodes(p,
+							&numa_nodes, "");
 					printf("  +- %s %s %s %s %s %s %s\n",
 						libnvme_path_get_name(p),
-						libnvme_path_get_ana_state(p),
-						libnvme_path_get_numa_nodes(p),
+						ana_state,
+						numa_nodes,
 						libnvme_ctrl_get_name(c),
 						libnvme_ctrl_get_transport(c),
 						libnvme_ctrl_get_address(c),
 						libnvme_ctrl_get_state(c));
 
 				} else if (!strcmp(iopolicy, "queue-depth")) {
+					int queue_depth;
+
 					/*
 					 * For iopolicy queue-depth, exclude
 					 * printing numa nodes.
 					 */
+					libnvme_path_get_queue_depth(p,
+							&queue_depth, 0);
 					printf("  +- %s %s %d %s %s %s %s\n",
 						libnvme_path_get_name(p),
-						libnvme_path_get_ana_state(p),
-						libnvme_path_get_queue_depth(p),
+						ana_state,
+						queue_depth,
 						libnvme_ctrl_get_name(c),
 						libnvme_ctrl_get_transport(c),
 						libnvme_ctrl_get_address(c),
@@ -6310,7 +6359,7 @@ static void stdout_subsystem_topology_multipath(libnvme_subsystem_t s,
 					 */
 					printf("  +- %s %s %s %s %s %s\n",
 						libnvme_path_get_name(p),
-						libnvme_path_get_ana_state(p),
+						ana_state,
 						libnvme_ctrl_get_name(c),
 						libnvme_ctrl_get_transport(c),
 						libnvme_ctrl_get_address(c),

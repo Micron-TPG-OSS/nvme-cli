@@ -287,6 +287,7 @@ static void __nvme_free_ns(struct libnvme_ns *n)
 	free(n->generic_name);
 	free(n->name);
 	free(n->sysfs_dir);
+	libnvme_ns_sysfs_free(n->sysfs);
 	libnvme_namespace_for_each_path_safe(n, p, _p) {
 		list_del_init(&p->nentry);
 		p->n = NULL;
@@ -645,83 +646,6 @@ __shr_public libnvme_ctrl_t libnvme_path_get_ctrl(libnvme_path_t p)
 __shr_public libnvme_ns_t libnvme_path_get_ns(libnvme_path_t p)
 {
 	return p->n;
-}
-
-__shr_public int libnvme_path_get_queue_depth(libnvme_path_t p)
-{
-	__cleanup_free char *queue_depth = NULL;
-
-	queue_depth = libnvme_get_path_attr(p, "queue_depth");
-	if (queue_depth) {
-		sscanf(queue_depth, "%d", &p->queue_depth);
-	}
-
-	return p->queue_depth;
-}
-
-__shr_public char *libnvme_path_get_ana_state(libnvme_path_t p)
-{
-	__cleanup_free char *ana_state = NULL;
-
-	ana_state = libnvme_get_path_attr(p, "ana_state");
-	if (ana_state) {
-		if (!p->ana_state || strcmp(ana_state, p->ana_state)) {
-			free(p->ana_state);
-			p->ana_state = strdup(ana_state);
-		}
-	}
-
-	return p->ana_state;
-}
-
-__shr_public char *libnvme_path_get_numa_nodes(libnvme_path_t p)
-{
-	__cleanup_free char *numa_nodes = NULL;
-
-	numa_nodes = libnvme_get_path_attr(p, "numa_nodes");
-	if (numa_nodes) {
-		if (!p->numa_nodes || strcmp(numa_nodes, p->numa_nodes)) {
-			free(p->numa_nodes);
-			p->numa_nodes = strdup(numa_nodes);
-		}
-	}
-
-	return p->numa_nodes;
-}
-
-__shr_public long libnvme_path_get_multipath_failover_count(
-		libnvme_path_t p)
-{
-	__cleanup_free char *failover_count = NULL;
-
-	failover_count = libnvme_get_path_attr(p,
-				"diag/multipath_failover_count");
-	if (failover_count)
-		sscanf(failover_count, "%ld", &p->multipath_failover_count);
-
-	return p->multipath_failover_count;
-}
-
-__shr_public long libnvme_path_get_command_retry_count(libnvme_path_t p)
-{
-	__cleanup_free char *retry_count = NULL;
-
-	retry_count = libnvme_get_path_attr(p, "diag/command_retry_count");
-	if (retry_count)
-		sscanf(retry_count, "%ld", &p->command_retry_count);
-
-	return p->command_retry_count;
-}
-
-__shr_public long libnvme_path_get_command_error_count(libnvme_path_t p)
-{
-	__cleanup_free char *error_count = NULL;
-
-	error_count = libnvme_get_path_attr(p, "diag/command_error_count");
-	if (error_count)
-		sscanf(error_count, "%ld", &p->command_error_count);
-
-	return p->command_error_count;
 }
 
 static libnvme_stat_t libnvme_path_get_stat(libnvme_path_t p, unsigned int idx)
@@ -1147,8 +1071,7 @@ void nvme_free_path(struct libnvme_path *p)
 	list_del_init(&p->nentry);
 	free(p->name);
 	free(p->sysfs_dir);
-	free(p->ana_state);
-	free(p->numa_nodes);
+	libnvme_path_sysfs_free(p->sysfs);
 	free(p);
 }
 
@@ -1156,7 +1079,7 @@ static int libnvme_ctrl_scan_path(struct libnvme_global_ctx *ctx,
 		struct libnvme_ctrl *c, char *name)
 {
 	struct libnvme_path *p;
-	__cleanup_free char *path = NULL, *grpid = NULL, *queue_depth = NULL;
+	__cleanup_free char *path = NULL;
 	int ret;
 
 	libnvme_msg(ctx, LIBNVME_LOG_DEBUG, "scan controller %s path %s\n",
@@ -1172,27 +1095,16 @@ static int libnvme_ctrl_scan_path(struct libnvme_global_ctx *ctx,
 	if (!p)
 		return -ENOMEM;
 
+	p->sysfs = libnvme_path_sysfs_alloc();
+	if (!p->sysfs) {
+		free(p);
+		return -ENOMEM;
+	}
+
 	p->c = c;
 	p->name = strdup(name);
 	p->sysfs_dir = path;
 	path = NULL;
-	p->ana_state = libnvme_get_path_attr(p, "ana_state");
-	if (!p->ana_state)
-		p->ana_state = strdup("optimized");
-
-	p->numa_nodes = libnvme_get_path_attr(p, "numa_nodes");
-	if (!p->numa_nodes)
-		p->numa_nodes = strdup("-1");
-
-	grpid = libnvme_get_path_attr(p, "ana_grpid");
-	if (grpid) {
-		sscanf(grpid, "%d", &p->grpid);
-	}
-
-	queue_depth = libnvme_get_path_attr(p, "queue_depth");
-	if (queue_depth) {
-		sscanf(queue_depth, "%d", &p->queue_depth);
-	}
 
 	list_node_init(&p->nentry);
 	list_node_init(&p->entry);
@@ -1594,14 +1506,21 @@ __shr_public void libnvme_rescan_ctrl(struct libnvme_ctrl *c)
 static int libnvme_bytes_to_lba(libnvme_ns_t n, off_t offset, size_t count,
 		__u64 *lba, __u16 *nlb)
 {
-	int bs;
+	int bs, lba_shift;
+	int ret;
 
-	bs = libnvme_ns_get_lba_size(n);
+	ret = libnvme_ns_get_lba_size(n, &bs, 0);
+	if (ret)
+		return ret;
 	if (!count || offset & (bs - 1) || count & (bs - 1))
 		return -EINVAL;
 
-	*lba = offset >> n->lba_shift;
-	*nlb = (count >> n->lba_shift) - 1;
+	ret = libnvme_ns_get_lba_shift(n, &lba_shift, 0);
+	if (ret)
+		return ret;
+
+	*lba = offset >> lba_shift;
+	*nlb = (count >> lba_shift) - 1;
 
 	return 0;
 }
@@ -1681,61 +1600,6 @@ __shr_public const char *libnvme_ns_get_firmware(libnvme_ns_t n)
 
 	libnvme_ctrl_get_firmware(n->c, &val, NULL);
 	return val;
-}
-
-__shr_public void libnvme_ns_copy_uuid(libnvme_ns_t n,
-		unsigned char out[NVME_UUID_LEN])
-{
-	memcpy(out, n->uuid, NVME_UUID_LEN);
-}
-
-__shr_public long libnvme_ns_get_command_retry_count(libnvme_ns_t n)
-{
-	__cleanup_free char *retry_count = NULL;
-
-	retry_count = libnvme_get_ns_attr(n, "diag/command_retry_count");
-	if (retry_count)
-		sscanf(retry_count, "%ld", &n->command_retry_count);
-
-	return n->command_retry_count;
-}
-
-__shr_public long libnvme_ns_get_command_error_count(libnvme_ns_t n)
-{
-	__cleanup_free char *error_count = NULL;
-
-	error_count = libnvme_get_ns_attr(n, "diag/command_error_count");
-	if (error_count)
-		sscanf(error_count, "%ld", &n->command_error_count);
-
-	return n->command_error_count;
-}
-
-__shr_public long libnvme_ns_get_io_requeue_no_usable_path_count(
-		libnvme_ns_t n)
-{
-	__cleanup_free char *requeue_count = NULL;
-
-	requeue_count = libnvme_get_ns_attr(n,
-			"diag/io_requeue_no_usable_path_count");
-	if (requeue_count)
-		sscanf(requeue_count, "%ld",
-			&n->io_requeue_no_usable_path_count);
-
-	return n->io_requeue_no_usable_path_count;
-}
-
-__shr_public long libnvme_ns_get_io_fail_no_available_path_count(
-		libnvme_ns_t n)
-{
-	__cleanup_free char *fail_count = NULL;
-
-	fail_count = libnvme_get_ns_attr(n,
-			"diag/io_fail_no_available_path_count");
-	if (fail_count)
-		sscanf(fail_count, "%ld", &n->io_fail_no_available_path_count);
-
-	return n->io_fail_no_available_path_count;
 }
 
 __shr_public int libnvme_ns_identify(libnvme_ns_t n, struct nvme_id_ns *ns)
