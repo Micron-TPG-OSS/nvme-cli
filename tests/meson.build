@@ -59,6 +59,11 @@ foreach t : tests
         timeout: 500,
         protocol: 'tap',
         is_parallel: false,
+        # Named so that these can be selected on their own with
+        # "meson test --suite core". Without a suite name they land in the
+        # project-wide default suite, which is indistinguishable from
+        # "every test in nvme-cli" on the command line.
+        suite: 'core',
     )
 endforeach
 
