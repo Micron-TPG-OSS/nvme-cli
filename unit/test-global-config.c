@@ -60,8 +60,11 @@ static char *write_temp(const char *content)
 	char buf[PATH_MAX];
 	char *path;
 	int fd;
+	int n;
 
-	snprintf(buf, sizeof(buf), "%s/nvme-cli-conf-test-XXXXXX", temp_dir());
+	n = snprintf(buf, sizeof(buf), "%s/nvme-cli-conf-test-XXXXXX",
+		     temp_dir());
+	shr_assert(n > 0 && (size_t)n < sizeof(buf));
 	path = strdup(buf);
 	shr_assert(path);
 
