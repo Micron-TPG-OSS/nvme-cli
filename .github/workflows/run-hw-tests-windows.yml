@@ -44,6 +44,12 @@ on:
   # workflow that is on the pushed branch, so changes here can be exercised
   # against the real drive before anything is merged to master.
   #
+  # A push carries no inputs, so the branch name picks the suite:
+  #
+  #   hw-ci-staging/core/<name>   core suites   (WRITES to the namespace)
+  #   hw-ci-staging/all/<name>    everything    (WRITES to the namespace)
+  #   hw-ci-staging/<name>        plugins       (read-mostly, the default)
+  #
   # This is NOT the fork-PR hazard called out above: only collaborators with
   # write access can push a branch to this repository, whereas a pull_request
   # trigger would run code from an arbitrary contributor's fork.
@@ -214,11 +220,27 @@ jobs:
           COMSPEC: 'C:\WINDOWS\system32\cmd.exe'
         run: |
           set -uo pipefail
-          case "${{ inputs.suites || 'plugins' }}" in
+          # workflow_dispatch supplies inputs.suites; a push does not, so fall
+          # back to the branch name. Anything unrecognised gets the read-mostly
+          # default rather than a destructive run.
+          suites="${{ inputs.suites || '' }}"
+          if [[ -z "${suites}" ]]; then
+              case "${GITHUB_REF_NAME}" in
+                  hw-ci-staging/core/*) suites=core ;;
+                  hw-ci-staging/all/*)  suites=all ;;
+                  *)                    suites=plugins ;;
+              esac
+              echo "::notice::push to '${GITHUB_REF_NAME}' -> suites=${suites}"
+          fi
+          case "${suites}" in
               plugins) args=(--suite micron --suite ocp) ;;
               core)    args=(--suite core) ;;
               all)     args=(--suite core --suite micron --suite ocp) ;;
+              *)       echo "::error::unknown suites value '${suites}'" ; exit 1 ;;
           esac
+          if [[ "${suites}" != plugins ]]; then
+              echo "::warning::${suites} suites write to ${NVME_HW_NAMESPACE}"
+          fi
           # Note: a bare "--suite nvme-cli" would match the *project* name and
           # silently select every test, so each suite is named explicitly.
           meson test -C .build-ci --print-errorlogs "${args[@]}"
