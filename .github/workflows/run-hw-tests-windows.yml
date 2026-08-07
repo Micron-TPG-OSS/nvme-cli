@@ -1,0 +1,232 @@
+---
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# This file is part of nvme.
+# Copyright (c) 2026 Micron Technology, Inc.
+#
+# Authors: Brandon Busacker <bbusacker@micron.com>
+#
+# Hardware-in-the-loop test run for Windows Server 2025.
+#
+# Unlike upstream's run-nightly-tests.yml -- which needs a KubeVirt VM, a
+# nightly-built Linux kernel, and the out-of-tree kubevirt-action from
+# linux-blktests/blktests-ci -- this workflow targets a plain self-hosted
+# Windows box with an NVMe drive installed. There is no VM and no blktests;
+# the runner talks to the drive directly.
+#
+# SAFETY: several testcases are destructive. On Windows the namespace
+# management suites self-disable (libnvme reports no NS management support,
+# so nvme_format_test / nvme_create_max_ns_test / nvme_attach_detach_ns_test
+# all skip), but nvme_read_write_test still writes to LBA 0 of the
+# namespace. Set NVME_HW_ALLOWED_SERIALS on the runner so that the tests
+# refuse to touch anything but the designated drive.
+#
+# Do NOT add a pull_request trigger. This repository is public, and a
+# self-hosted runner combined with fork-PR code execution would hand
+# arbitrary contributors a shell on Micron hardware.
+
+name: Run hardware tests (Windows Server 2025)
+
+on:
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: 'Which suites to run'
+        required: false
+        default: 'plugins'
+        type: choice
+        options:
+          - plugins       # micron + ocp -- read-mostly, safest
+          - core          # nvme-cli core suites (writes to the namespace)
+          - all
+  # Staging loop. Unlike workflow_dispatch and schedule -- which only work
+  # once the file is on the default branch -- push runs the version of the
+  # workflow that is on the pushed branch, so changes here can be exercised
+  # against the real drive before anything is merged to master.
+  #
+  # This is NOT the fork-PR hazard called out above: only collaborators with
+  # write access can push a branch to this repository, whereas a pull_request
+  # trigger would run code from an arbitrary contributor's fork.
+  push:
+    branches:
+      - 'hw-ci-staging/**'
+  schedule:
+    - cron: '0 07 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  # One drive, one run. Never cancel in progress: an interrupted run can
+  # leave the drive mid-format.
+  group: nvme-hw-micron-ws2025
+  cancel-in-progress: false
+
+jobs:
+  hw-tests:
+    # micron-ws2025 is the custom label; self-hosted/windows/x64 are applied
+    # automatically by the runner but are listed for clarity. Currently
+    # served by a single machine.
+    runs-on: [self-hosted, windows, x64, micron-ws2025]
+    timeout-minutes: 90
+
+    # Set as runner-level environment variables (not repo secrets, so that
+    # they are visible in logs for debugging):
+    #   NVME_HW_CONTROLLER       controller under test,  e.g. /dev/nvme0
+    #   NVME_HW_NAMESPACE        namespace under test,    e.g. /dev/nvme0n1
+    #   NVME_HW_ALLOWED_SERIALS  comma-separated serial allowlist
+    #
+    # Use the nvmeX / nvmeXnY names, with or without a /dev/ prefix. The
+    # Linux-style paths are abstracted on Windows too: libnvme strips the
+    # /dev/ prefix (lib-win.c: 'if (strstr(name, "/dev/"))') and resolves
+    # the remainder to the underlying \\?\pci and \\.\PhysicalDriveN paths
+    # itself. Do not set the raw Windows paths directly -- a PCI instance
+    # path contains '&' characters, which cmd.exe -- used by the tests'
+    # subprocess(shell=True) calls on Windows -- would interpret as command
+    # separators.
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-meson
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-ccache
+            mingw-w64-ucrt-x86_64-json-c
+            mingw-w64-ucrt-x86_64-python-jsonschema
+
+      - name: Check the runner is configured for a drive
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          missing=0
+          for var in NVME_HW_CONTROLLER NVME_HW_NAMESPACE; do
+              if [[ -z "${!var:-}" ]]; then
+                  echo "::error::${var} is not set on this runner"
+                  missing=1
+              fi
+          done
+          if [[ -z "${NVME_HW_ALLOWED_SERIALS:-}" ]]; then
+              echo "::warning::NVME_HW_ALLOWED_SERIALS is not set;" \
+                   "the serial-number safety guard is disabled"
+          fi
+          # The tests interpolate these into shell strings run through
+          # cmd.exe, so reject anything that is not a bare nvmeX / nvmeXnY
+          # name (optionally /dev/-prefixed) rather than letting cmd.exe
+          # mangle it. libnvme strips the /dev/ prefix on Windows, so both
+          # spellings address the same device.
+          if [[ -n "${NVME_HW_CONTROLLER:-}" &&
+                ! "${NVME_HW_CONTROLLER}" =~ ^(/dev/)?nvme[0-9]+$ ]]; then
+              echo "::error::NVME_HW_CONTROLLER must be of the form 'nvme0'" \
+                   "or '/dev/nvme0', got '${NVME_HW_CONTROLLER}'"
+              missing=1
+          fi
+          if [[ -n "${NVME_HW_NAMESPACE:-}" &&
+                ! "${NVME_HW_NAMESPACE}" =~ ^(/dev/)?nvme[0-9]+n[0-9]+$ ]]; then
+              echo "::error::NVME_HW_NAMESPACE must be of the form 'nvme0n1'" \
+                   "or '/dev/nvme0n1', got '${NVME_HW_NAMESPACE}'"
+              missing=1
+          fi
+          exit "${missing}"
+
+      - name: Generate tests/config.json
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          # Strip any /dev/ prefix *here, in bash*, and write the bare nvmeX
+          # name. Both forms address the same device as far as libnvme is
+          # concerned, but they are not equivalent across this step: MSYS2
+          # rewrites POSIX-looking paths when an MSYS process spawns a native
+          # Windows one, and the mingw python below is a native binary. A
+          # controller of '/dev/nvme0' reaches python as
+          # 'C:/msys64/dev/nvme0' -- in the environment and in argv alike --
+          # and would be written into config.json in that form, so every
+          # testcase would then fail to open the drive. Bash sees the
+          # unconverted value, so canonicalising before the hand-off avoids
+          # the conversion entirely.
+          ctrl="${NVME_HW_CONTROLLER#/dev/}"
+          ns="${NVME_HW_NAMESPACE#/dev/}"
+          # Same reasoning for allowed_serials: split in bash, emit JSON.
+          serials='[]'
+          if [[ -n "${NVME_HW_ALLOWED_SERIALS:-}" ]]; then
+              serials=$(python - "${NVME_HW_ALLOWED_SERIALS}" <<'PY'
+          import json, sys
+          print(json.dumps([s.strip() for s in sys.argv[1].split(",") if s.strip()]))
+          PY
+              )
+          fi
+          python - "${ctrl}" "${ns}" "${serials}" <<'PY'
+          import json, os, sys
+          ctrl, ns, serials = sys.argv[1], sys.argv[2], sys.argv[3]
+          cfg = {
+              "controller": ctrl,
+              "ns1": ns,
+              "log_dir": "nvmetests",
+              "log_level": "DEBUG",
+              "nvme_bin": os.path.join(os.getcwd(), ".build-ci", "nvme.exe"),
+              "allowed_serials": json.loads(serials),
+          }
+          with open("tests/config.json", "w") as f:
+              json.dump(cfg, f, indent=2)
+          PY
+          cat tests/config.json
+          # Guard against the conversion silently reappearing.
+          python - <<'PY'
+          import json, sys
+          cfg = json.load(open("tests/config.json"))
+          for key in ("controller", "ns1"):
+              if "/" in cfg[key] or "\\" in cfg[key]:
+                  sys.exit(f"::error::{key} was path-converted to {cfg[key]!r}")
+          PY
+
+      - name: Build nvme-cli with hardware tests enabled
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          # Configure and compile only. The suites are run explicitly in the
+          # next step so that the choice of suite is honoured, so the default
+          # test_meson hook is bypassed via a direct meson invocation.
+          meson setup .build-ci                 \
+              --werror                          \
+              --buildtype=release               \
+              -Dnvme-tests=true                 \
+              -Dplugin-tests=micron,ocp
+          meson compile -C .build-ci
+          ./.build-ci/nvme.exe --version
+
+      - name: Run hardware tests
+        id: hwtests
+        shell: msys2 {0}
+        env:
+          # The test framework shells out via subprocess(..., shell=True),
+          # which on Windows execs %COMSPEC%. MSYS2's login shell does not
+          # export COMSPEC, so without this every command -- even 'echo' --
+          # fails with "The syntax of the command is incorrect."
+          COMSPEC: 'C:\WINDOWS\system32\cmd.exe'
+        run: |
+          set -uo pipefail
+          case "${{ inputs.suites || 'plugins' }}" in
+              plugins) args=(--suite micron --suite ocp) ;;
+              core)    args=(--suite core) ;;
+              all)     args=(--suite core --suite micron --suite ocp) ;;
+          esac
+          # Note: a bare "--suite nvme-cli" would match the *project* name and
+          # silently select every test, so each suite is named explicitly.
+          meson test -C .build-ci --print-errorlogs "${args[@]}"
+
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: always()
+        with:
+          name: windows-2025-hw-test-logs
+          path: |
+            .build-ci/meson-logs/*.txt
+            tests/nvmetests/
+          if-no-files-found: warn
