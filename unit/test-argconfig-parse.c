@@ -7,10 +7,9 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "../common.h"
 #include "../util/argconfig.h"
 #include "../util/cleanup.h"
-
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
 const char *libnvme_strerror(int errnum);
 
@@ -420,9 +419,11 @@ int main(void)
 
 	test_rc = 0;
 	setlocale(LC_NUMERIC, "C");
-	f = freopen("/dev/null", "w", stderr);
-	if (!f)
+	f = freopen(DEV_NULL, "w", stderr);
+	if (!f) {
 		printf("ERROR: reopening stderr failed: %s\n", libnvme_strerror(errno));
+		test_rc = 1;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(toval_tests); i++)
 		toval_test(&toval_tests[i]);

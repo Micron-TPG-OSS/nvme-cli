@@ -699,7 +699,7 @@ if want_nvme
         )
     endif
 
-    if host_system == 'linux'
+    if host_system == 'linux' or host_system == 'windows'
         subdir('unit')
     endif
     subdir('unit-py')
