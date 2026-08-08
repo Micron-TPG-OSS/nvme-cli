@@ -65,8 +65,8 @@ if want_fabrics
     mock_ioctl_tests += 'discovery'
 endif
 
-# On Windows the mock decodes the Windows IOCTLs that ioctl-win.c actually
-# issues, which so far covers identify, get/set features and get log page.
+# On Windows the mock decodes the NVMe-specific Windows IOCTLs that
+# are supported, which so far covers identify, get/set features and get log page.
 # The remaining tests exercise command families that reach the driver by other
 # routes (SCSI CDBs for read/write/flush, dedicated firmware/format/sanitize
 # IOCTLs) or that libnvme does not implement on Windows at all. Enabling them
