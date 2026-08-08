@@ -108,9 +108,9 @@ static inline bool mock_ok(const struct mock_cmd *mock)
  * @mock: the mock whose expectation is being read
  *
  * On Windows a failing command returns before ioctl-win.c copies
- * FixedProtocolReturnData into the caller's command, so the result stays as
- * the caller left it. Everywhere else the mock's result is delivered even on
- * failure.
+ * FixedProtocolReturnData into the caller's command, so the result is the zero
+ * that libnvme_exec_*_passthru() stored on the way in rather than the mock's.
+ * Everywhere else the mock's result is delivered even on failure.
  */
 static inline uint64_t mock_result(const struct mock_cmd *mock)
 {
