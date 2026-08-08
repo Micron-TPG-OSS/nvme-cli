@@ -76,7 +76,7 @@ struct mock_cmd {
 #define WIN_CSI_UNSUPPORTED	.win_err = -ENOTSUP, .win_no_ioctl = true
 
 /**
- * mock_err() - the error a mocked command is expected to produce here
+ * mock_err() - the error a mocked command is expected to produce
  * @mock: the mock whose expectation is being read
  *
  * Returns @mock->err everywhere except Windows, where a non-zero
