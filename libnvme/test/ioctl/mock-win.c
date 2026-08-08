@@ -479,7 +479,8 @@ static void decode_protocol_command(struct decoded_cmd *dec, void *in,
 	/*
 	 * submit_storage_protocol_command() copies sizeof(cmd->result) bytes
 	 * out of FixedProtocolReturnData, reading the FixedProtocolReturnData2
-	 * that follow it as well, so a full 64-bit result does survive this path.
+	 * that follows it as well, so a full 64-bit result does survive this
+	 * path.
 	 */
 	dec->result = &pc->FixedProtocolReturnData;
 	dec->result_is_64bit = true;
@@ -602,7 +603,8 @@ static BOOL WINAPI mock_device_io_control(HANDLE fd, DWORD code,
 	check_cmd(&dec, mock_cmd);
 
 	if (mock_cmd->win_no_ioctl)
-		fail("unexpected IOCTL for command expected to be rejected before IOCTL");
+		fail("unexpected IOCTL for a command expected to be rejected "
+		     "before reaching one");
 
 	if (mock_err(mock_cmd)) {
 		/*
