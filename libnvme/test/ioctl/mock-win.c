@@ -103,9 +103,15 @@ static libnvme_fd_t mock_fd = LIBNVME_INVALID_FD;
 static struct mock_cmds mock_admin_cmds = {.name = "admin"};
 static struct mock_cmds mock_io_cmds = {.name = "IO"};
 
-static BOOL (WINAPI *real_device_io_control)(HANDLE, DWORD, LPVOID, DWORD,
-					     LPVOID, DWORD, LPDWORD,
-					     LPOVERLAPPED);
+/*
+ * A typedef rather than a bare function pointer: checkpatch cannot parse the
+ * WINAPI calling-convention macro ahead of the '*' and reports inconsistent
+ * spacing around it.
+ */
+typedef BOOL WINAPI device_io_control_fn(HANDLE, DWORD, LPVOID, DWORD, LPVOID,
+					 DWORD, LPDWORD, LPOVERLAPPED);
+
+static device_io_control_fn *real_device_io_control;
 
 static void set_mock_cmds(
 	struct mock_cmds *mock_cmds, const struct mock_cmd *cmds, size_t len)
