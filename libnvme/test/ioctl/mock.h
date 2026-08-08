@@ -68,10 +68,9 @@ struct mock_cmd {
 };
 
 /*
- * Declares a command that Windows refuses to issue because it names a Command
- * Set other than NVM. submit_admin_identify() and submit_admin_get_log_page()
- * both check the CSI field themselves and return -ENOTSUP without touching the
- * driver, so no IOCTL is seen and no mock is consumed.
+ * Declares a command that the Windows implementation refuses to issue because
+ * it names a Command Set other than NVM. No IOCTL is seen and no mock is
+ * consumed.
  */
 #define WIN_CSI_UNSUPPORTED	.win_err = -ENOTSUP, .win_no_ioctl = true
 
