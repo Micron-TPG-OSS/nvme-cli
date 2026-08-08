@@ -596,7 +596,10 @@ static BOOL WINAPI mock_device_io_control(HANDLE fd, DWORD code,
 
 	check_cmd(&dec, mock_cmd);
 
-	if (mock_cmd->err) {
+	if (mock_cmd->win_no_ioctl)
+		fail("unexpected IOCTL for command expected to be rejected before IOCTL");
+
+	if (mock_err(mock_cmd)) {
 		/*
 		 * Report the error the test expects to observe on this
 		 * platform, which mock_err() resolves. Where that differs from
