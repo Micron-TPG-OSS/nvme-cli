@@ -34,8 +34,7 @@
  * @err: If negative, ioctl() returns -1 and sets `errno` to `-err`.
  *       Otherwise, ioctl() returns `err`, representing a NVMe status code.
  * @win_err: What libnvme returns for this command on Windows, when that
- *           differs from `err` because the Windows storage stack cannot carry
- *           the command faithfully. 0 means Windows behaves the same.
+ *           differs from `err`. 0 means Windows behaves the same.
  *           Ignored on every other platform. See mock_err().
  * @win_no_ioctl: Set alongside `win_err` when Windows rejects the command
  *           before issuing any IOCTL, so no mock is consumed. The mock layer
