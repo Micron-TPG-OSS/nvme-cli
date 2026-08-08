@@ -1,0 +1,112 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * Copyright (c) Micron, Inc 2024.
+ *
+ * @file: utils.h
+ * @brief: This module contains all the utilities needed for other modules.
+ * @author: Chaithanya Shoba <ashoba@micron.com>
+ */
+
+#include "common.h"
+#include "nvme-print.h"
+
+/*Request data format*/
+struct __packed request_data {
+	char *field;
+	int  size;
+	int  size2;
+};
+
+enum field_size {
+	FIELD_SIZE_16 = 16,
+	FIELD_SIZE_8 = 8,
+	FIELD_SIZE_7 = 7,
+	FIELD_SIZE_6 = 6,
+	FIELD_SIZE_4 = 4,
+	FIELD_SIZE_3 = 3,
+	FIELD_SIZE_2 = 2,
+	FIELD_SIZE_1 = 1
+};
+
+/**
+ * @brief prints generic structure parser
+ *
+ * @param buf, input raw log data
+ * @param log_page, input format of the data
+ * @param field_count, intput log field count
+ * @param stats, input json object to add fields
+ * @param spec, input ocp spec index
+ * @param fp, input file pointer
+ *
+ * @return 0 success
+ */
+void generic_structure_parser(__u8 *buf, struct request_data *req_data, int field_count,
+			  struct json_object *stats, __u8 spec, FILE *fp);
+
+/**
+ * @brief prints raw data to the buffer
+ *
+ * @param msg, intput buffer to write data
+ * @param pdata, input raw data
+ * @param data_size, input size of the data
+ * @param fp, input file pointer
+ *
+ * @return 0 success
+ */
+void print_formatted_var_size_str(const char *msg, const __u8 *pdata, size_t data_size, FILE *fp);
+
+/**
+ * @brief formats a 16-byte field as a hex string
+ *
+ * @param offset, input offset of the param
+ * @param sfield, input field name
+ * @param buf, input raw data
+ *
+ * @return allocated string (caller must free), or NULL on error
+ */
+char *process_field_size_16(int offset, char *sfield, __u8 *buf);
+
+/**
+ * @brief formats an 8-byte field as a hex string
+ *
+ * @param offset, input offset of the param
+ * @param sfield, input field name
+ * @param buf, input raw data
+ *
+ * @return allocated string (caller must free), or NULL on error
+ */
+char *process_field_size_8(int offset, char *sfield, __u8 *buf);
+
+/**
+ * @brief formats a 7-byte field as a hex string
+ *
+ * @param offset, input offset of the param
+ * @param sfield, input field name
+ * @param buf, input raw data
+ *
+ * @return allocated string (caller must free), or NULL on error
+ */
+char *process_field_size_7(int offset, char *sfield, __u8 *buf);
+
+/**
+ * @brief formats a 6-byte field as a hex string
+ *
+ * @param offset, input offset of the param
+ * @param sfield, input field name
+ * @param buf, input raw data
+ *
+ * @return allocated string (caller must free), or NULL on error
+ */
+char *process_field_size_6(int offset, char *sfield, __u8 *buf);
+
+/**
+ * @brief formats a variable-size field as a hex string
+ *
+ * @param offset, input offset of the param
+ * @param sfield, input field name
+ * @param buf, input raw data
+ * @param size, input data size
+ *
+ * @return allocated string (caller must free), or NULL on error
+ */
+char *process_field_size_default(int offset, char *sfield, __u8 *buf, int size);

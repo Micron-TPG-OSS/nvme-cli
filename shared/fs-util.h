@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include <stdbool.h>
 #include <sys/types.h>
 
 /*
@@ -37,6 +38,15 @@ int shr_mkstemp(char *template);
 /* fsync() path, to make a preceding rename()/unlink() inside it durable. */
 void shr_fsync_dir(const char *path);
 
+/* Return true if fd is still an open file descriptor, false once closed. */
+bool shr_fd_is_open(int fd);
+
+/*
+ * Remove a file.
+ * Return: 0 on success, -errno otherwise.
+ */
+int shr_unlink(const char *path);
+
 /*
  * The final path component (the part after the last '/'), or path itself
  * if there's no '/'. Unlike POSIX basename(), never modifies path and
@@ -50,3 +60,17 @@ char *shr_basename(const char *path);
  * characters are not counted as part of the pathname.
  */
 char *shr_dirname(char *path);
+
+/*
+ * Read an entire file into a newly allocated buffer.
+ *
+ * If dir is non-NULL, the file opened is dir + "/" + path (or just dir, if
+ * path is empty). Otherwise, path is used as-is.
+ *
+ * If retries > 1, a failed open is retried up to retries times, sleeping
+ * 1 second between attempts.
+ *
+ * Return: allocated buffer with *size set to its length (caller must
+ * free), or NULL on error.
+ */
+unsigned char *shr_read_file(const char *dir, const char *path, long *size, int retries);

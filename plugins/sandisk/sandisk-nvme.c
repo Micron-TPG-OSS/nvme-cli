@@ -21,8 +21,7 @@
 #include "nvme-print.h"
 #include "nvme.h"
 #include "plugin.h"
-#include "util/cleanup.h"
-#include "util/types.h"
+#include "src/cleanup.h"
 
 #define CREATE_CMD
 #include "sandisk-nvme.h"
