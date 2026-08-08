@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <io.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -78,6 +79,18 @@ int shr_mkstemp(char *template)
 
 void shr_fsync_dir(const char *path)
 {
+}
+
+int shr_unlink(const char *path)
+{
+	if (_unlink(path) < 0)
+		return -errno;
+	return 0;
+}
+
+bool shr_fd_is_open(int fd)
+{
+	return _get_osfhandle(fd) != -1;
 }
 
 char *shr_dirname(char *path)
