@@ -233,18 +233,17 @@ static void complete_cmd(const struct decoded_cmd *dec,
 		return;
 
 	/*
-	 * FixedProtocolReturnData is a single DWORD in every one of these
-	 * structures, so only the 64-bit-capable passthru path can carry a
-	 * result that doesn't fit in 32 bits.
+	 * Only STORAGE_PROTOCOL_COMMAND supports 64 bits of result data. Other
+	 * structures use a single DWORD FixedProtocolReturnData field.
 	 */
 	if (dec->result_is_64bit) {
 		/*
-		 * Deliberately spill past FixedProtocolReturnData into the
-		 * reserved word that follows it, because that is exactly what
-		 * submit_storage_protocol_command() reads back: it copies
-		 * sizeof(cmd->result) bytes starting at this address. Storing
-		 * the two halves as separate DWORDs says so without a memcpy
-		 * the compiler would flag as overflowing the first field.
+		 * It carries them in two DWORD fields,
+		 * FixedProtocolReturnData and FixedProtocolReturnData2, so
+		 * write the halves separately rather than with a memcpy the
+		 * compiler would flag as overflowing the first field. UCRT64's
+		 * winioctl.h predates the second field and still declares it
+		 * reserved.
 		 */
 		dec->result[0] = (DWORD)mock->result;
 		dec->result[1] = (DWORD)(mock->result >> 32);

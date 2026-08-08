@@ -11,8 +11,7 @@
  * What does work is rewriting that thunk. Every PE image that calls an
  * imported function reaches it through a slot in its Import Address Table,
  * so overwriting libnvme's IAT slot for DeviceIoControl redirects the call
- * without touching libnvme's code. Verified on both x86_64 and aarch64
- * (see the arm64 spike recorded on TACT-59).
+ * without touching libnvme's code. Verified on both x86_64 and aarch64.
  */
 #pragma once
 

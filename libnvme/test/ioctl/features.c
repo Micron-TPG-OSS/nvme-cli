@@ -1472,12 +1472,7 @@ static void test_set_status_code_error(void)
 		.cdw11 = EVENTS,
 		.result = TEST_RESULT,
 		.err = TEST_SC,
-		/*
-		 * Set Features reports failure through get_errno_from_error(),
-		 * which has no NVMe status codes to return, so the status is
-		 * lost and only the errno survives.
-		 */
-		.win_err = -EIO,
+		.win_err = -EIO,    /* Windows returns EIO */
 	};
 	struct libnvme_passthru_cmd cmd;
 	int err;
@@ -1528,13 +1523,7 @@ static void test_get_status_code_error(void)
 		.cdw10 = TEST_SEL << 8 | NVME_FEAT_FID_KATO,
 		.result = TEST_RESULT,
 		.err = TEST_SC,
-		/*
-		 * Get Features is the one path that recovers an NVMe status
-		 * from a Win32 error: get_features_status() turns
-		 * ERROR_IO_DEVICE back into INVALID_FIELD. It adds DNR, which
-		 * the original status did not carry.
-		 */
-		.win_err = TEST_SC | NVME_SC_DNR,
+		.win_err = TEST_SC | NVME_SC_DNR,    /* Windows sets DNR */
 	};
 	struct libnvme_passthru_cmd cmd;
 	int err;
@@ -1557,13 +1546,7 @@ static void test_get_kernel_error(void)
 		.cdw10 = TEST_SEL << 8 | NVME_FEAT_FID_NUM_QUEUES,
 		.result = 0,
 		.err = -EBUSY,
-		/*
-		 * There is no Win32 error that get_errno_from_error() turns
-		 * back into EBUSY, so the driver has no way to report this and
-		 * the errno cannot survive the round trip. Any unrecognised
-		 * error becomes EIO.
-		 */
-		.win_err = -EIO,
+		.win_err = -EIO,    /* Windows returns EIO */
 	};
 	struct libnvme_passthru_cmd cmd;
 	int err;
