@@ -566,12 +566,7 @@ static void test_status_code_error(void)
 		.cdw10 = NVME_IDENTIFY_CNS_NVMSET_LIST,
 		.cdw11 = TEST_NVMSETID,
 		.err = TEST_SC,
-		/*
-		 * Identify reports failure through get_errno_from_error(),
-		 * which has no NVMe status codes to return, so the status is
-		 * lost and only the errno survives.
-		 */
-		.win_err = -EIO,
+		.win_err = -EIO,    /* Windows returns EIO */
 	};
 	struct libnvme_passthru_cmd cmd;
 	int err;
