@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <string.h>
 
 #include <libnvme.h>
 
@@ -1471,6 +1472,7 @@ static void test_set_status_code_error(void)
 		.cdw11 = EVENTS,
 		.result = TEST_RESULT,
 		.err = TEST_SC,
+		.win_err = -EIO,    /* Windows returns EIO */
 	};
 	struct libnvme_passthru_cmd cmd;
 	int err;
@@ -1479,10 +1481,43 @@ static void test_set_status_code_error(void)
 	nvme_init_set_features_async_event(&cmd, false, EVENTS);
 	err = libnvme_exec_admin_passthru(test_hdl, &cmd);
 	end_mock_cmds();
-	check(err == TEST_SC, "got error %d, expected %d", err, TEST_SC);
-	check(cmd.result == TEST_RESULT,
-	      "got result %" PRIu64 ", expected %" PRIu32,
-	      (uint64_t)cmd.result, TEST_RESULT);
+	check(err == mock_err(&mock_admin_cmd), "got error %d, expected %d",
+	      err, mock_err(&mock_admin_cmd));
+	check(cmd.result == mock_result(&mock_admin_cmd),
+	      "got result %" PRIu64 ", expected %" PRIu64,
+	      (uint64_t)cmd.result, mock_result(&mock_admin_cmd));
+}
+
+/*
+ * A failing command must not leave a stale result behind. The init helpers
+ * memset the whole command, so seed the result afterwards to make sure the
+ * zeroing in libnvme_exec_admin_passthru() is what is being tested and not
+ * nvme_init_set_features_async_event().
+ */
+static void test_set_error_clears_stale_result(void)
+{
+	uint32_t EVENTS = 0x12345678;
+	struct mock_cmd mock_admin_cmd = {
+		.opcode = nvme_admin_set_features,
+		.cdw10 = NVME_FEAT_FID_ASYNC_EVENT,
+		.cdw11 = EVENTS,
+		.result = TEST_RESULT,
+		.err = TEST_SC,
+		.win_err = -EIO,    /* Windows returns EIO */
+	};
+	struct libnvme_passthru_cmd cmd;
+	int err;
+
+	set_mock_admin_cmds(&mock_admin_cmd, 1);
+	nvme_init_set_features_async_event(&cmd, false, EVENTS);
+	cmd.result = 0xdeadbeefcafef00d;
+	err = libnvme_exec_admin_passthru(test_hdl, &cmd);
+	end_mock_cmds();
+	check(err == mock_err(&mock_admin_cmd), "got error %d, expected %d",
+	      err, mock_err(&mock_admin_cmd));
+	check(cmd.result == mock_result(&mock_admin_cmd),
+	      "got result %" PRIu64 ", expected %" PRIu64,
+	      (uint64_t)cmd.result, mock_result(&mock_admin_cmd));
 }
 
 static void test_set_kernel_error(void)
@@ -1520,6 +1555,7 @@ static void test_get_status_code_error(void)
 		.cdw10 = TEST_SEL << 8 | NVME_FEAT_FID_KATO,
 		.result = TEST_RESULT,
 		.err = TEST_SC,
+		.win_err = TEST_SC | NVME_SC_DNR,    /* Windows sets DNR */
 	};
 	struct libnvme_passthru_cmd cmd;
 	int err;
@@ -1528,10 +1564,11 @@ static void test_get_status_code_error(void)
 	nvme_init_get_features_kato(&cmd, TEST_SEL);
 	err = libnvme_exec_admin_passthru(test_hdl, &cmd);
 	end_mock_cmds();
-	check(err == TEST_SC, "got error %d, expected %d", err, TEST_SC);
-	check(cmd.result == TEST_RESULT,
-	      "got result %" PRIu64 ", expected %" PRIu32,
-	      (uint64_t)cmd.result, TEST_RESULT);
+	check(err == mock_err(&mock_admin_cmd), "got error %d, expected %d",
+	      err, mock_err(&mock_admin_cmd));
+	check(cmd.result == mock_result(&mock_admin_cmd),
+	      "got result %" PRIu64 ", expected %" PRIu64,
+	      (uint64_t)cmd.result, mock_result(&mock_admin_cmd));
 }
 
 static void test_get_kernel_error(void)
@@ -1541,6 +1578,7 @@ static void test_get_kernel_error(void)
 		.cdw10 = TEST_SEL << 8 | NVME_FEAT_FID_NUM_QUEUES,
 		.result = 0,
 		.err = -EBUSY,
+		.win_err = -EIO,    /* Windows returns EIO */
 	};
 	struct libnvme_passthru_cmd cmd;
 	int err;
@@ -1549,7 +1587,8 @@ static void test_get_kernel_error(void)
 	nvme_init_get_features_num_queues(&cmd, TEST_SEL);
 	err = libnvme_exec_admin_passthru(test_hdl, &cmd);
 	end_mock_cmds();
-	check(err == -EBUSY, "got error %d, expected -EBUSY", err);
+	check(err == mock_err(&mock_admin_cmd), "got error %d, expected %d",
+	      err, mock_err(&mock_admin_cmd));
 	check(!cmd.result,
 		"result unexpectedly set to %" PRIu64, (uint64_t)cmd.result);
 }
@@ -1575,7 +1614,8 @@ static void test_lm_set_features_ctrl_data_queue(void)
 		hp, tpt, etpt);
 	err = libnvme_exec_admin_passthru(test_hdl, &cmd);
 	end_mock_cmds();
-	check(err == 0, "set features returned error %d, errno %m", err);
+	check(err == 0, "set features returned error %d, errno %s",
+	      err, strerror(errno));
 	check(cmd.result == TEST_RESULT,
 	      "got result %" PRIu64 ", expected %" PRIu32,
 	      (uint64_t)cmd.result, TEST_RESULT);
@@ -1602,7 +1642,8 @@ static void test_lm_get_features_ctrl_data_queue(void)
 		TEST_CDQID, &data);
 	err = libnvme_exec_admin_passthru(test_hdl, &cmd);
 	end_mock_cmds();
-	check(err == 0, "get features returned error %d, errno %m", err);
+	check(err == 0, "get features returned error %d, errno %s",
+	      err, strerror(errno));
 	check(cmd.result == TEST_RESULT,
 	      "got result %" PRIu64 ", expected %" PRIu32,
 	      (uint64_t)cmd.result, TEST_RESULT);
@@ -1691,6 +1732,7 @@ int main(void)
 	RUN_TEST(set_write_protect);
 	RUN_TEST(get_write_protect);
 	RUN_TEST(set_status_code_error);
+	RUN_TEST(set_error_clears_stale_result);
 	RUN_TEST(set_kernel_error);
 	RUN_TEST(get_status_code_error);
 	RUN_TEST(get_kernel_error);
