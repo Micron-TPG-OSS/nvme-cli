@@ -38,8 +38,10 @@
 #include "nvme-print.h"
 #include "nvme.h"
 #include "plugin.h"
-#include "util/cleanup.h"
-#include "util/types.h"
+#include "src/cleanup.h"
+#include "uint128-util.h"
+#include "time-util.h"
+#include "parse-util.h"
 #include "nvme-pci-ids.h"
 
 #define CREATE_CMD
@@ -5123,7 +5125,7 @@ static int wdc_print_latency_monitor_log_normal(struct libnvme_transport_handle 
 			if (le64_to_cpu(log_data->active_latency_timestamp[i][j]) == -1) {
 				printf("                    N/A         ");
 			} else {
-				convert_ts(le64_to_cpu(log_data->active_latency_timestamp[i][j]), ts_buf);
+				shr_format_ts(le64_to_cpu(log_data->active_latency_timestamp[i][j]), ts_buf);
 				printf("%s     ", ts_buf);
 			}
 		}
@@ -5148,7 +5150,7 @@ static int wdc_print_latency_monitor_log_normal(struct libnvme_transport_handle 
 			if (le64_to_cpu(log_data->static_latency_timestamp[i][j]) == -1) {
 				printf("                    N/A         ");
 			} else {
-				convert_ts(le64_to_cpu(log_data->static_latency_timestamp[i][j]), ts_buf);
+				shr_format_ts(le64_to_cpu(log_data->static_latency_timestamp[i][j]), ts_buf);
 				printf("%s     ", ts_buf);
 			}
 		}
@@ -8324,7 +8326,7 @@ static int wdc_vs_smart_add_log(int argc, char **argv, struct command *acmd,
 		goto out;
 	}
 
-	num = argconfig_parse_comma_sep_array(cfg.log_page_mask, log_page_list, 16);
+	num = shr_parse_csv_int(cfg.log_page_mask, log_page_list, 16);
 
 	if (num == -1) {
 		nvme_show_error("ERROR: WDC: log page list is malformed");

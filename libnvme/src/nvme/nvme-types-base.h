@@ -2138,18 +2138,18 @@ enum nvme_id_ctrl_oacs {
 	NVME_CTRL_OACS_HMLM			= NVME_VAL(CTRL_OACS_HMLMS),
 };
 
-#define NVME_CTRL_OACS_SSRS(oacs)	NVME_GET(CTRL_OACS_SSRS)
-#define NVME_CTRL_OACS_FNVMS(oacs)	NVME_GET(CTRL_OACS_FNVMS)
-#define NVME_CTRL_OACS_FWDS(oacs)	NVME_GET(CTRL_OACS_FWDS)
-#define NVME_CTRL_OACS_NMS_M(oacs)	NVME_GET(CTRL_OACS_NMS)
-#define NVME_CTRL_OACS_DSTS(oacs)	NVME_GET(CTRL_OACS_DSTS)
-#define NVME_CTRL_OACS_DIRS(oacs)	NVME_GET(CTRL_OACS_DIRS)
-#define NVME_CTRL_OACS_NSRS(oacs)	NVME_GET(CTRL_OACS_NSRS)
-#define NVME_CTRL_OACS_VMS_M(oacs)	NVME_GET(CTRL_OACS_VMS)
-#define NVME_CTRL_OACS_DBCS(oacs)	NVME_GET(CTRL_OACS_DBCS)
-#define NVME_CTRL_OACS_GLSS(oacs)	NVME_GET(CTRL_OACS_GLSS)
-#define NVME_CTRL_OACS_CFLS(oacs)	NVME_GET(CTRL_OACS_CFLS)
-#define NVME_CTRL_OACS_HMLMS(oacs)	NVME_GET(CTRL_OACS_HMLMS)
+#define NVME_CTRL_OACS_SSRS(oacs)	NVME_GET(oacs, CTRL_OACS_SSRS)
+#define NVME_CTRL_OACS_FNVMS(oacs)	NVME_GET(oacs, CTRL_OACS_FNVMS)
+#define NVME_CTRL_OACS_FWDS(oacs)	NVME_GET(oacs, CTRL_OACS_FWDS)
+#define NVME_CTRL_OACS_NMS_M(oacs)	NVME_GET(oacs, CTRL_OACS_NMS)
+#define NVME_CTRL_OACS_DSTS(oacs)	NVME_GET(oacs, CTRL_OACS_DSTS)
+#define NVME_CTRL_OACS_DIRS(oacs)	NVME_GET(oacs, CTRL_OACS_DIRS)
+#define NVME_CTRL_OACS_NSRS(oacs)	NVME_GET(oacs, CTRL_OACS_NSRS)
+#define NVME_CTRL_OACS_VMS_M(oacs)	NVME_GET(oacs, CTRL_OACS_VMS)
+#define NVME_CTRL_OACS_DBCS(oacs)	NVME_GET(oacs, CTRL_OACS_DBCS)
+#define NVME_CTRL_OACS_GLSS(oacs)	NVME_GET(oacs, CTRL_OACS_GLSS)
+#define NVME_CTRL_OACS_CFLS(oacs)	NVME_GET(oacs, CTRL_OACS_CFLS)
+#define NVME_CTRL_OACS_HMLMS(oacs)	NVME_GET(oacs, CTRL_OACS_HMLMS)
 
 /**
  * enum nvme_id_ctrl_frmw - Flags and values indicates capabilities regarding
@@ -2288,12 +2288,30 @@ enum nvme_id_ctrl_hctm {
 
 /**
  * enum nvme_id_ctrl_sanicap - Indicates attributes for sanitize operations.
+ * @NVME_CTRL_SANICAP_CES_SHIFT: Crypto erase support shift
+ * @NVME_CTRL_SANICAP_BES_SHIFT: Block erase support shift
+ * @NVME_CTRL_SANICAP_OWS_SHIFT: Overwrite support shift
+ * @NVME_CTRL_SANICAP_VERS_SHIFT: Verification support shift
+ * @NVME_CTRL_SANICAP_NVERS_SHIFT: Namespace verification support shift
+ * @NVME_CTRL_SANICAP_NDI_SHIFT: No-deallocate inhibited shift
+ * @NVME_CTRL_SANICAP_NODMMAS_SHIFT: No-deallocate modifies media after sanitize
+ *				     shift
+ * @NVME_CTRL_SANICAP_CES_MASK: Crypto erase support mask
+ * @NVME_CTRL_SANICAP_BES_MASK: Block erase support mask
+ * @NVME_CTRL_SANICAP_OWS_MASK: Overwrite support mask
+ * @NVME_CTRL_SANICAP_VERS_MASK: Verification support mask
+ * @NVME_CTRL_SANICAP_NVERS_MASK: Namespace verification support mask
+ * @NVME_CTRL_SANICAP_NDI_MASK: No-deallocate inhibited mask
+ * @NVME_CTRL_SANICAP_NODMMAS_MASK: No-deallocate modifies media after sanitize
+ *				    mask
  * @NVME_CTRL_SANICAP_CES:     Crypto Erase Support. If set, then the
  *			       controller supports the Crypto Erase sanitize operation.
  * @NVME_CTRL_SANICAP_BES:     Block Erase Support. If set, then the controller
  *			       supports the Block Erase sanitize operation.
  * @NVME_CTRL_SANICAP_OWS:     Overwrite Support. If set, then the controller
  *			       supports the Overwrite sanitize operation.
+ * @NVME_CTRL_SANICAP_VERS: Verification support
+ * @NVME_CTRL_SANICAP_NVERS: Namespace verification support
  * @NVME_CTRL_SANICAP_NDI:     No-Deallocate Inhibited. If set and the No-
  *			       Deallocate Response Mode bit is set, then the
  *			       controller deallocates after the sanitize
@@ -2711,6 +2729,7 @@ struct nvme_lbaf {
  * @NVME_LBAF_RP_BETTER:   Better performance
  * @NVME_LBAF_RP_GOOD:	   Good performance
  * @NVME_LBAF_RP_DEGRADED: Degraded performance
+ * @NVME_LBAF_RP_SHIFT: Relative performance shift
  * @NVME_LBAF_RP_MASK:	   Mask to get the relative performance value from the
  *			   field
  */
@@ -2982,10 +3001,13 @@ enum nvme_id_ns_dpc {
  * @NVME_NS_DPS_PI_TYPE1: Protection information is enabled, Type 1
  * @NVME_NS_DPS_PI_TYPE2: Protection information is enabled, Type 2
  * @NVME_NS_DPS_PI_TYPE3: Protection information is enabled, Type 3
+ * @NVME_NS_DPS_PI_SHIFT: Protection information type shift
  * @NVME_NS_DPS_PI_MASK:  Mask to get the value of the PI type
  * @NVME_NS_DPS_PI_FIRST: If set, indicates that the protection information, if
  *			  enabled, is transferred as the first eight bytes of
  *			  metadata.
+ * @NVME_NS_DPS_PI_FIRST_SHIFT: Protection information in first bytes shift
+ * @NVME_NS_DPS_PI_FIRST_MASK: Protection information in first bytes mask
  */
 enum nvme_id_ns_dps {
 	NVME_NS_DPS_PI_NONE		= 0,
@@ -2994,9 +3016,9 @@ enum nvme_id_ns_dps {
 	NVME_NS_DPS_PI_TYPE3		= 3,
 	NVME_NS_DPS_PI_SHIFT		= 0,
 	NVME_NS_DPS_PI_MASK		= 0x7,
-	NVME_NS_DPS_PI_FIRST		= 1 << 3,
 	NVME_NS_DPS_PI_FIRST_SHIFT	= 3,
 	NVME_NS_DPS_PI_FIRST_MASK	= 0x1,
+	NVME_NS_DPS_PI_FIRST		= NVME_VAL(NS_DPS_PI_FIRST),
 };
 
 #define NVME_NS_DPS_PI(dps)		NVME_GET(dps, NS_DPS_PI)
@@ -3256,6 +3278,7 @@ struct nvme_id_uuid_list_entry {
 
 /**
  * enum nvme_id_uuid - Identifier Association
+ * @NVME_ID_UUID_HDR_ASSOCIATION_SHIFT:
  * @NVME_ID_UUID_HDR_ASSOCIATION_MASK:
  * @NVME_ID_UUID_ASSOCIATION_NONE:
  * @NVME_ID_UUID_ASSOCIATION_VENDOR:
@@ -3565,8 +3588,10 @@ struct nvme_error_log_page {
 };
 
 /**
- * enum nvme_err_pel - Persistent Error Log Entry masks
+ * enum nvme_err_pel - Parameter error location field
+ * @NVME_ERR_PEL_BYTE_SHIFT: Byte location shift
  * @NVME_ERR_PEL_BYTE_MASK:	Byte mask for error location
+ * @NVME_ERR_PEL_BIT_SHIFT: Bit location shift
  * @NVME_ERR_PEL_BIT_MASK:	Bit mask for error location
  */
 enum nvme_err_pel {
@@ -3931,7 +3956,10 @@ struct nvme_cmd_effects_log {
  * @NVME_CMD_EFFECTS_NCC:	Namespace Capability Change
  * @NVME_CMD_EFFECTS_NIC:	Namespace Inventory Change
  * @NVME_CMD_EFFECTS_CCC:	Controller Capability Change
+ * @NVME_CMD_EFFECTS_CSER_SHIFT: Command submission and execution relaxations
+ *				 shift
  * @NVME_CMD_EFFECTS_CSER_MASK:	Command Submission and Execution Relaxations
+ * @NVME_CMD_EFFECTS_CSE_SHIFT: Command submission and execution shift
  * @NVME_CMD_EFFECTS_CSE_MASK:	Command Submission and Execution
  * @NVME_CMD_EFFECTS_UUID_SEL:	UUID Selection Supported
  */
@@ -4024,6 +4052,7 @@ struct nvme_st_result {
  * @NVME_ST_RESULT_ABORTED_UNKNOWN:  Operation was aborted for unknown reason.
  * @NVME_ST_RESULT_ABORTED_SANITIZE: Operation was aborted due to a sanitize operation.
  * @NVME_ST_RESULT_NOT_USED:	     Entry not used (does not contain a test result).
+ * @NVME_ST_RESULT_SHIFT: Device self-test result shift
  * @NVME_ST_RESULT_MASK:	     Mask to get the status result value from
  *				     the &struct nvme_st_result.dsts field.
  */
@@ -4055,6 +4084,7 @@ enum nvme_status_result {
  * @NVME_ST_CODE_ABORT:	   Abort device self-test operation.
  * @NVME_ST_CODE_SHIFT:	   Shift amount to get the code value from the
  *			   &struct nvme_st_result.dsts field.
+ * @NVME_ST_CODE_MASK: Self-test code mask
  */
 enum nvme_st_code {
 	NVME_ST_CODE_RESERVED		= 0x0,
@@ -4076,8 +4106,10 @@ enum nvme_st_code {
  * @NVME_ST_CURR_OP_EXTENDED:	 Extended device self-test operation in progress.
  * @NVME_ST_CURR_OP_VS:		 Vendor specific.
  * @NVME_ST_CURR_OP_RESERVED:	 Reserved.
+ * @NVME_ST_CURR_OP_SHIFT: Device self-test operation status shift
  * @NVME_ST_CURR_OP_MASK:	 Mask to get the current operation value from the
  *				 &struct nvme_self_test_log.current_operation field.
+ * @NVME_ST_CURR_OP_CMPL_SHIFT: Current device self-test completion shift
  * @NVME_ST_CURR_OP_CMPL_MASK:	 Mask to get the current operation completion value
  *				 from the &struct nvme_self_test_log.completion field.
  */
@@ -6051,18 +6083,29 @@ struct nvme_lba_range_type_entry {
  * @NVME_LBART_TYPE_RAID:	RAID
  * @NVME_LBART_TYPE_CACHE:	Cache
  * @NVME_LBART_TYPE_SWAP:	Page / swap file
+ * @NVME_LBART_ATTRB_LBARO_SHIFT: LBA range overwriteable shift
+ * @NVME_LBART_ATTRB_HLBAR_SHIFT: Hide LBA range shift
+ * @NVME_LBART_ATTRB_LBARO_MASK: LBA range overwriteable mask
+ * @NVME_LBART_ATTRB_HLBAR_MASK: Hide LBA range mask
  * @NVME_LBART_ATTRIB_TEMP:	Temp
  * @NVME_LBART_ATTRIB_HIDE:	Hidden
  */
 enum nvme_lbart {
-	NVME_LBART_TYPE_GP	= 0,
-	NVME_LBART_TYPE_FS	= 1,
-	NVME_LBART_TYPE_RAID	= 2,
-	NVME_LBART_TYPE_CACHE	= 3,
-	NVME_LBART_TYPE_SWAP	= 4,
-	NVME_LBART_ATTRIB_TEMP	= 1 << 0,
-	NVME_LBART_ATTRIB_HIDE	= 1 << 1,
+	NVME_LBART_TYPE_GP		= 0,
+	NVME_LBART_TYPE_FS		= 1,
+	NVME_LBART_TYPE_RAID		= 2,
+	NVME_LBART_TYPE_CACHE		= 3,
+	NVME_LBART_TYPE_SWAP		= 0,
+	NVME_LBART_ATTRB_LBARO_SHIFT	= 0,
+	NVME_LBART_ATTRB_HLBAR_SHIFT	= 1,
+	NVME_LBART_ATTRB_LBARO_MASK	= 0x1,
+	NVME_LBART_ATTRB_HLBAR_MASK	= 0x1,
+	NVME_LBART_ATTRIB_TEMP		= NVME_VAL(LBART_ATTRB_LBARO),
+	NVME_LBART_ATTRIB_HIDE		= NVME_VAL(LBART_ATTRB_HLBAR),
 };
+
+#define NVME_LBART_ATTRB_LBARO(attrb)	NVME_GET(attrb, LBART_ATTRB_LBARO)
+#define NVME_LBART_ATTRB_HLBAR(attrb)	NVME_GET(attrb, LBART_ATTRB_HLBAR)
 
 /**
  * struct nvme_lba_range_type - LBA Range Type
@@ -7153,6 +7196,7 @@ static inline __u32 nvme_status_equals(int status, enum nvme_status_type type,
  * @nvme_admin_manage_export_nvms:	Manage Exported NVM Subsystem
  * @nvme_admin_manage_export_ns:	Manage Exported Namespace
  * @nvme_admin_manage_export_port:	Manage Exported Port
+ * @nvme_admin_cross_ctrl_reset:	Cross-Controller Reset
  * @nvme_admin_send_disc_log_page:	Send Discovery Log Page
  * @nvme_admin_track_send:		Track Send
  * @nvme_admin_track_receive:		Track Receive
@@ -7205,6 +7249,7 @@ enum nvme_admin_opcode {
 	nvme_admin_manage_export_nvms	= 0x2d,
 	nvme_admin_manage_export_ns	= 0x31,
 	nvme_admin_manage_export_port	= 0x35,
+	nvme_admin_cross_ctrl_reset	= 0x38,
 	nvme_admin_send_disc_log_page	= 0x39,
 	nvme_admin_track_send		= 0x3d,
 	nvme_admin_track_receive	= 0x3e,
@@ -7340,7 +7385,10 @@ enum nvme_identify_cns {
  * @NVME_LOG_LID_FDP_RUH_USAGE:			Reclaim Unit Handle Usage
  * @NVME_LOG_LID_FDP_STATS:			FDP Statistics
  * @NVME_LOG_LID_FDP_EVENTS:			FDP Events
+ * @NVME_LOG_LID_MFG_DEFAULT_CONFIG:		Manufacturer Default Configuration
  * @NVME_LOG_LID_POWER_MEASUREMENT:		Power Measurement
+ * @NVME_LOG_LID_VOLTAGE_MEASUREMENT:		Voltage Measurement
+ * @NVME_LOG_LID_RATE_LIMITING:			Rate Limiting
  * @NVME_LOG_LID_DISCOVERY:			Discovery
  * @NVME_LOG_LID_HOST_DISCOVERY:		Host Discovery
  * @NVME_LOG_LID_AVE_DISCOVERY:			AVE Discovery
@@ -7387,7 +7435,10 @@ enum nvme_cmd_get_log_lid {
 	NVME_LOG_LID_FDP_RUH_USAGE				= 0x21,
 	NVME_LOG_LID_FDP_STATS					= 0x22,
 	NVME_LOG_LID_FDP_EVENTS					= 0x23,
+	NVME_LOG_LID_MFG_DEFAULT_CONFIG				= 0x24,
 	NVME_LOG_LID_POWER_MEASUREMENT				= 0x25,
+	NVME_LOG_LID_VOLTAGE_MEASUREMENT			= 0x27,
+	NVME_LOG_LID_RATE_LIMITING				= 0x28,
 	NVME_LOG_LID_DISCOVERY					= 0x70,
 	NVME_LOG_LID_HOST_DISCOVERY				= 0x71,
 	NVME_LOG_LID_AVE_DISCOVERY				= 0x72,
@@ -7437,6 +7488,9 @@ enum nvme_cmd_get_log_lid {
  * @NVME_FEAT_FID_POWER_LIMIT:		Power Limit
  * @NVME_FEAT_FID_POWER_THRESH:		Power Threshold
  * @NVME_FEAT_FID_POWER_MEASUREMENT:	Power Measurement
+ * @NVME_FEAT_FID_VOLTAGE_THRESHOLD:	Voltage Threshold
+ * @NVME_FEAT_FID_VOLTAGE_MEASUREMENT:	Voltage Measurement
+ * @NVME_FEAT_FID_RATE_LIMITING:	Rate Limiting
  * @NVME_FEAT_FID_EMB_MGMT_CTRL_ADDR:	Embedded Management Controller Address
  * @NVME_FEAT_FID_HOST_MGMT_AGENT_ADDR:	Host Management Agent Address
  * @NVME_FEAT_FID_ENH_CTRL_METADATA:	Enhanced Controller Metadata
@@ -7487,6 +7541,9 @@ enum nvme_features_id {
 	NVME_FEAT_FID_POWER_LIMIT				= 0x23,
 	NVME_FEAT_FID_POWER_THRESH				= 0x24,
 	NVME_FEAT_FID_POWER_MEASUREMENT				= 0x25,
+	NVME_FEAT_FID_VOLTAGE_THRESHOLD				= 0x26,
+	NVME_FEAT_FID_VOLTAGE_MEASUREMENT			= 0x27,
+	NVME_FEAT_FID_RATE_LIMITING				= 0x28,
 	NVME_FEAT_FID_EMB_MGMT_CTRL_ADDR			= 0x78,
 	NVME_FEAT_FID_HOST_MGMT_AGENT_ADDR			= 0x79,
 	NVME_FEAT_FID_ENH_CTRL_METADATA				= 0x7d,
@@ -7817,7 +7874,7 @@ enum nvme_feat {
 	NVME_FEAT_FDP_ENABLED_SHIFT	= 0,
 	NVME_FEAT_FDP_ENABLED_MASK	= 0x1,
 	NVME_FEAT_FDP_INDEX_SHIFT	= 8,
-	NVME_FEAT_FDP_INDEX_MASK	= 0xf,
+	NVME_FEAT_FDP_INDEX_MASK	= 0xff,
 	NVME_FEAT_FDP_EVENTS_ENABLE_SHIFT = 0,
 	NVME_FEAT_FDP_EVENTS_ENABLE_MASK  = 0x1,
 	NVME_FEAT_HOST_ID_EXHID_SHIFT	= 0,
@@ -8819,6 +8876,7 @@ struct nvme_lm_nvme_controller_state_data_header {
  * @hdr: Header
  * @sqs: I/O Submission Queue list
  * @cqs: I/O Completion Queue list
+ * @queue_data_buf: Queue data buffer
  */
 struct nvme_lm_nvme_controller_state_data {
 	struct nvme_lm_nvme_controller_state_data_header hdr;
@@ -9177,6 +9235,9 @@ nvme_feature_decode_perf_characteristics(__u32 value, __u8 *attri, bool *rvspa)
 	*attri = NVME_FEAT_PERFC_ATTRI(value);
 	*rvspa = NVME_FEAT_PERFC_RVSPA(value);
 }
+
+#define NVME_FEAT_FDPE(v) NVME_GET(v, FEAT_FDP_ENABLED)
+#define NVME_FEAT_FDPCIDX(v) NVME_GET(v, FEAT_FDP_INDEX)
 
 #define NVME_FEAT_HOST_ID_EXHID(v) NVME_GET(v, FEAT_HOST_ID_EXHID)
 

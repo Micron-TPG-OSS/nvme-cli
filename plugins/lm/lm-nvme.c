@@ -32,7 +32,7 @@
 #include "nvme-print.h"
 #include "nvme.h"
 #include "plugin.h"
-#include "util/cleanup.h"
+#include "src/cleanup.h"
 
 #define CREATE_CMD
 #include "lm-nvme.h"
@@ -471,7 +471,7 @@ static int lm_migration_recv(int argc, char **argv, struct command *acmd, struct
 
 	if (cfg.output && strlen(cfg.output)) {
 		fd = fopen(cfg.output, "w");
-		if (fd < 0) {
+		if (!fd) {
 			nvme_show_perror(cfg.output);
 			return -errno;
 		}

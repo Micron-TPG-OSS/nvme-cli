@@ -53,11 +53,135 @@ test_parse_util = executable(
     ['test-parse-util.c'],
     dependencies: [
         config_dep,
+        ccan_dep,
         shared_dep,
     ],
 )
 
 test('shared - parse-util', test_parse_util)
+
+test_hex_util = executable(
+    'test-hex-util',
+    ['test-hex-util.c'],
+    dependencies: [
+        config_dep,
+        shared_dep,
+    ],
+)
+
+test('shared - hex-util', test_hex_util)
+
+test_cleanup = executable(
+    'test-cleanup',
+    ['test-cleanup.c'],
+    dependencies: [
+        config_dep,
+        shared_dep,
+    ],
+)
+
+test('shared - cleanup', test_cleanup)
+
+test_wrap_util = executable(
+    'test-wrap-util',
+    ['test-wrap-util.c'],
+    dependencies: [
+        config_dep,
+        shared_dep,
+    ],
+)
+
+test('shared - wrap-util', test_wrap_util)
+
+test_temp_util = executable(
+    'test-temp-util',
+    ['test-temp-util.c'],
+    dependencies: [
+        config_dep,
+        shared_dep,
+    ],
+)
+
+test('shared - temp-util', test_temp_util)
+
+test_time_util = executable(
+    'test-time-util',
+    ['test-time-util.c'],
+    dependencies: [
+        config_dep,
+        shared_dep,
+    ],
+)
+
+test('shared - time-util', test_time_util)
+
+test_progress_util = executable(
+    'test-progress-util',
+    ['test-progress-util.c'],
+    dependencies: [
+        config_dep,
+        shared_dep,
+    ],
+)
+
+test('shared - progress-util', test_progress_util)
+
+test_table = executable(
+    'test-table',
+    ['test-table.c'],
+    dependencies: [
+        config_dep,
+        shared_dep,
+    ],
+)
+
+test('shared - table', test_table)
+
+test_suffix_util = executable(
+    'test-suffix-util',
+    ['test-suffix-util.c'],
+    dependencies: [
+        config_dep,
+        ccan_dep,
+        shared_dep,
+    ],
+)
+
+test('shared - suffix-util', test_suffix_util)
+
+test_uint128_util = executable(
+    'test-uint128-util',
+    ['test-uint128-util.c'],
+    dependencies: [
+        config_dep,
+        ccan_dep,
+        shared_dep,
+    ],
+)
+
+test('shared - uint128-util', test_uint128_util)
+
+test_int_util = executable(
+    'test-int-util',
+    ['test-int-util.c'],
+    dependencies: [
+        config_dep,
+        shared_dep,
+    ],
+)
+
+test('shared - int-util', test_int_util)
+
+test_uuid_util = executable(
+    'test-uuid-util',
+    ['test-uuid-util.c'],
+    dependencies: [
+        config_dep,
+        shared_dep,
+    ],
+)
+
+test('shared - uuid-util', test_uuid_util)
 
 test_hash_util = executable(
     'test-hash-util',
@@ -114,6 +238,32 @@ if host_system != 'windows'
     )
 
     test('shared - net-util', test_net_util)
+endif
+
+if host_system != 'windows'
+    test_crypto_util = executable(
+        'test-crypto-util',
+        ['test-crypto-util.c'],
+        dependencies: [
+            config_dep,
+            shared_dep,
+        ],
+    )
+
+    test('shared - crypto-util', test_crypto_util)
+endif
+
+if host_system != 'windows'
+    test_sig_util = executable(
+        'test-sig-util',
+        ['test-sig-util.c'],
+        dependencies: [
+            config_dep,
+            shared_dep,
+        ],
+    )
+
+    test('shared - sig-util', test_sig_util)
 endif
 
 if host_system != 'windows'

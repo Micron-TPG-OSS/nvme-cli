@@ -378,6 +378,11 @@ static void print_hex(const uint8_t *x, int len)
 		printf("%02x", x[i]);
 }
 
+/* Safe display fallbacks for the lazy eui64/nguid/uuid getters below. */
+static const uint8_t zero_eui64[8];
+static const uint8_t zero_nguid[16];
+static const unsigned char zero_uuid[NVME_UUID_LEN];
+
 int main(int argc, char **argv)
 {
 	struct libnvme_global_ctx *ctx;
@@ -444,32 +449,59 @@ int main(int argc, char **argv)
 
 				libnvme_ctrl_for_each_ns(c, n) {
 					char uuid_str[NVME_UUID_LEN_STRING];
-					unsigned char uuid[NVME_UUID_LEN];
+					const unsigned char *uuid;
+					const uint8_t *eui64;
+					const uint8_t *nguid;
+					int lba_size;
+					uint64_t lba_count;
+					enum nvme_csi csi;
+
+					libnvme_ns_get_lba_size(n,
+							&lba_size, 0);
+					libnvme_ns_get_lba_count(n,
+							&lba_count, 0);
 					printf("   `- %s lba size:%d lba max:%" PRIu64 "\n",
 					       libnvme_ns_get_name(n),
-					       libnvme_ns_get_lba_size(n),
-					       libnvme_ns_get_lba_count(n));
+					       lba_size, lba_count);
 					printf("      eui:");
-					print_hex(libnvme_ns_get_eui64(n), 8);
+					libnvme_ns_get_eui64(n, &eui64,
+							zero_eui64);
+					print_hex(eui64, 8);
 					printf(" nguid:");
-					print_hex(libnvme_ns_get_nguid(n), 16);
-					libnvme_ns_copy_uuid(n, uuid);
-					libnvme_uuid_to_string(uuid, uuid_str);
-					printf(" uuid:%s csi:%d\n", uuid_str,
-					       libnvme_ns_get_csi(n));
+					libnvme_ns_get_nguid(n, &nguid,
+							zero_nguid);
+					print_hex(nguid, 16);
+					libnvme_ns_get_uuid(n, &uuid,
+							zero_uuid);
+					libnvme_uuid_to_string(
+							(unsigned char *)uuid,
+							uuid_str);
+					libnvme_ns_get_csi(n, &csi,
+							NVME_CSI_NVM);
+					printf(" uuid:%s csi:%d\n",
+					       uuid_str, csi);
 				}
 
-				libnvme_ctrl_for_each_path(c, p)
+				libnvme_ctrl_for_each_path(c, p) {
+					const char *ana_state;
+
+					libnvme_path_get_ana_state(p,
+							&ana_state, "");
 					printf("   `- %s %s\n",
 					       libnvme_path_get_name(p),
-					       libnvme_path_get_ana_state(p));
+					       ana_state);
+				}
 			}
 
 			libnvme_subsystem_for_each_ns(s, n) {
+				int lba_size;
+				uint64_t lba_count;
+
+				libnvme_ns_get_lba_size(n, &lba_size, 0);
+				libnvme_ns_get_lba_count(n, &lba_count, 0);
 				printf(" `- %s lba size:%d lba max:%" PRIu64 "\n",
 				       libnvme_ns_get_name(n),
-				       libnvme_ns_get_lba_size(n),
-				       libnvme_ns_get_lba_count(n));
+				       lba_size, lba_count);
 			}
 		}
 		printf("\n");

@@ -7,9 +7,10 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "../common.h"
-#include "../util/argconfig.h"
-#include "../util/cleanup.h"
+#include "../src/argconfig.h"
+#include "../src/cleanup.h"
+#include "../src/common.h"
+#include "parse-util.h"
 
 const char *libnvme_strerror(int errnum);
 
@@ -191,7 +192,7 @@ void comma_sep_array_test(const struct comma_sep_array_test *test)
 {
 	__cleanup_free char *input = strdup(test->input);
 	__u32 values[COMMA_SEP_ARRAY_MAX_VALUES] = {};
-	int ret = argconfig_parse_comma_sep_array_u32(
+	int ret = shr_parse_csv_u32(
 		input, values, COMMA_SEP_ARRAY_MAX_VALUES);
 	int i;
 

@@ -351,29 +351,36 @@ class Member:
     py_alias: alternate Python attribute name from ``// !python:alias=NAME``,
               or None to use the C member name.
 
-    is_sysfs_lazy: True when this member's getter/setter use the
-                   sentinel-cache shape instead of the plain generated
-                   shape. Set directly by dict-driven generators (e.g.
-                   generate_sysfs_accessors.py) — this generator's own
-                   header-annotation parser never sets it.
-    sysfs_attr: sysfs attribute name to read on cache miss, or None.
-    sysfs_loader: loader function name that fills this member (and
-                  possibly others in its group) on cache miss, or None.
-                  Mutually meaningful only when sysfs_attr is None.
-    is_volatile: True when the member is always re-read from sysfs on
-                 every call, never cached.
+    is_attr_lazy: True when this member's getter/setter use the
+                  sentinel-cache shape instead of the plain generated
+                  shape. Set directly by dict-driven generators (e.g.
+                  generate_attr_accessors.py) — this generator's own
+                  header-annotation parser never sets it.
+    attr_name: attribute name to read on cache miss, or None.
+    attr_loader: loader function name that fills this member (and
+                 possibly others in its group) on cache miss, or None.
+                 Mutually meaningful only when attr_name is None.
+    is_volatile: True when the member is always re-read on every call,
+                 never cached.
+    attr_reader: the C function name used to read a plain attr_name
+                 (e.g. libnvme_get_ctrl_attr, libnvme_get_path_attr).
+                 Meaningful only alongside attr_name.
+    is_absent: True when this platform has no source for the member at
+               all -- the getter always returns -ENOENT, no attr_name
+               or attr_loader call ever happens.
     """
 
     __slots__ = ('name', 'type', 'read_mode', 'write_mode',
                  'is_char_array', 'is_char_ptr_array', 'is_scalar_array',
                  'array_size', 'py_visible', 'py_alias', 'field_path',
-                 'is_sysfs_lazy', 'sysfs_attr', 'sysfs_loader', 'is_volatile')
+                 'is_attr_lazy', 'attr_name', 'attr_loader', 'is_volatile',
+                 'attr_reader', 'is_absent')
 
     def __init__(self, name, type_str, read_mode, write_mode,
                  is_char_array, is_char_ptr_array, is_scalar_array, array_size,
                  py_visible=True, py_alias=None, field_path=None,
-                 is_sysfs_lazy=False, sysfs_attr=None, sysfs_loader=None,
-                 is_volatile=False):
+                 is_attr_lazy=False, attr_name=None, attr_loader=None,
+                 is_volatile=False, attr_reader=None, is_absent=False):
         self.name = name
         self.type = type_str          # e.g. "const char *", "int", "__u32"
         self.read_mode = read_mode    # 'generated' | 'custom' | 'none'
@@ -385,10 +392,12 @@ class Member:
         self.py_visible = py_visible  # False → excluded from SWIG fragment
         self.py_alias = py_alias      # str → rename Python attribute; None → use C name
         self.field_path = field_path if field_path is not None else name
-        self.is_sysfs_lazy = is_sysfs_lazy
-        self.sysfs_attr = sysfs_attr
-        self.sysfs_loader = sysfs_loader
+        self.is_attr_lazy = is_attr_lazy
+        self.attr_name = attr_name
+        self.attr_loader = attr_loader
         self.is_volatile = is_volatile
+        self.attr_reader = attr_reader
+        self.is_absent = is_absent
 
     @property
     def has_accessor(self):
@@ -1317,9 +1326,9 @@ def emit_hdr_getter(f, prefix, sname, type_name, mname, mtype, is_dyn_str):
 
 
 def emit_hdr_getter_lazy(f, prefix, sname, type_name, mname, mtype):
-    """Emit a header declaration for a lazy sysfs getter.
+    """Emit a header declaration for a lazy attribute getter.
 
-    Unlike a plain getter, a sysfs read (or the loader behind it) can
+    Unlike a plain getter, an attribute read (or the loader behind it) can
     fail, and a bare return value has no room to say so -- lazy getters
     return int and deliver the value through an out-param instead. A
     third argument, dflt, is what gets stored in that out-param when the
@@ -1330,7 +1339,11 @@ def emit_hdr_getter_lazy(f, prefix, sname, type_name, mname, mtype):
     """
     fn = _get_name(prefix, sname, mname)
     is_str = mtype == 'const char *'
-    out_type = 'const char **' if is_str else f'{mtype} *'
+    # mtype itself may already end in '*' (e.g. a cached-buffer pointer
+    # member) -- type_sep() decides whether boxing it as an out-param
+    # needs a space before the extra '*' or not, same as dflt_sep below,
+    # so two adjacent '*'s never end up with a stray space between them.
+    out_type = 'const char **' if is_str else f'{mtype}{type_sep(mtype)}*'
     dflt_type = 'const char *' if is_str else mtype
     dflt_sep = type_sep(dflt_type)
     f.write(
@@ -1433,12 +1446,19 @@ def generate_hdr(f, prefix, sname, type_name, members):
                 emit_hdr_setter_val(f, prefix, sname, type_name,
                                     member.name, member.type)
         if member.read_mode == 'generated':
-            if member.is_sysfs_lazy:
+            if member.is_attr_lazy:
                 emit_hdr_getter_lazy(f, prefix, sname, type_name,
                                      member.name, member.type)
             else:
                 emit_hdr_getter(f, prefix, sname, type_name,
                                 member.name, member.type, is_dyn_str)
+        elif member.read_mode == 'custom' and member.is_attr_lazy:
+            # The struct is opaque, so even a hand-written getter's
+            # prototype must come from this generator -- no other file
+            # may declare a function that reaches inside the struct. The
+            # body itself lives in a hand-written *-custom-<os>.c file.
+            emit_hdr_getter_lazy(f, prefix, sname, type_name,
+                                 member.name, member.type)
 
 
 # ---------------------------------------------------------------------------
@@ -1446,6 +1466,15 @@ def generate_hdr(f, prefix, sname, type_name, members):
 # ---------------------------------------------------------------------------
 
 PUB = '__shr_public '
+
+# scanf format for each numeric lazy-getter type this generator has ever
+# needed. Deliberately not a general type->format mapper -- add an entry
+# only when a real member needs it (mirrors generate_attr_accessors.py's
+# own restraint on its _PY_FROM dict).
+_SCANF_FMT = {
+    'long': '%ld',
+    'int': '%d',
+}
 
 
 def emit_src_setter_dynstr(f, prefix, sname, type_name, mname, field_path):
@@ -1610,14 +1639,14 @@ def emit_src_getter_scalar_array(f, prefix, sname, type_name, mname, elem_type,
 
 
 def emit_src_setter_lazy_dynstr(f, prefix, sname, type_name, mname, field_path):
-    """Emit a dynamic-string setter for a lazy sysfs member.
+    """Emit a dynamic-string setter for a lazy attribute member.
 
-    Frees the old value with SYSFS_FREE() instead of free(): the cached
-    value may be the NO_SYSFS_ATTR sentinel, and free()ing that address
+    Frees the old value with ATTR_FREE() instead of free(): the cached
+    value may be the NO_ATTR sentinel, and free()ing that address
     would crash. An explicit NULL argument stores the sentinel, not NULL
     -- otherwise setting NULL (e.g. clearing a key) would look identical
     to "never read," and the next getter call would silently re-fetch
-    from sysfs and undo the clear.
+    it and undo the clear.
     """
     sig = (f'{PUB}void {_set_name(prefix, sname, mname)}'
            f'(struct {type_name} *p, const char *{mname})')
@@ -1630,26 +1659,26 @@ def emit_src_setter_lazy_dynstr(f, prefix, sname, type_name, mname, field_path):
             f'\t\tconst char *{mname})\n'
         )
 
-    f.write(f'{{\n\tSYSFS_FREE(p->{field_path});\n')
-    body = f'\tp->{field_path} = {mname} ? strdup({mname}) : NO_SYSFS_ATTR;'
+    f.write(f'{{\n\tATTR_FREE(p->{field_path});\n')
+    body = f'\tp->{field_path} = {mname} ? strdup({mname}) : NO_ATTR;'
     if fits_80_ntabs(1, body):
         f.write(body + '\n')
     else:
         f.write(
             f'\tp->{field_path} =\n'
-            f'\t\t{mname} ? strdup({mname}) : NO_SYSFS_ATTR;\n'
+            f'\t\t{mname} ? strdup({mname}) : NO_ATTR;\n'
         )
     f.write('}\n\n')
 
 
 def emit_src_getter_lazy_attr(f, prefix, sname, type_name, mname, field_path,
-                              sysfs_attr):
-    """Emit a lazy getter that caches one plain sysfs attribute.
+                              attr_name, attr_reader):
+    """Emit a lazy getter that caches one plain attribute.
 
     First call reads the attribute and caches the result: a real pointer
-    if the attribute exists, or the NO_SYSFS_ATTR sentinel if it does not
+    if the attribute exists, or the NO_ATTR sentinel if it does not
     (a raw NULL there would look "not yet read" and re-fire every call).
-    Every later call returns the cached value without touching sysfs
+    Every later call returns the cached value without reading it
     again. Returns -ENOENT when the attribute does not exist, so the
     caller can tell "absent" from "not yet checked". *val is set to dflt
     unconditionally before anything else, so a failure path never leaves
@@ -1666,23 +1695,23 @@ def emit_src_getter_lazy_attr(f, prefix, sname, type_name, mname, field_path,
         '{\n'
         f'\tstruct {type_name} *c = (struct {type_name} *)p;\n\n'
         '\t*val = dflt;\n\n'
-        f'\tif (__shr_unlikely(!SYSFS_IS_LOADED(c->{field_path}))) {{\n'
+        f'\tif (__shr_unlikely(!ATTR_IS_LOADED(c->{field_path}))) {{\n'
     )
-    load = f'\t\tc->{field_path} = libnvme_get_ctrl_attr(c, "{sysfs_attr}");'
+    load = f'\t\tc->{field_path} = {attr_reader}(c, "{attr_name}");'
     if fits_80_ntabs(2, load.lstrip()):
         f.write(load + '\n')
     else:
         f.write(
             f'\t\tc->{field_path} =\n'
-            f'\t\t\tlibnvme_get_ctrl_attr(c, "{sysfs_attr}");\n'
+            f'\t\t\t{attr_reader}(c, "{attr_name}");\n'
         )
     f.write(
         f'\t\tif (!c->{field_path})\n'
-        f'\t\t\tc->{field_path} = NO_SYSFS_ATTR;\n'
+        f'\t\t\tc->{field_path} = NO_ATTR;\n'
         '\t}\n\n'
     )
     f.write(
-        f'\tif (SYSFS_IS_ABSENT(c->{field_path}))\n'
+        f'\tif (ATTR_IS_ABSENT(c->{field_path}))\n'
         f'\t\treturn -ENOENT;\n\n'
         f'\t*val = c->{field_path};\n'
         f'\treturn 0;\n'
@@ -1690,15 +1719,65 @@ def emit_src_getter_lazy_attr(f, prefix, sname, type_name, mname, field_path,
     )
 
 
+def emit_src_getter_lazy_attr_num(f, prefix, sname, type_name, mname, mtype,
+                                  field_path, attr_name, attr_reader):
+    """Emit a lazy getter that caches one plain attribute, boxed.
+
+    Same cache-once shape as emit_src_getter_lazy_attr(), but the cached
+    field is a heap-allocated TYPE * rather than a plain value: mtype has
+    no spare value to serve as "not loaded" (0 is a legitimate reading),
+    so the field reuses the string members' NULL/NO_ATTR/real-value
+    tri-state instead of inventing a second mechanism. *val is set to
+    dflt unconditionally before anything else -- see
+    emit_src_getter_lazy_attr()'s docstring.
+    """
+    f.write(
+        f'{PUB}int {_get_name(prefix, sname, mname)}(\n'
+        f'\t\tconst struct {type_name} *p,\n'
+        f'\t\t{mtype} *val,\n'
+        f'\t\t{mtype} dflt)\n'
+    )
+    f.write(
+        '{\n'
+        f'\tstruct {type_name} *c = (struct {type_name} *)p;\n\n'
+        '\t*val = dflt;\n\n'
+        f'\tif (__shr_unlikely(!ATTR_IS_LOADED(c->{field_path}))) {{\n'
+        '\t\t__cleanup_free char *str = NULL;\n\n'
+        f'\t\tstr = {attr_reader}(c, "{attr_name}");\n'
+        f'\t\tif (!str)\n'
+        f'\t\t\tc->{field_path} = ({mtype} *)NO_ATTR;\n'
+        '\t\telse {\n'
+        f'\t\t\tc->{field_path} = malloc(sizeof({mtype}));\n'
+        f'\t\t\tif (!c->{field_path})\n'
+        '\t\t\t\treturn -ENOMEM;\n'
+    )
+    scanf_check = (f'\t\t\tif (sscanf(str, "{_SCANF_FMT[mtype]}", '
+                   f'c->{field_path}) != 1) {{')
+    f.write(
+        f'{scanf_check}\n'
+        f'\t\t\t\tfree(c->{field_path});\n'
+        f'\t\t\t\tc->{field_path} = NULL;\n'
+        '\t\t\t\treturn -EINVAL;\n'
+        '\t\t\t}\n'
+        '\t\t}\n'
+        '\t}\n\n'
+        f'\tif (ATTR_IS_ABSENT(c->{field_path}))\n'
+        f'\t\treturn -ENOENT;\n\n'
+        f'\t*val = *c->{field_path};\n'
+        f'\treturn 0;\n'
+        '}\n\n'
+    )
+
+
 def emit_src_getter_lazy_loader(f, prefix, sname, type_name, mname,
-                                field_path, sysfs_loader):
+                                field_path, attr_loader):
     """Emit a lazy getter backed by a loader-function call.
 
     The loader may populate several members of the same group in one call
     (e.g. dhchap_host_key/dhchap_ctrl_key/keyring from one sysfs read
     pass), writing NULL to any it leaves absent. After it returns, a
     member still at NULL means no value exists for it -- stamp the
-    NO_SYSFS_ATTR sentinel so the guard doesn't re-fire the loader on
+    NO_ATTR sentinel so the guard doesn't re-fire the loader on
     every subsequent call. A negative loader return means the load
     itself failed (not just "attribute absent") and is propagated to
     the caller unchanged. *val is set to dflt unconditionally before
@@ -1715,16 +1794,16 @@ def emit_src_getter_lazy_loader(f, prefix, sname, type_name, mname,
         f'\tstruct {type_name} *c = (struct {type_name} *)p;\n'
         '\tint ret;\n\n'
         '\t*val = dflt;\n\n'
-        f'\tif (__shr_unlikely(!SYSFS_IS_LOADED(c->{field_path}))) {{\n'
-        f'\t\tret = {sysfs_loader}(c);\n'
+        f'\tif (__shr_unlikely(!ATTR_IS_LOADED(c->{field_path}))) {{\n'
+        f'\t\tret = {attr_loader}(c);\n'
         '\t\tif (ret)\n'
         '\t\t\treturn ret;\n'
         f'\t\tif (!c->{field_path})\n'
-        f'\t\t\tc->{field_path} = NO_SYSFS_ATTR;\n'
+        f'\t\t\tc->{field_path} = NO_ATTR;\n'
         '\t}\n\n'
     )
     f.write(
-        f'\tif (SYSFS_IS_ABSENT(c->{field_path}))\n'
+        f'\tif (ATTR_IS_ABSENT(c->{field_path}))\n'
         f'\t\treturn -ENOENT;\n\n'
         f'\t*val = c->{field_path};\n'
         f'\treturn 0;\n'
@@ -1733,10 +1812,10 @@ def emit_src_getter_lazy_loader(f, prefix, sname, type_name, mname,
 
 
 def emit_src_getter_volatile_num(f, prefix, sname, type_name, mname, mtype,
-                                 field_path, sysfs_attr):
+                                 field_path, attr_name, attr_reader):
     """Emit an always-live numeric getter for a volatile lazy member.
 
-    No sentinel, no cache: every call re-reads the sysfs attribute and
+    No sentinel, no cache: every call re-reads the attribute and
     parses it into the member. Returns -ENOENT when the attribute cannot
     be read and -EINVAL when it can be read but not parsed, rather than
     the previous value -- the caller can tell a real absence, or bad
@@ -1755,15 +1834,78 @@ def emit_src_getter_volatile_num(f, prefix, sname, type_name, mname, mtype,
         f'\tstruct {type_name} *c = (struct {type_name} *)p;\n'
         '\t__cleanup_free char *str = NULL;\n\n'
         '\t*val = dflt;\n\n'
-        f'\tstr = libnvme_get_ctrl_attr(c, "{sysfs_attr}");\n'
+        f'\tstr = {attr_reader}(c, "{attr_name}");\n'
         '\tif (!str)\n'
         '\t\treturn -ENOENT;\n\n'
-        f'\tif (sscanf(str, "%ld", &c->{field_path}) != 1)\n'
+        f'\tif (sscanf(str, "{_SCANF_FMT[mtype]}", &c->{field_path}) != 1)\n'
         '\t\treturn -EINVAL;\n\n'
         f'\t*val = c->{field_path};\n'
         '\treturn 0;\n'
         '}\n\n'
     )
+
+
+def emit_src_getter_volatile_str(f, prefix, sname, type_name, mname,
+                                 field_path, attr_name, attr_reader):
+    """Emit an always-live string getter for a volatile lazy member.
+
+    Re-reads the attribute on every call like emit_src_getter_volatile_num(),
+    but keeps the previous string cached and only replaces it when the new
+    read differs -- free-and-replace-if-changed, matching what the
+    hand-written volatile getters this replaces already did, so a caller
+    holding the returned pointer across two calls that read the same
+    value never sees it freed out from under it. Returns -ENOENT (not the
+    stale value) when the attribute cannot be read. *val is set to dflt
+    unconditionally before anything else -- see
+    emit_src_getter_lazy_attr()'s docstring.
+    """
+    f.write(
+        f'{PUB}int {_get_name(prefix, sname, mname)}(\n'
+        f'\t\tconst struct {type_name} *p,\n'
+        f'\t\tconst char **val,\n'
+        f'\t\tconst char *dflt)\n'
+    )
+    f.write(
+        '{\n'
+        f'\tstruct {type_name} *c = (struct {type_name} *)p;\n'
+        '\t__cleanup_free char *str = NULL;\n\n'
+        '\t*val = dflt;\n\n'
+        f'\tstr = {attr_reader}(c, "{attr_name}");\n'
+        '\tif (!str)\n'
+        '\t\treturn -ENOENT;\n\n'
+        f'\tif (!c->{field_path} || strcmp(str, c->{field_path})) {{\n'
+        f'\t\tfree(c->{field_path});\n'
+        f'\t\tc->{field_path} = strdup(str);\n'
+        f'\t\tif (!c->{field_path})\n'
+        '\t\t\treturn -ENOMEM;\n'
+        '\t}\n\n'
+        f'\t*val = c->{field_path};\n'
+        '\treturn 0;\n'
+        '}\n\n'
+    )
+
+
+def emit_src_getter_absent(f, prefix, sname, type_name, mname, mtype):
+    """Emit a getter for a member with no source at all on this platform.
+
+    Always returns -ENOENT; never touches the struct or calls any attr
+    reader or loader. Used when a per-OS override marks a member
+    'absent' -- e.g. every libnvme_path member on Windows, since paths
+    (multipath) are a Linux-only concept. *val is set to dflt
+    unconditionally before returning -- see emit_src_getter_lazy_attr()'s
+    docstring.
+    """
+    is_str = mtype == 'const char *'
+    out_type = 'const char **' if is_str else f'{mtype} *'
+    dflt_type = 'const char *' if is_str else mtype
+    dflt_sep = type_sep(dflt_type)
+    f.write(
+        f'{PUB}int {_get_name(prefix, sname, mname)}(\n'
+        f'\t\t__shr_unused const struct {type_name} *p,\n'
+        f'\t\t{out_type}val,\n'
+        f'\t\t{dflt_type}{dflt_sep}dflt)\n'
+    )
+    f.write('{\n\t*val = dflt;\n\n\treturn -ENOENT;\n}\n\n')
 
 
 def generate_src(f, prefix, sname, type_name, members):
@@ -1780,23 +1922,39 @@ def generate_src(f, prefix, sname, type_name, members):
                                              member.name, member.type, fp)
             continue
 
-        if member.is_sysfs_lazy:
+        if member.is_attr_lazy:
             if member.write_mode == 'generated':
                 emit_src_setter_lazy_dynstr(f, prefix, sname, type_name,
                                             member.name, fp)
             if member.read_mode == 'generated':
-                if member.is_volatile:
-                    emit_src_getter_volatile_num(f, prefix, sname, type_name,
-                                                 member.name, member.type,
-                                                 fp, member.sysfs_attr)
-                elif member.sysfs_loader:
+                is_str = member.type == 'const char *'
+                if member.is_absent:
+                    emit_src_getter_absent(f, prefix, sname, type_name,
+                                           member.name, member.type)
+                elif member.is_volatile:
+                    if is_str:
+                        emit_src_getter_volatile_str(
+                            f, prefix, sname, type_name, member.name, fp,
+                            member.attr_name, member.attr_reader)
+                    else:
+                        emit_src_getter_volatile_num(
+                            f, prefix, sname, type_name, member.name,
+                            member.type, fp, member.attr_name,
+                            member.attr_reader)
+                elif member.attr_loader:
                     emit_src_getter_lazy_loader(f, prefix, sname, type_name,
                                                 member.name, fp,
-                                                member.sysfs_loader)
-                else:
+                                                member.attr_loader)
+                elif is_str:
                     emit_src_getter_lazy_attr(f, prefix, sname, type_name,
                                               member.name, fp,
-                                              member.sysfs_attr)
+                                              member.attr_name,
+                                              member.attr_reader)
+                else:
+                    emit_src_getter_lazy_attr_num(
+                        f, prefix, sname, type_name, member.name,
+                        member.type, fp, member.attr_name,
+                        member.attr_reader)
             continue
 
         is_dyn_str = (not member.is_char_array and
@@ -2010,7 +2168,8 @@ def generate_ld(f, prefix, sname, members, lc_members, default_members):
     if default_members:
         f.write(f'\t\t{_init_defaults_name(prefix, sname)};\n')
     for member in members:
-        if member.read_mode == 'generated':
+        custom_lazy = member.read_mode == 'custom' and member.is_attr_lazy
+        if member.read_mode == 'generated' or custom_lazy:
             f.write(f'\t\t{_get_name(prefix, sname, member.name)};\n')
         if member.write_mode == 'generated':
             f.write(f'\t\t{_set_name(prefix, sname, member.name)};\n')
@@ -2369,7 +2528,16 @@ def main():
     # -----------------------------------------------------------------------
     # Pass 2 — parse all header files, accumulate generated fragments.
     # -----------------------------------------------------------------------
-    files_to_include = []   # basenames of headers that contributed structs
+    files_to_include = []   # '../' + basename of headers that contributed
+                             # structs -- '../' because the generated .c
+                             # always lands one directory below the header
+                             # it was parsed from (src/nvme/generated/ vs.
+                             # src/nvme/). Not computed via os.path.relpath
+                             # against args.c_fname: the update script stages
+                             # output in a throwaway mktemp -d before copying
+                             # it to its real destination, so args.c_fname's
+                             # own directory does not reflect where the file
+                             # actually ends up.
     forward_declares = []   # struct names needing forward declarations
     hdr_parts = []          # fragments for accessors.h
     src_parts = []          # fragments for accessors.c
@@ -2422,7 +2590,7 @@ def main():
                 print(f"No annotated structs found in {in_hdr}.")
             continue
 
-        files_to_include.append(os.path.basename(in_hdr))
+        files_to_include.append('../' + os.path.basename(in_hdr))
 
         for (struct_name, members, lc_members, default_members, emit_py,
              struct_alias, name_prefix) in structs:

@@ -40,7 +40,7 @@ int libnvme_reconfigure_ctrl(__shr_unused struct libnvme_global_ctx *ctx,
 	libnvme_ctrl_release_transport_handle(c);
 	FREE_CTRL_ATTR(c->name);
 	FREE_CTRL_ATTR(c->sysfs_dir);
-	libnvme_ctrl_sysfs_reset(c->sysfs);
+	libnvme_ctrl_attrs_reset(c->attrs);
 
 	c->hdl = NULL;
 	c->name = shr_xstrdup(name);
@@ -141,13 +141,31 @@ static libnvme_subsystem_t libnvme_get_subsystem_windows(libnvme_host_t h,
 	if (ret)
 		return NULL;
 
-	/* Populate subsystem info from first controller */
-	if (!s->serial)
-		s->serial = libnvme_ctrl_map_entry_get_serial(ctrl_entry);
-	if (!s->model)
-		s->model = libnvme_ctrl_map_entry_get_model(ctrl_entry);
-	if (!s->firmware)
-		s->firmware = libnvme_ctrl_map_entry_get_firmware(ctrl_entry);
+	/*
+	 * Populate subsystem info from first controller. Windows has no
+	 * sysfs to lazily read these from, so push them in from the ctrl
+	 * map instead -- but only the first time this subsystem is seen,
+	 * matching the sysfs-backed getters' own "cache once" semantics.
+	 */
+	{
+		const char *cur;
+
+		if (libnvme_subsystem_get_serial(s, &cur, NULL)) {
+			__cleanup_free char *serial =
+				libnvme_ctrl_map_entry_get_serial(ctrl_entry);
+			libnvme_subsystem_set_serial(s, serial);
+		}
+		if (libnvme_subsystem_get_model(s, &cur, NULL)) {
+			__cleanup_free char *model =
+				libnvme_ctrl_map_entry_get_model(ctrl_entry);
+			libnvme_subsystem_set_model(s, model);
+		}
+		if (libnvme_subsystem_get_firmware(s, &cur, NULL)) {
+			__cleanup_free char *firmware =
+				libnvme_ctrl_map_entry_get_firmware(ctrl_entry);
+			libnvme_subsystem_set_firmware(s, firmware);
+		}
+	}
 
 	return s;
 }
@@ -245,25 +263,11 @@ const char *libnvme_ns_sysfs_dir(
 	return NULL;
 }
 
-int libnvme_ns_init(const char *path, struct libnvme_ns *ns)
+int libnvme_ns_init(__shr_unused const char *path, struct libnvme_ns *ns)
 {
-	__cleanup_libnvme_free struct nvme_id_ns *id = NULL;
-	uint8_t flbas;
-	int ret;
-
-	id = libnvme_alloc(sizeof(*id));
-	if (!id)
+	ns->attrs = libnvme_ns_attrs_alloc();
+	if (!ns->attrs)
 		return -ENOMEM;
-
-	ret = libnvme_ns_identify(ns, id);
-	if (ret)
-		return ret;
-
-	nvme_id_ns_flbas_to_lbaf_inuse(id->flbas, &flbas);
-	ns->lba_size = 1 << id->lbaf[flbas].ds;
-	ns->lba_count = le64_to_cpu(id->nsze);
-	ns->lba_util = le64_to_cpu(id->nuse);
-	ns->meta_size = le16_to_cpu(id->lbaf[flbas].ms);
 
 	return 0;
 }

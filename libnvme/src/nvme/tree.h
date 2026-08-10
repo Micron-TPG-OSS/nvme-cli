@@ -142,14 +142,6 @@ void libnvme_free_subsystem(struct libnvme_subsystem *s);
 libnvme_host_t libnvme_subsystem_get_host(libnvme_subsystem_t s);
 
 /**
- * libnvme_subsystem_get_iopolicy() - Get subsystem iopolicy name
- * @s:	subsystem
- *
- * Return: The iopolicy configured in subsystem @s
- */
-char *libnvme_subsystem_get_iopolicy(libnvme_subsystem_t s);
-
-/**
  * libnvme_ctrl_first_ns() - Start namespace iterator
  * @c:	Controller instance
  *
@@ -383,49 +375,6 @@ libnvme_ns_t libnvme_subsystem_next_ns(libnvme_subsystem_t s, libnvme_ns_t n);
 		p = libnvme_namespace_next_path(n, p))
 
 /**
- * libnvme_ns_copy_uuid() - Copy UUID of a namespace into a caller buffer
- * @n:		Namespace instance
- * @out:	buffer for the UUID
- *
- * Copies the namespace's uuid into @out
- */
-void libnvme_ns_copy_uuid(libnvme_ns_t n, unsigned char out[NVME_UUID_LEN]);
-
-/**
- * libnvme_ns_get_command_retry_count() - Get command retry count
- * @n: &libnvme_ns_t object
- *
- * Return: Number of times any command issued to namespace @n has to be retried
- */
-long libnvme_ns_get_command_retry_count(libnvme_ns_t n);
-
-/**
- * libnvme_ns_get_command_error_count() - Get command error count
- * @n: &libnvme_ns_t object
- *
- * Return: Number of times command issued to namespace @n returns non-zero
- * status or error
- */
-long libnvme_ns_get_command_error_count(libnvme_ns_t n);
-
-/**
- * libnvme_ns_get_io_requeue_no_usable_path_count() - Get I/Os requeue count
- * @n: &libnvme_ns_t object
- *
- * Return: Number of I/Os which are re-queued due to the unavalibility of
- * any usable path (maybe path is currently experiencing transinet link failure)
- */
-long libnvme_ns_get_io_requeue_no_usable_path_count(libnvme_ns_t n);
-
-/**
- * libnvme_ns_get_io_fail_no_available_path_count() - Get I/Os failed count
- * @n: &libnvme_ns_t object
- *
- * Return: Number of I/Os which are forced to fail due to no path available
- */
-long libnvme_ns_get_io_fail_no_available_path_count(libnvme_ns_t n);
-
-/**
  * libnvme_ns_get_firmware() - Firmware string of a namespace
  * @n:	Namespace instance
  *
@@ -567,57 +516,6 @@ int libnvme_ns_identify(libnvme_ns_t n, struct nvme_id_ns *ns);
  * Return: 0 on success, negative error code otherwise.
  */
 int libnvme_ns_identify_descs(libnvme_ns_t n, struct nvme_ns_id_desc *descs);
-
-/**
- * libnvme_path_get_queue_depth() - Queue depth of an libnvme_path_t object
- * @p: &libnvme_path_t object
- *
- * Return: Queue depth of @p
- */
-int libnvme_path_get_queue_depth(libnvme_path_t p);
-
-/**
- * libnvme_path_get_ana_state() - ANA state of an nvme_path_t object
- * @p: &libnvme_path_t object
- *
- * Return: ANA state of @p
- */
-char *libnvme_path_get_ana_state(libnvme_path_t p);
-
-/**
- * libnvme_path_get_numa_nodes() - Numa nodes of an nvme_path_t object
- * @p: &libnvme_path_t object
- *
- * Return: Numa nodes of @p
- */
-char *libnvme_path_get_numa_nodes(libnvme_path_t p);
-
-/**
- * libnvme_path_get_multipath_failover_count() - Get multipath failover count
- * @p: &libnvme_path_t object
- *
- * Return: Number of times I/Os have to be failed over to another active path
- * from path @p maybe due to any transient error observed on path @p
- */
-long libnvme_path_get_multipath_failover_count(libnvme_path_t p);
-
-/**
- * libnvme_path_get_command_retry_count() - Get command retry count
- * @p: &libnvme_path_t object
- *
- * Return: Number of times any command issued to the namespace represented by
- * path @p has to be retried
- */
-long libnvme_path_get_command_retry_count(libnvme_path_t p);
-
-/**
- * libnvme_path_get_command_error_count() - Get command error count
- * @p: &libnvme_path_t object
- *
- * Return: Number of times command issued to the namespace represented by path
- * @p returns non-zero status or error
- */
-long libnvme_path_get_command_error_count(libnvme_path_t p);
 
 /**
  * libnvme_path_get_ctrl() - Parent controller of an libnvme_path_t object

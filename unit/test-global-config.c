@@ -23,8 +23,8 @@
 
 #include "fs-util.h"
 
-#include "../global-config.h"
-#include "../args.h"
+#include "../src/global-config.h"
+#include "../src/args.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
