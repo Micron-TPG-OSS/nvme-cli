@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# This file is part of nvme.
+# Copyright (c) 2026 SUSE LLC
+#
+# Authors: Daniel Wagner <dwagner@suse.de>
+"""
+In-tree launcher for the nvme-cli e2e test suite.
+
+The actual runner logic (TAP output, --json-report, test discovery) lives in
+tests/e2e/runner.py as part of the tests.e2e package, since it needs to be
+loadable both here (as tests.e2e.runner) and from a standalone pip install
+(as nvme_e2e.e2e.runner -- see tests/README and tests/pyproject.toml). This
+script's only job is to find the nvme-cli checkout it belongs to and put it
+on sys.path before delegating, since nothing here is "installed".
+"""
+
+import argparse
+import os
+import sys
+
+
+def default_project_root() -> str | None:
+    """Best-effort nvme-cli checkout root: the parent of the directory this
+    script lives in, if that looks like an nvme-cli checkout.
+
+    Only resolves for the in-tree copy at tests/nvme-cli-e2e -- copies
+    placed elsewhere (e.g. the build-root convenience copy next to the
+    'nvme' binary) no longer sit next to tests/e2e and need --source-root.
+    """
+    candidate = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    if os.path.isdir(os.path.join(candidate, 'tests', 'e2e')):
+        return candidate
+    return None
+
+
+def main() -> None:
+    # Only --source-root is handled here; every other flag (--config,
+    # --controller, --json-report, the test module, --help, ...) is parsed
+    # by tests.e2e.runner.main() itself once this checkout is on sys.path.
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument('--source-root', default=None,
+                            help='Path to the nvme-cli checkout (for locating '
+                                 'and importing tests.e2e.*)')
+    pre_args, remaining_argv = pre_parser.parse_known_args()
+
+    if pre_args.source_root:
+        project_root = pre_args.source_root
+        if not os.path.isdir(os.path.join(project_root, 'tests', 'e2e')):
+            raise SystemExit(
+                f"error: --source-root {project_root!r} does not look like "
+                "an nvme-cli checkout (no tests/e2e found under it).")
+    else:
+        project_root = default_project_root()
+        if project_root is None:
+            raise SystemExit(
+                "error: could not find the nvme-cli checkout this test "
+                "belongs to (this copy of the script isn't sitting next "
+                "to tests/e2e, e.g. a build-root copy). Pass --source-root "
+                "<path to the nvme-cli checkout>.")
+
+    sys.path.insert(0, project_root)
+
+    from tests.e2e.runner import main as runner_main
+    sys.argv = [sys.argv[0]] + remaining_argv
+    runner_main()
+
+
+if __name__ == '__main__':
+    main()
