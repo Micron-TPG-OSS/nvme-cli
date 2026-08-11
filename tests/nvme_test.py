@@ -35,8 +35,6 @@ import sys
 import unittest
 import time
 
-from .nvme_test_logger import TestNVMeLogger
-
 logger = logging.getLogger(__name__)
 
 
@@ -66,6 +64,9 @@ class TestNVMeBase(unittest.TestCase):
 
     def setUp(self):
         self.nvme_bin = "nvme"
+        self.collect_device_data = False
+        self.device_data = []
+        self.device_metadata = None
         if not logging.getLogger().handlers:
             logging.basicConfig(format='%(message)s', stream=sys.stdout)
 
@@ -86,9 +87,44 @@ class TestNVMeBase(unittest.TestCase):
                                 input=stdin_data)
         if result.stdout:
             logger.debug(result.stdout)
+            sys.stdout.write(result.stdout)
+            sys.stdout.flush()
+            if getattr(self, 'stdout_log', None):
+                self.stdout_log.write(result.stdout)
+                self.stdout_log.flush()
         if result.stderr:
             logger.debug(result.stderr)
+            sys.stderr.write(result.stderr)
+            sys.stderr.flush()
+            if getattr(self, 'stderr_log', None):
+                self.stderr_log.write(result.stderr)
+                self.stderr_log.flush()
+        self._record_device_data(cmd, result)
         return result
+
+    def _record_device_data(self, cmd, result):
+        """ Record a command's parsed JSON output for the device-data log.
+
+        Opt-in via collect_device_data (off by default -- see load_config).
+        Only nvme commands with JSON-parseable stdout are useful for
+        feeding into a device-feature database -- everything else (shell
+        helpers, non-JSON output) is skipped.
+            - Args:
+                - cmd : the command that was run (string or argv list).
+                - result : the CompletedProcess returned by run_cmd.
+            - Returns:
+                - None
+        """
+        if not self.collect_device_data:
+            return
+        cmd_str = cmd if isinstance(cmd, str) else " ".join(cmd)
+        if not cmd_str.strip().startswith(self.nvme_bin) or not result.stdout:
+            return
+        try:
+            output = json.loads(result.stdout)
+        except (TypeError, json.JSONDecodeError):
+            return
+        self.device_data.append({'cmd': cmd_str, 'output': output})
 
 
 class TestNVMe(TestNVMeBase):
@@ -126,6 +162,8 @@ class TestNVMe(TestNVMeBase):
         self.pif = 0
 
         self.load_config()
+        if self.collect_device_data:
+            self._capture_device_metadata()
         if self.do_validate_pci_device:
             self.validate_pci_device()
         self.ns_mgmt_supported = self.get_ns_mgmt_support()
@@ -141,6 +179,11 @@ class TestNVMe(TestNVMeBase):
 
     def tearDown(self):
         """ Post Section for TestNVMe. """
+        self._write_device_data()
+        if getattr(self, 'stdout_log', None):
+            self.stdout_log.close()
+        if getattr(self, 'stderr_log', None):
+            self.stderr_log.close()
         if self.clear_log_dir is True:
             shutil.rmtree(self.log_dir, ignore_errors=True)
         if self.ns_mgmt_supported:
@@ -211,6 +254,8 @@ class TestNVMe(TestNVMeBase):
         self.nvme_bin = config.get('nvme_bin', self.nvme_bin)
         self.do_validate_pci_device = config.get(
             'do_validate_pci_device', self.do_validate_pci_device)
+        self.collect_device_data = config.get(
+            'collect_device_data', self.collect_device_data)
         self.clear_log_dir = False
 
         log_level_str = config.get('log_level', 'WARNING')
@@ -234,8 +279,51 @@ class TestNVMe(TestNVMeBase):
         self.test_log_dir = self.log_dir + "/" + test_name
         if not os.path.exists(self.test_log_dir):
             os.makedirs(self.test_log_dir)
-        sys.stdout = TestNVMeLogger(self.test_log_dir + "/" + "stdout.log")
-        sys.stderr = TestNVMeLogger(self.test_log_dir + "/" + "stderr.log")
+        self.stdout_log = open(self.test_log_dir + "/" + "stdout.log", "w")
+        self.stderr_log = open(self.test_log_dir + "/" + "stderr.log", "w")
+
+    def _capture_device_metadata(self):
+        """ Run 'nvme id-ctrl' once and cache the fields that identify this
+        device (vendor/serial/model/firmware/subnqn) as self.device_metadata.
+
+        Issued explicitly, up front, rather than opportunistically picked
+        out of whatever commands a test happens to run -- that way the
+        device-data log always has metadata, even for tests that never
+        query id-ctrl themselves or that read it in non-JSON form.
+            - Args:
+                - None
+            - Returns:
+                - None
+        """
+        id_ctrl_cmd = f"{self.nvme_bin} id-ctrl {self.ctrl} --output-format=json"
+        result = self.run_cmd(id_ctrl_cmd)
+        if result.returncode != 0 or not result.stdout:
+            return
+        output = self.parse_json_output(result.stdout, "nvme id-ctrl")
+        self.device_metadata = {
+            key: (val.strip() if isinstance(val, str) else val)
+            for key, val in output.items()
+            if key in ('vid', 'ssvid', 'sn', 'mn', 'fr', 'subnqn')
+        }
+
+    def _write_device_data(self):
+        """ Write this test's collected nvme command/JSON-output pairs plus
+        id-ctrl-derived device metadata to device_data.json in the per-test
+        log directory, alongside stdout.log/stderr.log. Intended to be fed
+        into a database that tracks per-device feature support.
+            - Args:
+                - None
+            - Returns:
+                - None
+        """
+        if self.test_log_dir == "XXX" or not self.device_data:
+            return
+        path = os.path.join(self.test_log_dir, "device_data.json")
+        with open(path, "w") as f:
+            json.dump({
+                'metadata': self.device_metadata or {},
+                'commands': self.device_data,
+            }, f, indent=2)
 
     def parse_json_output(self, output, context, expected_type=dict):
         """Parse JSON output and fail test clearly on malformed or wrong-typed data.

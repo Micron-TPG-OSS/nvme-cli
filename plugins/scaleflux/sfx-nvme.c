@@ -17,17 +17,22 @@
 
 #include <libnvme.h>
 
-#include "common.h"
+#include <ccan/endian/endian.h>
+#include <ccan/array_size/array_size.h>
+
+#include <compiler-attributes.h>
+
+#include <int-util.h>
+#include <progress-util.h>
+#include <temp-util.h>
+#include <time-util.h>
+#include <uint128-util.h>
+
 #include "nvme-cmds.h"
 #include "nvme-print.h"
 #include "nvme.h"
 #include "plugin.h"
 #include "src/cleanup.h"
-#include "uint128-util.h"
-#include "int-util.h"
-#include "temp-util.h"
-#include "time-util.h"
-#include "progress-util.h"
 
 #define CREATE_CMD
 #include "sfx-nvme.h"
@@ -1187,7 +1192,7 @@ static int nvme_parse_evtlog(void *pevent_log_info, __u32 log_len, char *output)
 		offset++;
 		length--;
 
-		if (!(offset % (log_len / 100)) || (offset == log_len))
+		if ((log_len >= 100 && !(offset % (log_len / 100))) || (offset == log_len))
 			shr_spinner("Parse", (float) (offset) / (float) (log_len), stdout);
 	}
 
