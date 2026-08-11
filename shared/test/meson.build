@@ -35,18 +35,16 @@ test_crc32 = executable(
 
 test('shared - crc32', test_crc32)
 
-if host_system != 'windows'
-    test_ini = executable(
-        'test-ini',
-        ['test-ini.c'],
-        dependencies: [
-            config_dep,
-            shared_dep,
-        ],
-    )
+test_ini = executable(
+    'test-ini',
+    ['test-ini.c'],
+    dependencies: [
+        config_dep,
+        shared_dep,
+    ],
+)
 
-    test('shared - ini', test_ini)
-endif
+test('shared - ini', test_ini)
 
 test_parse_util = executable(
     'test-parse-util',
@@ -239,6 +237,8 @@ test_mmio_util = executable(
 
 test('shared - mmio-util', test_mmio_util)
 
+# net-util-linux.c has no Windows counterpart, so there is nothing to exercise
+# there. Un-gate this once a net-util-win.c exists.
 if host_system != 'windows'
     test_net_util = executable(
         'test-net-util',
@@ -252,41 +252,35 @@ if host_system != 'windows'
     test('shared - net-util', test_net_util)
 endif
 
-if host_system != 'windows'
-    test_crypto_util = executable(
-        'test-crypto-util',
-        ['test-crypto-util.c'],
-        dependencies: [
-            config_dep,
-            shared_dep,
-        ],
-    )
+test_crypto_util = executable(
+    'test-crypto-util',
+    ['test-crypto-util.c'],
+    dependencies: [
+        config_dep,
+        shared_dep,
+    ],
+)
 
-    test('shared - crypto-util', test_crypto_util)
-endif
+test('shared - crypto-util', test_crypto_util)
 
-if host_system != 'windows'
-    test_sig_util = executable(
-        'test-sig-util',
-        ['test-sig-util.c'],
-        dependencies: [
-            config_dep,
-            shared_dep,
-        ],
-    )
+test_sig_util = executable(
+    'test-sig-util',
+    ['test-sig-util.c'],
+    dependencies: [
+        config_dep,
+        shared_dep,
+    ],
+)
 
-    test('shared - sig-util', test_sig_util)
-endif
+test('shared - sig-util', test_sig_util)
 
-if host_system != 'windows'
-    test_shr_assert = executable(
-        'test-shr-assert',
-        ['test-shr-assert.c'],
-        dependencies: [
-            config_dep,
-            shared_dep,
-        ],
-    )
+test_shr_assert = executable(
+    'test-shr-assert',
+    ['test-shr-assert.c'],
+    dependencies: [
+        config_dep,
+        shared_dep,
+    ],
+)
 
-    test('shared - shr-assert', test_shr_assert)
-endif
+test('shared - shr-assert', test_shr_assert)

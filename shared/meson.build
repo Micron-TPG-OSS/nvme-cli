@@ -45,7 +45,10 @@ else
 endif
 
 shared_deps = [ccan_dep]
-if host_system != 'windows'
+if host_system == 'windows'
+    # crypto-util-win.c hashes via BCrypt, openssl elsewhere.
+    shared_deps += [bcrypt_dep]
+else
     shared_deps += [openssl_dep]
 endif
 

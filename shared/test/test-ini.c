@@ -17,6 +17,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <fs-util.h>
 #include <ini.h>
 
 #define MAX_EVENTS 32
@@ -212,13 +213,13 @@ static bool test_file(void)
 		{ SHR_INI_SECTION, "f", "f", NULL, 2 },
 		{ SHR_INI_KV, "f", "key", "val", 3 },
 	};
-	char path[] = "/tmp/nvme-ini-test-XXXXXX";
+	char path[] = "nvme-ini-test-XXXXXX";
 	bool pass = true;
 	int fd, ret, i;
 
 	printf("test_file:\n");
 
-	fd = mkstemp(path);
+	fd = shr_mkstemp(path);
 	shr_assert(fd >= 0);
 	shr_assert(write(fd, "# file\n[f]\nkey = val\n", 21) == 21);
 	close(fd);
@@ -249,7 +250,7 @@ static bool test_file(void)
 	}
 
 	/* A directory must be rejected, not silently read as empty. */
-	ret = shr_ini_parse_file("/tmp", record, NULL);
+	ret = shr_ini_parse_file(".", record, NULL);
 	if (ret != -EISDIR) {
 		printf(" - directory path ret=%d (want -EISDIR) [FAIL]\n", ret);
 		pass = false;

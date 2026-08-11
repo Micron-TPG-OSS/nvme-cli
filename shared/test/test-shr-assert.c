@@ -10,10 +10,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/wait.h>
-#include <unistd.h>
 
 #include <shr-assert.h>
+
+#ifdef _WIN32
+#define popen _popen
+#define pclose _pclose
+#else
+#include <sys/wait.h>
+#endif
+
+/*
+ * Re-invoked with this argument, the test becomes the child whose failing
+ * assertion is under test. Windows has no fork(), so the child is a fresh
+ * process running this same binary rather than a copy of it.
+ */
+#define CHILD_ARG "--assert-child"
 
 static bool check_bool(const char *name, bool got, bool want)
 {
@@ -40,9 +52,20 @@ static bool test_pass_is_silent(void)
 }
 
 /*
- * Run a child that prints unterminated (buffered) output, then fails a
- * shr_assert(). Capture everything the child writes to stdout/stderr and
- * how it exits, to verify:
+ * The child half of test_fail_flushes_and_reports(): print unterminated
+ * (buffered) output, then fail a shr_assert(). Never returns.
+ */
+static void assert_child(void)
+{
+	/* Unterminated: only survives if something flushes it. */
+	printf("marker-before-failure");
+	shr_assert(1 == 2);
+	_Exit(EXIT_SUCCESS); /* unreachable */
+}
+
+/*
+ * Run this binary again as a child that fails an assertion. Capture
+ * everything it writes to stdout/stderr and how it exits, to verify:
  *  - the buffered output written before the failure was not lost, i.e.
  *    fflush(NULL) actually flushes stdio buffers before exiting - the
  *    exact case plain assert()/abort() gets wrong.
@@ -50,52 +73,53 @@ static bool test_pass_is_silent(void)
  *  - the process exits normally instead of being killed by a signal
  *    (contrasts with assert()'s SIGABRT via abort()).
  */
-static bool test_fail_flushes_and_reports(void)
+static bool test_fail_flushes_and_reports(const char *self)
 {
 	char buf[4096] = { 0 };
-	int pipefd[2];
-	ssize_t total = 0, n;
-	pid_t pid;
-	int status;
+	char cmd[4096];
+	size_t total = 0;
 	bool pass = true;
+	FILE *child;
+	int status;
 
 	printf("test_fail_flushes_and_reports:\n");
 
-	if (pipe(pipefd)) {
-		printf(" - pipe() failed [FAIL]\n");
+	/*
+	 * 2>&1 so the diagnostic on stderr and the marker on stdout arrive
+	 * interleaved on the one pipe, as they did through the shared fd pair
+	 * this test used before.
+	 */
+	if (snprintf(cmd, sizeof(cmd), "\"%s\" " CHILD_ARG " 2>&1", self) >=
+	    (int)sizeof(cmd)) {
+		printf(" - own path too long to re-invoke [FAIL]\n");
 		return false;
 	}
 
-	pid = fork();
-	if (pid < 0) {
-		printf(" - fork() failed [FAIL]\n");
+	child = popen(cmd, "r");
+	if (!child) {
+		printf(" - popen() failed [FAIL]\n");
 		return false;
 	}
 
-	if (pid == 0) {
-		close(pipefd[0]);
-		dup2(pipefd[1], STDOUT_FILENO);
-		dup2(pipefd[1], STDERR_FILENO);
-		close(pipefd[1]);
-
-		/* Unterminated: only survives if something flushes it. */
-		printf("marker-before-failure");
-		shr_assert(1 == 2);
-		_exit(EXIT_SUCCESS); /* unreachable */
-	}
-
-	close(pipefd[1]);
-	while (total < (ssize_t)sizeof(buf) - 1 &&
-	       (n = read(pipefd[0], buf + total, sizeof(buf) - 1 - total)) > 0)
-		total += n;
-	close(pipefd[0]);
+	total = fread(buf, 1, sizeof(buf) - 1, child);
 	buf[total] = '\0';
 
-	waitpid(pid, &status, 0);
+	status = pclose(child);
 
+	/*
+	 * pclose() hands back a wait status on POSIX but the child's exit code
+	 * directly on Windows. Either way a signal death shows up as something
+	 * other than a clean nonzero exit, which is what this asserts.
+	 */
+#ifdef _WIN32
+	pass &= check_bool("child exited (not signaled)", status >= 0, true);
+	pass &= check_bool("child exit status nonzero", status != 0, true);
+#else
 	pass &= check_bool("child exited (not signaled)", WIFEXITED(status), true);
 	if (WIFEXITED(status))
-		pass &= check_bool("child exit status nonzero", WEXITSTATUS(status) != 0, true);
+		pass &= check_bool("child exit status nonzero",
+				   WEXITSTATUS(status) != 0, true);
+#endif
 
 	pass &= check_bool("buffered output before failure survived",
 			   strstr(buf, "marker-before-failure") != NULL, true);
@@ -110,12 +134,15 @@ static bool test_fail_flushes_and_reports(void)
 	return pass;
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
 	bool pass = true;
 
+	if (argc > 1 && !strcmp(argv[1], CHILD_ARG))
+		assert_child();
+
 	pass &= test_pass_is_silent();
-	pass &= test_fail_flushes_and_reports();
+	pass &= test_fail_flushes_and_reports(argv[0]);
 
 	fflush(stdout);
 	exit(pass ? EXIT_SUCCESS : EXIT_FAILURE);

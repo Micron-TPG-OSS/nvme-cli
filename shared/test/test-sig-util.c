@@ -5,6 +5,7 @@
  *
  * Authors: Daniel Wagner <dwagner@suse.de>
  */
+#include <errno.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -37,6 +38,12 @@ static bool test_sigint(void)
 	return pass;
 }
 
+/*
+ * There is no console-resize signal in the Windows CRT, so
+ * shr_install_sigwinch_handler() reports -ENOTSUP there rather than pretending
+ * to succeed. Assert that contract instead of skipping, so a Windows build
+ * that silently starts returning 0 without delivering resize events fails.
+ */
 static bool test_sigwinch(void)
 {
 	bool pass = true;
@@ -45,6 +52,10 @@ static bool test_sigwinch(void)
 	printf("test_sigwinch:\n");
 
 	ret = shr_install_sigwinch_handler();
+
+#ifdef _WIN32
+	pass &= check_bool("handler reports -ENOTSUP", ret == -ENOTSUP);
+#else
 	pass &= check_bool("handler installs successfully", ret == 0);
 	pass &= check_bool("flag starts clear", !shr_sigwinch_received);
 
@@ -52,6 +63,7 @@ static bool test_sigwinch(void)
 	pass &= check_bool("flag set after SIGWINCH is raised", shr_sigwinch_received);
 
 	signal(SIGWINCH, SIG_DFL);
+#endif
 
 	return pass;
 }
