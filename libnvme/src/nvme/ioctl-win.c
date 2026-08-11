@@ -1931,13 +1931,6 @@ __shr_public int libnvme_exec_io_passthru(
 	if (!hdl || !cmd)
 		return -EINVAL;
 
-	/*
-	 * Every submit_*() below assigns cmd->result only after its error
-	 * check, so a failing command would otherwise leave the caller's
-	 * result untouched. Clear it up front, as the Linux backend does, so
-	 * that a caller which reads the result unconditionally sees 0 rather
-	 * than whatever it happened to pass in.
-	 */
 	cmd->result = 0;
 
 	switch (cmd->opcode) {
@@ -1982,7 +1975,6 @@ __shr_public int libnvme_exec_admin_passthru(
 	if (hdl->type != LIBNVME_TRANSPORT_HANDLE_TYPE_DIRECT)
 		return -ENOTSUP;
 
-	/* See the note in libnvme_exec_io_passthru(). */
 	cmd->result = 0;
 
 	switch (cmd->opcode) {

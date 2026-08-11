@@ -244,7 +244,7 @@ static void complete_cmd(const struct decoded_cmd *dec,
 	 */
 	if (dec->result_is_64bit) {
 		/*
-		 * It carries them in two DWORD fields,
+		 * The result is carried in two DWORD fields,
 		 * FixedProtocolReturnData and FixedProtocolReturnData2, so
 		 * write the halves separately rather than with a memcpy the
 		 * compiler would flag as overflowing the first field. UCRT64's
