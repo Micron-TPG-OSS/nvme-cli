@@ -13,7 +13,7 @@
 #include "data-area.h"
 #include "skht.h"
 #include "uart-log.h"
-#include "util/json.h"
+#include "nvme-json.h"
 
 static bool parse_uart_entry(struct telemetry_log *tl, uint64_t entry_offset_bit,
 			      struct json_object *uart_array)
@@ -108,7 +108,7 @@ int sldm_parse_cd_uart_log(struct telemetry_log *tl, uint32_t offset, uint32_t s
 
 	/* Parse entries using dynamic structure parsing */
 	for (i = 0; i < num_entries; i++) {
-		entry_offset_bit = (offset + (i * 192)) * 8;  /* Convert to bit offset */
+		entry_offset_bit = ((uint64_t)offset + (uint64_t)i * 192) * 8;  /* Convert to bit offset */
 		parse_uart_entry(tl, entry_offset_bit, uart_array);
 	}
 

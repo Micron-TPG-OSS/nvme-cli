@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <libgen.h>
 #include <limits.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -60,6 +61,18 @@ void shr_fsync_dir(const char *path)
 		fsync(fd);
 		close(fd);
 	}
+}
+
+int shr_unlink(const char *path)
+{
+	if (unlink(path) < 0)
+		return -errno;
+	return 0;
+}
+
+bool shr_fd_is_open(int fd)
+{
+	return fcntl(fd, F_GETFD) != -1;
 }
 
 char *shr_dirname(char *path)

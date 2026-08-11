@@ -6,7 +6,7 @@
 # Authors: Martin Belanger <Martin.Belanger@dell.com>
 #
 sources = [
-    'nvme/accessors.c',
+    'nvme/generated/accessors.c',
     'nvme/ioctl.c',
     'nvme/lib.c',
     'nvme/log.c',
@@ -16,7 +16,7 @@ sources = [
 ]
 if host_system == 'linux'
     sources += [
-        'nvme/ctrl-sysfs-custom-linux.c',
+        'nvme/attr-accessors-custom-linux.c',
         'nvme/ioctl-linux.c',
         'nvme/lib-linux.c',
         'nvme/mem-linux.c',
@@ -26,7 +26,7 @@ if host_system == 'linux'
 elif host_system == 'windows'
     sources += [
         'nvme/ctrl-map.c',
-        'nvme/ctrl-sysfs-custom-win.c',
+        'nvme/attr-accessors-custom-win.c',
         'nvme/ioctl-win.c',
         'nvme/lib-win.c',
         'nvme/mem-win.c',
@@ -35,8 +35,6 @@ elif host_system == 'windows'
     ]
 endif
 headers = [
-    'nvme/accessors.h',
-    'nvme/ctrl-sysfs.h',
     'nvme/endian.h',
     'nvme/ioctl.h',
     'nvme/lib-types.h',
@@ -60,9 +58,17 @@ headers = [
     'nvme/util.h',
 ]
 
+# Generator-owned headers (never hand-touched, unlike everything else in
+# headers above) -- kept in their own subdirectory and installed under
+# nvme/generated/ so libnvme.h.in can #include them by that same path.
+generated_headers = [
+    'nvme/generated/accessors.h',
+    'nvme/generated/attr-accessors.h',
+]
+
 if want_fabrics
     sources += [
-        'nvme/accessors-fabrics.c',
+        'nvme/generated/accessors-fabrics.c',
         'nvme/crypto.c',
         'nvme/config.c',
         'nvme/config-emit.c',
@@ -76,8 +82,10 @@ if want_fabrics
         'nvme/tree-fabrics.c',
         'nvme/util-fabrics.c',
     ]
+    generated_headers += [
+        'nvme/generated/accessors-fabrics.h',
+    ]
     headers += [
-        'nvme/accessors-fabrics.h',
         'nvme/config.h',
         'nvme/crypto.h',
         'nvme/exclusion.h',
@@ -130,6 +138,7 @@ if host_system == 'windows'
         bcrypt_dep,
         setupapi_dep,
         cfgmgr32_dep,
+        winpthread_dep,
     ]
 endif
 
@@ -138,27 +147,45 @@ nvmf_ld = meson.current_source_dir() / 'libnvmf.ld'
 mi_ld = meson.current_source_dir() / 'libnvme-mi.ld'
 accessors_ld = meson.current_source_dir() / 'accessors.ld'
 nvmf_accessors_ld = meson.current_source_dir() / 'accessors-fabrics.ld'
-ctrl_sysfs_ld = meson.current_source_dir() / 'ctrl-sysfs.ld'
+attr_accessors_ld = meson.current_source_dir() / 'attr-accessors.ld'
 
-link_args = [
-    '-Wl,--version-script=@0@'.format(nvme_ld),
-    '-Wl,--version-script=@0@'.format(accessors_ld),
-    '-Wl,--version-script=@0@'.format(ctrl_sysfs_ld),
-]
+# Version scripts filter the exported symbols. GNU ld honours --version-script
+# for PE/COFF too, but LLVM's lld does not accept the option at all, so the
+# MSYS2 CLANG64/CLANGARM64 environments cannot use them.
+#
+# Dropping them does not lose the public API. It is annotated with __shr_public
+# (visibility("default")), which clang honours on PE. So -fvisibility=hidden
+# below still keeps libnvme's own internals unexported. What is lost is the
+# filtering of symbols pulled in from static libraries, which PE auto-export
+# then adds to the export table.
+want_version_scripts = cc.has_link_argument(
+    '-Wl,--version-script=@0@'.format(nvme_ld)
+)
+
+link_args = []
+if want_version_scripts
+    link_args += [
+        '-Wl,--version-script=@0@'.format(nvme_ld),
+        '-Wl,--version-script=@0@'.format(accessors_ld),
+        '-Wl,--version-script=@0@'.format(attr_accessors_ld),
+    ]
+endif
 
 libconf = configuration_data()
 if want_fabrics
-    link_args += [
-        '-Wl,--version-script=@0@'.format(nvmf_ld),
-        '-Wl,--version-script=@0@'.format(nvmf_accessors_ld),
-    ]
+    if want_version_scripts
+        link_args += [
+            '-Wl,--version-script=@0@'.format(nvmf_ld),
+            '-Wl,--version-script=@0@'.format(nvmf_accessors_ld),
+        ]
+    endif
     libconf.set('FABRICS_INCLUDE',
                 fs.read('fabrics-includes.h.in').strip())
 else
     libconf.set('FABRICS_INCLUDE', '')
 endif
 
-if want_mi
+if want_mi and want_version_scripts
     link_args += [
         '-Wl,--version-script=@0@'.format(mi_ld),
     ]
@@ -217,6 +244,11 @@ mode = 'rw-r--r--'
 install_headers(
     headers,
     subdir: libnvme_api_name / 'nvme',
+    install_mode: mode,
+)
+install_headers(
+    generated_headers,
+    subdir: libnvme_api_name / 'nvme' / 'generated',
     install_mode: mode,
 )
 if want_mi

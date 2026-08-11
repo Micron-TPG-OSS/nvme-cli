@@ -35,7 +35,7 @@
 #include "nvme-print.h"
 #include "plugin.h"
 
-#include "util/suffix.h"
+#include "suffix-util.h"
 
 #define CREATE_CMD
 #include "huawei-nvme.h"
@@ -217,8 +217,8 @@ static void huawei_print_list_item(struct huawei_list_item *list_item,
 	double nsze       = le64_to_cpu(list_item->ns.nsze) * lba;
 	double nuse       = le64_to_cpu(list_item->ns.nuse) * lba;
 
-	const char *s_suffix = suffix_si_get(&nsze);
-	const char *u_suffix = suffix_si_get(&nuse);
+	const char *s_suffix = shr_suffix_si_get(&nsze);
+	const char *u_suffix = shr_suffix_si_get(&nuse);
 
 	char usage[128];
 	char nguid_buf[2 * sizeof(list_item->ns.nguid) + 1];
@@ -316,9 +316,10 @@ static int huawei_list(int argc, char **argv, struct command *acmd,
 	char path[264];
 	struct dirent **devices;
 	struct huawei_list_item *list_items;
-	unsigned int i, n, ret;
+	unsigned int i, n;
 	unsigned int huawei_num = 0;
 	nvme_print_flags_t fmt;
+	int ret;
 
 	NVME_ARGS(opts);
 

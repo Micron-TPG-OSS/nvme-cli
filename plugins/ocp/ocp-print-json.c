@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-#include "util/json.h"
-#include "util/types.h"
+#include "nvme-json.h"
+#include "uuid-util.h"
+#include "uint128-util.h"
+#include "int-util.h"
+#include "time-util.h"
 #include "common.h"
 #include "nvme-print.h"
 #include "ocp-print.h"
@@ -340,7 +343,7 @@ static void json_smart_extended_log_v1(struct ocp_smart_extended_log *log)
 			ascii += sprintf(ascii, "%c", log->dssd_firmware_revision[i]);
 		json_object_add_value_string(root, "Dssd firmware revision", ascii_arr);
 		json_object_add_value_string(root, "Dssd firmware build UUID",
-						util_uuid_to_string(log->dssd_firmware_build_uuid));
+						shr_uuid_to_string(log->dssd_firmware_build_uuid));
 		ascii = ascii_arr;
 		memset((void *)ascii, 0, 65);
 		for (i = 0; i < 64; i++)
@@ -504,7 +507,7 @@ static void json_smart_extended_log_v2(struct ocp_smart_extended_log *log)
 			ascii += sprintf(ascii, "%c", log->dssd_firmware_revision[i]);
 		json_object_add_value_string(root, "dssd_firmware_revision", ascii_arr);
 		json_object_add_value_string(root, "dssd_firmware_build_uuid",
-						util_uuid_to_string(log->dssd_firmware_build_uuid));
+						shr_uuid_to_string(log->dssd_firmware_build_uuid));
 		ascii = ascii_arr;
 		memset((void *)ascii, 0, 65);
 		for (i = 0; i < 64; i++)
@@ -614,7 +617,7 @@ static void json_c3_log(struct libnvme_transport_handle *hdl, struct ssd_latency
 			if (le64_to_cpu(log_data->active_latency_timestamp[3-i][j]) == -1) {
 				json_object_add_value_string(bucket, operation[j], "NA");
 			} else {
-				convert_ts(le64_to_cpu(log_data->active_latency_timestamp[3-i][j]),
+				shr_format_ts(le64_to_cpu(log_data->active_latency_timestamp[3-i][j]),
 					   ts_buf);
 				json_object_add_value_string(bucket, operation[j], ts_buf);
 			}
@@ -658,7 +661,7 @@ static void json_c3_log(struct libnvme_transport_handle *hdl, struct ssd_latency
 			if (le64_to_cpu(log_data->static_latency_timestamp[3-i][j]) == -1) {
 				json_object_add_value_string(bucket, operation[j], "NA");
 			} else {
-				convert_ts(le64_to_cpu(log_data->static_latency_timestamp[3-i][j]),
+				shr_format_ts(le64_to_cpu(log_data->static_latency_timestamp[3-i][j]),
 					   ts_buf);
 				json_object_add_value_string(bucket, operation[j], ts_buf);
 			}
@@ -702,7 +705,7 @@ static void json_c3_log(struct libnvme_transport_handle *hdl, struct ssd_latency
 	if (le64_to_cpu(log_data->debug_log_latency_stamp) == -1) {
 		json_object_add_value_string(root, "Debug Log Latency Time Stamp", "NA");
 	} else {
-		convert_ts(le64_to_cpu(log_data->debug_log_latency_stamp), ts_buf);
+		shr_format_ts(le64_to_cpu(log_data->debug_log_latency_stamp), ts_buf);
 		json_object_add_value_string(root, "Debug Log Latency Time Stamp", ts_buf);
 	}
 	json_object_add_value_uint(root, "Debug Log Pointer",
@@ -1160,6 +1163,7 @@ static void json_c7_log(struct libnvme_transport_handle *hdl, struct tcg_configu
 				  le32_to_cpu(log_data->pro_rlc));
 	json_object_add_value_int(root, "TCG Error Count", le32_to_cpu(log_data->tcg_ec));
 
+	res = res_arr;
 	memset((__u8 *)res, 0, 458);
 	if (log_page_version == 1) {
 		res += sprintf(res, "%d%d", *(__u8 *)&log_data->no_of_ns_prov_locking_obj_ext,

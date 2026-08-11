@@ -26,8 +26,8 @@
 #include "nvme-print.h"
 #include "nvme.h"
 #include "plugin.h"
-#include "util/cleanup.h"
-#include "util/types.h"
+#include "src/cleanup.h"
+#include "int-util.h"
 
 
 #define CREATE_CMD
@@ -59,7 +59,7 @@ static int ReadSysFile(const char *file, unsigned short *id)
 		return fd;
 	}
 
-	ret = read(fd, idstr, sizeof(idstr));
+	ret = read(fd, idstr, sizeof(idstr) - 1);
 	close(fd);
 	if (ret < 0)
 		perror("read");

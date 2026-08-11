@@ -19,7 +19,7 @@ project(
         'GPL-2.0-only',         # nvme-cli
         'LGPL-2.1-or-later',    # libnvme
     ],
-    version: '3.0-b.4',
+    version: '3.0-b.5',
     default_options: [
         'c_std=gnu99',
         'buildtype=debugoptimized',
@@ -174,6 +174,7 @@ if host_system == 'windows'
     bcrypt_dep = cc.find_library('bcrypt', required: true)
     setupapi_dep = cc.find_library('setupapi', required: true)
     cfgmgr32_dep = cc.find_library('cfgmgr32', required: true)
+    winpthread_dep = cc.find_library('winpthread', required: true)
 endif
 
 conf.set10(
@@ -358,7 +359,7 @@ else
 endif
 conf.set('NVME_HAVE_LIBKMOD', libkmod_dep.found(), description: 'Is libkmod available?')
 
-if not want_fabrics or get_option('openssl').disabled()
+if host_system != 'linux' or get_option('openssl').disabled()
     openssl_dep = dependency('', required: false)
 else
     openssl_dep = dependency(
@@ -598,52 +599,9 @@ subdir('libnvme')   # declares: libnvme_dep
 
 if want_nvme
     subdir('plugins')   # declares: plugin_sources
-    subdir('util')      # declares: util_sources
-
-    sources = [
-        'args.c',
-        'global-config.c',
-        'logging.c',
-        'nvme-cmds.c',
-        'nvme-models.c',
-        'nvme-pci-ids.c',
-        'nvme-print-binary.c',
-        'nvme-print-stdout.c',
-        'nvme-print.c',
-        'nvme-rpmb.c',
-        'nvme.c',
-        'plugin.c',
-    ]
-    if host_system == 'linux'
-        sources += [
-            'nvme-pci-ids-linux.c',
-        ]
-    elif host_system == 'windows'
-        sources += [
-            'nvme-pci-ids-win.c',
-        ]
-    endif
-
-    if json_c_dep.found()
-        sources += [
-            'nvme-print-json.c',
-        ]
-    endif
-
-    if want_fabrics
-        sources += [
-            'fabrics.c',
-            'config-convert.c',
-            'config-create.c',
-        ]
-    endif
-
-    if want_top
-        sources += 'nvme-print-stdout-top.c'
-    endif
+    subdir('src')       # declares: sources
 
     sources += plugin_sources
-    sources += util_sources
 
     link_args_list = []
     link_deps = [
@@ -669,6 +627,8 @@ if want_nvme
                 link_args_list += ['-ljson-c']
             endif
             link_args_list += ['-lwinpthread', '-Wl,-Bdynamic']
+        else
+            link_deps += [winpthread_dep]
         endif
     else
         link_args_list = ['-ldl']
@@ -677,6 +637,7 @@ if want_nvme
     nvme_exe = executable(
         'nvme',
         sources,
+        include_directories: 'src',
         dependencies: link_deps,
         link_args: link_args_list,
         install: true,
@@ -696,17 +657,25 @@ if want_nvme
         )
     endif
 
-    if host_system == 'linux'
-        subdir('unit')
+    if get_option('e2e-tests')
+        # A standalone copy of the e2e runner, placed next to the 'nvme'
+        # binary in the build root so it can be invoked directly -- e.g.
+        # './.build/nvme-cli-e2e --controller=... ...' -- entirely
+        # independent of 'meson test'.
+        cp = find_program('cp')
+        custom_target('nvme-cli-e2e',
+            input: files('tests/nvme-cli-e2e'),
+            output: 'nvme-cli-e2e',
+            command: [cp, '@INPUT@', '@OUTPUT@'],
+            build_by_default: true,
+            install: false,
+        )
     endif
-    subdir('unit-py')
+
+    subdir('tests')
 
     if want_discoverd
         subdir('discoverd')
-    endif
-
-    if get_option('nvme-tests')
-        subdir('tests')
     endif
 
     configure_file(

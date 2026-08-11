@@ -257,7 +257,7 @@ int libnvme_reconfigure_ctrl(struct libnvme_global_ctx *ctx,
 	FREE_CTRL_ATTR(c->name);
 	FREE_CTRL_ATTR(c->sysfs_dir);
 	FREE_CTRL_ATTR(c->state);
-	libnvme_ctrl_sysfs_reset(c->sysfs);
+	libnvme_ctrl_attrs_reset(c->attrs);
 
 	d = opendir(path);
 	if (!d) {
@@ -396,26 +396,6 @@ __shr_public int libnvme_scan_ctrl(
 	return 0;
 }
 
-static int libnvme_strtou64(const char *str, void *res)
-{
-	char *endptr;
-	__u64 v;
-
-	errno = 0;
-	v = strtoull(str, &endptr, 0);
-
-	if (errno != 0)
-		return -errno;
-
-	if (endptr == str) {
-		/* no digits found */
-		return -EINVAL;
-	}
-
-	*(__u64 *)res = v;
-	return 0;
-}
-
 static int libnvme_strtou32(const char *str, void *res)
 {
 	char *endptr;
@@ -436,43 +416,6 @@ static int libnvme_strtou32(const char *str, void *res)
 	return 0;
 }
 
-static int libnvme_strtoi(const char *str, void *res)
-{
-	char *endptr;
-	int v;
-
-	errno = 0;
-	v = strtol(str, &endptr, 0);
-
-	if (errno != 0)
-		return -errno;
-
-	if (endptr == str) {
-		/* no digits found */
-		return -EINVAL;
-	}
-
-	*(int *)res = v;
-	return 0;
-}
-
-static int libnvme_strtoeuid(const char *str, void *res)
-{
-	memcpy(res, str, 8);
-	return 0;
-}
-
-static int libnvme_strtouuid(const char *str, void *res)
-{
-	unsigned char uuid[NVME_UUID_LEN];
-
-	if (libnvme_uuid_from_string(str, uuid))
-		return -EINVAL;
-
-	memcpy(res, uuid, NVME_UUID_LEN);
-	return 0;
-}
-
 struct sysfs_attr_table {
 	void *var;
 	int (*parse)(const char *str, void *res);
@@ -480,7 +423,6 @@ struct sysfs_attr_table {
 	const char *name;
 };
 
-#define GETSHIFT(x) (__builtin_ffsll(x) - 1)
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 static int parse_attrs(const char *path, struct sysfs_attr_table *tbl, int size)
@@ -508,64 +450,19 @@ static int parse_attrs(const char *path, struct sysfs_attr_table *tbl, int size)
 
 int libnvme_ns_init(const char *path, struct libnvme_ns *ns)
 {
-	__cleanup_free char *attr = NULL;
-	struct stat sb;
-	uint64_t size;
 	int ret;
 
 	struct sysfs_attr_table base[] = {
 		{ &ns->nsid,      libnvme_strtou32,  true, "nsid" },
-		{ &size,          libnvme_strtou64,  true, "size" },
-		{ &ns->lba_size,  libnvme_strtou32,  true, "queue/logical_block_size" },
-		{ ns->eui64,      libnvme_strtoeuid, false, "eui" },
-		{ ns->nguid,      libnvme_strtouuid, false, "nguid" },
-		{ ns->uuid,       libnvme_strtouuid, false, "uuid" }
 	};
 
 	ret = parse_attrs(path, base, ARRAY_SIZE(base));
 	if (ret)
 		return ret;
 
-	ns->lba_shift = GETSHIFT(ns->lba_size);
-	/*
-	 * size is in 512 bytes units and lba_count is in lba_size which are not
-	 * necessarily the same.
-	 */
-	ns->lba_count = size >> (ns->lba_shift -  SECTOR_SHIFT);
-
-	if (asprintf(&attr, "%s/csi", path) < 0)
+	ns->attrs = libnvme_ns_attrs_alloc();
+	if (!ns->attrs)
 		return -ENOMEM;
-
-	ret = stat(attr, &sb);
-	if (ret == 0) {
-		/* only available on kernels >= 6.8 */
-		struct sysfs_attr_table ext[] = {
-			{ &ns->csi,       libnvme_strtoi,	true, "csi" },
-			{ &ns->lba_util,  libnvme_strtou64,	true, "nuse" },
-			{ &ns->meta_size, libnvme_strtoi,	true, "metadata_bytes"},
-
-		};
-
-		ret = parse_attrs(path, ext, ARRAY_SIZE(ext));
-		if (ret)
-			return ret;
-	} else {
-		__cleanup_libnvme_free struct nvme_id_ns *id = NULL;
-		uint8_t flbas;
-
-		id = libnvme_alloc(sizeof(*id));
-		if (!id)
-			return -ENOMEM;
-
-		ret = libnvme_ns_identify(ns, id);
-		if (ret)
-			return ret;
-
-		nvme_id_ns_flbas_to_lbaf_inuse(id->flbas, &flbas);
-		ns->lba_count = le64_to_cpu(id->nsze);
-		ns->lba_util = le64_to_cpu(id->nuse);
-		ns->meta_size = le16_to_cpu(id->lbaf[flbas].ms);
-	}
 
 	return 0;
 }
@@ -776,11 +673,6 @@ int libnvme_init_subsystem(libnvme_subsystem_t s, const char *name)
 			libnvme_subsys_sysfs_dir(s->h->ctx), name) < 0)
 		return -ENOMEM;
 
-	s->model = libnvme_get_attr(path, "model");
-	if (!s->model)
-		s->model = strdup("undefined");
-	s->serial = libnvme_get_attr(path, "serial");
-	s->firmware = libnvme_get_attr(path, "firmware_rev");
 	s->subsystype = libnvme_get_attr(path, "subsystype");
 	if (!s->subsystype) {
 		if (!strcmp(s->subsysnqn, NVME_DISC_SUBSYS_NAME))
@@ -790,7 +682,6 @@ int libnvme_init_subsystem(libnvme_subsystem_t s, const char *name)
 	}
 	s->name = strdup(name);
 	s->sysfs_dir = (char *)path;
-	s->iopolicy = libnvme_get_attr(path, "iopolicy");
 
 	return 0;
 }

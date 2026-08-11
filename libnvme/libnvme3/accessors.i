@@ -33,18 +33,19 @@ def _nvme_guarded_setattr(self, name, value):
             f"{type(self).__name__!r} has no attribute {name!r}")
 %}
 
+/* struct libnvme_path */
+%rename(Path) libnvme_path;
+struct libnvme_path {
+	const char * name;
+	const char * sysfs_dir;
+};
+
+%pythoncode %{
+Path.__setattr__ = _nvme_guarded_setattr
+%}
+
 /* struct libnvme_ns */
 %rename(Namespace) libnvme_ns;
-%rename(libnvme_ns_command_retry_count_get) libnvme_ns_get_command_retry_count;
-%rename(libnvme_ns_command_error_count_get) libnvme_ns_get_command_error_count;
-%rename(libnvme_ns_io_requeue_no_usable_path_count_get) libnvme_ns_get_io_requeue_no_usable_path_count;
-%rename(libnvme_ns_io_fail_no_available_path_count_get) libnvme_ns_get_io_fail_no_available_path_count;
-%{
-	#define libnvme_ns_command_retry_count_get libnvme_ns_get_command_retry_count
-	#define libnvme_ns_command_error_count_get libnvme_ns_get_command_error_count
-	#define libnvme_ns_io_requeue_no_usable_path_count_get libnvme_ns_get_io_requeue_no_usable_path_count
-	#define libnvme_ns_io_fail_no_available_path_count_get libnvme_ns_get_io_fail_no_available_path_count
-%}
 struct libnvme_ns {
 	__u32 nsid;
 	%immutable name;
@@ -52,27 +53,6 @@ struct libnvme_ns {
 	%immutable generic_name;
 	const char * generic_name;
 	const char * sysfs_dir;
-	int lba_shift;
-	int lba_size;
-	int meta_size;
-	uint64_t lba_count;
-	uint64_t lba_util;
-	%immutable eui64;
-	uint8_t eui64[8];
-	%immutable nguid;
-	uint8_t nguid[16];
-	%immutable csi;
-	enum nvme_csi csi;
-	%extend {
-		%immutable command_retry_count;
-		long command_retry_count;
-		%immutable command_error_count;
-		long command_error_count;
-		%immutable io_requeue_no_usable_path_count;
-		long io_requeue_no_usable_path_count;
-		%immutable io_fail_no_available_path_count;
-		long io_fail_no_available_path_count;
-	}
 };
 
 %pythoncode %{
@@ -122,10 +102,6 @@ Ctrl.__setattr__ = _nvme_guarded_setattr
 
 /* struct libnvme_subsystem */
 %rename(Subsystem) libnvme_subsystem;
-%rename(libnvme_subsystem_iopolicy_get) libnvme_subsystem_get_iopolicy;
-%{
-	#define libnvme_subsystem_iopolicy_get libnvme_subsystem_get_iopolicy
-%}
 struct libnvme_subsystem {
 	%immutable name;
 	const char * name;
@@ -133,18 +109,8 @@ struct libnvme_subsystem {
 	const char * sysfs_dir;
 	%immutable subsysnqn;
 	const char * subsysnqn;
-	%immutable model;
-	const char * model;
-	%immutable serial;
-	const char * serial;
-	%immutable firmware;
-	const char * firmware;
 	%immutable subsystype;
 	const char * subsystype;
-	%extend {
-		%immutable iopolicy;
-		const char * iopolicy;
-	}
 };
 
 %pythoncode %{

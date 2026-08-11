@@ -15,27 +15,45 @@ sources = [
     'base64.c',
     'crc32.c',
     'fs-util.c',
+    'hex-util.c',
     'ini.c',
+    'int-util.c',
     'parse-util.c',
+    'progress-util.c',
     'shr-assert.c',
+    'suffix-util.c',
+    'table.c',
+    'time-util.c',
+    'uint128-util.c',
+    'uuid-util.c',
+    'wrap-util.c',
 ]
 
 if host_system == 'windows'
     sources += [
         'fs-util-win.c',
+        'crypto-util-win.c',
+        'sig-util-win.c',
     ]
 else
     sources += [
         'fs-util-linux.c',
         'net-util-linux.c',
+        'crypto-util-linux.c',
+        'sig-util-linux.c',
     ]
+endif
+
+shared_deps = [ccan_dep]
+if host_system != 'windows'
+    shared_deps += [openssl_dep]
 endif
 
 libshared = static_library(
     'shared',
     sources,
     install: false,
-    dependencies: [ccan_dep],
+    dependencies: shared_deps,
 )
 
 shared_dep = declare_dependency(
