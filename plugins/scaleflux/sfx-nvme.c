@@ -30,7 +30,7 @@
 
 #include "nvme-cmds.h"
 #include "nvme-print.h"
-#include "nvme.h"
+#include "global-ctx.h"
 #include "plugin.h"
 #include "src/cleanup.h"
 
@@ -347,6 +347,7 @@ static int get_additional_smart_log(int argc, char **argv, struct command *acmd,
 #endif /* CONFIG_JSONC */
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
+	struct libnvme_passthru_cmd cmd;
 	nvme_print_flags_t flags;
 	struct config {
 		__u32 namespace_id;
@@ -374,8 +375,9 @@ static int get_additional_smart_log(int argc, char **argv, struct command *acmd,
 		return err;
 	}
 
-	err = nvme_get_nsid_log(hdl, cfg.namespace_id, false, 0xca,
-				(void *)&smart_log, sizeof(smart_log));
+	nvme_init_get_log(&cmd, cfg.namespace_id, 0xca, NVME_CSI_NVM,
+			  (void *)&smart_log, sizeof(smart_log));
+	err = libnvme_get_log(hdl, &cmd, false, NVME_LOG_PAGE_PDU_SIZE);
 	if (!err) {
 		if (flags & JSON || cfg.json)
 			show_sfx_smart_log_jsn(&smart_log, cfg.namespace_id,
@@ -982,7 +984,10 @@ static int sfx_set_feature(int argc, char **argv, struct command *acmd, struct p
 
 	if (cfg.feature_id == SFX_FEAT_ATOMIC && cfg.value) {
 		if (cfg.namespace_id != NVME_NSID_ALL) {
-			err = nvme_identify_ns(hdl, cfg.namespace_id, &ns);
+			struct libnvme_passthru_cmd cmd;
+
+			nvme_init_identify_ns(&cmd, cfg.namespace_id, &ns);
+			err = libnvme_exec_admin_passthru(hdl, &cmd);
 			if (err) {
 				nvme_show_err(err, "identify-namespace");
 						return err;
@@ -1560,6 +1565,7 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	struct nvme_id_ctrl id_ctrl = { 0 };
+	struct libnvme_passthru_cmd cmd;
 	struct extended_health_info_myrtle sfx_smart = { 0 };
 	struct nvme_smart_log smart_log = { 0 };
 	struct nvme_additional_smart_log additional_smart_log = { 0 };
@@ -1819,7 +1825,8 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 		snprintf(pcie_status, 9, "%s", "Unknown");
 
 	//Populate id-ctrl
-	err = nvme_identify_ctrl(hdl, &id_ctrl);
+	nvme_init_identify_ctrl(&cmd, &id_ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err) {
 		nvme_show_error("Unable to read nvme_identify_ctrl() error code:%x", err);
 		return err;
@@ -1871,8 +1878,9 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 	}
 
 	//Populate Additional SMART log (0xCA)
-	err = nvme_get_nsid_log(hdl, NVME_NSID_ALL, false, 0xca, (void *)&additional_smart_log,
-							sizeof(struct nvme_additional_smart_log));
+	nvme_init_get_log(&cmd, NVME_NSID_ALL, 0xca, NVME_CSI_NVM, (void *)&additional_smart_log,
+			  sizeof(struct nvme_additional_smart_log));
+	err = libnvme_get_log(hdl, &cmd, false, NVME_LOG_PAGE_PDU_SIZE);
 	if (err) {
 		nvme_show_err(err, "Could not read ScaleFlux SMART log");
 		return err;

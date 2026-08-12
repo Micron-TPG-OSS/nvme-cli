@@ -35,7 +35,9 @@
 
 #include "nvme-cmds.h"
 #include "nvme-print.h"
-#include "nvme.h"
+#include "plugin.h"
+#include "cleanup.h"
+#include "global-ctx.h"
 
 #define CREATE_CMD
 
@@ -757,6 +759,7 @@ int rpmb_cmd_option(int argc, char **argv, struct command *acmd, struct plugin *
 	unsigned int msg_size = 0;
 	unsigned int key_size = 0;
 	struct nvme_id_ctrl ctrl;
+	struct libnvme_passthru_cmd cmd;
 	int err = -1;
 
 	union ctrl_rpmbs_reg {
@@ -774,7 +777,8 @@ int rpmb_cmd_option(int argc, char **argv, struct command *acmd, struct plugin *
 		return err;
 	
 	/* before parsing  commands, check if controller supports any RPMB targets */
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err)
 		return err;
 	

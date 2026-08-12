@@ -17,9 +17,12 @@
 
 #include <ccan/array_size/array_size.h>
 
+#include <time-util.h>
+
 #include "nvme-cmds.h"
 #include "nvme-print.h"
-#include "nvme.h"
+#include "plugin.h"
+#include "global-ctx.h"
 #include "src/cleanup.h"
 
 #define CREATE_CMD
@@ -187,6 +190,7 @@ static int id_ns(int argc, char **argv, struct command *acmd, struct plugin *plu
 	nvme_print_flags_t flags;
 	struct nvme_zns_id_ns ns;
 	struct nvme_id_ns id_ns;
+	struct libnvme_passthru_cmd cmd;
 	int err = -1;
 
 	struct config {
@@ -222,13 +226,15 @@ static int id_ns(int argc, char **argv, struct command *acmd, struct plugin *plu
 		}
 	}
 
-	err = nvme_identify_ns(hdl, cfg.namespace_id, &id_ns);
+	nvme_init_identify_ns(&cmd, cfg.namespace_id, &id_ns);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err) {
 		nvme_show_status(err);
 		return err;
 	}
 
-	err = nvme_zns_identify_ns(hdl, cfg.namespace_id, &ns);
+	nvme_init_zns_identify_ns(&cmd, cfg.namespace_id, &ns);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (!err)
 		nvme_show_zns_id_ns(&ns, &id_ns, flags);
 	else
@@ -299,16 +305,19 @@ static int get_zdes_bytes(struct libnvme_transport_handle *hdl, __u32 nsid)
 {
 	struct nvme_zns_id_ns ns;
 	struct nvme_id_ns id_ns;
+	struct libnvme_passthru_cmd cmd;
 	__u8 lbaf;
 	int err;
 
-	err = nvme_identify_ns(hdl, nsid, &id_ns);
+	nvme_init_identify_ns(&cmd, nsid, &id_ns);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err) {
 		nvme_show_err(err, "identify namespace");
 		return -1;
 	}
 
-	err = nvme_zns_identify_ns(hdl, nsid,  &ns);
+	nvme_init_zns_identify_ns(&cmd, nsid, &ns);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err) {
 		nvme_show_err(err, "zns identify namespace");
 		return -1;
@@ -796,13 +805,15 @@ static int report_zones(int argc, char **argv, struct command *acmd, struct plug
 			return zdes;
 	}
 
-	err = nvme_identify_ns(hdl, cfg.namespace_id, &id_ns);
+	nvme_init_identify_ns(&cmd, cfg.namespace_id, &id_ns);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err) {
 		nvme_show_status(err);
 		return err;
 	}
 
-	err = nvme_zns_identify_ns(hdl, cfg.namespace_id, &id_zns);
+	nvme_init_zns_identify_ns(&cmd, cfg.namespace_id, &id_zns);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (!err) {
 		/* get zsze field from zns id ns data - needed for offset calculation */
 		nvme_id_ns_flbas_to_lbaf_inuse(id_ns.flbas, &lbaf);
@@ -958,7 +969,8 @@ static int zone_append(int argc, char **argv, struct command *acmd, struct plugi
 		}
 	}
 
-	err = nvme_identify_ns(hdl, cfg.namespace_id, &ns);
+	nvme_init_identify_ns(&cmd, cfg.namespace_id, &ns);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err) {
 		nvme_show_status(err);
 		return err;
@@ -1049,7 +1061,7 @@ static int zone_append(int argc, char **argv, struct command *acmd, struct plugi
 	gettimeofday(&end_time, NULL);
 	if (cfg.latency)
 		nvme_show_result(" latency: zone append: %llu us",
-		       elapsed_utime(start_time, end_time));
+		       shr_elapsed_utime(start_time, end_time));
 
 	if (!err)
 		nvme_show_verbose_result("Success appended data to LBA %"PRIx64,
@@ -1075,6 +1087,7 @@ static int changed_zone_list(int argc, char **argv, struct command *acmd, struct
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	struct nvme_zns_changed_zone_log log;
+	struct libnvme_passthru_cmd cmd;
 	nvme_print_flags_t flags;
 	int err = -1;
 
@@ -1105,8 +1118,9 @@ static int changed_zone_list(int argc, char **argv, struct command *acmd, struct
 		}
 	}
 
-	err = nvme_get_log_zns_changed_zones(hdl, cfg.namespace_id,
-					     cfg.rae, &log);
+	nvme_init_get_log_zns_changed_zones(&cmd, cfg.namespace_id, &log);
+
+	err = libnvme_get_log(hdl, &cmd, cfg.rae, sizeof(log));
 	if (!err)
 		nvme_show_zns_changed(&log, flags);
 	else

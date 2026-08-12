@@ -16,7 +16,8 @@
 
 #include "nvme-cmds.h"
 #include "nvme-print.h"
-#include "nvme.h"
+#include "cleanup.h"
+#include "global-ctx.h"
 #include "plugin.h"
 #include "uint128-util.h"
 
@@ -271,6 +272,7 @@ static int vt_add_entry_to_log(struct libnvme_transport_handle *hdl,
 			       const struct vtview_save_log_settings *cfg)
 {
 	struct vtview_smart_log_entry smart;
+	struct libnvme_passthru_cmd cmd;
 	const char *filename;
 	int ret = 0;
 	unsigned int nsid = 0;
@@ -289,13 +291,15 @@ static int vt_add_entry_to_log(struct libnvme_transport_handle *hdl,
 		return -1;
 	}
 
-	ret = nvme_identify_ns(hdl, nsid, &smart.raw_ns);
+	nvme_init_identify_ns(&cmd, nsid, &smart.raw_ns);
+	ret = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (ret) {
 		nvme_show_error("Cannot read namespace identify");
 		return -1;
 	}
 
-	ret = nvme_identify_ctrl(hdl, &smart.raw_ctrl);
+	nvme_init_identify_ctrl(&cmd, &smart.raw_ctrl);
+	ret = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (ret) {
 		nvme_show_error("Cannot read device identify controller");
 		return -1;
@@ -319,6 +323,7 @@ vt_update_vtview_log_header(struct libnvme_transport_handle *hdl, const char *pa
 			    const struct vtview_save_log_settings *cfg)
 {
 	struct vtview_log_header header;
+	struct libnvme_passthru_cmd cmd;
 	const char *filename;
 	int ret = 0;
 
@@ -349,13 +354,17 @@ vt_update_vtview_log_header(struct libnvme_transport_handle *hdl, const char *pa
 	nvme_show_verbose_info("Log file: %s", filename);
 	header.time_stamp = time(NULL);
 
-	ret = nvme_identify_ctrl(hdl, &header.raw_ctrl);
+	nvme_init_identify_ctrl(&cmd, &header.raw_ctrl);
+	ret = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (ret) {
 		nvme_show_error("Cannot read identify device");
 		return -1;
 	}
 
-	ret = nvme_get_log_fw_slot(hdl, false, &header.raw_fw);
+	nvme_init_get_log(&cmd, NVME_NSID_ALL, NVME_LOG_LID_FW_SLOT,
+		NVME_CSI_NVM, &header.raw_fw, sizeof(header.raw_fw));
+
+	ret = libnvme_get_log(hdl, &cmd, false, sizeof(header.raw_fw));
 	if (ret) {
 		nvme_show_error("Cannot read device firmware log");
 		return -1;
@@ -1030,6 +1039,7 @@ static int vt_show_identify(int argc, char **argv, struct command *acmd, struct 
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	struct nvme_id_ctrl ctrl;
+	struct libnvme_passthru_cmd cmd;
 	int ret, err = 0;
 
 	NVME_ARGS(opts);
@@ -1040,7 +1050,8 @@ static int vt_show_identify(int argc, char **argv, struct command *acmd, struct 
 		return err;
 	}
 
-	ret = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	ret = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (ret) {
 		nvme_show_error("Cannot read identify device");
 		return -1;

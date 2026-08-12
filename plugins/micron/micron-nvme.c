@@ -38,10 +38,11 @@
 #include "nvme-cmds.h"
 #include "nvme-pci-ids.h"
 #include "nvme-print.h"
-#include "nvme.h"
+#include "plugin.h"
+#include "global-ctx.h"
 #include "src/cleanup.h"
 #include "uint128-util.h"
-#include "utils.h"
+#include "field-parser.h"
 
 #define CREATE_CMD
 #include "micron-nvme.h"
@@ -1776,6 +1777,7 @@ static int micron_nand_stats(int argc, char **argv,
 	unsigned char logC0[C0_log_size] = { 0 };
 	enum eDriveModel eModel = UNKNOWN_MODEL;
 	struct nvme_id_ctrl ctrl;
+	struct libnvme_passthru_cmd cmd;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	int err;
@@ -1806,7 +1808,8 @@ static int micron_nand_stats(int argc, char **argv,
 		return -1;
 	}
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err) {
 		nvme_show_err(err, "ERROR : identify_ctrl() failed");
 		return -1;
@@ -2142,11 +2145,18 @@ static void GetErrorlogData(struct libnvme_transport_handle *hdl, int entries, c
 	int logSize = entries * sizeof(struct nvme_error_log_page);
 	__cleanup_libnvme_free struct nvme_error_log_page *error_log =
 				(struct nvme_error_log_page *)libnvme_alloc(logSize);
+	struct libnvme_passthru_cmd cmd;
+	size_t len;
 
 	if (!error_log)
 		return;
 
-	if (!nvme_get_log_error(hdl, NVME_NSID_ALL, entries, error_log))
+	len = sizeof(*error_log) * entries;
+
+	nvme_init_get_log(&cmd, NVME_NSID_ALL, NVME_LOG_LID_ERROR,
+		NVME_CSI_NVM, error_log, len);
+
+	if (!libnvme_get_log(hdl, &cmd, false, len))
 		WriteData((__u8 *)error_log, logSize, dir,
 			  "error_information_log.bin", "error log");
 }
@@ -2161,19 +2171,28 @@ static void GetGenericLogs(struct libnvme_transport_handle *hdl, const char *dir
 	void *pevent_log_info = NULL;
 	__u32 log_len = 0;
 	int err = 0;
+	struct libnvme_passthru_cmd cmd;
+	size_t len;
 
 	/* get self test log */
-	if (!nvme_get_log_device_self_test(hdl, &self_test_log))
+	len = sizeof(self_test_log);
+	nvme_init_get_log(&cmd, NVME_NSID_ALL, NVME_LOG_LID_DEVICE_SELF_TEST,
+		NVME_CSI_NVM, &self_test_log, len);
+	if (!libnvme_get_log(hdl, &cmd, false, len))
 		WriteData((__u8 *)&self_test_log, sizeof(self_test_log), dir,
 			  "drive_self_test.bin", "self test log");
 
 	/* get fw slot info log */
-	if (!nvme_get_log_fw_slot(hdl, false, &fw_log))
+	nvme_init_get_log(&cmd, NVME_NSID_ALL, NVME_LOG_LID_FW_SLOT,
+		NVME_CSI_NVM, &fw_log, sizeof(fw_log));
+	if (!libnvme_get_log(hdl, &cmd, false, sizeof(fw_log)))
 		WriteData((__u8 *)&fw_log, sizeof(fw_log), dir,
 			  "firmware_slot_info_log.bin", "firmware log");
 
 	/* get effects log */
-	if (!nvme_get_log_cmd_effects(hdl, NVME_CSI_NVM, &effects))
+	len = sizeof(effects);
+	nvme_init_get_log_cmd_effects(&cmd, NVME_CSI_NVM, &effects);
+	if (!libnvme_get_log(hdl, &cmd, false, len))
 		WriteData((__u8 *)&effects, sizeof(effects), dir,
 			  "command_effects_log.bin", "effects log");
 
@@ -2206,8 +2225,10 @@ static void GetNSIDDInfo(struct libnvme_transport_handle *hdl, const char *dir, 
 {
 	char file[PATH_MAX] = { 0 };
 	struct nvme_id_ns ns;
+	struct libnvme_passthru_cmd cmd;
 
-	if (!nvme_identify_ns(hdl, nsid, &ns)) {
+	nvme_init_identify_ns(&cmd, nsid, &ns);
+	if (!libnvme_exec_admin_passthru(hdl, &cmd)) {
 		snprintf(file, sizeof(file), "identify_namespace_%d_data.bin", nsid);
 		WriteData((__u8 *)&ns, sizeof(ns), dir, file, "id-ns");
 	}
@@ -2225,6 +2246,7 @@ static void GetOSConfig(const char *strOSDirName)
 static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type, __u8 **data,
 				uint32_t *logSize, int da)
 {
+	struct libnvme_passthru_cmd cmd;
 	int err;
 	int bs = NVME_LOG_TELEM_BLOCK_SIZE;
 	uint32_t dalb = 0;
@@ -2237,10 +2259,13 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 		return -ENOMEM;
 	}
 
-	if (ctrl_init)
-		err = nvme_get_log_telemetry_ctrl(hdl, true, 0, log, bs);
-	else
-		err = nvme_get_log_telemetry_host(hdl, 0, log, bs);
+	if (ctrl_init) {
+		nvme_init_get_log_telemetry_ctrl(&cmd, 0, log, bs);
+		err = libnvme_get_log_dynamic_chunk(hdl, &cmd, true, bs);
+	} else {
+		nvme_init_get_log_telemetry_host(&cmd, 0, log, bs);
+		err = libnvme_get_log_dynamic_chunk(hdl, &cmd, false, bs);
+	}
 
 	if (err) {
 		nvme_show_error("Failed to get telemetry log header for %s",
@@ -2284,10 +2309,13 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 		return -ENOMEM;
 	}
 
-	if (ctrl_init)
-		err = nvme_get_log_telemetry_ctrl(hdl, true, 0, log, *logSize);
-	else
-		err = nvme_get_log_telemetry_host(hdl, 0, log, *logSize);
+	if (ctrl_init) {
+		nvme_init_get_log_telemetry_ctrl(&cmd, 0, log, *logSize);
+		err = libnvme_get_log_dynamic_chunk(hdl, &cmd, true, *logSize);
+	} else {
+		nvme_init_get_log_telemetry_host(&cmd, 0, log, *logSize);
+		err = libnvme_get_log_dynamic_chunk(hdl, &cmd, false, *logSize);
+	}
 
 	if (!err) {
 		*data = (__u8 *)log;
@@ -2384,6 +2412,7 @@ static int micron_drive_info(int argc, char **argv, struct command *acmd,
 	const char *desc = "Get drive HW information";
 	struct nvme_id_ctrl ctrl =	{ 0 };
 	struct libnvme_passthru_cmd admin_cmd = { 0 };
+	struct libnvme_passthru_cmd cmd;
 	unsigned char logC0[C0_log_size] = { 0 };
 	struct fb_drive_info {
 		unsigned char hw_ver_major;
@@ -2434,7 +2463,8 @@ static int micron_drive_info(int argc, char **argv, struct command *acmd,
 			return -1;
 		}
 	} else {
-		err = nvme_identify_ctrl(hdl, &ctrl);
+		nvme_init_identify_ctrl(&cmd, &ctrl);
+		err = libnvme_exec_admin_passthru(hdl, &cmd);
 		if (err) {
 			nvme_show_error("ERROR : identify_ctrl() failed with 0x%x", err);
 			return -1;
@@ -3132,8 +3162,10 @@ static int micron_ocp_smart_health_logs(int argc, char **argv, struct command *a
 	if (eModel == M5410 || eModel == M5407) {
 		__u8 spec = (eModel == M5410) ? 0 : 1;
 		__u8 nsze;
+		struct libnvme_passthru_cmd cmd;
 
-		err = nvme_identify_ctrl(hdl, &ctrl);
+		nvme_init_identify_ctrl(&cmd, &ctrl);
+		err = libnvme_exec_admin_passthru(hdl, &cmd);
 		if (!err)
 			err = nvme_get_log_simple(hdl, 0xFB, logFB, FB_log_size);
 		if (err) {
@@ -3211,6 +3243,7 @@ static int micron_telemetry_cntrl_option(int argc, char **argv,
 	int fid = MICRON_FEATURE_TELEMETRY_CONTROL_OPTION;
 	enum eDriveModel model = UNKNOWN_MODEL;
 	struct nvme_id_ctrl ctrl = { 0 };
+	struct libnvme_passthru_cmd cmd;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 
@@ -3230,7 +3263,8 @@ static int micron_telemetry_cntrl_option(int argc, char **argv,
 	if (err)
 		return err;
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if ((ctrl.lpa & 0x8) != 0x8) {
 		printf("drive doesn't support host/controller generated telemetry logs\n");
 		return err;
@@ -3432,6 +3466,7 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 	unsigned int *puiIDDBuf;
 	unsigned int uiMask;
 	struct nvme_id_ctrl ctrl;
+	struct libnvme_passthru_cmd cmd;
 	char safe_sn[sizeof(ctrl.sn) + 1] = { 0 };
 	char msg[256] = { 0 };
 	int  c_logs_index = 8; /* should be current size of aVendorLogs */
@@ -3569,7 +3604,8 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 	if (sscanf(libnvme_transport_handle_get_name(hdl), "nvme%d", &ctrlIdx) != 1)
 		ctrlIdx = 0;
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err)
 		goto out;
 
@@ -3746,6 +3782,7 @@ static int micron_internal_logs(int argc, char **argv, struct command *acmd,
 				(void)NVMEResetLog(hdl, aVendorLogs[i].ucLogPage,
 						   aVendorLogs[i].nLogSize, aVendorLogs[i].nMaxSize);
 
+			break;
 		default:
 			bSize = aVendorLogs[i].nLogSize;
 			dataBuffer = (unsigned char *)libnvme_alloc(bSize);
@@ -3854,6 +3891,7 @@ static int micron_cloud_boot_SSD_version(int argc, char **argv,
 	const char *desc = "Prints HyperScale Boot Version";
 	unsigned char logC0[C0_log_size] = { 0 };
 	struct nvme_id_ctrl ctrl;
+	struct libnvme_passthru_cmd cmd;
 	enum eDriveModel eModel = UNKNOWN_MODEL;
 	int err = 0;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
@@ -3865,7 +3903,8 @@ static int micron_cloud_boot_SSD_version(int argc, char **argv,
 	if (err)
 		return err;
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err == 0) {
 		if (ctrl.vs[536] != MICRON_CUST_ID_GG) {
 			nvme_show_error("cloud-boot-SSD-version option is not supported for specified drive");
@@ -3899,6 +3938,7 @@ static int micron_device_waf(int argc, char **argv, struct command *acmd,
 	const char *desc = "Prints device Write Amplification Factor(WAF)";
 	unsigned char logC0[C0_log_size] = { 0 };
 	struct nvme_id_ctrl ctrl;
+	struct libnvme_passthru_cmd cmd;
 	struct nvme_smart_log smart_log;
 	enum eDriveModel eModel = UNKNOWN_MODEL;
 	int err = 0;
@@ -3914,7 +3954,8 @@ static int micron_device_waf(int argc, char **argv, struct command *acmd,
 	if (err)
 		return err;
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err == 0) {
 		if (ctrl.vs[536] != MICRON_CUST_ID_GG) {
 			nvme_show_error("vs-device-waf option is not supported for specified drive");
@@ -3953,6 +3994,7 @@ static int micron_cloud_log(int argc, char **argv, struct command *acmd,
 	const char *desc = "Retrieve Smart or Extended Smart Health log for the given device ";
 	unsigned int logC0[C0_log_size/sizeof(int)] = { 0 };
 	struct nvme_id_ctrl ctrl;
+	struct libnvme_passthru_cmd cmd;
 	enum eDriveModel eModel = UNKNOWN_MODEL;
 	int err = 0;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
@@ -3981,7 +4023,8 @@ static int micron_cloud_log(int argc, char **argv, struct command *acmd,
 		goto out;
 	}
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err == 0) {
 		if (ctrl.vs[536] != MICRON_CUST_ID_GG) {
 			nvme_show_error("vs-cloud-log option is not supported for specified drive");
@@ -4282,6 +4325,7 @@ static int micron_id_ctrl(int argc, char **argv, struct command *acmd,
 	const char *desc = "Identify Controller with Micron vendor fields";
 	enum eDriveModel eModel = UNKNOWN_MODEL;
 	struct nvme_id_ctrl ctrl = { 0 };
+	struct libnvme_passthru_cmd cmd;
 	nvme_print_flags_t flags;
 	int err = 0;
 
@@ -4302,7 +4346,8 @@ static int micron_id_ctrl(int argc, char **argv, struct command *acmd,
 		return err;
 	}
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err) {
 		nvme_show_error("identify controller failed: %s",
 			libnvme_strerror(err));

@@ -6,7 +6,7 @@
 
 #include <libnvme.h>
 
-#include "nvme.h"
+#include "args.h"
 #include "plugin.h"
 #include "argconfig.h"
 #include "cleanup.h"
@@ -80,6 +80,7 @@ void general_help(struct plugin *plugin, char *str)
 	unsigned int i = 0;
 	unsigned int padding = 15;
 	unsigned int curr_length = 0;
+	bool have_deprecated = false;
 
 	printf("%s-%s\n", prog->name, prog->version);
 
@@ -107,10 +108,14 @@ void general_help(struct plugin *plugin, char *str)
 		curr_length = 2 + strlen(plugin->commands[i]->name);
 		if (padding < curr_length)
 			padding = curr_length;
+		if (plugin->commands[i]->deprecated)
+			have_deprecated = true;
 	}
 
 	i = 0;
 	for (; plugin->commands[i]; i++) {
+		if (plugin->commands[i]->deprecated)
+			continue;
 		if (!str || strstr(plugin->commands[i]->name, str))
 			printf("  %-*s %s\n", padding, plugin->commands[i]->name,
 			       plugin->commands[i]->help);
@@ -133,24 +138,63 @@ void general_help(struct plugin *plugin, char *str)
 	 * The first plugin is the built-in. If we're not showing help for the
 	 * built-in, don't show the program's other extensions
 	 */
-	if (plugin->name)
-		return;
+	if (!plugin->name) {
+		bool have_core = false, have_vendor = false;
 
-	extension = prog->extensions->next;
-	if (!extension)
-		return;
+		extension = prog->extensions->next;
+		while (extension) {
+			if (extension->core)
+				have_core = true;
+			else
+				have_vendor = true;
+			extension = extension->next;
+		}
 
-	printf("\nThe following are all installed plugin extensions:\n");
-	if (str)
-		printf("Note: Only extensions including %s\n", str);
+		if (have_core) {
+			printf("\nThe following are core NVMe/NVMeoF plugins:\n");
+			if (str)
+				printf("Note: Only extensions including %s\n", str);
 
-	while (extension) {
-		if (!str || strstr(extension->name, str))
-			printf("  %-*s %s\n", 15, extension->name, extension->desc);
-		extension = extension->next;
+			extension = prog->extensions->next;
+			while (extension) {
+				if (extension->core && (!str || strstr(extension->name, str)))
+					printf("  %-*s %s\n", 15, extension->name, extension->desc);
+				extension = extension->next;
+			}
+		}
+
+		if (have_vendor) {
+			printf("\nThe following are vendor specific plugins:\n");
+			if (str)
+				printf("Note: Only extensions including %s\n", str);
+
+			extension = prog->extensions->next;
+			while (extension) {
+				if (!extension->core && (!str || strstr(extension->name, str)))
+					printf("  %-*s %s\n", 15, extension->name, extension->desc);
+				extension = extension->next;
+			}
+		}
+
+		if (have_core || have_vendor)
+			printf("\nSee '%s <plugin> help' for more information on a plugin\n",
+					prog->name);
 	}
-	printf("\nSee '%s <plugin> help' for more information on a plugin\n",
-			prog->name);
+
+	if (have_deprecated) {
+		printf("\nThe following sub-commands are deprecated and will be removed in the next major version:\n");
+		if (str)
+			printf("Note: Only sub-commands including %s\n", str);
+
+		i = 0;
+		for (; plugin->commands[i]; i++) {
+			if (!plugin->commands[i]->deprecated)
+				continue;
+			if (!str || strstr(plugin->commands[i]->name, str))
+				printf("  %-*s %s\n", padding, plugin->commands[i]->name,
+				       plugin->commands[i]->help);
+		}
+	}
 }
 
 int handle_plugin(int argc, char **argv, struct plugin *plugin)

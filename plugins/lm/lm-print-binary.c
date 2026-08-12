@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "lm-print.h"
+#include <libnvme.h>
+
+#include "nvme-print.h"
 
 static void binary_controller_state_data(struct nvme_lm_controller_state_data *data, size_t len,
 					 __u32 offset)

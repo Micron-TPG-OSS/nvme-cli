@@ -26,7 +26,8 @@
 #include "logging.h"
 #include "nvme-cmds.h"
 #include "nvme-print.h"
-#include "nvme.h"
+#include "cleanup.h"
+#include "global-ctx.h"
 #include "plugin.h"
 
 #include "ocp-smart-extended-log.h"
@@ -294,6 +295,7 @@ int ocp_set_latency_monitor_feature(int argc, char **argv, struct command *acmd,
 	struct feature_latency_monitor buf = { 0 };
 	__u32  nsid = NVME_NSID_ALL;
 	struct nvme_id_ctrl ctrl;
+	struct libnvme_passthru_cmd cmd;
 
 	const char *desc = "Set Latency Monitor feature.";
 	const char *active_bucket_timer_threshold = "This is the value that loads the Active Bucket Timer Threshold.";
@@ -357,7 +359,8 @@ int ocp_set_latency_monitor_feature(int argc, char **argv, struct command *acmd,
 		}
 	}
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err)
 		return err;
 
@@ -1279,12 +1282,13 @@ static int get_telemetry_log_page_data(struct libnvme_transport_handle *hdl,
 		 * nvme_get_log_telemetry methods read the log in the largest
 		 * successful chunks, filling the entire specified length.
 		 */
-		if (tele_type == TELEMETRY_TYPE_HOST)
-			err = nvme_get_log_telemetry_host(hdl, offset,
-							  telemetry_log, len);
-		else
-			err = nvme_get_log_telemetry_ctrl(hdl, false, offset,
-							  telemetry_log, len);
+		if (tele_type == TELEMETRY_TYPE_HOST) {
+			nvme_init_get_log_telemetry_host(&cmd, offset, telemetry_log, len);
+			err = libnvme_get_log_dynamic_chunk(hdl, &cmd, false, len);
+		} else {
+			nvme_init_get_log_telemetry_ctrl(&cmd, offset, telemetry_log, len);
+			err = libnvme_get_log_dynamic_chunk(hdl, &cmd, false, len);
+		}
 		if (err < 0) {
 			nvme_show_error("Failed to fetch the log from drive.");
 			break;
@@ -1492,6 +1496,7 @@ static int ocp_telemetry_log(int argc, char **argv, struct command *acmd, struct
 	__u32  nsid = NVME_NSID_ALL;
 	char sn[21] = {0,};
 	struct nvme_id_ctrl ctrl;
+	struct libnvme_passthru_cmd cmd;
 	bool is_support_telemetry_controller;
 	struct ocp_telemetry_parse_options opt = {0};
 	int tele_type = 0;
@@ -1521,7 +1526,8 @@ static int ocp_telemetry_log(int argc, char **argv, struct command *acmd, struct
 			return err;
 	}
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err)
 		return err;
 

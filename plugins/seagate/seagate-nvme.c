@@ -43,7 +43,8 @@
 
 #include "nvme-cmds.h"
 #include "nvme-print.h"
-#include "nvme.h"
+#include "cleanup.h"
+#include "global-ctx.h"
 #include "plugin.h"
 
 #define CREATE_CMD
@@ -891,6 +892,7 @@ static void json_print_stx_smart_log_C0(struct json_object *root, STX_EXT_SMART_
 static int vs_smart_log(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
 	struct nvme_id_ctrl     ctrl;
+	struct libnvme_passthru_cmd cmd;
 	char                    modelNo[40];
 	STX_EXT_SMART_LOG_PAGE_C0   ehExtSmart;
 	EXTENDED_SMART_INFO_T   ExtdSMARTInfo;
@@ -929,7 +931,8 @@ static int vs_smart_log(int argc, char **argv, struct command *acmd, struct plug
 	 * to determine drive family.
 	 */
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (!err) {
 		memcpy(modelNo, ctrl.mn, sizeof(modelNo));
 	} else {
@@ -1423,6 +1426,7 @@ static int clear_fw_activate_history(int argc, char **argv, struct command *acmd
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	struct nvme_id_ctrl ctrl;
+	struct libnvme_passthru_cmd cmd;
 	char modelNo[40];
 	__u64 result;
 
@@ -1443,7 +1447,8 @@ static int clear_fw_activate_history(int argc, char **argv, struct command *acmd
 		return -1;
 	}
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (!err) {
 		memcpy(modelNo, ctrl.mn, sizeof(modelNo));
 	} else {
@@ -1476,6 +1481,7 @@ static int vs_clr_pcie_correctable_errs(int argc, char **argv, struct command *a
 	const char *save = "specifies that the controller shall save the attribute";
 
 	struct nvme_id_ctrl ctrl;
+	struct libnvme_passthru_cmd cmd;
 	char modelNo[40];
 
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
@@ -1502,7 +1508,8 @@ static int vs_clr_pcie_correctable_errs(int argc, char **argv, struct command *a
 	}
 
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (!err) {
 		memcpy(modelNo, ctrl.mn, sizeof(modelNo));
 	} else {
@@ -1569,8 +1576,9 @@ static int get_host_tele(int argc, char **argv, struct command *acmd, struct plu
 
 	dump_fd = STDOUT_FILENO;
 	cfg.log_id = (cfg.log_id << 8) | 0x07;
-	err = nvme_get_nsid_log(hdl, cfg.namespace_id, false, cfg.log_id,
-				(void *)(&tele_log), sizeof(tele_log));
+	nvme_init_get_log(&cmd, cfg.namespace_id, cfg.log_id, NVME_CSI_NVM,
+			  (void *)(&tele_log), sizeof(tele_log));
+	err = libnvme_get_log(hdl, &cmd, false, NVME_LOG_PAGE_PDU_SIZE);
 	if (!err) {
 		maxBlk = tele_log.tele_data_area3;
 		offset += 512;
@@ -1673,8 +1681,9 @@ static int get_ctrl_tele(int argc, char **argv, struct command *acmd, struct plu
 	dump_fd = STDOUT_FILENO;
 
 	log_id = 0x08;
-	err = nvme_get_nsid_log(hdl, cfg.namespace_id, false, log_id,
-				(void *)(&tele_log), sizeof(tele_log));
+	nvme_init_get_log(&cmd, cfg.namespace_id, log_id, NVME_CSI_NVM,
+			  (void *)(&tele_log), sizeof(tele_log));
+	err = libnvme_get_log(hdl, &cmd, false, NVME_LOG_PAGE_PDU_SIZE);
 	if (!err) {
 		maxBlk = tele_log.tele_data_area3;
 		offset += 512;
@@ -1792,8 +1801,9 @@ static int vs_internal_log(int argc, char **argv, struct command *acmd, struct p
 	}
 
 	log_id = 0x08;
-	err = nvme_get_nsid_log(hdl, cfg.namespace_id, false, log_id,
-				(void *)(&tele_log), sizeof(tele_log));
+	nvme_init_get_log(&cmd, cfg.namespace_id, log_id, NVME_CSI_NVM,
+			  (void *)(&tele_log), sizeof(tele_log));
+	err = libnvme_get_log(hdl, &cmd, false, NVME_LOG_PAGE_PDU_SIZE);
 	if (!err) {
 		maxBlk = tele_log.tele_data_area3;
 		offset += 512;

@@ -2,6 +2,9 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
+
+#include "nvme-json.h"
 
 struct program {
 	const char *name;
@@ -21,6 +24,7 @@ struct plugin {
 	struct program *parent;
 	struct plugin *next;
 	struct plugin *tail;
+	bool core;
 };
 
 struct command {
@@ -28,7 +32,13 @@ struct command {
 	char *help;
 	int (*fn)(int argc, char **argv, struct command *acmd, struct plugin *plugin);
 	char *alias;
+	bool deprecated;
 };
 
 void general_help(struct plugin *plugin, char *str);
 int handle_plugin(int argc, char **argv, struct plugin *plugin);
+
+void register_extension(struct plugin *plugin);
+
+int __id_ctrl(int argc, char **argv, struct command *acmd,
+	struct plugin *plugin, void (*vs)(uint8_t *vs, struct json_object *root));

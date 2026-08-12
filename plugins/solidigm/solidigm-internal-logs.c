@@ -15,6 +15,8 @@
 #include <inttypes.h>
 #include <time.h>
 
+#include <sys/stat.h>
+
 #include <libnvme.h>
 
 #include <ccan/endian/endian.h>
@@ -25,7 +27,8 @@
 
 #include "nvme-cmds.h"
 #include "nvme-print.h"
-#include "nvme.h"
+#include "cleanup.h"
+#include "global-ctx.h"
 #include "plugin.h"
 
 #include "solidigm-util.h"
@@ -224,9 +227,11 @@ static int read_header(struct libnvme_passthru_cmd *cmd, struct libnvme_transpor
 static int get_serial_number(char *str, struct libnvme_transport_handle *hdl)
 {
 	struct nvme_id_ctrl ctrl = {0};
+	struct libnvme_passthru_cmd cmd;
 	int err;
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err)
 		return err;
 
@@ -504,10 +509,12 @@ static int ilog_dump_identify_page(struct libnvme_transport_handle *hdl,
 	__u8 data[NVME_IDENTIFY_DATA_SIZE];
 	__u8 *buff = cns->buffer ? cns->buffer : data;
 	__cleanup_free char *filename = NULL;
+	struct libnvme_passthru_cmd cmd;
 	int err;
 
-	err = nvme_identify(hdl, nsid, NVME_CSI_NVM, cns->id, buff,
-		sizeof(data));
+	nvme_init_identify(&cmd, nsid, NVME_CSI_NVM, cns->id, buff, sizeof(data));
+
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err)
 		return err;
 
@@ -691,6 +698,7 @@ static int ilog_dump_log_page(struct libnvme_transport_handle *hdl, struct ilog 
 {
 	__u8 *buff = lp->buffer;
 	__cleanup_free char *filename = NULL;
+	struct libnvme_passthru_cmd cmd;
 
 	int err;
 	if (!lp->buffer_size)
@@ -700,7 +708,8 @@ static int ilog_dump_log_page(struct libnvme_transport_handle *hdl, struct ilog 
 		if (!buff)
 			return -ENOMEM;
 	}
-	err = nvme_get_nsid_log(hdl, 0, 0, lp->id, buff, lp->buffer_size);
+	nvme_init_get_log(&cmd, 0, lp->id, NVME_CSI_NVM, buff, lp->buffer_size);
+	err = libnvme_get_log(hdl, &cmd, false, NVME_LOG_PAGE_PDU_SIZE);
 	if (err)
 		return err;
 

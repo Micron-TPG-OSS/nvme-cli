@@ -4,17 +4,18 @@ sources = [
     'src/args.c',
     'src/argconfig.c',
     'src/global-config.c',
+    'src/global-ctx.c',
     'src/logging.c',
-    'src/nvme-cmds.c',
     'src/nvme-models.c',
     'src/nvme-pci-ids.c',
     'src/nvme-print-binary.c',
     'src/nvme-print-stdout.c',
     'src/nvme-print.c',
+    'src/nvme-regs.c',
     'src/nvme-rpmb.c',
     'src/nvme.c',
     'src/plugin.c',
-    'src/utils.c',
+    'src/field-parser.c',
 ]
 
 if host_system == 'linux'
@@ -31,7 +32,7 @@ endif
 if json_c_dep.found()
     sources += [
         'src/nvme-print-json.c',
-        'src/json.c',
+        'src/nvme-json.c',
     ]
 endif
 
