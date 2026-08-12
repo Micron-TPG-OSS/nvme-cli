@@ -17,7 +17,8 @@
 #include "memblaze-smart-log-add-x.h"
 #include "nvme-cmds.h"
 #include "nvme-print.h"
-#include "nvme.h"
+#include "cleanup.h"
+#include "global-ctx.h"
 #include "plugin.h"
 
 #define CREATE_CMD
@@ -362,10 +363,12 @@ static int show_memblaze_smart_log(struct libnvme_transport_handle *hdl, __u32 n
 	const char *devname, struct nvme_memblaze_smart_log *smart)
 {
 	struct nvme_id_ctrl ctrl;
+	struct libnvme_passthru_cmd cmd;
 	char fw_ver[10];
 	int err = 0;
 
-	err = nvme_identify_ctrl(hdl, &ctrl);
+	nvme_init_identify_ctrl(&cmd, &ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err)
 		return err;
 
@@ -428,6 +431,7 @@ static int mb_get_additional_smart_log(int argc, char **argv, struct command *ac
 	const char *raw = "dump output in binary format";
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
+	struct libnvme_passthru_cmd cmd;
 	struct config {
 		__u32 namespace_id;
 		bool  raw_binary;
@@ -446,8 +450,9 @@ static int mb_get_additional_smart_log(int argc, char **argv, struct command *ac
 	if (err)
 		return err;
 
-	err = nvme_get_nsid_log(hdl, cfg.namespace_id, false, 0xca,
-				&smart_log, sizeof(smart_log));
+	nvme_init_get_log(&cmd, cfg.namespace_id, 0xca, NVME_CSI_NVM,
+			  &smart_log, sizeof(smart_log));
+	err = libnvme_get_log(hdl, &cmd, false, NVME_LOG_PAGE_PDU_SIZE);
 	if (!err) {
 		if (!cfg.raw_binary)
 			err = show_memblaze_smart_log(hdl, cfg.namespace_id,
@@ -1293,6 +1298,7 @@ static int mb_set_latency_feature(int argc, char **argv, struct command *acmd, s
 static int mb_get_latency_feature(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
 	__u64 res = 0;
+	struct libnvme_passthru_cmd cmd;
 	int err;
 
 	// Get the configuration
@@ -1308,9 +1314,12 @@ static int mb_get_latency_feature(int argc, char **argv, struct command *acmd, s
 
 	// Get feature
 
-	err = nvme_get_features_simple(hdl, FID_LATENCY_FEATURE,
-			NVME_GET_FEATURES_SEL_CURRENT, &res);
+	nvme_init_get_features(&cmd, FID_LATENCY_FEATURE, NVME_GET_FEATURES_SEL_CURRENT);
+
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
+	res = cmd.result;
 	if (!err) {
+
 		uint32_t result = res;
 		nvme_show_verbose_result("%s have done successfully. result = %#" PRIx32 ".", acmd->name, result);
 

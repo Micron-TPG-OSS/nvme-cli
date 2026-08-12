@@ -179,6 +179,8 @@ class TestNVMe(TestNVMeBase):
 
     def tearDown(self):
         """ Post Section for TestNVMe. """
+        if self.ns_mgmt_supported:
+            self.create_and_attach_default_ns()
         self._write_device_data()
         if getattr(self, 'stdout_log', None):
             self.stdout_log.close()
@@ -186,8 +188,6 @@ class TestNVMe(TestNVMeBase):
             self.stderr_log.close()
         if self.clear_log_dir is True:
             shutil.rmtree(self.log_dir, ignore_errors=True)
-        if self.ns_mgmt_supported:
-            self.create_and_attach_default_ns()
 
     @classmethod
     def tearDownClass(cls):
@@ -737,13 +737,13 @@ class TestNVMe(TestNVMeBase):
         return err
 
     def get_smart_log(self, nsid):
-        """ Wrapper for nvme smart-log command.
+        """ Wrapper for nvme log smart command.
             - Args:
                 - nsid : namespace id to get smart log from.
             - Returns:
                 - 0 on success, error code on failure.
         """
-        smart_log_cmd = f"{self.nvme_bin} smart-log {self.ctrl} " + \
+        smart_log_cmd = f"{self.nvme_bin} log smart {self.ctrl} " + \
             f"--namespace-id={str(nsid)}"
         result = self.run_cmd(smart_log_cmd)
         err = result.returncode
@@ -768,14 +768,14 @@ class TestNVMe(TestNVMeBase):
         return err
 
     def get_error_log(self):
-        """ Wrapper for nvme error-log command.
+        """ Wrapper for nvme log error command.
             - Args:
                 - None
             - Returns:
                 - 0 on success, error code on failure.
         """
         pattern = re.compile(r"^ Entry\[[ ]*[0-9]+\]")
-        error_log_cmd = f"{self.nvme_bin} error-log {self.ctrl}"
+        error_log_cmd = f"{self.nvme_bin} log error {self.ctrl}"
         result = self.run_cmd(error_log_cmd)
         err = result.returncode
         self.assertEqual(err, 0, "ERROR : nvme error log failed")

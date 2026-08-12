@@ -31,7 +31,8 @@
 #include <ccan/endian/endian.h>
 
 #include "nvme-cmds.h"
-#include "nvme.h"
+#include "cleanup.h"
+#include "global-ctx.h"
 #include "nvme-print.h"
 #include "plugin.h"
 
@@ -71,12 +72,14 @@ static int huawei_get_nvme_info(struct libnvme_transport_handle *hdl,
 				struct huawei_list_item *item, const char *node)
 {
 	struct stat nvme_stat_info;
+	struct libnvme_passthru_cmd cmd;
 	int err;
 	int len;
 
 	memset(item, 0, sizeof(*item));
 
-	err = nvme_identify_ctrl(hdl, &item->ctrl);
+	nvme_init_identify_ctrl(&cmd, &item->ctrl);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err)
 		return err;
 
@@ -89,7 +92,8 @@ static int huawei_get_nvme_info(struct libnvme_transport_handle *hdl,
 
 	item->huawei_device = true;
 	err = libnvme_get_nsid(hdl, &item->nsid);
-	err = nvme_identify_ns(hdl, item->nsid, &item->ns);
+	nvme_init_identify_ns(&cmd, item->nsid, &item->ns);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err)
 		return err;
 
@@ -350,7 +354,7 @@ static int huawei_list(int argc, char **argv, struct command *acmd,
 		__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 
 		snprintf(path, sizeof(path), "/dev/%s", devices[i]->d_name);
-		ret = libnvme_open(ctx, path, &hdl);
+		ret = libnvme_open(ctx, path, O_RDONLY, &hdl);
 		if (ret) {
 			nvme_show_error("Cannot open device %s: %s",
 				path, libnvme_strerror(-ret));

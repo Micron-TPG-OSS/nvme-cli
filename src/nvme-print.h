@@ -2,11 +2,12 @@
 #pragma once
 
 #include <inttypes.h>
+#include <string.h>
 
 #include <ccan/list/list.h>
 
-#include "nvme.h"
-#include "types.h"
+#include "args.h"
+#include "nvme-json.h"
 #include "table.h"
 #include "uint128-util.h"
 #include "int-util.h"
@@ -29,6 +30,51 @@ typedef struct nvme_effects_log_node {
 
 void d(unsigned char *buf, int len, int width, int group);
 void d_raw(unsigned char *buf, unsigned len);
+
+enum nvme_cli_topo_ranking {
+	NVME_CLI_TOPO_NAMESPACE,
+	NVME_CLI_TOPO_CTRL,
+	NVME_CLI_TOPO_MULTIPATH,
+};
+
+static inline bool nvme_is_multipath(libnvme_subsystem_t s)
+{
+	libnvme_ns_t n;
+	libnvme_path_t p;
+
+	libnvme_subsystem_for_each_ns(s, n)
+		libnvme_namespace_for_each_path(n, p)
+			return true;
+
+	return false;
+}
+
+static inline bool subsystem_iopolicy_filter(const char *name, void *arg)
+{
+	libnvme_subsystem_t s = arg;
+	const char *iopolicy;
+
+	libnvme_subsystem_get_iopolicy(s, &iopolicy, "");
+
+	if (!strcmp(iopolicy, "queue-depth")) {
+		/* exclude "Nodes" for iopolicy queue-depth */
+		if (!strcmp(name, "Nodes"))
+			return false;
+	} else if (!strcmp(iopolicy, "numa")) {
+		/* exclude "Qdepth" for iopolicy numa */
+		if (!strcmp(name, "Qdepth"))
+			return false;
+	} else { /* round-robin */
+		/* exclude "Nodes" and "Qdepth" for iopolicy round-robin */
+		if (!strcmp(name, "Nodes") || !strcmp(name, "Qdepth"))
+			return false;
+	}
+
+	return true;
+}
+
+int get_reg_size(int offset);
+bool nvme_is_ctrl_reg(int offset);
 
 struct nvme_error_log_filter {
 	bool valid;
@@ -128,7 +174,6 @@ struct print_ops {
 	void (*host_discovery_log)(struct nvme_host_discovery_log *log);
 	void (*ave_discovery_log)(struct nvme_ave_discovery_log *log);
 	void (*pull_model_ddc_req_log)(struct nvme_pull_model_ddc_req_log *log);
-	void (*log)(const char *devname, struct nvme_get_log_args *args);
 
 	/* libnvme tree print functions */
 	void (*list_item)(libnvme_ns_t n, struct shr_table *t);
@@ -428,7 +473,8 @@ void nvme_show_ave_discovery_log(struct nvme_ave_discovery_log *log,
 				 nvme_print_flags_t flags);
 void nvme_show_pull_model_ddc_req_log(struct nvme_pull_model_ddc_req_log *log,
 				      nvme_print_flags_t flags);
-void nvme_show_log(const char *devname, struct nvme_get_log_args *args, nvme_print_flags_t flags);
+void nvme_show_log(const char *devname, enum nvme_cmd_get_log_lid lid, __u32 nsid, __u16 lsi,
+		   __u8 lsp, void *log, __u32 len, nvme_print_flags_t flags);
 void nvme_show_pel_header(struct nvme_persistent_event_log *pevent_log_head, int human);
 void nvme_show_pel_event_header(int i, struct nvme_persistent_event_entry *pevent_entry_head,
 				int human);

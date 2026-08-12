@@ -1,10 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #pragma once
 
+#include "plugin.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
-#include "types.h"
+#include <nvme/nvme-types.h>
 
 #define MB_SMART_LOG_ADD_SIZE 512
 

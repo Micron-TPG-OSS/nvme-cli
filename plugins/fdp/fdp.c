@@ -15,7 +15,9 @@
 
 #include "nvme-cmds.h"
 #include "nvme-print.h"
-#include "nvme.h"
+#include "plugin.h"
+#include "cleanup.h"
+#include "global-ctx.h"
 #include "parse-util.h"
 
 #define CREATE_CMD
@@ -33,6 +35,7 @@ static int fdp_configs(int argc, char **argv, struct command *acmd,
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	__cleanup_free void *log = NULL;
 	struct nvme_fdp_config_log hdr;
+	struct libnvme_passthru_cmd cmd;
 	nvme_print_flags_t flags;
 	int err;
 
@@ -71,8 +74,8 @@ static int fdp_configs(int argc, char **argv, struct command *acmd,
 		return -EINVAL;
 	}
 
-	err = nvme_get_log_fdp_configurations(hdl, cfg.egid, 0,
-					      &hdr, sizeof(hdr));
+	nvme_init_get_log_fdp_configurations(&cmd, cfg.egid, 0, &hdr, sizeof(hdr));
+	err = libnvme_get_log(hdl, &cmd, false, sizeof(hdr));
 	if (err) {
 		nvme_show_status(errno);
 		return err;
@@ -82,7 +85,8 @@ static int fdp_configs(int argc, char **argv, struct command *acmd,
 	if (!log)
 		return -ENOMEM;
 
-	err = nvme_get_log_fdp_configurations(hdl, cfg.egid, 0, log, hdr.size);
+	nvme_init_get_log_fdp_configurations(&cmd, cfg.egid, 0, log, hdr.size);
+	err = libnvme_get_log(hdl, &cmd, false, hdr.size);
 	if (err) {
 		nvme_show_status(errno);
 		return err;
@@ -103,6 +107,7 @@ static int fdp_usage(int argc, char **argv, struct command *acmd, struct plugin 
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	__cleanup_free void *log = NULL;
 	struct nvme_fdp_ruhu_log hdr;
+	struct libnvme_passthru_cmd cmd;
 	nvme_print_flags_t flags;
 	size_t len;
 	int err;
@@ -133,8 +138,8 @@ static int fdp_usage(int argc, char **argv, struct command *acmd, struct plugin 
 	if (cfg.raw_binary)
 		flags = BINARY;
 
-	err = nvme_get_log_reclaim_unit_handle_usage(hdl, cfg.egid,
-						     0, &hdr, sizeof(hdr));
+	nvme_init_get_log_reclaim_unit_handle_usage(&cmd, cfg.egid, 0, &hdr, sizeof(hdr));
+	err = libnvme_get_log(hdl, &cmd, false, sizeof(hdr));
 	if (err) {
 		nvme_show_status(err);
 		return err;
@@ -145,8 +150,8 @@ static int fdp_usage(int argc, char **argv, struct command *acmd, struct plugin 
 	if (!log)
 		return -ENOMEM;
 
-	err = nvme_get_log_reclaim_unit_handle_usage(hdl, cfg.egid,
-						     0, log, len);
+	nvme_init_get_log_reclaim_unit_handle_usage(&cmd, cfg.egid, 0, log, len);
+	err = libnvme_get_log(hdl, &cmd, false, len);
 	if (err) {
 		nvme_show_status(err);
 		return err;
@@ -166,6 +171,7 @@ static int fdp_stats(int argc, char **argv, struct command *acmd, struct plugin 
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	struct nvme_fdp_stats_log stats;
+	struct libnvme_passthru_cmd cmd;
 	nvme_print_flags_t flags;
 	int err;
 
@@ -203,7 +209,8 @@ static int fdp_stats(int argc, char **argv, struct command *acmd, struct plugin 
 
 	memset(&stats, 0x0, sizeof(stats));
 
-	err = nvme_get_log_fdp_stats(hdl, cfg.egid, 0, &stats, sizeof(stats));
+	nvme_init_get_log_fdp_stats(&cmd, cfg.egid, 0, &stats, sizeof(stats));
+	err = libnvme_get_log(hdl, &cmd, false, sizeof(stats));
 	if (err) {
 		nvme_show_status(err);
 		return err;
@@ -224,6 +231,7 @@ static int fdp_events(int argc, char **argv, struct command *acmd, struct plugin
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	struct nvme_fdp_events_log events;
+	struct libnvme_passthru_cmd cmd;
 	nvme_print_flags_t flags;
 	int err;
 
@@ -262,8 +270,9 @@ static int fdp_events(int argc, char **argv, struct command *acmd, struct plugin
 
 	memset(&events, 0x0, sizeof(events));
 
-	err = nvme_get_log_fdp_events(hdl, cfg.egid,
+	nvme_init_get_log_fdp_events(&cmd, cfg.egid,
 			cfg.host_events, 0, &events, sizeof(events));
+	err = libnvme_get_log(hdl, &cmd, false, sizeof(events));
 	if (err) {
 		nvme_show_status(err);
 		return err;
