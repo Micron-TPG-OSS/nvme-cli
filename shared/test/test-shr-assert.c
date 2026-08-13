@@ -13,12 +13,15 @@
 
 #include <shr-assert.h>
 
-#ifdef _WIN32
-#define popen _popen
-#define pclose _pclose
+#if defined(_WIN32)
+#include <io.h>
+#define read _read
+#define close _close
 #else
-#include <sys/wait.h>
+#include <unistd.h>
 #endif
+
+#include <proc-util.h>
 
 /*
  * Re-invoked with this argument, the test becomes the child whose failing
@@ -64,8 +67,9 @@ static void assert_child(void)
 }
 
 /*
- * Run this binary again as a child that fails an assertion. Capture
- * everything it writes to stdout/stderr and how it exits, to verify:
+ * Run a child that prints unterminated (buffered) output, then fails a
+ * shr_assert(). Capture everything the child writes to stdout/stderr and
+ * how it exits, to verify:
  *  - the buffered output written before the failure was not lost, i.e.
  *    fflush(NULL) actually flushes stdio buffers before exiting - the
  *    exact case plain assert()/abort() gets wrong.
@@ -75,51 +79,38 @@ static void assert_child(void)
  */
 static bool test_fail_flushes_and_reports(const char *self)
 {
+	const char *const argv[] = { self, CHILD_ARG, NULL };
 	char buf[4096] = { 0 };
-	char cmd[4096];
 	size_t total = 0;
 	bool pass = true;
-	FILE *child;
-	int status;
+	bool exited = false;
+	int code = 0;
+	int fds[2];
+	ssize_t n;
 
 	printf("test_fail_flushes_and_reports:\n");
 
-	/*
-	 * 2>&1 so the diagnostic on stderr and the marker on stdout arrive
-	 * interleaved on the one pipe, as they did through the shared fd pair
-	 * this test used before.
-	 */
-	if (snprintf(cmd, sizeof(cmd), "\"%s\" " CHILD_ARG " 2>&1", self) >=
-	    (int)sizeof(cmd)) {
-		printf(" - own path too long to re-invoke [FAIL]\n");
+	if (shr_pipe(fds)) {
+		printf(" - shr_pipe() failed [FAIL]\n");
 		return false;
 	}
 
-	child = popen(cmd, "r");
-	if (!child) {
-		printf(" - popen() failed [FAIL]\n");
+	if (shr_spawn_sync(argv, fds[1], fds[1], &exited, &code)) {
+		close(fds[0]);
+		close(fds[1]);
+		printf(" - shr_spawn_sync() failed [FAIL]\n");
 		return false;
 	}
+	close(fds[1]); /* only the child holds a writer now */
 
-	total = fread(buf, 1, sizeof(buf) - 1, child);
+	while (total < sizeof(buf) - 1 &&
+	       (n = read(fds[0], buf + total, sizeof(buf) - 1 - total)) > 0)
+		total += (size_t)n;
+	close(fds[0]);
 	buf[total] = '\0';
 
-	status = pclose(child);
-
-	/*
-	 * pclose() hands back a wait status on POSIX but the child's exit code
-	 * directly on Windows. Either way a signal death shows up as something
-	 * other than a clean nonzero exit, which is what this asserts.
-	 */
-#ifdef _WIN32
-	pass &= check_bool("child exited (not signaled)", status >= 0, true);
-	pass &= check_bool("child exit status nonzero", status != 0, true);
-#else
-	pass &= check_bool("child exited (not signaled)", WIFEXITED(status), true);
-	if (WIFEXITED(status))
-		pass &= check_bool("child exit status nonzero",
-				   WEXITSTATUS(status) != 0, true);
-#endif
+	pass &= check_bool("child exited (not signaled)", exited, true);
+	pass &= check_bool("child exit status nonzero", code != 0, true);
 
 	pass &= check_bool("buffered output before failure survived",
 			   strstr(buf, "marker-before-failure") != NULL, true);
