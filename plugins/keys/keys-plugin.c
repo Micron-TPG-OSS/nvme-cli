@@ -42,20 +42,24 @@ static int read_key_value(const char *inline_value, char **out)
 	return *out ? 0 : -ENOMEM;
 }
 
+static bool valid_kxchap_secret_len(unsigned int len)
+{
+	return len == 32 || len == 48 || len == 64;
+}
+
 static int gen_kxchap(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
 	const char *desc =
-	    "Generate a KX-HMAC-CHAP host key usable for NVMe In-Band Authentication.";
+	    "Generate a KX-HMAC-CHAP secret in the DHHC-1 representation, usable for\n"
+	    "NVMe In-Band Authentication.";
 	const char *secret =
-	    "Optional secret (in hexadecimal characters) to be used to initialize the host key.";
-	const char *key_len = "Length of the resulting key (32, 48, or 64 bytes).";
+	    "Optional secret (in hexadecimal characters) to be placed in the representation.";
+	const char *secret_len = "Length of the secret (32, 48, or 64 bytes).";
 	const char *hmac =
-	    "HMAC function to use for key transformation (0 = none, 1 = SHA-256, 2 = SHA-384, 3 = SHA-512).";
-	const char *nqn = "Host NQN to use for key transformation.";
+	    "Hash function the consumer is to apply to the secret (0 = none, 1 = SHA-256, 2 = SHA-384, 3 = SHA-512).";
 
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_free unsigned char *raw_secret = NULL;
-	__cleanup_free char *hnqn = NULL;
 	unsigned char key[68];
 	char encoded_key[128];
 	unsigned long crc = shr_crc32(0L, NULL, 0);
@@ -63,22 +67,19 @@ static int gen_kxchap(int argc, char **argv, struct command *acmd, struct plugin
 
 	struct config {
 		char		*secret;
-		unsigned int	key_len;
-		char		*nqn;
+		unsigned int	secret_len;
 		unsigned int	hmac;
 	};
 
 	struct config cfg = {
 		.secret		= NULL,
-		.key_len	= 0,
-		.nqn		= NULL,
+		.secret_len	= 0,
 		.hmac		= 0,
 	};
 
 	NVME_ARGS(opts,
 		  OPT_STR("secret",		's', &cfg.secret,	secret),
-		  OPT_UINT("key-length",	'l', &cfg.key_len,	key_len),
-		  OPT_STR("nqn",		'n', &cfg.nqn,		nqn),
+		  OPT_UINT("secret-length",	'l', &cfg.secret_len,	secret_len),
 		  OPT_UINT("hmac",		'm', &cfg.hmac,		hmac));
 
 	err = parse_args(argc, argv, desc, opts);
@@ -93,63 +94,63 @@ static int gen_kxchap(int argc, char **argv, struct command *acmd, struct plugin
 		nvme_show_error("Invalid HMAC identifier %u", cfg.hmac);
 		return -EINVAL;
 	}
-	if (cfg.hmac > 0) {
+	/*
+	 * The hash identifier records the transform the consumer applies; it
+	 * does not constrain the secret's own length, so accept all three
+	 * with any identifier. A secret given as hex is the payload, so it
+	 * takes an even number of characters and fixes the length; an
+	 * explicit one may only confirm it. Only a secret generated here
+	 * (none given, or from a pin) falls back to the digest size.
+	 */
+	if (cfg.secret && strncmp(cfg.secret, "pin:", 4)) {
+		size_t len = strlen(cfg.secret);
+
+		if (len % 2) {
+			nvme_show_error("Secret has an odd number of hexadecimal characters (%zu)",
+					len);
+			return -EINVAL;
+		}
+		if (cfg.secret_len && cfg.secret_len != len / 2) {
+			nvme_show_error("Secret length %u does not match the secret given (%zu bytes)",
+					cfg.secret_len, len / 2);
+			return -EINVAL;
+		}
+		cfg.secret_len = len / 2;
+	} else if (!cfg.secret_len) {
 		switch (cfg.hmac) {
 		case 1:
-			if (!cfg.key_len) {
-				cfg.key_len = 32;
-			} else if (cfg.key_len != 32) {
-				nvme_show_error("Invalid key length %d for SHA(256)", cfg.key_len);
-				return -EINVAL;
-			}
+			cfg.secret_len = 32;
 			break;
 		case 2:
-			if (!cfg.key_len) {
-				cfg.key_len = 48;
-			} else if (cfg.key_len != 48) {
-				nvme_show_error("Invalid key length %d for SHA(384)", cfg.key_len);
-				return -EINVAL;
-			}
+			cfg.secret_len = 48;
 			break;
 		case 3:
-			if (!cfg.key_len) {
-				cfg.key_len = 64;
-			} else if (cfg.key_len != 64) {
-				nvme_show_error("Invalid key length %d for SHA(512)", cfg.key_len);
-				return -EINVAL;
-			}
+			cfg.secret_len = 64;
 			break;
 		default:
+			cfg.secret_len = 32;
 			break;
 		}
-	} else if (!cfg.key_len) {
-		cfg.key_len = 32;
+	}
+	if (!valid_kxchap_secret_len(cfg.secret_len)) {
+		nvme_show_error("Invalid secret length %u", cfg.secret_len);
+		return -EINVAL;
 	}
 
-	err = libnvmf_create_raw_secret(ctx, cfg.secret, cfg.key_len, &raw_secret);
+	err = libnvmf_create_raw_secret(ctx, cfg.secret, cfg.secret_len, &raw_secret);
 	if (err)
 		return err;
 
-	if (!cfg.nqn) {
-		err = libnvmf_host_get_ids(ctx, NULL, NULL, &hnqn, NULL);
-		if (err)
-			return err;
-		cfg.nqn = hnqn;
-	}
+	memcpy(key, raw_secret, cfg.secret_len);
 
-	err = libnvmf_gen_kxchap_key(ctx, cfg.nqn, cfg.hmac,
-		cfg.key_len, raw_secret, key);
-	if (err)
-		return err;
-
-	crc = shr_crc32(crc, key, cfg.key_len);
-	key[cfg.key_len++] = crc & 0xff;
-	key[cfg.key_len++] = (crc >> 8) & 0xff;
-	key[cfg.key_len++] = (crc >> 16) & 0xff;
-	key[cfg.key_len++] = (crc >> 24) & 0xff;
+	crc = shr_crc32(crc, key, cfg.secret_len);
+	key[cfg.secret_len++] = crc & 0xff;
+	key[cfg.secret_len++] = (crc >> 8) & 0xff;
+	key[cfg.secret_len++] = (crc >> 16) & 0xff;
+	key[cfg.secret_len++] = (crc >> 24) & 0xff;
 
 	memset(encoded_key, 0, sizeof(encoded_key));
-	shr_base64_encode(key, cfg.key_len, encoded_key);
+	shr_base64_encode(key, cfg.secret_len, encoded_key);
 
 	nvme_show_result("DHHC-1:%02x:%s:", cfg.hmac, encoded_key);
 	return 0;
@@ -164,7 +165,7 @@ static int validate_kxchap_key(const char *key, int *hmac_out,
 	int decoded_len, hmac, err;
 
 	if (sscanf(key, "DHHC-1:%02x:%*s", &hmac) != 1) {
-		nvme_show_error("Invalid key header '%s'", key);
+		nvme_show_error("Invalid secret header '%s'", key);
 		return -EINVAL;
 	}
 	if (hmac > 3) {
@@ -190,7 +191,7 @@ static int validate_kxchap_key(const char *key, int *hmac_out,
 	}
 
 	if (key[len - 1] != ':') {
-		nvme_show_error("Invalid key format (missing trailing ':')");
+		nvme_show_error("Invalid secret format (missing trailing ':')");
 		return -EINVAL;
 	}
 
@@ -201,7 +202,7 @@ static int validate_kxchap_key(const char *key, int *hmac_out,
 	}
 	decoded_len = err;
 	decoded_len -= 4;
-	if (decoded_len != 32 && decoded_len != 48 && decoded_len != 64) {
+	if (!valid_kxchap_secret_len(decoded_len)) {
 		nvme_show_error("Invalid secret length %d", decoded_len);
 		return -EINVAL;
 	}
@@ -211,7 +212,7 @@ static int validate_kxchap_key(const char *key, int *hmac_out,
 		   ((uint32_t)decoded_key[decoded_len + 2] << 16) |
 		   ((uint32_t)decoded_key[decoded_len + 3] << 24);
 	if (key_crc != crc) {
-		nvme_show_error("CRC mismatch (key %08x, crc %08x)", key_crc, crc);
+		nvme_show_error("CRC mismatch (secret %08x, crc %08x)", key_crc, crc);
 		return -EINVAL;
 	}
 
@@ -224,12 +225,12 @@ static int validate_kxchap_key(const char *key, int *hmac_out,
 static int check_kxchap(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
 	const char *desc =
-	    "Check a KX-HMAC-CHAP host key for usability for NVMe In-Band Authentication,\n"
+	    "Check a KX-HMAC-CHAP host secret for usability for NVMe In-Band Authentication,\n"
 	    "and, if --identity is given, check whether it is already loaded into a keyring.";
-	const char *keydata = "KX-HMAC-CHAP key (in DHHC-1 interchange format) to be validated. Reads from stdin if not given.";
-	const char *keyring = "Keyring to check for an already loaded key.";
-	const char *keytype = "Key type of the key to look up.";
-	const char *identity = "Identity to look up in the keyring to check if the key is already loaded.";
+	const char *keydata = "KX-HMAC-CHAP secret (in DHHC-1 interchange format) to be validated. Reads from stdin if not given.";
+	const char *keyring = "Keyring to check for an already loaded secret.";
+	const char *keytype = "Key type of the secret to look up.";
+	const char *identity = "Identity to look up in the keyring to check if the secret is already loaded.";
 
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_free char *key = NULL;
@@ -264,7 +265,7 @@ static int check_kxchap(int argc, char **argv, struct command *acmd, struct plug
 
 	err = read_key_value(cfg.keydata, &key);
 	if (err) {
-		nvme_show_error("No key data");
+		nvme_show_error("No secret data");
 		return err;
 	}
 
@@ -272,7 +273,7 @@ static int check_kxchap(int argc, char **argv, struct command *acmd, struct plug
 	if (err)
 		return err;
 
-	nvme_show_result("Key is valid (HMAC %d, length %d, CRC %08x)", hmac, decoded_len, crc);
+	nvme_show_result("Secret is valid (HMAC %d, length %d, CRC %08x)", hmac, decoded_len, crc);
 
 	if (!cfg.identity)
 		return 0;
@@ -300,7 +301,7 @@ static int check_kxchap(int argc, char **argv, struct command *acmd, struct plug
 
 	err = libnvmf_lookup_key(ctx, cfg.keytype, cfg.identity, &key_id);
 	if (err) {
-		nvme_show_result("Key is not loaded for identity '%s'", cfg.identity);
+		nvme_show_result("Secret is not loaded for identity '%s'", cfg.identity);
 		return 0;
 	}
 
@@ -312,9 +313,9 @@ static int check_kxchap(int argc, char **argv, struct command *acmd, struct plug
 	}
 
 	if ((size_t)stored_len == strlen(key) && !memcmp(stored, key, stored_len))
-		nvme_show_result("Key is loaded (serial %08x) and matches", (unsigned int)key_id);
+		nvme_show_result("Secret is loaded (serial %08x) and matches", (unsigned int)key_id);
 	else
-		nvme_show_result("Key is loaded (serial %08x) but differs", (unsigned int)key_id);
+		nvme_show_result("Secret is loaded (serial %08x) but differs", (unsigned int)key_id);
 
 	return 0;
 }
@@ -926,7 +927,7 @@ static int import_key(struct libnvme_global_ctx *ctx, const char *keyring,
 
 static int key_import(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
-	const char *desc = "Import NVMeoF TLS PSKs and KX-HMAC-CHAP keys into a keyring.\n";
+	const char *desc = "Import NVMeoF TLS PSKs and KX-HMAC-CHAP secrets into a keyring.\n";
 	const char *keyring = "Keyring to import the keys into.";
 	const char *keyfile = "File to read the keys from (default: stdin).";
 	const char *keydata = "Key to insert directly under --identity. Reads from stdin if not given.";

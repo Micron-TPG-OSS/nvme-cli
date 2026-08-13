@@ -1840,7 +1840,7 @@ static int micron_nand_stats(int argc, char **argv,
 		nsze = ((ctrl.oacs >> 3) & 0x1);
 
 	if (has_fb_log) {
-		__u8 spec = (eModel == M5410) ? 0 : 1;	/* FB spec version */
+		__u8 spec = 1; /* FB spec version */
 
 		print_nand_stats_fb((__u8 *)logFB, (__u8 *)extSmartLog, nsze, is_json, spec);
 		err = 0;
@@ -2263,7 +2263,7 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 		nvme_init_get_log_telemetry_ctrl(&cmd, 0, log, bs);
 		err = libnvme_get_log_dynamic_chunk(hdl, &cmd, true, bs);
 	} else {
-		nvme_init_get_log_telemetry_host(&cmd, 0, log, bs);
+		nvme_init_get_log_create_telemetry_host(&cmd, log);
 		err = libnvme_get_log_dynamic_chunk(hdl, &cmd, false, bs);
 	}
 
@@ -2310,11 +2310,11 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 	}
 
 	if (ctrl_init) {
-		nvme_init_get_log_telemetry_ctrl(&cmd, 0, log, *logSize);
-		err = libnvme_get_log_dynamic_chunk(hdl, &cmd, true, *logSize);
+		nvme_init_get_log_telemetry_ctrl(&cmd, bs, (__u8 *)log + bs, *logSize - bs);
+		err = libnvme_get_log_dynamic_chunk(hdl, &cmd, true, *logSize - bs);
 	} else {
-		nvme_init_get_log_telemetry_host(&cmd, 0, log, *logSize);
-		err = libnvme_get_log_dynamic_chunk(hdl, &cmd, false, *logSize);
+		nvme_init_get_log_telemetry_host(&cmd, bs, (__u8 *)log + bs, *logSize - bs);
+		err = libnvme_get_log_dynamic_chunk(hdl, &cmd, false, *logSize - bs);
 	}
 
 	if (!err) {
@@ -3379,17 +3379,20 @@ static int get_common_log(struct libnvme_transport_handle *hdl, uint8_t id, uint
 		}
 		memcpy(buffer, (uint8_t *)&hdr, sizeof(hdr));
 	} else if (hdr.log_size < hdr.max_size) {
-		buffer = (uint8_t *)libnvme_alloc(sizeof(hdr) + hdr.log_size);
+		/* log_size includes the header, so the payload is the remainder */
+		uint32_t payload = hdr.log_size - sizeof(hdr);
+
+		buffer = (uint8_t *)libnvme_alloc(hdr.log_size);
 		if (!buffer) {
-			nvme_show_error("malloc of %zu bytes failed for log: 0x%X",
-				hdr.log_size + sizeof(hdr), id);
+			nvme_show_error("malloc of %u bytes failed for log: 0x%X",
+				hdr.log_size, id);
 			return -ENOMEM;
 		}
 		memcpy(buffer, &hdr, sizeof(hdr));
-		ret = nvme_get_log_lpo(hdl, id, sizeof(hdr), chunk, hdr.log_size,
+		ret = nvme_get_log_lpo(hdl, id, sizeof(hdr), chunk, payload,
 					   buffer + sizeof(hdr));
 		if (!ret)
-			log_size += hdr.log_size;
+			log_size += payload;
 	} else if (hdr.log_size >= hdr.max_size) {
 		/*
 		 * reached maximum, to maintain, sequence we need to depend on write

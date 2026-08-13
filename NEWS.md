@@ -14,14 +14,30 @@
 
 * Key management has moved into a new `nvme keys` plugin.
   `gen-dhchap-key`, `check-dhchap-key`, `gen-tls-key`,
-  `check-tls-key`, and `tls-key` are now `nvme keys gen-kxchap`,
-  `check-kxchap`, `gen-tls`, `check-tls`, `insert-tls`, `import`,
+  `check-tls-key`, and `tls-key` are now `nvme keys gen-kxchap-secret`,
+  `check-kxchap-secret`, `gen-tls`, `check-tls`, `insert-tls`, `import`,
   `export`, and `revoke`. The old commands still work as deprecated
   aliases, except `check-tls-key --insert`, which has no equivalent
   there. Use `nvme keys insert-tls` instead. The `DH-HMAC-CHAP`
   naming is also renamed to `KX-HMAC-CHAP` throughout, matching
-  TP4201. See `nvme-keys-gen-kxchap(1)` and
-  `nvme-keys-check-kxchap(1)`.
+  TP4201. See `nvme-keys-gen-kxchap-secret(1)` and
+  `nvme-keys-check-kxchap-secret(1)`.
+
+* `nvme gen-dhchap-key` emits the secret it was given rather than the
+  key transformed from it, so its output differs whenever `--hmac` is
+  non-zero. `--nqn`/`-n` fed only that transform and is now accepted
+  with a warning and ignored. See `nvme-gen-dhchap-key(1)`.
+
+* `nvme gen-dhchap-key` rejects a `--secret` with an odd number of
+  hexadecimal characters. nvme-cli 2.x padded the trailing one with a
+  zero and emitted a secret that was never given: 63 characters ending
+  `...bababa` produced `...ababab0a`.
+
+* `nvme check-dhchap-key` reports on the secret rather than on the key:
+  `Key is valid`, `Key is loaded` and `Key is not loaded` are now
+  `Secret is ...`, and the validation errors say secret where they said
+  key. Exit codes are unchanged, but a script matching the old wording
+  needs updating. See `nvme-check-dhchap-key(1)`.
 
 * All `nvme *-log` commands (`smart-log`, `ana-log`, `error-log`,
   `fw-log`, `telemetry-log`, `self-test-log`, `sanitize-log`, and the
@@ -30,12 +46,58 @@
   e.g. `nvme smart-log` is now `nvme log smart`. The old top-level
   commands still work as deprecated aliases.
 
-* Deprecated commands (currently the old `nvme keys` and `nvme log`
-  aliases above) are enabled by default; they can be turned off at
-  build time with `-Ddeprecated-cmds=disabled`. `nvme help` now
-  lists them in a separate "deprecated" section instead of alongside
-  current commands, and running one prints a warning that it will be
-  removed in the next major version.
+* All `nvme id-*`/`nvm-id-*`/`list-*` Identify commands (`id-ctrl`,
+  `id-ns`, `id-ns-granularity`, `id-ns-lba-format`, `list-ns`,
+  `list-ctrl`, `nvm-id-ctrl`, `nvm-id-ns`, `nvm-id-ns-lba-format`,
+  `primary-ctrl-caps`, `list-secondary`, `cmdset-ind-id-ns`,
+  `ns-descs`, `id-nvmset`, `id-uuid`, `id-iocs`, `id-domain`, and
+  `list-endgrp`) have moved into a new `nvme id` plugin, e.g.
+  `nvme id-ctrl` is now `nvme id ctrl`. The old top-level commands
+  still work as deprecated aliases.
+
+* Namespace management commands (`create-ns`, `delete-ns`,
+  `attach-ns`, `detach-ns`, `get-ns-id`) have moved into a new
+  `nvme ns` plugin, e.g. `nvme create-ns` is now `nvme ns create`.
+  The old top-level commands still work as deprecated aliases.
+
+* Reservation commands (`resv-acquire`, `resv-register`,
+  `resv-release`, `resv-report`) have moved into a new `nvme resv`
+  plugin, e.g. `nvme resv-acquire` is now `nvme resv acquire`. The
+  old top-level commands still work as deprecated aliases.
+
+* NVMe-MI commands (`nvme-mi-recv`, `nvme-mi-send`) have moved into
+  a new `nvme nvme-mi` plugin, e.g. `nvme nvme-mi-recv` is now
+  `nvme nvme-mi recv`. The old top-level commands still work as
+  deprecated aliases.
+
+* I/O Management commands (`io-mgmt-recv`, `io-mgmt-send`) have
+  moved into a new `nvme io-mgmt` plugin, e.g. `nvme io-mgmt-recv`
+  is now `nvme io-mgmt recv`. The old top-level commands still work
+  as deprecated aliases.
+
+* Directive commands (`dir-receive`, `dir-send`) have moved into a
+  new `nvme dir` plugin, e.g. `nvme dir-receive` is now
+  `nvme dir receive`. The old top-level commands still work as
+  deprecated aliases.
+
+* Security Send/Receive commands (`security-send`, `security-recv`)
+  have moved into a new `nvme security` plugin, e.g.
+  `nvme security-send` is now `nvme security send`. The old
+  top-level commands still work as deprecated aliases.
+
+* Firmware commands (`fw-commit`, `fw-download`) have moved into a
+  new `nvme fw` plugin, e.g. `nvme fw-download` is now
+  `nvme fw download`. The old top-level commands still work as
+  deprecated aliases.
+
+* Deprecated commands (currently the old `nvme keys`, `nvme log`,
+  `nvme id`, `nvme ns`, `nvme resv`, `nvme nvme-mi`, `nvme io-mgmt`,
+  `nvme dir`, `nvme security`, and `nvme fw` aliases above) are
+  enabled by default; they can be turned off at build time with
+  `-Ddeprecated-cmds=disabled`.
+  `nvme help` now lists them in a separate "deprecated" section
+  instead of alongside current commands, and running one prints a
+  warning that it will be removed in the next major version.
 
 * `nvme disconnect-all` with no options no longer disconnects every
   fabric controller. It now only disconnects controllers with no
