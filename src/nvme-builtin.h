@@ -10,29 +10,31 @@
 COMMAND_LIST(
 	ENTRY("list", "List all NVMe devices and namespaces on machine", list)
 	ENTRY("list-subsys", "List nvme subsystems", list_subsys)
-	ENTRY("id-ctrl", "Send NVMe Identify Controller", id_ctrl)
-	ENTRY("id-ns", "Send NVMe Identify Namespace, display structure", id_ns)
-	ENTRY("id-ns-granularity", "Send NVMe Identify Namespace Granularity List, display structure", id_ns_granularity)
-	ENTRY("id-ns-lba-format", "Send NVMe Identify Namespace for the specified LBA Format index, display structure", id_ns_lba_format)
-	ENTRY("list-ns", "Send NVMe Identify List, display structure", list_ns)
-	ENTRY("list-ctrl", "Send NVMe Identify Controller List, display structure", list_ctrl)
-	ENTRY("nvm-id-ctrl", "Send NVMe Identify Controller NVM Command Set, display structure", nvm_id_ctrl)
-	ENTRY("nvm-id-ns", "Send NVMe Identify Namespace NVM Command Set, display structure", nvm_id_ns)
-	ENTRY("nvm-id-ns-lba-format", "Send NVMe Identify Namespace NVM Command Set for the specified LBA Format index, display structure", nvm_id_ns_lba_format)
-	ENTRY("primary-ctrl-caps", "Send NVMe Identify Primary Controller Capabilities", primary_ctrl_caps)
-	ENTRY("list-secondary", "List Secondary Controllers associated with a Primary Controller", list_secondary_ctrl)
-	ENTRY("cmdset-ind-id-ns", "I/O Command Set Independent Identify Namespace", cmd_set_independent_id_ns)
-	ENTRY("ns-descs", "Send NVMe Namespace Descriptor List, display structure", ns_descs)
-	ENTRY("id-nvmset", "Send NVMe Identify NVM Set List, display structure", id_nvmset)
-	ENTRY("id-uuid", "Send NVMe Identify UUID List, display structure", id_uuid)
-	ENTRY("id-iocs", "Send NVMe Identify I/O Command Set, display structure", id_iocs)
-	ENTRY("id-domain", "Send NVMe Identify Domain List, display structure", id_domain)
-	ENTRY("list-endgrp", "Send NVMe Identify Endurance Group List, display structure", id_endurance_grp_list)
-	ENTRY("create-ns", "Creates a namespace with the provided parameters", create_ns)
-	ENTRY("delete-ns", "Deletes a namespace from the controller", delete_ns)
-	ENTRY("attach-ns", "Attaches a namespace to requested controller(s)", attach_ns)
-	ENTRY("detach-ns", "Detaches a namespace from requested controller(s)", detach_ns)
-	ENTRY("get-ns-id", "Retrieve the namespace ID of opened block device", get_ns_id)
+#ifdef CONFIG_DEPRECATED_CMDS
+	ENTRY_DEPRECATED("id-ctrl", "Send NVMe Identify Controller (deprecated, use 'nvme id ctrl')", id_ctrl)
+	ENTRY_DEPRECATED("id-ns", "Send NVMe Identify Namespace, display structure (deprecated, use 'nvme id ns')", id_ns)
+	ENTRY_DEPRECATED("id-ns-granularity", "Send NVMe Identify Namespace Granularity List, display structure (deprecated, use 'nvme id ns-granularity')", id_ns_granularity)
+	ENTRY_DEPRECATED("id-ns-lba-format", "Send NVMe Identify Namespace for the specified LBA Format index, display structure (deprecated, use 'nvme id ns-lba-format')", id_ns_lba_format)
+	ENTRY_DEPRECATED("list-ns", "Send NVMe Identify List, display structure (deprecated, use 'nvme id ns-list')", list_ns)
+	ENTRY_DEPRECATED("list-ctrl", "Send NVMe Identify Controller List, display structure (deprecated, use 'nvme id ctrl-list')", list_ctrl)
+	ENTRY_DEPRECATED("nvm-id-ctrl", "Send NVMe Identify Controller NVM Command Set, display structure (deprecated, use 'nvme id nvm-ctrl')", nvm_id_ctrl)
+	ENTRY_DEPRECATED("nvm-id-ns", "Send NVMe Identify Namespace NVM Command Set, display structure (deprecated, use 'nvme id nvm-ns')", nvm_id_ns)
+	ENTRY_DEPRECATED("nvm-id-ns-lba-format", "Send NVMe Identify Namespace NVM Command Set for the specified LBA Format index, display structure (deprecated, use 'nvme id nvm-ns-lba-format')", nvm_id_ns_lba_format)
+	ENTRY_DEPRECATED("primary-ctrl-caps", "Send NVMe Identify Primary Controller Capabilities (deprecated, use 'nvme id primary-ctrl-caps')", primary_ctrl_caps)
+	ENTRY_DEPRECATED("list-secondary", "List Secondary Controllers associated with a Primary Controller (deprecated, use 'nvme id secondary-ctrl-list')", list_secondary_ctrl)
+	ENTRY_DEPRECATED("cmdset-ind-id-ns", "I/O Command Set Independent Identify Namespace (deprecated, use 'nvme id ns-ind')", cmd_set_independent_id_ns)
+	ENTRY_DEPRECATED("ns-descs", "Send NVMe Namespace Descriptor List, display structure (deprecated, use 'nvme id ns-descs')", ns_descs)
+	ENTRY_DEPRECATED("id-nvmset", "Send NVMe Identify NVM Set List, display structure (deprecated, use 'nvme id nvmset')", id_nvmset)
+	ENTRY_DEPRECATED("id-uuid", "Send NVMe Identify UUID List, display structure (deprecated, use 'nvme id uuid')", id_uuid)
+	ENTRY_DEPRECATED("id-iocs", "Send NVMe Identify I/O Command Set, display structure (deprecated, use 'nvme id iocs')", id_iocs)
+	ENTRY_DEPRECATED("id-domain", "Send NVMe Identify Domain List, display structure (deprecated, use 'nvme id domain')", id_domain)
+	ENTRY_DEPRECATED("list-endgrp", "Send NVMe Identify Endurance Group List, display structure (deprecated, use 'nvme id endgrp-list')", id_endurance_grp_list)
+	ENTRY_DEPRECATED("create-ns", "Creates a namespace with the provided parameters (deprecated, use 'nvme ns create')", create_ns)
+	ENTRY_DEPRECATED("delete-ns", "Deletes a namespace from the controller (deprecated, use 'nvme ns delete')", delete_ns)
+	ENTRY_DEPRECATED("attach-ns", "Attaches a namespace to requested controller(s) (deprecated, use 'nvme ns attach')", attach_ns)
+	ENTRY_DEPRECATED("detach-ns", "Detaches a namespace from requested controller(s) (deprecated, use 'nvme ns detach')", detach_ns)
+	ENTRY_DEPRECATED("get-ns-id", "Retrieve the namespace ID of opened block device (deprecated, use 'nvme ns get-id')", get_ns_id)
+#endif /* CONFIG_DEPRECATED_CMDS */
 	ENTRY("get-log", "Generic NVMe get log, returns log in raw format", get_log)
 #ifdef CONFIG_DEPRECATED_CMDS
 	ENTRY_DEPRECATED("telemetry-log", "Retrieve FW Telemetry log write to file (deprecated, use 'nvme log telemetry')", get_telemetry_log)
@@ -78,18 +80,24 @@ COMMAND_LIST(
 	ENTRY("set-property", "Set a property and show the resulting value", set_property)
 	ENTRY("get-property", "Get a property and show the resulting value", get_property)
 	ENTRY("format", "Format namespace with new block format", format_cmd)
-	ENTRY("fw-commit", "Verify and commit firmware to a specific slot (fw-activate in old version < 1.2)", fw_commit, "fw-activate")
-	ENTRY("fw-download", "Download new firmware", fw_download)
+#ifdef CONFIG_DEPRECATED_CMDS
+	ENTRY_DEPRECATED("fw-commit", "Verify and commit firmware to a specific slot (fw-activate in old version < 1.2) (deprecated, use 'nvme fw commit')", fw_commit, "fw-activate")
+	ENTRY_DEPRECATED("fw-download", "Download new firmware (deprecated, use 'nvme fw download')", fw_download)
+#endif /* CONFIG_DEPRECATED_CMDS */
 	ENTRY("admin-passthru", "Submit an arbitrary admin command, return results", admin_passthru)
 	ENTRY("io-passthru", "Submit an arbitrary IO command, return results", io_passthru)
-	ENTRY("security-send", "Submit a Security Send command, return results", sec_send)
-	ENTRY("security-recv", "Submit a Security Receive command, return results", sec_recv)
+#ifdef CONFIG_DEPRECATED_CMDS
+	ENTRY_DEPRECATED("security-send", "Submit a Security Send command, return results (deprecated, use 'nvme security send')", sec_send)
+	ENTRY_DEPRECATED("security-recv", "Submit a Security Receive command, return results (deprecated, use 'nvme security recv')", sec_recv)
+#endif /* CONFIG_DEPRECATED_CMDS */
 	ENTRY("get-lba-status", "Submit a Get LBA Status command, return results", get_lba_status)
 	ENTRY("capacity-mgmt", "Submit Capacity Management Command, return results", capacity_mgmt)
-	ENTRY("resv-acquire", "Submit a Reservation Acquire, return results", resv_acquire)
-	ENTRY("resv-register", "Submit a Reservation Register, return results", resv_register)
-	ENTRY("resv-release", "Submit a Reservation Release, return results", resv_release)
-	ENTRY("resv-report", "Submit a Reservation Report, return results", resv_report)
+#ifdef CONFIG_DEPRECATED_CMDS
+	ENTRY_DEPRECATED("resv-acquire", "Submit a Reservation Acquire, return results (deprecated, use 'nvme resv acquire')", resv_acquire)
+	ENTRY_DEPRECATED("resv-register", "Submit a Reservation Register, return results (deprecated, use 'nvme resv register')", resv_register)
+	ENTRY_DEPRECATED("resv-release", "Submit a Reservation Release, return results (deprecated, use 'nvme resv release')", resv_release)
+	ENTRY_DEPRECATED("resv-report", "Submit a Reservation Report, return results (deprecated, use 'nvme resv report')", resv_report)
+#endif /* CONFIG_DEPRECATED_CMDS */
 	ENTRY("dsm", "Submit a Data Set Management command, return results", dsm)
 	ENTRY("copy", "Submit a Simple Copy command, return results", copy_cmd)
 	ENTRY("flush", "Submit a Flush command, return results", flush_cmd)
@@ -124,23 +132,29 @@ COMMAND_LIST(
 	ENTRY("gen-hostnqn", "Generate NVMeoF host NQN", gen_hostnqn_cmd)
 	ENTRY("show-hostnqn", "Show NVMeoF host NQN", show_hostnqn_cmd)
 #ifdef CONFIG_DEPRECATED_CMDS
-	ENTRY_DEPRECATED("gen-dhchap-key", "Generate NVMeoF DH-HMAC-CHAP host key (deprecated, use 'nvme keys gen-kxchap')", gen_dhchap_key)
-	ENTRY_DEPRECATED("check-dhchap-key", "Validate NVMeoF DH-HMAC-CHAP host key (deprecated, use 'nvme keys check-kxchap')", check_dhchap_key)
+	ENTRY_DEPRECATED("gen-dhchap-key", "Generate NVMeoF DH-HMAC-CHAP host secret (deprecated, use 'nvme keys gen-kxchap-secret')", gen_dhchap_key)
+	ENTRY_DEPRECATED("check-dhchap-key", "Validate NVMeoF DH-HMAC-CHAP host secret (deprecated, use 'nvme keys check-kxchap-secret')", check_dhchap_key)
 	ENTRY_DEPRECATED("gen-tls-key", "Generate NVMeoF TLS PSK (deprecated, use 'nvme keys gen-tls')", gen_tls_key)
 	ENTRY_DEPRECATED("check-tls-key", "Validate NVMeoF TLS PSK (deprecated, use 'nvme keys check-tls')", check_tls_key)
 	ENTRY_DEPRECATED("tls-key", "Manage NVMeoF TLS PSKs (deprecated, use 'nvme keys import/export/revoke')", tls_key)
 #endif /* CONFIG_DEPRECATED_CMDS */
 #endif /* CONFIG_FABRICS */
-	ENTRY("dir-receive", "Submit a Directive Receive command, return results", dir_receive)
-	ENTRY("dir-send", "Submit a Directive Send command, return results", dir_send)
+#ifdef CONFIG_DEPRECATED_CMDS
+	ENTRY_DEPRECATED("dir-receive", "Submit a Directive Receive command, return results (deprecated, use 'nvme dir receive')", dir_receive)
+	ENTRY_DEPRECATED("dir-send", "Submit a Directive Send command, return results (deprecated, use 'nvme dir send')", dir_send)
+#endif /* CONFIG_DEPRECATED_CMDS */
 	ENTRY("virt-mgmt", "Manage Flexible Resources between Primary and Secondary Controller", virtual_mgmt)
 	ENTRY("rpmb", "Replay Protection Memory Block commands", rpmb_cmd)
 	ENTRY("lockdown", "Submit a Lockdown command,return result", lockdown_cmd)
 	ENTRY("show-topology", "Show the topology", show_topology_cmd)
-	ENTRY("io-mgmt-recv", "I/O Management Receive", io_mgmt_recv)
-	ENTRY("io-mgmt-send", "I/O Management Send", io_mgmt_send)
-	ENTRY("nvme-mi-recv", "Submit a NVMe-MI Receive command, return results", nmi_recv)
-	ENTRY("nvme-mi-send", "Submit a NVMe-MI Send command, return results", nmi_send)
+#ifdef CONFIG_DEPRECATED_CMDS
+	ENTRY_DEPRECATED("io-mgmt-recv", "I/O Management Receive (deprecated, use 'nvme io-mgmt recv')", io_mgmt_recv)
+	ENTRY_DEPRECATED("io-mgmt-send", "I/O Management Send (deprecated, use 'nvme io-mgmt send')", io_mgmt_send)
+#endif /* CONFIG_DEPRECATED_CMDS */
+#ifdef CONFIG_DEPRECATED_CMDS
+	ENTRY_DEPRECATED("nvme-mi-recv", "Submit a NVMe-MI Receive command, return results (deprecated, use 'nvme nvme-mi recv')", nmi_recv)
+	ENTRY_DEPRECATED("nvme-mi-send", "Submit a NVMe-MI Send command, return results (deprecated, use 'nvme nvme-mi send')", nmi_send)
+#endif /* CONFIG_DEPRECATED_CMDS */
 );
 
 #endif
