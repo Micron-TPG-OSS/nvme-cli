@@ -130,7 +130,7 @@ uuid = executable(
 
 test('libnvme - uuid', uuid)
 
-if host_system == 'linux' and (not meson.is_cross_build())
+if host_system == 'linux' and (not is_static)
     mem = executable(
         'test-mem',
         ['mem.c'],
@@ -138,6 +138,7 @@ if host_system == 'linux' and (not meson.is_cross_build())
             config_dep,
             ccan_dep,
             libnvme_dep,
+            dl_dep,
         ],
     )
 
