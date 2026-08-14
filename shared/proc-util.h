@@ -9,6 +9,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /*
  * Create a pipe. fds[0] is the read end, fds[1] the write end. On Windows the
@@ -17,22 +18,33 @@
  */
 int shr_pipe(int fds[2]);
 
+/* Opaque child handle: a pid_t on POSIX, a process HANDLE on Windows. */
+typedef intptr_t shr_proc_t;
+
 /*
- * Spawn argv[0] with arguments argv (NULL-terminated) WITHOUT a shell,
- * synchronously waiting for it, and report how it ended. No command string is
- * built, so there is no shell to interpret metacharacters. argv[0] must be a
- * path to the executable (no PATH search), mirroring _spawnv()/execv().
+ * Spawn argv[0] with arguments argv (NULL-terminated) WITHOUT a shell and
+ * return immediately; the child runs concurrently. No command string is built,
+ * so there is no shell to interpret metacharacters. argv[0] must be a path to
+ * the executable (no PATH search), mirroring _spawnv()/execv().
  *
  * If out_fd/err_fd are >= 0, the child's stdout/stderr are redirected to them
- * (pass the same fd for both to merge, the 2>&1 equivalent); -1 means inherit.
+ * (pass the same fd for both to merge, the 2>&1 equivalent; pass distinct pipes
+ * to keep them separate; either may point at a real file); -1 means inherit.
  *
- * The child is waited for before returning, so its total output must fit within
- * the OS pipe buffer if out_fd/err_fd point at a pipe whose read end is drained
- * afterward.
+ * If a redirect target is a pipe, drain its read end while the child runs and
+ * only THEN call shr_wait_proc(); a child that fills the pipe buffer blocks on
+ * write() until the reader drains it, so waiting first would deadlock.
  *
- * On success, *exited is set true if the child terminated normally and *code to
- * its exit status; *exited is false if it crashed or was killed by a signal.
- * Return: 0 on success, -errno if the child could not be spawned or waited for.
+ * On success *proc receives the child handle for shr_wait_proc().
+ * Return: 0 on success, -errno if the child could not be spawned.
  */
-int shr_spawn_sync(const char *const argv[], int out_fd, int err_fd,
-		   bool *exited, int *code);
+int shr_spawn(const char *const argv[], int out_fd, int err_fd,
+	      shr_proc_t *proc);
+
+/*
+ * Wait for a child from shr_spawn() and report how it ended. On success *exited
+ * is set true if the child terminated normally and *code to its exit status;
+ * *exited is false if it crashed or was killed by a signal.
+ * Return: 0 on success, -errno if the child could not be waited for.
+ */
+int shr_wait_proc(shr_proc_t proc, bool *exited, int *code);

@@ -81,12 +81,14 @@ static bool test_fail_flushes_and_reports(const char *self)
 {
 	const char *const argv[] = { self, CHILD_ARG, NULL };
 	char buf[4096] = { 0 };
+	char scratch[4096];
 	size_t total = 0;
 	bool pass = true;
 	bool exited = false;
 	int code = 0;
 	int fds[2];
 	ssize_t n;
+	shr_proc_t proc;
 
 	printf("test_fail_flushes_and_reports:\n");
 
@@ -95,19 +97,35 @@ static bool test_fail_flushes_and_reports(const char *self)
 		return false;
 	}
 
-	if (shr_spawn_sync(argv, fds[1], fds[1], &exited, &code)) {
+	if (shr_spawn(argv, fds[1], fds[1], &proc)) {
 		close(fds[0]);
 		close(fds[1]);
-		printf(" - shr_spawn_sync() failed [FAIL]\n");
+		printf(" - shr_spawn() failed [FAIL]\n");
 		return false;
 	}
 	close(fds[1]); /* only the child holds a writer now */
 
-	while (total < sizeof(buf) - 1 &&
-	       (n = read(fds[0], buf + total, sizeof(buf) - 1 - total)) > 0)
-		total += (size_t)n;
+	/*
+	 * Drain the pipe to EOF before waiting. Keep the first sizeof(buf)-1
+	 * bytes and discard any overflow, but keep reading either way: stopping
+	 * early would leave the child's next write() to a full pipe unread, and
+	 * closing fds[0] would then SIGPIPE it (reported as signaled, not
+	 * exited). Reading to EOF also avoids a deadlock on a full buffer.
+	 */
+	while ((n = read(fds[0], scratch, sizeof(scratch))) > 0) {
+		size_t room = sizeof(buf) - 1 - total;
+		size_t take = ((size_t)n < room) ? (size_t)n : room;
+
+		memcpy(buf + total, scratch, take);
+		total += take;
+	}
 	close(fds[0]);
 	buf[total] = '\0';
+
+	if (shr_wait_proc(proc, &exited, &code)) {
+		printf(" - shr_wait_proc() failed [FAIL]\n");
+		return false;
+	}
 
 	pass &= check_bool("child exited (not signaled)", exited, true);
 	pass &= check_bool("child exit status nonzero", code != 0, true);

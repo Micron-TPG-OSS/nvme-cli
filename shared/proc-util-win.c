@@ -10,16 +10,42 @@
 #include <io.h>
 #include <process.h>
 #include <stdio.h>
+#include <windows.h>
 
 #include "proc-util.h"
 
-int shr_pipe(int fds[2])
+/*
+ * _dup() returns an inheritable fd, so the stdout/stderr backups would leak
+ * into the child spawned with _P_NOWAIT (created before they are restored and
+ * closed). Clear the inherit flag on the underlying handle so the child
+ * inherits only its redirected streams.
+ *
+ * Note: _spawnv() passes fds 0/1/2 to the child as its standard handles via
+ * the CRT startup block, regardless of the pipe's _O_NOINHERIT flag.
+ * The child still receives the redirected stdout/stderr, while the raw
+ * (high-numbered) pipe fds stay uninherited, which is what lets the pipe
+ * reach EOF once the child exits instead of hanging the drain.
+ */
+static void clear_inherit(int fd)
 {
-	return _pipe(fds, 1 << 16, _O_BINARY) ? -errno : 0;
+	intptr_t h = _get_osfhandle(fd);
+
+	if (h != -1)
+		SetHandleInformation((HANDLE)h, HANDLE_FLAG_INHERIT, 0);
 }
 
-int shr_spawn_sync(const char *const argv[], int out_fd, int err_fd,
-		   bool *exited, int *code)
+int shr_pipe(int fds[2])
+{
+	/*
+	 * _O_NOINHERIT so a spawned child does not inherit the raw pipe fds:
+	 * the _dup2() onto stdout/stderr in shr_spawn() gives the child only
+	 * its redirected streams. Binary mode avoids CRLF translation.
+	 */
+	return _pipe(fds, 1 << 16, _O_BINARY | _O_NOINHERIT) ? -errno : 0;
+}
+
+int shr_spawn(const char *const argv[], int out_fd, int err_fd,
+	      shr_proc_t *proc)
 {
 	int saved_out = -1, saved_err = -1;
 	intptr_t rc = -1;
@@ -41,6 +67,7 @@ int shr_spawn_sync(const char *const argv[], int out_fd, int err_fd,
 			err = errno;
 			goto restore;
 		}
+		clear_inherit(saved_out);
 	}
 	if (err_fd >= 0) {
 		fflush(stderr);
@@ -49,9 +76,14 @@ int shr_spawn_sync(const char *const argv[], int out_fd, int err_fd,
 			err = errno;
 			goto restore;
 		}
+		clear_inherit(saved_err);
 	}
 
-	rc = _spawnv(_P_WAIT, argv[0], argv);
+	/*
+	 * _P_NOWAIT so the child runs concurrently: the caller must drain a
+	 * pipe target before shr_wait_proc(); waiting here would deadlock.
+	 */
+	rc = _spawnv(_P_NOWAIT, argv[0], argv);
 	if (rc == -1)
 		err = errno;
 
@@ -71,13 +103,30 @@ restore:
 	if (rc == -1)
 		return err ? -err : -EIO;
 
+	*proc = rc;
+
+	return 0;
+}
+
+int shr_wait_proc(shr_proc_t proc, bool *exited, int *code)
+{
+	unsigned int u;
+	int status;
+
+	if (_cwait(&status, proc, 0) == -1)
+		return -errno;
+
 	/*
-	 * _spawnv(_P_WAIT) returns the child's exit code directly. Windows has
-	 * no signals, but a crash (e.g. abort()) surfaces as a 0xCxxxxxxx
-	 * status, negative once narrowed to int -- treat that as "not exited".
+	 * _cwait() reports the child's exit code in status. Windows has no
+	 * signals, but a crash surfaces as a Microsoft-defined error-severity
+	 * NTSTATUS code in 0xC0000000-0xCFFFFFFF (e.g. 0xC0000005 access
+	 * violation, 0xC00000FD stack overflow). Bound both ends so a normal
+	 * exit(-1) (0xFFFFFFFF, which is above that range) is preserved as a
+	 * clean exit with *code == -1 rather than misread as a crash.
 	 */
-	*exited = (int)rc >= 0;
-	*code = (int)rc;
+	u = (unsigned int)status;
+	*exited = !(u >= 0xC0000000u && u <= 0xCFFFFFFFu);
+	*code = status;
 
 	return 0;
 }
