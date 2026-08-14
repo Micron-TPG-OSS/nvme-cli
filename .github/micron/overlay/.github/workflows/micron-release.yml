@@ -223,6 +223,9 @@ jobs:
             runner: windows-latest
             msystem: UCRT64
             cc: /ucrt64/bin/gcc
+            # MSYS2's gcc links libwinpthread through its own spec file, so
+            # nothing extra is needed here.
+            extra_link_args: ''
             packages: >-
               git zip
               mingw-w64-ucrt-x86_64-gcc
@@ -236,6 +239,14 @@ jobs:
             runner: windows-11-arm
             msystem: CLANGARM64
             cc: /clangarm64/bin/clang
+            # clang has no such spec, so anything it links that is not
+            # nvme.exe itself is left with libnvme's clock_gettime64
+            # reference unresolved -- which is how libnvme's own test
+            # executables fail to link. -Bstatic/-Bdynamic mirrors what
+            # meson.build already does for nvme.exe, so adding this keeps
+            # every binary in the build self-contained rather than trading
+            # the link error for a libwinpthread-1.dll dependency.
+            extra_link_args: '-Wl,-Bstatic -lwinpthread -Wl,-Bdynamic'
             packages: >-
               git zip
               mingw-w64-clang-aarch64-clang
@@ -250,6 +261,7 @@ jobs:
       VERSION: ${{ needs.detect.outputs.version }}
       UPSTREAM_SHA: ${{ needs.detect.outputs.upstream_sha }}
       ARCH: ${{ matrix.arch }}
+      EXTRA_LINK_ARGS: ${{ matrix.extra_link_args }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -296,9 +308,22 @@ jobs:
           # No --prefix: we never run "meson install", and GITHUB_WORKSPACE is a
           # backslashed Windows path inside the MSYS2 shell, which meson
           # rejects as a prefix.
+
+          # c_link_args/cpp_link_args apply to every target in the build,
+          # subprojects included, which is the point: the link args
+          # meson.build adds for --default-library=static reach nvme.exe
+          # only, so libnvme's own targets need theirs from here. See the
+          # matrix for why only ARM64 sets this.
+          EXTRA=()
+          if [ -n "${EXTRA_LINK_ARGS}" ]; then
+            EXTRA+=( "-Dc_link_args=${EXTRA_LINK_ARGS}" )
+            EXTRA+=( "-Dcpp_link_args=${EXTRA_LINK_ARGS}" )
+          fi
+
           CC='${{ matrix.cc }}' meson setup .build-release \
             --buildtype=release \
-            --default-library=static
+            --default-library=static \
+            "${EXTRA[@]}"
 
       - name: Compile
         shell: msys2 {0}
