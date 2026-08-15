@@ -9,7 +9,7 @@
  * validators.
  */
 
-#include <shr-assert.h>
+#include <shared/assert-util.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>

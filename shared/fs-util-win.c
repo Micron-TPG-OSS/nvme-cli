@@ -16,8 +16,8 @@
 #include <sys/stat.h>
 #include <windows.h>
 
-#include "cleanup.h"
-#include "compiler-attributes.h"
+#include "cleanup-util.h"
+#include "compiler-attributes-util.h"
 #include "fs-util.h"
 
 #ifndef O_BINARY
@@ -88,9 +88,23 @@ int shr_unlink(const char *path)
 	return 0;
 }
 
+int shr_rmdir(const char *path)
+{
+	if (_rmdir(path) < 0)
+		return -errno;
+	return 0;
+}
+
 bool shr_fd_is_open(int fd)
 {
 	return _get_osfhandle(fd) != -1;
+}
+
+int shr_close(int fd)
+{
+	if (_close(fd) < 0)
+		return -errno;
+	return 0;
 }
 
 const char *shr_dev_null(void)

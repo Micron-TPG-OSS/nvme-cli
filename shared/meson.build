@@ -12,17 +12,17 @@
 
 sources = [
     'array-util.c',
-    'base64.c',
-    'crc32.c',
+    'assert-util.c',
+    'base64-util.c',
+    'crc32-util.c',
     'fs-util.c',
     'hex-util.c',
-    'ini.c',
+    'ini-util.c',
     'int-util.c',
     'parse-util.c',
     'progress-util.c',
-    'shr-assert.c',
     'suffix-util.c',
-    'table.c',
+    'table-util.c',
     'time-util.c',
     'uint128-util.c',
     'uuid-util.c',
@@ -57,10 +57,10 @@ libshared = static_library(
 )
 
 shared_dep = declare_dependency(
-    include_directories: '.',
+    include_directories: '..',
     link_with: libshared,
 )
 
 if want_tests
-    subdir('test')
+    subdir('tests')
 endif

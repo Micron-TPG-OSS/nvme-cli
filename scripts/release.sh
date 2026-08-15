@@ -65,10 +65,8 @@ unregister_cleanup() {
 
 trap cleanup EXIT
 
-register_cleanup
-
 # expected version regex
-re='^v([0-9]+\.[0-9]+(\.[0-9]+)?)(-(rc|a|b)\.[0-9]+)?$'
+re='^v([0-9]+\.[0-9]+(\.[0-9]+)?)(-(rc|a|b)\.?[0-9]+)?$'
 
 # use the version string provided from the command line
 if [[ "$VERSION" =~ ${re} ]]; then
@@ -80,6 +78,8 @@ else
     echo "invalid version string $VERSION"
     exit 1
 fi
+
+register_cleanup
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
@@ -126,12 +126,15 @@ if ! "${BUILDDIR}/nvme" utils dump-command-metadata > "${BUILDDIR}/metadata.json
     exit 1
 fi
 
-./completions/generate-completions.py --bash completions/bash-nvme-completion.sh < "${BUILDDIR}/metadata.json"
+./completions/generate-completions.py \
+    --bash completions/bash-nvme-completion.sh \
+    --zsh completions/_nvme \
+    < "${BUILDDIR}/metadata.json"
 rm -rf -- "${BUILDDIR}"
 
-if [[ -n $(git status -s -- completions/bash-nvme-completion.sh) ]]; then
-    git add completions/bash-nvme-completion.sh
-    git commit -s -m "completions: regenerate bash completion for $VERSION"
+if [[ -n $(git status -s -- completions/bash-nvme-completion.sh completions/_nvme) ]]; then
+    git add completions/bash-nvme-completion.sh completions/_nvme
+    git commit -s -m "completions: regenerate bash and zsh completions for $VERSION"
 fi
 
 # update meson.build
