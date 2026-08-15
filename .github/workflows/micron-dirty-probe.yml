@@ -3,10 +3,17 @@
 #
 # THROWAWAY DIAGNOSTIC -- delete this file once the question is answered.
 #
-# "git describe --dirty" reports 3.0-b.3+ on a fresh tag checkout in the
-# Windows release build, before meson has run. This reproduces just the
-# checkout and asks git what it thinks is modified, on both runners and with
-# both git binaries (the runner's Git for Windows and MSYS2's).
+# Round 1 established the cause of "nvme version 3.0-b.3 (git 3.0-b.3+)":
+# actions/checkout runs Git for Windows, whose config on the runner has
+# core.autocrlf=true, so the working tree is written with CRLF. MSYS2's git --
+# the one meson calls for "git describe" -- has autocrlf unset, so it sees
+# every text file as modified and describe reports the tree as dirty.
+#
+# Round 2 tests the fix: turn autocrlf off before checkout, so the working
+# tree is byte-identical to the repository and both git binaries agree.
+#
+# sed -n '1,Np' instead of "head -N" throughout: setup-msys2's shell runs with
+# -e and pipefail, so head closing the pipe early kills the step with 141.
 
 name: Micron - dirty tree probe
 
@@ -17,6 +24,10 @@ on:
         description: 'Tag to check out'
         type: string
         default: 'v3.0-b.3'
+      fix:
+        description: 'Set core.autocrlf=false before checking out'
+        type: boolean
+        default: true
 
 jobs:
   probe:
@@ -34,6 +45,20 @@ jobs:
             runner: windows-11-arm
             msystem: CLANGARM64
     steps:
+      - name: Where does autocrlf come from, and turn it off
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo "== autocrlf before, with origins =="
+          git config --show-origin --get-all core.autocrlf || echo '<unset>'
+          if [ "${{ inputs.fix }}" = "true" ]; then
+            git config --global core.autocrlf false
+            echo "== autocrlf after =="
+            git config --show-origin --get-all core.autocrlf || echo '<unset>'
+          else
+            echo "fix=false: leaving autocrlf alone"
+          fi
+
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: refs/tags/${{ inputs.tag }}
@@ -43,29 +68,16 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          echo "== git version =="
           git --version
-          echo "== relevant config =="
-          for k in core.fileMode core.autocrlf core.symlinks core.ignorecase \
-                   core.eol core.safecrlf; do
+          echo "== config =="
+          for k in core.autocrlf core.fileMode core.eol; do
             echo "$k = $(git config --get "$k" || echo '<unset>')"
           done
           echo "== describe =="
           git describe --abbrev=7 --dirty=+ || true
-          echo "== status --porcelain (tracked only) =="
-          git status --porcelain --untracked-files=no | head -50
-          echo "== count =="
+          echo "== modified tracked files =="
+          git status --porcelain --untracked-files=no | sed -n '1,10p'
           git status --porcelain --untracked-files=no | wc -l
-          echo "== diff --summary =="
-          git diff --summary | head -30
-          echo "== diff --stat (tail) =="
-          git diff --stat | tail -10
-          echo "== diff-index HEAD =="
-          git diff-index --name-status HEAD | head -30
-          echo "== after an explicit refresh =="
-          git update-index --refresh || true
-          git diff-index --name-status HEAD | head -30
-          git describe --abbrev=7 --dirty=+ || true
 
       - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
         with:
@@ -78,31 +90,19 @@ jobs:
         run: |
           set -uo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          echo "== git version =="
           git --version
-          echo "== relevant config =="
-          for k in core.fileMode core.autocrlf core.symlinks core.ignorecase \
-                   core.eol core.safecrlf; do
+          echo "== config =="
+          for k in core.autocrlf core.fileMode core.eol; do
             echo "$k = $(git config --get "$k" || echo '<unset>')"
           done
           echo "== describe =="
           git describe --abbrev=7 --dirty=+ || true
-          echo "== status --porcelain (tracked only) =="
-          git status --porcelain --untracked-files=no | head -50
-          echo "== count =="
+          echo "== modified tracked files =="
+          git status --porcelain --untracked-files=no | sed -n '1,10p'
           git status --porcelain --untracked-files=no | wc -l
-          echo "== diff --summary =="
-          git diff --summary | head -30
-          echo "== first modified file, in detail =="
-          F="$(git diff-index --name-only HEAD | head -1)"
-          if [ -n "${F}" ]; then
-            echo "file: ${F}"
-            git diff --no-color -- "${F}" | head -20
-            ls -l "${F}"
-            git ls-files -s -- "${F}"
+          echo "== line endings on disk =="
+          if head -c 400 CONTRIBUTING.md | grep -q $'\r'; then
+            echo "CONTRIBUTING.md has CRLF"
           else
-            echo "nothing modified according to diff-index"
+            echo "CONTRIBUTING.md has LF"
           fi
-          echo "== describe after refresh =="
-          git update-index --refresh || true
-          git describe --abbrev=7 --dirty=+ || true
