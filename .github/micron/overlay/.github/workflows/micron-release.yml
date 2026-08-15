@@ -193,7 +193,16 @@ jobs:
             exit 1
           fi
 
-          EXISTING="$(git ls-remote --tags origin "refs/tags/${TAG}" | cut -f1)"
+          # Fetch the fork's tag rather than reading it with ls-remote: for an
+          # annotated tag ls-remote reports the tag object's sha, not the
+          # commit, so comparing it against upstream_sha said "mismatch" for a
+          # tag that was in fact already correct. rev-list peels it.
+          EXISTING=""
+          if git fetch --no-tags origin \
+               "refs/tags/${TAG}:refs/fork-tags/${TAG}" 2>/dev/null; then
+            EXISTING="$(git rev-list -n1 "refs/fork-tags/${TAG}")"
+          fi
+
           if [ -z "${EXISTING}" ]; then
             git push origin "refs/tags/${TAG}"
             echo "Pushed ${TAG} (${UPSTREAM_SHA}) to ${GITHUB_REPOSITORY}"
