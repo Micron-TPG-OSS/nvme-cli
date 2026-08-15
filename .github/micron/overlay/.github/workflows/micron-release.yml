@@ -272,6 +272,17 @@ jobs:
       ARCH: ${{ matrix.arch }}
       EXTRA_LINK_ARGS: ${{ matrix.extra_link_args }}
     steps:
+      # actions/checkout uses Git for Windows, and these runners ship
+      # core.autocrlf=true in its system config, so the working tree is
+      # written with CRLF. MSYS2's git -- the one meson calls for "git
+      # describe" -- has autocrlf unset, so it saw all ~700 text files as
+      # modified and stamped the binary "nvme version 3.0-b.3 (git
+      # 3.0-b.3+)". Checking out with LF makes the two agree that a fresh
+      # tag checkout is clean.
+      - name: Check out without CRLF conversion
+        shell: bash
+        run: git config --global core.autocrlf false
+
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: refs/tags/${{ needs.detect.outputs.tag }}
@@ -294,7 +305,19 @@ jobs:
             echo "::error::HEAD is ${HEAD_SHA}, expected upstream tag commit ${UPSTREAM_SHA}"
             exit 1
           fi
-          git describe --abbrev=7 --dirty=+
+          DESC="$(git describe --abbrev=7 --dirty=+)"
+          echo "${DESC}"
+
+          # A dirty tree means the version baked into nvme.exe gets a "+",
+          # so say what git thinks changed. A warning rather than an error:
+          # the artifacts are still the tag's code, and a release should not
+          # be blocked by a cosmetic version suffix.
+          case "${DESC}" in
+          *+)
+            echo "::warning::tree is dirty at ${TAG}; nvme.exe will report ${DESC}"
+            git status --porcelain --untracked-files=no | sed -n '1,20p'
+            ;;
+          esac
 
       - name: Configure
         shell: msys2 {0}
