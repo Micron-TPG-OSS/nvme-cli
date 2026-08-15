@@ -392,9 +392,13 @@ jobs:
 
           ZIP="nvme-cli-${VERSION}-${ARCH}.zip"
 
-          mkdir -p dist/stage
-          cp .build-release/nvme.exe dist/stage/
-          (cd dist/stage && zip -9 "../${ZIP}" nvme.exe)
+          # Stage outside dist/ so dist/ holds exactly the release assets and
+          # nothing else: the release job hands dist/* straight to
+          # "gh release upload", which fails on a directory.
+          rm -rf stage dist
+          mkdir -p stage dist
+          cp .build-release/nvme.exe stage/
+          (cd stage && zip -9 "../dist/${ZIP}" nvme.exe)
           (cd dist && sha256sum "${ZIP}" > "${ZIP}.sha256")
 
           # Recorded in the release notes, as the 3.0-b.3 release did.
@@ -430,7 +434,9 @@ jobs:
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         if: failure()
         with:
-          name: windows-${{ matrix.arch }}-logs
+          # Not windows-*: the release job downloads that pattern as the
+          # release assets.
+          name: logs-${{ matrix.arch }}
           path: |
             .build-release/meson-logs/*.txt
 
@@ -493,6 +499,10 @@ jobs:
 
           TITLE="nvme-cli ${VERSION} (Windows x64 + ARM64)"
 
+          # Named explicitly rather than dist/*, so anything that lands in
+          # dist/ by accident is not published as a release asset.
+          ASSETS=( dist/*.zip dist/*.zip.sha256 )
+
           # Mirror upstream's prerelease flag: every v3.0-* release so far is one.
           PRERELEASE_FLAG=false
           if [ "${PRERELEASE}" = "true" ]; then
@@ -514,7 +524,8 @@ jobs:
               --notes-file notes.md \
               --draft=false \
               --prerelease="${PRERELEASE_FLAG}"
-            gh release upload "${TAG}" --repo "${GITHUB_REPOSITORY}" --clobber dist/*
+            gh release upload "${TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --clobber "${ASSETS[@]}"
           else
             ARGS=(
               "${TAG}"
@@ -526,7 +537,7 @@ jobs:
             if [ "${PRERELEASE_FLAG}" = "true" ]; then
               ARGS+=(--prerelease)
             fi
-            gh release create "${ARGS[@]}" dist/*
+            gh release create "${ARGS[@]}" "${ASSETS[@]}"
           fi
 
           echo "Published ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}" \
