@@ -21,7 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <compiler-attributes.h>
+#include <shared/compiler-attributes-util.h>
 
 #include "accessors.h"
 

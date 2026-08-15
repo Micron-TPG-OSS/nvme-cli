@@ -3,6 +3,14 @@
 #
 # This file is part of nvme.
 # Combined workflow to sync upstream master and merge into mingw
+#
+# Each job re-applies the Micron .github overlay after its merge, so
+# Micron-owned CI files come back to their intended contents on every sync
+# without needing a merge resolution. See .github/micron/README.md.
+#
+# This file is deliberately not overlay-managed: it runs the applier, and an
+# overlay able to rewrite its own applier could break the mechanism that would
+# fix it. Edit it in place.
 
 name: Micron - Sync and Merge
 
@@ -75,7 +83,35 @@ jobs:
           git checkout -B master origin/master
           # Merge upstream master
           git merge upstream/master -m "Sync: merge upstream master into master" --no-edit
-          # Push the merged result
+
+      - name: Re-apply Micron .github overlay
+        run: |
+          set -euo pipefail
+          cd work
+          if [ ! -f .github/micron/apply.sh ]; then
+            echo "::warning::.github/micron/apply.sh not present on master; skipping overlay"
+            exit 0
+          fi
+
+          # Invoked via bash so a missing +x bit is never the reason a sync fails.
+          bash .github/micron/apply.sh
+
+          # Stage first, then test the index: "git diff --quiet" alone ignores
+          # untracked files, so a merge that DELETED a projected file would leave
+          # the restored copy uncommitted and silently unpushed.
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Overlay already in place; nothing to commit."
+          else
+            git commit -m "Micron: re-apply .github overlay after upstream sync"
+            echo "Committed overlay changes:"
+            git show --stat --oneline HEAD | head -20
+          fi
+
+      - name: Push changes
+        run: |
+          set -euo pipefail
+          cd work
           git push origin master
 
   merge:
@@ -119,6 +155,25 @@ jobs:
           set -euo pipefail
           git fetch origin master
           git merge origin/master -m "Auto-merge master into mingw"
+
+      - name: Re-apply Micron .github overlay
+        run: |
+          set -euo pipefail
+          if [ ! -f .github/micron/apply.sh ]; then
+            echo "::warning::.github/micron/apply.sh not present on mingw; skipping overlay"
+            exit 0
+          fi
+
+          bash .github/micron/apply.sh
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Overlay already in place; nothing to commit."
+          else
+            git commit -m "Micron: re-apply .github overlay after merge"
+            echo "Committed overlay changes:"
+            git show --stat --oneline HEAD | head -20
+          fi
 
       - name: Push changes
         run: |

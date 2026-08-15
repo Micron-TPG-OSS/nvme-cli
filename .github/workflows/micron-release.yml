@@ -1,0 +1,692 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# This file is part of nvme.
+# Copyright (c) 2026 Micron Technology, Inc.
+#
+#
+# ---------------------------------------------------------------------------
+# PROJECTED FILE -- do not edit this copy.
+#
+# The source of truth is:
+#     .github/micron/overlay/.github/workflows/micron-release.yml
+#
+# .github/micron/apply.sh copies it here, and micron-sync-and-merge.yml runs
+# that applier after every upstream sync. Edits made directly to this file are
+# reverted by the next sync.
+# ---------------------------------------------------------------------------
+#
+# Publish Windows x64 + ARM64 builds of nvme-cli whenever a new release is
+# posted upstream at linux-nvme/nvme-cli.
+#
+# Why a schedule instead of "on: release"?
+#   GitHub release events do not cross repository boundaries: a release
+#   published in linux-nvme/nvme-cli cannot trigger a workflow here. So we poll
+#   the upstream releases API instead. The poll runs shortly after the 12:00 UTC
+#   "Micron - Sync and Merge" job, so master/mingw are already current.
+#
+#   The poll deliberately does NOT use the "latest release" endpoint: every
+#   v3.0-* release upstream is flagged as a prerelease, and /releases/latest
+#   skips prereleases (it still reports v2.16). We take the most recently
+#   published non-draft release, prerelease or not, and mirror that flag onto
+#   our release.
+#
+# Why build from the tag rather than from mingw?
+#   As of v3.0-rc1 the Windows port is fully upstream -- the only files mingw
+#   carries on top of the upstream tag are .github/*, TODO.md and
+#   WINDOWS_COMMAND_SUPPORT.md, none of which affect the build. Building the tag
+#   itself means the artifacts correspond exactly to the upstream release. (The
+#   previous hand-built 3.0-b.3 release shipped 3.0-b.3-150-gae99de1+, i.e. 150
+#   commits past the tag and dirty.)
+#
+# Why is the binary self-contained?
+#   meson.build links json-c and libwinpthread into the executable when
+#   default_library=static, leaving only genuine system DLLs (kernel32, bcrypt,
+#   ucrtbase) dynamic. The "verify no MinGW runtime deps" step below asserts
+#   that per run rather than taking it on faith.
+
+name: Micron - Windows Release
+
+on:
+  schedule:
+    # 12:30 UTC: 30 minutes after "Micron - Sync and Merge" runs at 12:00 UTC.
+    - cron: '30 12 * * *'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Upstream tag to build (default: newest upstream release)'
+        type: string
+        required: false
+      force:
+        description: 'Rebuild even if a release already exists for the tag'
+        type: boolean
+        default: false
+      merge_tag_into_mingw:
+        description: 'Also merge the upstream tag into mingw and push'
+        type: boolean
+        default: false
+
+concurrency:
+  group: micron-windows-release
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    name: detect upstream release
+    runs-on: ubuntu-latest
+    # Guard against this running in any further fork of this fork.
+    if: github.repository == 'Micron-TPG-OSS/nvme-cli'
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      tag: ${{ steps.check.outputs.tag }}
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+      upstream_sha: ${{ steps.check.outputs.upstream_sha }}
+    steps:
+      - name: Resolve upstream release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ inputs.tag }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${INPUT_TAG}" ]; then
+            TAG="${INPUT_TAG}"
+            echo "Using tag from workflow input: ${TAG}"
+          else
+            # Most recently published non-draft release, including prereleases.
+            TAG="$(gh api 'repos/linux-nvme/nvme-cli/releases?per_page=30' \
+              --jq '[.[] | select(.draft == false)]
+                    | sort_by(.published_at) | reverse | .[0].tag_name')"
+            echo "Newest upstream release: ${TAG}"
+          fi
+
+          if [ -z "${TAG}" ] || [ "${TAG}" = "null" ]; then
+            echo "::error::Could not determine an upstream release tag"
+            exit 1
+          fi
+
+          # Fail loudly if the tag has no release (typo'd manual input).
+          RELEASE="$(gh api "repos/linux-nvme/nvme-cli/releases/tags/${TAG}")"
+          PRERELEASE="$(printf '%s' "${RELEASE}" | jq -r '.prerelease')"
+
+          # Commit the upstream tag points at, so we can verify we build it.
+          UPSTREAM_SHA="$(gh api "repos/linux-nvme/nvme-cli/commits/${TAG}" --jq '.sha')"
+
+          # Strip the leading v: tag v3.0-rc1 -> version 3.0-rc1, matching the
+          # asset naming of the existing hand-made 3.0-b.3 release.
+          VERSION="${TAG#v}"
+
+          SHOULD_BUILD=true
+          EXISTING_DRAFT="$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" \
+            --json isDraft --jq '.isDraft' 2>/dev/null || true)"
+          if [ -n "${EXISTING_DRAFT}" ]; then
+            if [ "${FORCE}" = "true" ]; then
+              echo "Release ${TAG} already exists, but force=true -- rebuilding."
+            elif [ "${EXISTING_DRAFT}" = "true" ]; then
+              # Deleting a release's tag reverts it to a draft. A draft is
+              # unfinished work rather than a published release, so build and
+              # let the release job publish it instead of skipping forever.
+              echo "Release ${TAG} exists but is a draft -- rebuilding to finish it."
+            else
+              echo "Release ${TAG} already exists in ${GITHUB_REPOSITORY} -- nothing to do."
+              SHOULD_BUILD=false
+            fi
+          fi
+
+          {
+            echo "should_build=${SHOULD_BUILD}"
+            echo "tag=${TAG}"
+            echo "version=${VERSION}"
+            echo "prerelease=${PRERELEASE}"
+            echo "upstream_sha=${UPSTREAM_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Upstream release check"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Tag | \`${TAG}\` |"
+            echo "| Version | \`${VERSION}\` |"
+            echo "| Prerelease | \`${PRERELEASE}\` |"
+            echo "| Upstream commit | \`${UPSTREAM_SHA}\` |"
+            echo "| Building | \`${SHOULD_BUILD}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Job IDs use underscores, not hyphens: hyphens in a job ID force the
+  # awkward needs['a-b'].result form in expressions, since the expression
+  # parser reads '-' as subtraction.
+  sync_tag:
+    name: sync upstream tag into fork
+    needs: detect
+    if: needs.detect.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.detect.outputs.tag }}
+      UPSTREAM_SHA: ${{ needs.detect.outputs.upstream_sha }}
+    steps:
+      # Mirror the upstream tag into this fork so the build has a stable ref
+      # here and the GitHub release can be anchored to a real tag. This does not
+      # depend on "Micron - Sync and Merge" having already pulled the commit in
+      # via master, so it works even if a release lands between syncs.
+      #
+      # Pushed with GITHUB_TOKEN on purpose: pushes made with GITHUB_TOKEN do
+      # not start new workflow runs, which keeps this tag from tripping the
+      # "push: tags: [v*]" trigger in upload.yml.
+      - name: Fetch upstream tag and push to fork
+        run: |
+          set -euo pipefail
+          mkdir -p work && cd work
+          git init -q
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
+          git remote add upstream https://github.com/linux-nvme/nvme-cli.git
+
+          git fetch --no-tags upstream "refs/tags/${TAG}:refs/tags/${TAG}"
+
+          FETCHED_SHA="$(git rev-list -n1 "refs/tags/${TAG}")"
+          if [ "${FETCHED_SHA}" != "${UPSTREAM_SHA}" ]; then
+            echo "::error::Tag ${TAG} resolves to ${FETCHED_SHA}, expected ${UPSTREAM_SHA}"
+            exit 1
+          fi
+
+          # Fetch the fork's tag rather than reading it with ls-remote: for an
+          # annotated tag ls-remote reports the tag object's sha, not the
+          # commit, so comparing it against upstream_sha said "mismatch" for a
+          # tag that was in fact already correct. rev-list peels it.
+          EXISTING=""
+          if git fetch --no-tags origin \
+               "refs/tags/${TAG}:refs/fork-tags/${TAG}" 2>/dev/null; then
+            EXISTING="$(git rev-list -n1 "refs/fork-tags/${TAG}")"
+          fi
+
+          if [ -z "${EXISTING}" ]; then
+            git push origin "refs/tags/${TAG}"
+            echo "Pushed ${TAG} (${UPSTREAM_SHA}) to ${GITHUB_REPOSITORY}"
+          elif [ "${EXISTING}" = "${UPSTREAM_SHA}" ]; then
+            echo "Tag ${TAG} already present and matches upstream -- nothing to push"
+          else
+            # Never silently move an existing tag; a mismatch means someone
+            # tagged locally or upstream re-tagged, and that needs a human.
+            echo "::error::Tag ${TAG} exists in fork at ${EXISTING} but upstream has ${UPSTREAM_SHA}"
+            exit 1
+          fi
+
+  build:
+    name: build ${{ matrix.arch }}
+    needs: [detect, sync_tag]
+    if: needs.detect.outputs.should_build == 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Package lists mirror the proven windows jobs in build.yml, plus zip
+          # for packaging. gcc for x64; clang for ARM64 because CLANGARM64 is
+          # MSYS2's only native aarch64 environment (see build.yml for detail).
+          - arch: win64
+            runner: windows-latest
+            msystem: UCRT64
+            cc: /ucrt64/bin/gcc
+            # MSYS2's gcc links libwinpthread through its own spec file, so
+            # nothing extra is needed here.
+            extra_link_args: ''
+            packages: >-
+              git zip
+              mingw-w64-ucrt-x86_64-gcc
+              mingw-w64-ucrt-x86_64-pkgconf
+              mingw-w64-ucrt-x86_64-meson
+              mingw-w64-ucrt-x86_64-ninja
+              mingw-w64-ucrt-x86_64-ccache
+              mingw-w64-ucrt-x86_64-json-c
+              mingw-w64-ucrt-x86_64-python-jsonschema
+          - arch: arm64
+            runner: windows-11-arm
+            msystem: CLANGARM64
+            cc: /clangarm64/bin/clang
+            # clang has no such spec, so anything it links that is not
+            # nvme.exe itself is left with libnvme's clock_gettime64
+            # reference unresolved -- which is how libnvme's own test
+            # executables fail to link. -Bstatic/-Bdynamic mirrors what
+            # meson.build already does for nvme.exe, so adding this keeps
+            # every binary in the build self-contained rather than trading
+            # the link error for a libwinpthread-1.dll dependency.
+            extra_link_args: '-Wl,-Bstatic -lwinpthread -Wl,-Bdynamic'
+            packages: >-
+              git zip
+              mingw-w64-clang-aarch64-clang
+              mingw-w64-clang-aarch64-pkgconf
+              mingw-w64-clang-aarch64-meson
+              mingw-w64-clang-aarch64-ninja
+              mingw-w64-clang-aarch64-ccache
+              mingw-w64-clang-aarch64-json-c
+              mingw-w64-clang-aarch64-python-jsonschema
+    env:
+      TAG: ${{ needs.detect.outputs.tag }}
+      VERSION: ${{ needs.detect.outputs.version }}
+      UPSTREAM_SHA: ${{ needs.detect.outputs.upstream_sha }}
+      ARCH: ${{ matrix.arch }}
+      EXTRA_LINK_ARGS: ${{ matrix.extra_link_args }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: refs/tags/${{ needs.detect.outputs.tag }}
+          # Full history so meson's git describe yields the exact tag.
+          fetch-depth: 0
+
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: ${{ matrix.packages }}
+
+      - name: Confirm we are building the upstream tag
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          if [ "${HEAD_SHA}" != "${UPSTREAM_SHA}" ]; then
+            echo "::error::HEAD is ${HEAD_SHA}, expected upstream tag commit ${UPSTREAM_SHA}"
+            exit 1
+          fi
+          git describe --abbrev=7 --dirty=+
+
+      - name: Configure
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          # --default-library=static is what selects the self-contained Windows
+          # link path in meson.build (json-c + libwinpthread linked in-process).
+          #
+          # Deliberately not scripts/build.sh: its "static" config adds
+          # --wrap-mode=forcefallback, which would build json-c as a meson
+          # subproject, and the hardcoded -ljson-c in meson.build's static
+          # branch would then not resolve against the linker search path. We
+          # want MSYS2's own json-c, which ships libjson-c.a.
+          #
+          # --werror is intentionally omitted: a release build should not fail
+          # on a new compiler diagnostic. build.yml already gates warnings on
+          # every push and PR.
+          # No --prefix: we never run "meson install", and GITHUB_WORKSPACE is a
+          # backslashed Windows path inside the MSYS2 shell, which meson
+          # rejects as a prefix.
+
+          # c_link_args/cpp_link_args apply to every target in the build,
+          # subprojects included, which is the point: the link args
+          # meson.build adds for --default-library=static reach nvme.exe
+          # only, so libnvme's own targets need theirs from here. See the
+          # matrix for why only ARM64 sets this.
+          EXTRA=()
+          if [ -n "${EXTRA_LINK_ARGS}" ]; then
+            EXTRA+=( "-Dc_link_args=${EXTRA_LINK_ARGS}" )
+            EXTRA+=( "-Dcpp_link_args=${EXTRA_LINK_ARGS}" )
+          fi
+
+          CC='${{ matrix.cc }}' meson setup .build-release \
+            --buildtype=release \
+            --default-library=static \
+            "${EXTRA[@]}"
+
+      - name: Compile
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          meson compile -C .build-release
+
+      - name: Unit tests
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          meson test -C .build-release
+
+      - name: Verify no MinGW runtime deps
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+
+          # Read the PE import table rather than using ldd. ldd resolves paths
+          # through the MSYS2 runtime, which is x86_64 even on windows-11-arm,
+          # so it cannot be relied on for the aarch64 binary. Import names are
+          # host-independent. binutils ships objdump, the clang toolchain ships
+          # llvm-objdump; both print "DLL Name:" lines for PE files.
+          OBJDUMP="$(command -v objdump || command -v llvm-objdump || true)"
+          if [ -z "${OBJDUMP}" ]; then
+            echo "::error::neither objdump nor llvm-objdump found; cannot verify imports"
+            exit 1
+          fi
+
+          "${OBJDUMP}" -p .build-release/nvme.exe \
+            | awk -F'DLL Name:' '/DLL Name:/ {gsub(/[ \t\r]/, "", $2); print $2}' \
+            | sort -u > imports.txt
+
+          if [ ! -s imports.txt ]; then
+            echo "::error::could not read any DLL imports from nvme.exe"
+            exit 1
+          fi
+
+          echo "Imported DLLs:"
+          cat imports.txt
+
+          # A self-contained build imports only genuine Windows system DLLs.
+          # Any of these means the exe would need that runtime DLL shipped
+          # beside it, so fail rather than publish a zip that cannot run on a
+          # clean machine.
+          if grep -Eiq '^(libjson-c|libwinpthread|libgcc_s|libstdc\+\+|libc\+\+|libunwind|libatomic|libssp|libnvme|msys-)' imports.txt; then
+            echo "::error::nvme.exe imports MinGW/MSYS2 runtime DLLs (listed above); expected a self-contained binary"
+            exit 1
+          fi
+          echo "nvme.exe is self-contained."
+
+      - name: Package
+        id: package
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+
+          ZIP="nvme-cli-${VERSION}-${ARCH}.zip"
+
+          # Stage outside dist/ so dist/ holds exactly the release assets and
+          # nothing else: the release job hands dist/* straight to
+          # "gh release upload", which fails on a directory.
+          rm -rf stage dist
+          mkdir -p stage dist
+          cp .build-release/nvme.exe stage/
+          (cd stage && zip -9 "../dist/${ZIP}" nvme.exe)
+          (cd dist && sha256sum "${ZIP}" > "${ZIP}.sha256")
+
+          # Recorded in the release notes, as the 3.0-b.3 release did.
+          NVME_VERSION="$(./.build-release/nvme.exe version 2>/dev/null | head -1 || true)"
+
+          {
+            echo "zip=${ZIP}"
+            echo "nvme_version=${NVME_VERSION}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Report
+        shell: msys2 {0}
+        env:
+          NVME_VERSION: ${{ steps.package.outputs.nvme_version }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### ${ARCH}"
+            echo ""
+            echo '```'
+            echo "${NVME_VERSION}"
+            cat imports.txt
+            ls -l dist/
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: windows-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: failure()
+        with:
+          # Not windows-*: the release job downloads that pattern as the
+          # release assets.
+          name: logs-${{ matrix.arch }}
+          path: |
+            .build-release/meson-logs/*.txt
+
+  release:
+    name: publish release
+    needs: [detect, build]
+    if: needs.detect.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      # Created with GITHUB_TOKEN on purpose: releases published with
+      # GITHUB_TOKEN do not start new workflow runs, so this does not trip the
+      # "release: [published]" trigger in upload.yml (whose build-static job is
+      # not repository-gated and would otherwise run here pointlessly).
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ needs.detect.outputs.tag }}
+      VERSION: ${{ needs.detect.outputs.version }}
+      PRERELEASE: ${{ needs.detect.outputs.prerelease }}
+      UPSTREAM_SHA: ${{ needs.detect.outputs.upstream_sha }}
+    steps:
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          pattern: windows-*
+          path: dist
+          merge-multiple: true
+
+      - name: Compose release notes
+        run: |
+          set -euo pipefail
+          ls -l dist/
+
+          SHORT_SHA="${UPSTREAM_SHA:0:7}"
+
+          cat > notes.md <<EOF
+          Windows build of nvme-cli **${VERSION}** (Micron TPG OSS) for x64 and ARM64.
+
+          Built from the upstream release tag [\`${TAG}\`](https://github.com/linux-nvme/nvme-cli/releases/tag/${TAG}) at commit \`${SHORT_SHA}\`.
+
+          ## Download
+          Pick the zip matching your CPU architecture. Each contains a self-contained \`nvme.exe\` -- json-c and libwinpthread are linked in, so no MSYS2 runtime DLLs are required.
+
+          - **x64** — \`nvme-cli-${VERSION}-win64.zip\` (+ \`nvme-cli-${VERSION}-win64.zip.sha256\`)
+          - **ARM64** — \`nvme-cli-${VERSION}-arm64.zip\` (+ \`nvme-cli-${VERSION}-arm64.zip.sha256\`)
+
+          ## Verify
+          \`\`\`powershell
+          (Get-FileHash <downloaded-zip> -Algorithm SHA256).Hash
+          \`\`\`
+          Compare against the value in the matching \`.sha256\` file.
+
+          > ⚠️ The executable is not code-signed, so Windows SmartScreen may warn on first run.
+          EOF
+
+          cat notes.md
+
+      - name: Create release
+        run: |
+          set -euo pipefail
+
+          TITLE="nvme-cli ${VERSION} (Windows x64 + ARM64)"
+
+          # Named explicitly rather than dist/*, so anything that lands in
+          # dist/ by accident is not published as a release asset.
+          ASSETS=( dist/*.zip dist/*.zip.sha256 )
+
+          # Mirror upstream's prerelease flag: every v3.0-* release so far is one.
+          PRERELEASE_FLAG=false
+          if [ "${PRERELEASE}" = "true" ]; then
+            PRERELEASE_FLAG=true
+          fi
+
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            # force=true path. Replace the notes and title as well as the
+            # assets: leaving the old body in place would describe artifacts
+            # that no longer exist, which is how the hand-made 3.0-b.3 release
+            # ended up advertising a commit its zips were not built from.
+            #
+            # --draft=false because a release whose tag is deleted reverts to a
+            # draft, and "gh release edit" on its own would leave it that way.
+            # A rebuild should always end up published.
+            gh release edit "${TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${TITLE}" \
+              --notes-file notes.md \
+              --draft=false \
+              --prerelease="${PRERELEASE_FLAG}"
+            gh release upload "${TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --clobber "${ASSETS[@]}"
+          else
+            ARGS=(
+              "${TAG}"
+              --repo "${GITHUB_REPOSITORY}"
+              --target "${UPSTREAM_SHA}"
+              --title "${TITLE}"
+              --notes-file notes.md
+            )
+            if [ "${PRERELEASE_FLAG}" = "true" ]; then
+              ARGS+=(--prerelease)
+            fi
+            gh release create "${ARGS[@]}" "${ASSETS[@]}"
+          fi
+
+          echo "Published ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+  # Optional and off by default. The daily "Micron - Sync and Merge" already
+  # brings the tag's commits into mingw by way of master, so merging the tag
+  # here as well is redundant and only adds conflict surface. Kept as a manual
+  # switch for when you want mingw explicitly pinned at a release point.
+  merge_mingw:
+    name: merge tag into mingw
+    needs: detect
+    if: |
+      needs.detect.outputs.should_build == 'true' &&
+      inputs.merge_tag_into_mingw == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: merge-master-to-mingw
+      cancel-in-progress: false
+    env:
+      TAG: ${{ needs.detect.outputs.tag }}
+    steps:
+      - name: Generate GitHub App token
+        id: generate-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.SYNC_APP_ID }}
+          private-key: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: mingw
+          fetch-depth: 0
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Merge and push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git fetch --no-tags origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          if git merge-base --is-ancestor "refs/tags/${TAG}" HEAD; then
+            echo "mingw already contains ${TAG} -- nothing to merge"
+            exit 0
+          fi
+
+          git merge --no-edit "refs/tags/${TAG}" \
+            -m "Merge upstream ${TAG} into mingw"
+          git push origin mingw
+
+      - name: Notify on merge conflict
+        if: failure()
+        run: |
+          echo "::error::Failed to merge ${TAG} into mingw. Manual intervention required."
+          exit 1
+
+  notify:
+    name: notify on failure
+    needs: [detect, sync_tag, build, release, merge_mingw]
+    runs-on: ubuntu-latest
+    # always() required - without it, GitHub skips this job when an upstream job
+    # is skipped, ignoring the rest of the condition.
+    if: |
+      always() &&
+      (needs.detect.result == 'failure' ||
+       needs.sync_tag.result == 'failure' ||
+       needs.build.result == 'failure' ||
+       needs.release.result == 'failure' ||
+       needs.merge_mingw.result == 'failure')
+    steps:
+      - name: Determine failed job
+        id: failed-job
+        run: |
+          if [ "${{ needs.detect.result }}" == "failure" ]; then
+            echo "job_name=Detect" >> $GITHUB_OUTPUT
+            echo "job_step=resolve upstream release" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.sync_tag.result }}" == "failure" ]; then
+            echo "job_name=Sync Tag" >> $GITHUB_OUTPUT
+            echo "job_step=mirror upstream tag into fork" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.build.result }}" == "failure" ]; then
+            echo "job_name=Build" >> $GITHUB_OUTPUT
+            echo "job_step=build Windows x64/ARM64 binaries" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.release.result }}" == "failure" ]; then
+            echo "job_name=Release" >> $GITHUB_OUTPUT
+            echo "job_step=publish GitHub release" >> $GITHUB_OUTPUT
+          else
+            echo "job_name=Merge" >> $GITHUB_OUTPUT
+            echo "job_step=merge tag into mingw" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send Teams Notification
+        run: |
+          WORKFLOW_NAME="${{ github.workflow }}"
+          WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          REPO="${{ github.repository }}"
+          TRIGGERED_BY="${{ github.actor }}"
+          TAG="${{ needs.detect.outputs.tag }}"
+          FAILED_JOB="${{ steps.failed-job.outputs.job_name }}"
+          FAILED_STEP="${{ steps.failed-job.outputs.job_step }}"
+
+          cat > payload.json <<EOF
+          {
+            "@type": "MessageCard",
+            "@context": "https://schema.org/extensions",
+            "summary": "Workflow Failed: ${WORKFLOW_NAME} - ${FAILED_JOB}",
+            "themeColor": "FF0000",
+            "title": "❌ Workflow Failed: ${WORKFLOW_NAME}",
+            "sections": [
+              {
+                "activityTitle": "Repository: ${REPO}",
+                "facts": [
+                  {
+                    "name": "Failed Job:",
+                    "value": "${FAILED_JOB} (${FAILED_STEP})"
+                  },
+                  {
+                    "name": "Upstream tag:",
+                    "value": "${TAG:-unknown}"
+                  },
+                  {
+                    "name": "Triggered by:",
+                    "value": "${TRIGGERED_BY}"
+                  },
+                  {
+                    "name": "Status:",
+                    "value": "Failed"
+                  }
+                ]
+              }
+            ],
+            "potentialAction": [
+              {
+                "@type": "OpenUri",
+                "name": "View Workflow Run",
+                "targets": [
+                  {
+                    "os": "default",
+                    "uri": "${WORKFLOW_URL}"
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
+
+          curl -H "Content-Type: application/json" \
+               -d @payload.json \
+               "${{ secrets.TEAMS_WEBHOOK_URL }}"

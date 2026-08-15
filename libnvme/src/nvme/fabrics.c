@@ -35,7 +35,8 @@
 #include <ccan/list/list.h>
 #include <ccan/str/str.h>
 
-#include <compiler-attributes.h>
+#include <shared/array-util.h>
+#include <shared/compiler-attributes-util.h>
 
 #include <libnvme.h>
 
@@ -1813,7 +1814,7 @@ static bool nvmf_excluded(struct libnvme_global_ctx *ctx,
 static int nvmf_connect_disc_entry(libnvme_host_t h,
 		struct nvmf_disc_log_entry *e,
 		struct libnvme_ctrl_params *params,
-		bool *discover, libnvme_ctrl_t *cp)
+		libnvme_ctrl_t *cp)
 {
 	libnvme_ctrl_t c;
 	int ret;
@@ -1880,15 +1881,13 @@ static int nvmf_connect_disc_entry(libnvme_host_t h,
 		return ret;
 	}
 
+	/*
+	 * Self entries (SUBTYPE 03h) are filtered out by the caller before
+	 * this function is ever reached -- they never need a connection of
+	 * their own.
+	 */
 	switch (e->subtype) {
-	case NVME_NQN_CURR:
-		libnvme_ctrl_set_discovered(c, true);
-		libnvme_ctrl_set_unique_discovery_ctrl(c,
-				strcmp(e->subnqn, NVME_DISC_SUBSYS_NAME));
-		break;
 	case NVME_NQN_DISC:
-		if (discover)
-			*discover = true;
 		libnvme_ctrl_set_discovery_ctrl(c, true);
 		libnvme_ctrl_set_unique_discovery_ctrl(c,
 				strcmp(e->subnqn, NVME_DISC_SUBSYS_NAME));
@@ -1901,11 +1900,6 @@ static int nvmf_connect_disc_entry(libnvme_host_t h,
 		libnvme_ctrl_set_discovery_ctrl(c, false);
 		libnvme_ctrl_set_unique_discovery_ctrl(c, false);
 		break;
-	}
-
-	if (libnvme_ctrl_get_discovered(c)) {
-		libnvme_free_ctrl(c);
-		return -EAGAIN;
 	}
 
 	if (e->treq & NVMF_TREQ_DISABLE_SQFLOW &&
@@ -2542,6 +2536,19 @@ static libnvme_ctrl_t lookup_ctrl(libnvme_host_t h,
 	return NULL;
 }
 
+/*
+ * Same as lookup_ctrl(), but only returns a controller that's actually
+ * connected. lookup_ctrl() can also match a scanned-but-unconnected
+ * draft, which has no kernel-assigned name yet.
+ */
+static libnvme_ctrl_t lookup_live_ctrl(libnvme_host_t h,
+		const struct libnvme_ctrl_params *params)
+{
+	libnvme_ctrl_t c = lookup_ctrl(h, params);
+
+	return (c && libnvme_ctrl_get_name(c)) ? c : NULL;
+}
+
 __shr_public int libnvmf_get_owner_from_tid(struct libnvme_global_ctx *ctx,
 		const struct libnvmf_tid *tid, char **owner)
 {
@@ -2638,7 +2645,7 @@ static int set_discovery_kato(struct libnvmf_context *fctx,
 	int tmo = params->cfg.keep_alive_tmo;
 	/*
 	 * EPCSD isn't known until after the Discovery Log Page comes back, so
-	 * auto mode optimistically requests a KATO here; dc_should_connect()
+	 * auto mode optimistically requests a KATO here; dc_decide()
 	 * disconnects per entry afterward if EPCSD turns out to be unset.
 	 */
 	bool wants_kato = fctx->persistent == LIBNVMF_PERSISTENT_AUTO ||
@@ -2682,10 +2689,43 @@ static void nvme_parse_tls_args(const char *keyring, const char *tls_key,
 	}
 }
 
-static bool dc_should_disconnect(struct libnvmf_context *fctx,
-		const char *subnqn, __u16 eflags)
+enum dc_ownership {
+	DC_OWNED,
+	DC_BORROWED,
+};
+
+/*
+ * Decide whether a discovery controller connection should be disconnected
+ * once its own Discovery Log Page has been fully walked. Pure function,
+ * no I/O, so it is directly unit-testable.
+ *
+ * @own: DC_BORROWED means this connection pre-existed the walk and is
+ *       never ours to disconnect, regardless of persistence mode.
+ * @self_seen: whether this DC's own self entry (SUBTYPE 03h, "current
+ *             discovery subsystem") was found in its own Discovery Log
+ *             Page.
+ * @self_eflags: that self entry's EFLAGS; meaningful only if @self_seen.
+ * @parent_eflags: the EFLAGS this DC's own referral entry carried in its
+ *                 parent's Discovery Log Page, or NULL if this DC has no
+ *                 parent (the primary). Used only as a fallback when
+ *                 @self_seen is false.
+ */
+static bool dc_decide(struct libnvmf_context *fctx, const char *subnqn,
+		enum dc_ownership own, bool self_seen, __u16 self_eflags,
+		const __u16 *parent_eflags)
 {
+	__u16 eflags;
 	bool disconnect;
+
+	if (own == DC_BORROWED)
+		return false;
+
+	if (self_seen)
+		eflags = self_eflags;
+	else if (parent_eflags)
+		eflags = *parent_eflags;
+	else
+		eflags = 0;
 
 	switch (fctx->persistent) {
 	case LIBNVMF_PERSISTENT_FORCE:
@@ -2707,26 +2747,6 @@ static bool dc_should_disconnect(struct libnvmf_context *fctx,
 	}
 
 	return disconnect;
-}
-
-static bool dc_should_connect(struct libnvmf_context *fctx,
-		struct nvmf_disc_log_entry *e, bool *pdisconnect)
-{
-	__u16 eflags;
-
-	if (e->subtype == NVME_NQN_NVME) {
-		*pdisconnect = false;
-		return fctx->connect;
-	}
-
-	eflags = le16_to_cpu(e->eflags);
-
-	/* Discovery controller returns duplicate information. */
-	if (eflags & NVMF_DISC_EFLAGS_DUPRETINFO)
-		return false;
-
-	*pdisconnect = dc_should_disconnect(fctx, e->subnqn, eflags);
-	return true;
 }
 
 /*
@@ -2771,17 +2791,275 @@ static void dc_log_decision(struct libnvmf_context *fctx,
 		reason ? reason : "");
 }
 
+static void dc_already_connected(struct libnvmf_context *fctx,
+		libnvme_host_t h, struct nvmf_disc_log_entry *e)
+{
+	if (fctx->hooks.already_connected)
+		fctx->hooks.already_connected(fctx, h, e->subnqn,
+			libnvmf_trtype_str(e->trtype), e->traddr,
+			e->trsvcid, fctx->hooks.user_data);
+}
+
+/*
+ * The spec does not require processing referral entries deeper than
+ * eight levels.
+ */
+#define NVMF_MAX_REFERRAL_DEPTH 8
+
+/*
+ * Every discovery controller visited during one top-level walk, keyed by
+ * TID. The depth cap alone is not a cycle guard -- a referral graph can
+ * cycle back to an earlier DC within eight hops -- so this is what
+ * actually stops the walk from looping.
+ */
+SHR_PTRARRAY_DEFINE(dc_visited, struct libnvmf_tid);
+
+static bool dc_visited_has(const struct dc_visited *v,
+		const struct libnvmf_tid *tid)
+{
+	const char *canon = libnvmf_tid_get_canonical(tid);
+
+	if (!canon)
+		return false;
+
+	for (size_t i = 0; i < v->len; i++) {
+		const char *seen = libnvmf_tid_get_canonical(v->items[i]);
+
+		if (seen && !strcmp(seen, canon))
+			return true;
+	}
+
+	return false;
+}
+
+/*
+ * Registers c's own real, connected identity -- not whatever a referring
+ * entry claimed about it -- so a cycle that loops back to c (including
+ * back to the primary) is recognized even if reached via a differently
+ * reported path. Best-effort: a TID construction failure here just means
+ * this one DC isn't deduplicated, not a fatal error for the walk.
+ */
+static void dc_visited_register(struct dc_visited *visited,
+		struct libnvme_ctrl *c, struct libnvmf_context *fctx)
+{
+	struct libnvmf_tid *tid;
+	int err;
+
+	err = libnvmf_tid_from_fields(libnvme_ctrl_get_transport(c),
+			libnvme_ctrl_get_traddr(c), libnvme_ctrl_get_trsvcid(c),
+			libnvme_ctrl_get_subsysnqn(c),
+			libnvme_ctrl_get_host_traddr(c),
+			libnvme_ctrl_get_host_iface(c),
+			fctx->hostnqn, fctx->hostid, &tid);
+	if (err)
+		return;
+
+	if (dc_visited_append(visited, tid))
+		libnvmf_tid_free(tid);
+}
+
+static inline void free_libnvmf_tid(struct libnvmf_tid **tid)
+{
+	libnvmf_tid_free(*tid);
+}
+#define __cleanup_libnvmf_tid __cleanup(free_libnvmf_tid)
+
+/*
+ * A leaf entry (NVME_NQN_NVME, an I/O controller) is a dead end for the
+ * walk: connect it if --connect was requested, and there is nothing
+ * further to recurse into.
+ */
+static void dc_connect_leaf_entry(struct libnvme_global_ctx *ctx,
+		struct libnvmf_context *fctx, struct libnvme_host *h,
+		struct nvmf_disc_log_entry *e,
+		struct libnvme_ctrl_params *params)
+{
+	struct dc_decision d = { 0 };
+	int err;
+
+	if (!fctx->connect) {
+		dc_log_decision(fctx, e, &d, "connect not requested");
+		return;
+	}
+
+	if (fctx->hooks.connect_leaf) {
+		/*
+		 * NBFT's own leaf-connect quirks (DHCP retry, firing
+		 * hooks.connected) apply instead -- it fires the hook
+		 * itself.
+		 */
+		err = fctx->hooks.connect_leaf(ctx, fctx, h, e, params, &d.c);
+	} else {
+		err = nvmf_connect_disc_entry(h, e, params, &d.c);
+		if (d.c && fctx->hooks.connected)
+			fctx->hooks.connected(fctx, d.c, fctx->hooks.user_data);
+	}
+	if (d.c) {
+		d.connect = true;
+		dc_log_decision(fctx, e, &d, NULL);
+	} else if (err == -ENVME_CONNECT_ALREADY) {
+		dc_already_connected(fctx, h, e);
+	} else {
+		dc_log_decision(fctx, e, &d, libnvme_strerror(-err));
+	}
+}
+
 static int _nvmf_discover(struct libnvme_global_ctx *ctx,
 		struct libnvmf_context *fctx,
 		const struct libnvme_ctrl_params *ctrl_params,
-		struct libnvme_ctrl *c, bool primary, bool already_connected)
+		struct libnvme_ctrl *c, enum dc_ownership own, int depth,
+		struct dc_visited *visited, const __u16 *parent_eflags,
+		bool *disconnected);
+
+/*
+ * A referral entry (NVME_NQN_DISC) is a branch point: it opens up another
+ * Discovery Service to walk, unlike a leaf entry.
+ */
+static void dc_walk_referral(struct libnvme_global_ctx *ctx,
+		struct libnvmf_context *fctx, struct libnvme_host *h,
+		struct nvmf_disc_log_entry *e,
+		struct libnvme_ctrl_params *params, int depth,
+		struct dc_visited *visited, __u16 eflags)
+{
+	__cleanup_libnvmf_tid struct libnvmf_tid *tid = NULL;
+	struct dc_decision d = { 0 };
+	enum dc_ownership child_own;
+	bool child_disconnected = false;
+	libnvme_ctrl_t cl;
+	int err;
+
+	if (eflags & NVMF_DISC_EFLAGS_DUPRETINFO) {
+		dc_log_decision(fctx, e, &d, "duplicate information");
+		return;
+	}
+
+	if (depth >= NVMF_MAX_REFERRAL_DEPTH) {
+		dc_log_decision(fctx, e, &d,
+			"referral depth limit reached, not descending");
+		return;
+	}
+
+	if (libnvmf_tid_from_fields(params->transport, params->traddr,
+			params->trsvcid, params->subsysnqn,
+			params->host_traddr, params->host_iface,
+			fctx->hostnqn, fctx->hostid, &tid)) {
+		dc_log_decision(fctx, e, &d, "invalid entry");
+		return;
+	}
+
+	if (dc_visited_has(visited, tid)) {
+		dc_log_decision(fctx, e, &d, "already visited this walk");
+		return;
+	}
+
+	cl = lookup_live_ctrl(h, params);
+	if (cl) {
+		d.c = cl;
+		d.already_connected = true;
+		child_own = DC_BORROWED;
+	} else {
+		set_discovery_kato(fctx, params);
+		err = nvmf_connect_disc_entry(h, e, params, &d.c);
+		if (!d.c) {
+			if (err == -ENVME_CONNECT_ALREADY)
+				dc_already_connected(fctx, h, e);
+			else
+				dc_log_decision(fctx, e, &d,
+					libnvme_strerror(-err));
+			return;
+		}
+		child_own = DC_OWNED;
+		if (fctx->hooks.connected)
+			fctx->hooks.connected(fctx, d.c, fctx->hooks.user_data);
+	}
+	d.connect = true;
+	dc_log_decision(fctx, e, &d, NULL);
+
+	if (tid) {
+		if (!dc_visited_append(visited, tid))
+			tid = NULL; /* ownership transferred */
+	}
+
+	/*
+	 * The child decides its own fate (disconnect or persist)
+	 * internally, the same way this DC just did above for
+	 * itself. Only free it if it actually disconnected --
+	 * a persisted child must stay in the tree, since a sibling
+	 * or later referral elsewhere in this same walk may still
+	 * need to find it via lookup_live_ctrl()/dc_visited_has().
+	 */
+	_nvmf_discover(ctx, fctx, params, d.c, child_own, depth + 1,
+		       visited, &eflags, &child_disconnected);
+	if (child_disconnected)
+		libnvme_free_ctrl(d.c);
+}
+
+/*
+ * Pass 1: a first pass over the DLP entries to sanitize them and survey
+ * this DC's own self entry (SUBTYPE 03h) -- the only place this DC's own
+ * EPCSD is ever reported. Returns whether c should be disconnected once
+ * its own Discovery Log Page has been fully walked.
+ */
+static bool dc_survey_self_entry(struct libnvmf_context *fctx,
+		struct libnvme_ctrl *c, enum dc_ownership own, bool primary,
+		const __u16 *parent_eflags, struct nvmf_discovery_log *log,
+		uint64_t numrec)
+{
+	struct nvmf_disc_log_entry *self_entry = NULL;
+	struct dc_decision d = {
+		.c = c,
+		.primary = primary,
+		.already_connected = own == DC_BORROWED,
+	};
+	bool self_seen;
+	__u16 self_eflags;
+
+	for (uint64_t i = 0; i < numrec; i++) {
+		struct nvmf_disc_log_entry *e = &log->entries[i];
+
+		sanitize_discovery_log_entry(c->ctx, e);
+		if (e->subtype == NVME_NQN_CURR)
+			self_entry = e;
+	}
+
+	self_seen = self_entry != NULL;
+	self_eflags = self_seen ? le16_to_cpu(self_entry->eflags) : 0;
+
+	d.disconnect = dc_decide(fctx, libnvme_ctrl_get_subsysnqn(c), own,
+			self_seen, self_eflags, parent_eflags);
+
+	if (self_entry) {
+		dc_log_decision(fctx, self_entry, &d, NULL);
+	} else if (own == DC_BORROWED) {
+		dc_log_decision(fctx, NULL, &d,
+			"pre-existing, not ours to disconnect");
+	} else if (parent_eflags) {
+		dc_log_decision(fctx, NULL, &d,
+			"no self entry, using parent's view");
+	} else {
+		dc_log_decision(fctx, NULL, &d,
+			"no self entry, EPCSD assumed 0");
+	}
+
+	return d.disconnect;
+}
+
+static int _nvmf_discover(struct libnvme_global_ctx *ctx,
+		struct libnvmf_context *fctx,
+		const struct libnvme_ctrl_params *ctrl_params,
+		struct libnvme_ctrl *c, enum dc_ownership own, int depth,
+		struct dc_visited *visited, const __u16 *parent_eflags,
+		bool *disconnected)
 {
 	__cleanup_free struct nvmf_discovery_log *log = NULL;
 	libnvme_subsystem_t s = libnvme_ctrl_get_subsystem(c);
 	libnvme_host_t h = libnvme_subsystem_get_host(s);
-	struct nvmf_disc_log_entry *self_entry = NULL;
 	uint64_t numrec;
+	bool disconnect;
 	int err;
+
+	if (disconnected)
+		*disconnected = false;
 
 	struct libnvmf_discovery_args args = {
 		.max_retries = fctx->default_max_discovery_retries,
@@ -2802,117 +3080,89 @@ static int _nvmf_discover(struct libnvme_global_ctx *ctx,
 		fctx->hooks.discovery_log(fctx, log, numrec,
 			fctx->hooks.user_data);
 
-	for (int i = 0; i < numrec; i++) {
+	dc_visited_register(visited, c, fctx);
+
+	/*
+	 * Pass 1: survey c's own self entry, and determine if safe to
+	 * disconnect.
+	 */
+	disconnect = dc_survey_self_entry(fctx, c, own, !parent_eflags,
+					   parent_eflags, log, numrec);
+
+	/*
+	 * Safe to disconnect now, before walking c's own referrals: this
+	 * connection is only ever needed to fetch c's own DLP, and
+	 * dc_visited already recorded c, independent of whether the
+	 * connection stays open.
+	 */
+	if (disconnect) {
+		libnvmf_disconnect_ctrl(c);
+		if (disconnected)
+			*disconnected = true;
+	}
+
+	/*
+	 * Pass 2: everything else -- referrals to walk, NVM subsystem
+	 * entries to connect per --connect. Self entries are already
+	 * handled above.
+	 */
+	for (uint64_t i = 0; i < numrec; i++) {
 		struct nvmf_disc_log_entry *e = &log->entries[i];
-		struct dc_decision d = { 0 };
-		libnvme_ctrl_t cl;
-		bool discover = false;
 		__cleanup_ctrl_params struct libnvme_ctrl_params params =
 			ctrl_params_dup(ctrl_params);
+		struct dc_decision d = { 0 };
+		const char *transport;
+		__u16 eflags;
 
-		sanitize_discovery_log_entry(c->ctx, e);
-
-		params.subsysnqn = e->subnqn;
-		params.transport = libnvmf_trtype_str(e->trtype);
-		params.traddr = e->traddr;
-		params.trsvcid = e->trsvcid;
-
-		/* Already connected ? */
-		cl = lookup_ctrl(h, &params);
-		if (cl == c) {
-			/*
-			 * This entry describes c's own port (SUBTYPE 03h,
-			 * "current discovery subsystem"). It is the only
-			 * place c's own EPCSD is ever reported, so remember
-			 * it instead of silently discarding it below.
-			 */
-			if (!self_entry)
-				self_entry = e;
-			d.c = c;
-			d.already_connected = true;
-			dc_log_decision(fctx, e, &d,
-				"self entry, decision deferred to primary");
+		if (e->subtype == NVME_NQN_CURR)
 			continue;
-		}
-		if (cl && libnvme_ctrl_get_name(cl)) {
-			d.c = cl;
-			d.already_connected = true;
-			dc_log_decision(fctx, e, &d, "already connected");
-			continue;
-		}
 
 		/* Skip connect if the transport types don't match */
-		if (strcmp(libnvme_ctrl_get_transport(c),
-			   params.transport)) {
+		transport = libnvmf_trtype_str(e->trtype);
+		if (strcmp(libnvme_ctrl_get_transport(c), transport)) {
 			dc_log_decision(fctx, e, &d, "transport mismatch");
 			continue;
 		}
 
-		if (!dc_should_connect(fctx, e, &d.disconnect)) {
-			dc_log_decision(fctx, e, &d,
-				"not connecting (duplicate info, or connect not requested)");
+		params.subsysnqn = e->subnqn;
+		params.transport = transport;
+		params.traddr = e->traddr;
+		params.trsvcid = e->trsvcid;
+		eflags = le16_to_cpu(e->eflags);
+
+		if (e->subtype == NVME_NQN_NVME) {
+			dc_connect_leaf_entry(ctx, fctx, h, e, &params);
 			continue;
 		}
-		d.connect = true;
 
-		err = nvmf_connect_disc_entry(h, e, &params, &discover, &d.c);
-		if (err && err != -ENVME_CONNECT_ALREADY)
-			dc_log_decision(fctx, e, &d, libnvme_strerror(-err));
-		else
-			dc_log_decision(fctx, e, &d, NULL);
-
-		if (d.c) {
-			if (discover) {
-				set_discovery_kato(fctx, &params);
-				_nvmf_discover(ctx, fctx, &params, d.c, false,
-					       false);
-			}
-
-			if (d.disconnect) {
-				libnvmf_disconnect_ctrl(d.c);
-				libnvme_free_ctrl(d.c);
-			}
-		} else if (err == -ENVME_CONNECT_ALREADY) {
-			fctx->hooks.already_connected(fctx, h, e->subnqn,
-				libnvmf_trtype_str(e->trtype), e->traddr,
-				e->trsvcid, fctx->hooks.user_data);
-		}
-	}
-
-	/*
-	 * c has no parent to make this decision for it. Its own EPCSD is
-	 * only ever reported in its own self entry (SUBTYPE 03h); an
-	 * absent self entry means EPCSD is not reported, which the spec
-	 * defines identically to EPCSD=0.
-	 */
-	if (primary) {
-		struct dc_decision d = {
-			.c = c,
-			.primary = true,
-			.already_connected = already_connected,
-		};
-
-		if (already_connected) {
-			dc_log_decision(fctx, self_entry, &d,
-				"pre-existing, not ours to disconnect");
-		} else {
-			__u16 eflags = self_entry ?
-				le16_to_cpu(self_entry->eflags) : 0;
-
-			d.disconnect = dc_should_disconnect(fctx,
-					libnvme_ctrl_get_subsysnqn(c), eflags);
-			if (self_entry)
-				dc_log_decision(fctx, self_entry, &d, NULL);
-			else
-				dc_log_decision(fctx, NULL, &d,
-					"no self entry, EPCSD assumed 0");
-
-			if (d.disconnect)
-				libnvmf_disconnect_ctrl(c);
-		}
+		/* NVME_NQN_DISC: a referral to another Discovery Service. */
+		dc_walk_referral(ctx, fctx, h, e, &params, depth, visited,
+				  eflags);
 	}
 
 	return 0;
+}
+
+/*
+ * Owns the whole-walk visited-set lifetime, so callers don't need to know
+ * it exists. c has no parent -- it is the primary discovery controller
+ * connection -- so the walk starts at depth 0 with no parent eflags.
+ */
+static int dc_walk(struct libnvme_global_ctx *ctx, struct libnvmf_context *fctx,
+		struct libnvme_ctrl *c, enum dc_ownership own)
+{
+	struct dc_visited visited = { 0 };
+	int err;
+
+	err = _nvmf_discover(ctx, fctx, &fctx->ctrl_params, c, own, 0,
+			&visited, NULL, NULL);
+
+	/* dc_visited owns only the backing array, not the TIDs in it. */
+	for (size_t i = 0; i < visited.len; i++)
+		libnvmf_tid_free(visited.items[i]);
+	dc_visited_free(&visited);
+
+	return err;
 }
 
 __shr_public const char *libnvmf_get_default_trsvcid(const char *transport,
@@ -2943,7 +3193,8 @@ retry:
 	err = libnvmf_add_ctrl(h, c);
 	if (!err)
 		return 0;
-	if (fctx->hooks.decide_retry(fctx, err, fctx->hooks.user_data))
+	if (fctx->hooks.decide_retry &&
+	    fctx->hooks.decide_retry(fctx, err, fctx->hooks.user_data))
 		goto retry;
 
 	return err;
@@ -3043,6 +3294,137 @@ static int nvmf_create_discovery_ctrl(struct libnvme_global_ctx *ctx,
 	return 0;
 }
 
+static struct libnvme_ctrl *dc_open_by_device(struct libnvme_global_ctx *ctx,
+		struct libnvmf_context *fctx,
+		struct libnvme_ctrl_params *params, enum dc_ownership *own)
+{
+	struct libnvme_ctrl *c;
+	int err;
+
+	err = libnvme_scan_ctrl(ctx, fctx->device, &c);
+	if (err) {
+		/* No controller found, fall back to creating one. */
+		libnvme_msg(ctx, LIBNVME_LOG_ERR,
+			"ctrl device %s not found\n", fctx->device);
+		return NULL;
+	}
+
+	/* Check if device matches command-line options */
+	if (!libnvmf_ctrl_match_config(c, params)) {
+		libnvme_msg(ctx, LIBNVME_LOG_ERR,
+			"ctrl device %s found, ignoring non matching command-line options\n",
+			fctx->device);
+	}
+
+	if (!libnvme_ctrl_get_discovery_ctrl(c)) {
+		libnvme_msg(ctx, LIBNVME_LOG_ERR,
+			"ctrl device %s found, ignoring non discovery controller\n",
+			fctx->device);
+
+		libnvme_free_ctrl(c);
+		return NULL;
+	}
+
+	/*
+	 * The controller device was found, so this is an already-existing
+	 * connection: it must not be disconnected on exit. Record that fact
+	 * locally instead of overriding fctx->persistent, which must keep
+	 * reflecting what the user actually asked for.
+	 */
+	*own = DC_BORROWED;
+
+	/*
+	 * When --host-traddr/--host-iface are not specified on the
+	 * command line, use the discovery controller's (c) host-
+	 * traddr/host-iface for the connections to controllers
+	 * returned in the Discovery Log Pages. This is essential
+	 * when invoking "connect-all" with --device to reuse an
+	 * existing persistent discovery controller (as is done
+	 * for the udev rules). This ensures that host-traddr/
+	 * host-iface are consistent with the discovery controller (c).
+	 */
+	if (!params->host_traddr)
+		params->host_traddr = (char *)libnvme_ctrl_get_host_traddr(c);
+	if (!params->host_iface)
+		params->host_iface = (char *)libnvme_ctrl_get_host_iface(c);
+
+	return c;
+}
+
+/*
+ * Ownership is reported separately (@own) rather than folded into
+ * fctx->persistent, which must keep reflecting what the user actually
+ * asked for regardless of whether this connection is reused or fresh.
+ *
+ * @honor_no_reuse: false makes this ignore --no-reuse and always attempt
+ *                  reuse first. NBFT's boot-time auto-connect has no
+ *                  concept of --no-reuse and always tries to reuse an
+ *                  existing connection first.
+ */
+static int dc_open(struct libnvme_global_ctx *ctx, struct libnvmf_context *fctx,
+		struct libnvme_host *h, struct libnvme_ctrl_params *params,
+		bool honor_no_reuse, enum dc_ownership *own,
+		struct libnvme_ctrl **ctrl)
+{
+	struct libnvme_ctrl *c = NULL;
+	enum dc_ownership local_own = DC_OWNED;
+	int err;
+
+	if (!honor_no_reuse || !fctx->no_reuse) {
+		if (fctx->device)
+			c = dc_open_by_device(ctx, fctx, params, &local_own);
+
+		if (!c) {
+			c = lookup_ctrl(h, params);
+			if (c)
+				local_own = DC_BORROWED;
+		}
+	}
+
+	if (c) {
+		if (!libnvme_ctrl_get_transport_handle(c)) {
+			/*
+			 * When we found an existing controller it might not
+			 * have a device handle yet
+			 */
+			err = libnvme_open(ctx, c->name, O_RDONLY, &c->hdl);
+			if (err) {
+				libnvme_msg(ctx, LIBNVME_LOG_ERR,
+					"failed to open %s\n", c->name);
+				return err;
+			}
+		}
+	} else {
+		/*
+		 * No existing controller, or --no-reuse was given: create a
+		 * new one.
+		 */
+		err = nvmf_create_discovery_ctrl(ctx, fctx, params, h, &c);
+
+		/*
+		 * NBFT only: the OS's own DHCP client can obtain a different
+		 * local address for this HFI than the firmware had when it
+		 * built the NBFT table. Retry once without host_traddr.
+		 * fctx->nbft_hfi is NULL for every non-NBFT caller, so this
+		 * is a complete no-op for the general path.
+		 */
+		if (err == -ENVME_CONNECT_ADDRNOTAVAIL && fctx->nbft_hfi &&
+		    !strcmp(params->transport, "tcp") &&
+		    strlen(fctx->nbft_hfi->tcp_info.dhcp_server_ipaddr) > 0) {
+			params->host_traddr = NULL;
+			err = nvmf_create_discovery_ctrl(ctx, fctx, params,
+					h, &c);
+		}
+
+		if (err)
+			return err;
+	}
+
+	*own = local_own;
+	*ctrl = c;
+	return 0;
+}
+
 #define NBFT_SYSFS_FILENAME	"NBFT*"
 
 static int nbft_filter(const struct dirent *dent)
@@ -3135,7 +3517,7 @@ static bool validate_uri(struct libnvme_global_ctx *ctx,
 static int nbft_connect(struct libnvme_global_ctx *ctx,
 		struct libnvmf_context *fctx, struct libnvme_ctrl_params *params,
 		struct libnvme_host *h, struct nvmf_disc_log_entry *e,
-		struct libnbft_subsystem_ns *ss)
+		struct libnbft_subsystem_ns *ss, libnvme_ctrl_t *cp)
 {
 	libnvme_ctrl_t c;
 	int saved_log_level;
@@ -3143,12 +3525,18 @@ static int nbft_connect(struct libnvme_global_ctx *ctx,
 	bool saved_log_pid;
 	int ret;
 
+	if (cp)
+		*cp = NULL;
+
 	saved_log_level = libnvme_get_logging_level(ctx, &saved_log_pid,
 		&saved_log_tstamp);
 
-	c = lookup_ctrl(h, params);
-	if (c && libnvme_ctrl_get_name(c))
+	c = lookup_live_ctrl(h, params);
+	if (c) {
+		if (cp)
+			*cp = c;
 		return 0;
+	}
 
 	if (nvmf_excluded(ctx, params->transport,
 			  params->traddr, params->trsvcid,
@@ -3197,102 +3585,63 @@ static int nbft_connect(struct libnvme_global_ctx *ctx,
 	if (fctx->hooks.connected)
 		fctx->hooks.connected(fctx, c, fctx->hooks.user_data);
 
+	if (cp)
+		*cp = c;
 	return 0;
 }
 
-static int nbft_discovery(struct libnvme_global_ctx *ctx,
-		struct libnvmf_context *fctx,
-		const struct libnvme_ctrl_params *ctrl_params,
-		struct libnbft_discovery *dd,
-		struct libnvme_host *h, struct libnvme_ctrl *c)
+/*
+ * connect_leaf hook for the NBFT-driven walk: nbft_connect() plus the
+ * checks _nvmf_discover()'s general leaf-connect path gets for free from
+ * distinguishable lookup_ctrl()/nvmf_excluded() outcomes. nbft_connect()
+ * has its own copies of both checks internally, but folds every "nothing
+ * to do" outcome into a plain 0 -- fine for its other caller (the SSNS
+ * loop below), but not enough to fit dc_log_decision()'s
+ * connected/already-connected/reason contract. Re-checking here, before
+ * calling nbft_connect(), keeps nbft_connect() itself untouched for that
+ * other caller.
+ */
+static int nbft_connect_leaf(struct libnvme_global_ctx *ctx,
+		struct libnvmf_context *fctx, struct libnvme_host *h,
+		struct nvmf_disc_log_entry *e,
+		struct libnvme_ctrl_params *params, libnvme_ctrl_t *cp)
 {
-	struct nvmf_discovery_log *log = NULL;
+	libnvme_ctrl_t c;
 	int ret;
-	int i;
 
-	struct libnvmf_discovery_args args = {
-		.max_retries = 10 /* MAX_DISC_RETRIES */,
-		.lsp = NVMF_LOG_DISC_LSP_NONE,
-	};
+	*cp = NULL;
 
-	ret = nvme_discovery_log(c, &args, &log);
-	if (ret) {
-		libnvme_msg(ctx, LIBNVME_LOG_ERR,
-			"Discovery Descriptor %d: failed to get discovery log: %s\n",
-			dd->index, libnvme_strerror(-ret));
-		return ret;
+	c = lookup_live_ctrl(h, params);
+	if (c) {
+		*cp = c;
+		return -ENVME_CONNECT_ALREADY;
 	}
 
-	for (i = 0; i < le64_to_cpu(log->numrec); i++) {
-		struct nvmf_disc_log_entry *e = &log->entries[i];
-		__cleanup_ctrl_params struct libnvme_ctrl_params params =
-			ctrl_params_dup(ctrl_params);
-		libnvme_ctrl_t cl;
+	if (nvmf_excluded(ctx, params->transport, params->traddr,
+			  params->trsvcid, params->subsysnqn,
+			  params->host_traddr, params->host_iface,
+			  libnvme_host_get_hostnqn(h),
+			  libnvme_host_get_hostid(h)))
+		return -EPERM;
 
-		sanitize_discovery_log_entry(c->ctx, e);
+	ret = nbft_connect(ctx, fctx, params, h, e, NULL, &c);
 
-		params.subsysnqn = e->subnqn;
-		params.transport = libnvmf_trtype_str(e->trtype);
-		params.traddr = e->traddr;
-		params.trsvcid = e->trsvcid;
-
-		if (e->subtype == NVME_NQN_CURR)
-			continue;
-
-		/* Already connected ? */
-		cl = lookup_ctrl(h, &params);
-		if (cl && libnvme_ctrl_get_name(cl))
-			continue;
-
-		/* Skip connect if the transport types don't match */
-		if (strcmp(libnvme_ctrl_get_transport(c),
-			   params.transport))
-			continue;
-
-		if (e->subtype == NVME_NQN_DISC) {
-			libnvme_ctrl_t child;
-
-			ret = nvmf_connect_disc_entry(h, e, &params,
-				NULL, &child);
-			if (ret)
-				continue;
-			nbft_discovery(ctx, fctx, &params, dd, h, child);
-			libnvmf_disconnect_ctrl(child);
-			libnvme_free_ctrl(child);
-		} else {
-			ret = nbft_connect(ctx, fctx, &params, h, e, NULL);
-
-			/*
-			 * With TCP/DHCP, it can happen that the OS
-			 * obtains a different local IP address than the
-			 * firmware had. Retry without host_traddr.
-			 */
-			if (ret == -ENVME_CONNECT_ADDRNOTAVAIL &&
-			    !strcmp(params.transport, "tcp") &&
-			    strlen(dd->hfi->tcp_info.dhcp_server_ipaddr) > 0) {
-				const char *htradr = params.host_traddr;
-
-				params.host_traddr = NULL;
-				ret = nbft_connect(ctx, fctx, &params, h, e, NULL);
-
-				if (ret == 0)
-					libnvme_msg(ctx, LIBNVME_LOG_INFO,
-						"Discovery Descriptor %d: connect with host_traddr=\"%s\" failed, success after omitting host_traddr\n",
-						dd->index,
-						htradr);
-			}
-
-			if (ret)
-				libnvme_msg(ctx, LIBNVME_LOG_ERR,
-					"Discovery Descriptor %d: no controller found\n",
-					dd->index);
-			if (ret == -ENOMEM)
-				break;
-		}
+	/*
+	 * With TCP/DHCP, the OS's own DHCP client can obtain a different
+	 * local address for this HFI than the firmware had. Retry once
+	 * without host_traddr.
+	 */
+	if (ret == -ENVME_CONNECT_ADDRNOTAVAIL &&
+	    !strcmp(params->transport, "tcp") && fctx->nbft_hfi &&
+	    strlen(fctx->nbft_hfi->tcp_info.dhcp_server_ipaddr) > 0) {
+		params->host_traddr = NULL;
+		ret = nbft_connect(ctx, fctx, params, h, e, NULL, &c);
 	}
 
-	libnvme_free(log);
-	return 0;
+	if (!ret)
+		*cp = c;
+
+	return ret;
 }
 
 #define VLAN_PROC_PATH "/proc/net/vlan"
@@ -3470,7 +3819,8 @@ __shr_public int libnvmf_discover_nbft(struct libnvme_global_ctx *ctx,
 						"SSNS %d: could not find host interface for HFI %d\n",
 						(*ss)->index, hfi->index);
 
-				rr = nbft_connect(ctx, fctx, &params, h, NULL, *ss);
+				rr = nbft_connect(ctx, fctx, &params, h, NULL,
+						*ss, NULL);
 
 				/*
 				 * With TCP/DHCP, it can happen that the OS
@@ -3484,7 +3834,7 @@ __shr_public int libnvmf_discover_nbft(struct libnvme_global_ctx *ctx,
 					params.host_traddr = NULL;
 
 					rr = nbft_connect(ctx, fctx, &params, h,
-						NULL, *ss);
+						NULL, *ss, NULL);
 
 					if (rr == 0)
 						libnvme_msg(ctx, LIBNVME_LOG_INFO,
@@ -3511,7 +3861,7 @@ __shr_public int libnvmf_discover_nbft(struct libnvme_global_ctx *ctx,
 			__cleanup_free char *trsvcid = NULL;
 			__cleanup_ctrl_params struct libnvme_ctrl_params params =
 				ctrl_params_copy(&fctx->ctrl_params);
-			bool persistent = false;
+			enum dc_ownership own;
 			bool linked = false;
 			libnvme_ctrl_t c;
 
@@ -3568,7 +3918,8 @@ __shr_public int libnvmf_discover_nbft(struct libnvme_global_ctx *ctx,
 					strdup(libnvmf_get_default_trsvcid(
 						uri->protocol, true));
 
-			params.subsysnqn = NVME_DISC_SUBSYS_NAME;
+			params.subsysnqn = (*dd)->nqn ?
+				(*dd)->nqn : NVME_DISC_SUBSYS_NAME;
 			params.transport =  uri->protocol;
 			params.traddr = uri->host;
 			params.trsvcid = trsvcid;
@@ -3579,24 +3930,21 @@ __shr_public int libnvmf_discover_nbft(struct libnvme_global_ctx *ctx,
 					"Discovery Descriptor %d: could not find host interface for HFI %d\n",
 					(*dd)->index, hfi->index);
 
-			/* Lookup existing discovery controller */
-			c = lookup_ctrl(h, &params);
-			if (c && libnvme_ctrl_get_name(c))
-				persistent = true;
+			/*
+			 * NBFT boot discovery is a one-shot operation: never
+			 * honor --no-reuse (dc_open()'s honor_no_reuse=false
+			 * below) and never keep a freshly created connection
+			 * alive past this walk (--persistent has no meaning
+			 * here either). nbft_hfi and connect_leaf give
+			 * dc_open() and the shared walker's leaf-connect step
+			 * access to this DC's own HFI/leaf-connect quirks,
+			 * several stack frames removed from this loop.
+			 */
+			fctx->nbft_hfi = hfi;
+			fctx->hooks.connect_leaf = nbft_connect_leaf;
+			fctx->persistent = LIBNVMF_PERSISTENT_NO;
 
-			if (!c) {
-				ret = nvmf_create_discovery_ctrl(ctx, fctx,
-					&params, h, &c);
-				if (ret == -ENVME_CONNECT_ADDRNOTAVAIL &&
-				    !strcmp(params.transport, "tcp") &&
-				    strlen(hfi->tcp_info.dhcp_server_ipaddr) > 0) {
-					params.traddr = NULL;
-					ret = nvmf_create_discovery_ctrl(ctx,
-						fctx, &params, h, &c);
-				}
-			} else
-				ret = 0;
-
+			ret = dc_open(ctx, fctx, h, &params, false, &own, &c);
 			if (ret) {
 				libnvme_msg(ctx, LIBNVME_LOG_ERR,
 					"Discovery Descriptor %d: failed to add discovery controller: %s\n",
@@ -3604,9 +3952,7 @@ __shr_public int libnvmf_discover_nbft(struct libnvme_global_ctx *ctx,
 				goto out_free;
 			}
 
-			rr = nbft_discovery(ctx, fctx, &params, *dd, h, c);
-			if (!persistent)
-				libnvmf_disconnect_ctrl(c);
+			rr = dc_walk(ctx, fctx, c, own);
 			libnvme_free_ctrl(c);
 			if (rr == -ENOMEM) {
 				ret = rr;
@@ -3619,125 +3965,12 @@ out_free:
 	return ret;
 }
 
-static struct libnvme_ctrl *discover_lookup_ctrl_by_device(
-		struct libnvme_global_ctx *ctx, struct libnvmf_context *fctx,
-		bool *already_connected)
-{
-	struct libnvme_ctrl *c;
-	int err;
-
-	err = libnvme_scan_ctrl(ctx, fctx->device, &c);
-	if (err) {
-		/*
-		 * No controller found, fall back to create one.
-		 * But that controller cannot be persistent.
-		 */
-		libnvme_msg(ctx, LIBNVME_LOG_ERR,
-			"ctrl device %s not found%s\n", fctx->device,
-			fctx->persistent == LIBNVMF_PERSISTENT_AUTO ||
-			fctx->persistent == LIBNVMF_PERSISTENT_FORCE ?
-				", ignoring --persistent" : "");
-
-		fctx->persistent = LIBNVMF_PERSISTENT_NO;
-
-		return NULL;
-	}
-
-	/* Check if device matches command-line options */
-	if (!libnvmf_ctrl_match_config(c, &fctx->ctrl_params)) {
-		libnvme_msg(ctx, LIBNVME_LOG_ERR,
-			"ctrl device %s found, ignoring non matching command-line options\n",
-			fctx->device);
-	}
-
-	if (!libnvme_ctrl_get_discovery_ctrl(c)) {
-		libnvme_msg(ctx, LIBNVME_LOG_ERR,
-			"ctrl device %s found, ignoring non discovery controller\n",
-			fctx->device);
-
-		fctx->persistent = LIBNVMF_PERSISTENT_NO;
-
-		libnvme_free_ctrl(c);
-		return NULL;
-	}
-
-	/*
-	 * The controller device was found, so this is an already-existing
-	 * connection: it must not be disconnected on exit. Record that fact
-	 * locally instead of overriding fctx->persistent, which must keep
-	 * reflecting what the user actually asked for.
-	 */
-	*already_connected = true;
-
-	/*
-	 * When --host-traddr/--host-iface are not specified on the
-	 * command line, use the discovery controller's (c) host-
-	 * traddr/host-iface for the connections to controllers
-	 * returned in the Discovery Log Pages. This is essential
-	 * when invoking "connect-all" with --device to reuse an
-	 * existing persistent discovery controller (as is done
-	 * for the udev rules). This ensures that host-traddr/
-	 * host-iface are consistent with the discovery controller (c).
-	 */
-	if (!fctx->ctrl_params.host_traddr)
-		fctx->ctrl_params.host_traddr =
-			(char *)libnvme_ctrl_get_host_traddr(c);
-	if (!fctx->ctrl_params.host_iface)
-		fctx->ctrl_params.host_iface =
-			(char *)libnvme_ctrl_get_host_iface(c);
-
-	return c;
-}
-
-static int discover_lookup_ctrl(struct libnvme_global_ctx *ctx,
-		struct libnvmf_context *fctx, struct libnvme_host *h,
-		struct libnvme_ctrl **ctrl, bool *already_connected)
-{
-	struct libnvme_ctrl *c = NULL;
-	int err;
-
-	if (fctx->device)
-		c = discover_lookup_ctrl_by_device(ctx, fctx,
-						    already_connected);
-
-	if (!c) {
-		c = lookup_ctrl(h, &fctx->ctrl_params);
-		if (c) {
-			/*
-			 * It was not created by us: record that fact
-			 * locally, do not touch fctx->persistent.
-			 */
-			*already_connected = true;
-		}
-	}
-
-	if (!c)
-		return 0;
-
-	if (!libnvme_ctrl_get_transport_handle(c)) {
-		/*
-		 * When we found an existing controller it might not have a
-		 * device handle yet
-		 */
-		err = libnvme_open(ctx, c->name, O_RDONLY, &c->hdl);
-		if (err) {
-			libnvme_msg(ctx, LIBNVME_LOG_ERR,
-				"failed to open %s\n", c->name);
-
-			return err;
-		}
-	}
-
-	*ctrl = c;
-	return 0;
-}
-
 __shr_public int libnvmf_discover(struct libnvme_global_ctx *ctx,
 		struct libnvmf_context *fctx)
 {
 	struct libnvme_ctrl *c = NULL;
 	struct libnvme_host *h;
-	bool already_connected = false;
+	enum dc_ownership own;
 	int err;
 
 	err = libnvme_get_host(ctx, fctx->hostnqn, fctx->hostid, &h);
@@ -3748,38 +3981,16 @@ __shr_public int libnvmf_discover(struct libnvme_global_ctx *ctx,
 	if (err)
 		return err;
 
-	if (!fctx->force) {
-		/*
-		 * When --force is used, always create a controller, otherwise
-		 * try to lookup an already existing controller first.
-		 */
-		err = discover_lookup_ctrl(ctx, fctx, h, &c,
-					   &already_connected);
-		if (err) {
+	err = dc_open(ctx, fctx, h, &fctx->ctrl_params, true, &own, &c);
+	if (err) {
+		if (err != -ENVME_CONNECT_IGNORED)
 			libnvme_msg(ctx, LIBNVME_LOG_ERR,
-				 "failed to lookup controller, error %s\n",
-				 libnvme_strerror(-err));
-			return err;
-		}
+				"failed to add controller, error %s\n",
+				libnvme_strerror(-err));
+		return err;
 	}
 
-	if (!c) {
-		/*
-		 * No existing controller or --force has been used, thus create
-		 * a new controller.
-		 */
-		err = nvmf_create_discovery_ctrl(ctx, fctx, &fctx->ctrl_params, h, &c);
-		if (err) {
-			if (err != -ENVME_CONNECT_IGNORED)
-				libnvme_msg(ctx, LIBNVME_LOG_ERR,
-					 "failed to add controller, error %s\n",
-					 libnvme_strerror(-err));
-			return err;
-		}
-	}
-
-	err = _nvmf_discover(ctx, fctx, &fctx->ctrl_params, c, true,
-			      already_connected);
+	err = dc_walk(ctx, fctx, c, own);
 	libnvme_free_ctrl(c);
 
 	return err;
@@ -3808,19 +4019,20 @@ __shr_public int libnvmf_connect(
 	if (err)
 		return err;
 
-	c = lookup_ctrl(h, &fctx->ctrl_params);
-	if (c && libnvme_ctrl_get_name(c) &&
-	    !fctx->ctrl_params.cfg.duplicate_connect) {
+	c = lookup_live_ctrl(h, &fctx->ctrl_params);
+	if (c && !fctx->ctrl_params.cfg.duplicate_connect) {
 		int instance = ctrl_instance(c);
 
 		write_devid_file(fctx, devid_fd, c);
 		if (instance >= 0)
 			registry_update_on_connect(ctx, instance);
-		fctx->hooks.already_connected(fctx, h,
-			libnvme_ctrl_get_subsysnqn(c),
-			libnvme_ctrl_get_transport(c),
-			libnvme_ctrl_get_traddr(c),
-			libnvme_ctrl_get_trsvcid(c), fctx->hooks.user_data);
+		if (fctx->hooks.already_connected)
+			fctx->hooks.already_connected(fctx, h,
+				libnvme_ctrl_get_subsysnqn(c),
+				libnvme_ctrl_get_transport(c),
+				libnvme_ctrl_get_traddr(c),
+				libnvme_ctrl_get_trsvcid(c),
+				fctx->hooks.user_data);
 		return -EALREADY;
 	}
 
@@ -3872,7 +4084,8 @@ __shr_public int libnvmf_connect(
 	}
 
 	write_devid_file(fctx, devid_fd, c);
-	fctx->hooks.connected(fctx, c, fctx->hooks.user_data);
+	if (fctx->hooks.connected)
+		fctx->hooks.connected(fctx, c, fctx->hooks.user_data);
 
 	return 0;
 }

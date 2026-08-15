@@ -11,8 +11,8 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#include <base64.h>
-#include <crc32.h>
+#include <shared/base64-util.h>
+#include <shared/crc32-util.h>
 #include <libnvme.h>
 
 #include "fabrics.h"
