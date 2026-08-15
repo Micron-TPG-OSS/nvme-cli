@@ -1,0 +1,108 @@
+---
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# THROWAWAY DIAGNOSTIC -- delete this file once the question is answered.
+#
+# "git describe --dirty" reports 3.0-b.3+ on a fresh tag checkout in the
+# Windows release build, before meson has run. This reproduces just the
+# checkout and asks git what it thinks is modified, on both runners and with
+# both git binaries (the runner's Git for Windows and MSYS2's).
+
+name: Micron - dirty tree probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to check out'
+        type: string
+        default: 'v3.0-b.3'
+
+jobs:
+  probe:
+    name: probe ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: win64
+            runner: windows-latest
+            msystem: UCRT64
+          - arch: arm64
+            runner: windows-11-arm
+            msystem: CLANGARM64
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Ask the runner's own git
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo "== git version =="
+          git --version
+          echo "== relevant config =="
+          for k in core.fileMode core.autocrlf core.symlinks core.ignorecase \
+                   core.eol core.safecrlf; do
+            echo "$k = $(git config --get "$k" || echo '<unset>')"
+          done
+          echo "== describe =="
+          git describe --abbrev=7 --dirty=+ || true
+          echo "== status --porcelain (tracked only) =="
+          git status --porcelain --untracked-files=no | head -50
+          echo "== count =="
+          git status --porcelain --untracked-files=no | wc -l
+          echo "== diff --summary =="
+          git diff --summary | head -30
+          echo "== diff --stat (tail) =="
+          git diff --stat | tail -10
+          echo "== diff-index HEAD =="
+          git diff-index --name-status HEAD | head -30
+          echo "== after an explicit refresh =="
+          git update-index --refresh || true
+          git diff-index --name-status HEAD | head -30
+          git describe --abbrev=7 --dirty=+ || true
+
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: git
+
+      - name: Ask MSYS2's git, the way the release build does
+        shell: msys2 {0}
+        run: |
+          set -uo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          echo "== git version =="
+          git --version
+          echo "== relevant config =="
+          for k in core.fileMode core.autocrlf core.symlinks core.ignorecase \
+                   core.eol core.safecrlf; do
+            echo "$k = $(git config --get "$k" || echo '<unset>')"
+          done
+          echo "== describe =="
+          git describe --abbrev=7 --dirty=+ || true
+          echo "== status --porcelain (tracked only) =="
+          git status --porcelain --untracked-files=no | head -50
+          echo "== count =="
+          git status --porcelain --untracked-files=no | wc -l
+          echo "== diff --summary =="
+          git diff --summary | head -30
+          echo "== first modified file, in detail =="
+          F="$(git diff-index --name-only HEAD | head -1)"
+          if [ -n "${F}" ]; then
+            echo "file: ${F}"
+            git diff --no-color -- "${F}" | head -20
+            ls -l "${F}"
+            git ls-files -s -- "${F}"
+          else
+            echo "nothing modified according to diff-index"
+          fi
+          echo "== describe after refresh =="
+          git update-index --refresh || true
+          git describe --abbrev=7 --dirty=+ || true
