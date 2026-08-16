@@ -43,6 +43,14 @@
 #   default_library=static, leaving only genuine system DLLs (kernel32, bcrypt,
 #   ucrtbase) dynamic. The "verify no MinGW runtime deps" step below asserts
 #   that per run rather than taking it on faith.
+#
+# Why does a GitHub workflow write to SharePoint?
+#   The TACT team's home page is where people inside Micron look for these
+#   builds, and having the same run that published the release also announce it
+#   is what keeps the two from drifting. The sharepoint job only runs once the
+#   repository variables naming the Entra app and site are set, so it is inert
+#   by default. The setup runbook is kept outside this public repository,
+#   because it names the tenant and site it applies to.
 
 name: Micron - Windows Release
 
@@ -80,6 +88,7 @@ jobs:
       tag: ${{ steps.check.outputs.tag }}
       version: ${{ steps.check.outputs.version }}
       prerelease: ${{ steps.check.outputs.prerelease }}
+      published_at: ${{ steps.check.outputs.published_at }}
       upstream_sha: ${{ steps.check.outputs.upstream_sha }}
     steps:
       - name: Resolve upstream release
@@ -111,6 +120,11 @@ jobs:
           RELEASE="$(gh api "repos/linux-nvme/nvme-cli/releases/tags/${TAG}")"
           PRERELEASE="$(printf '%s' "${RELEASE}" | jq -r '.prerelease')"
 
+          # Upstream's publish time, reported as-is on the SharePoint row: the
+          # date that matters to a reader is when the release happened, not when
+          # this workflow got round to noticing it.
+          PUBLISHED_AT="$(printf '%s' "${RELEASE}" | jq -r '.published_at')"
+
           # Commit the upstream tag points at, so we can verify we build it.
           UPSTREAM_SHA="$(gh api "repos/linux-nvme/nvme-cli/commits/${TAG}" --jq '.sha')"
 
@@ -140,6 +154,7 @@ jobs:
             echo "tag=${TAG}"
             echo "version=${VERSION}"
             echo "prerelease=${PRERELEASE}"
+            echo "published_at=${PUBLISHED_AT}"
             echo "upstream_sha=${UPSTREAM_SHA}"
           } >> "$GITHUB_OUTPUT"
 
@@ -427,6 +442,12 @@ jobs:
           # Recorded in the release notes, as the 3.0-b.3 release did.
           NVME_VERSION="$(./.build-release/nvme.exe version 2>/dev/null | head -1 || true)"
 
+          # Also into the artifact, for the sharepoint job: a matrix job's
+          # outputs are whichever leg finished last, so a file is the only way
+          # to read this reliably from a downstream job. Safe to put in dist/
+          # because the release job names its assets explicitly.
+          printf '%s\n' "${NVME_VERSION}" > "dist/nvme-version-${ARCH}.txt"
+
           {
             echo "zip=${ZIP}"
             echo "nvme_version=${NVME_VERSION}"
@@ -566,6 +587,89 @@ jobs:
           echo "Published ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}" \
             >> "$GITHUB_STEP_SUMMARY"
 
+  # Record the release on the TACT SharePoint site, so the team's home page
+  # lists what was built and where to download it.
+  #
+  # Gated on repository *variables* rather than secrets: job-level "if" cannot
+  # read the secrets context, and with OIDC there is no secret to read anyway.
+  # Until the three variables are set the job simply does not run, so this file
+  # is safe to merge before the Entra app exists.
+  #
+  # The variables name an Entra app registration whose federated credential
+  # trusts this repository's OIDC token on master, holding Graph's
+  # Sites.Selected scoped to the one site. Setup is documented outside this
+  # public repository.
+  sharepoint:
+    name: update SharePoint
+    needs: [detect, build, release]
+    if: |
+      needs.detect.outputs.should_build == 'true' &&
+      vars.SHAREPOINT_TENANT_ID != '' &&
+      vars.SHAREPOINT_CLIENT_ID != '' &&
+      vars.SHAREPOINT_SITE_ID != ''
+    runs-on: ubuntu-latest
+    permissions:
+      # id-token: write is what allows the job to ask GitHub for the short-lived
+      # OIDC JWT that Entra's federated credential trusts. Naming any permission
+      # drops the rest to none, hence contents: read for the checkout.
+      contents: read
+      id-token: write
+    env:
+      TAG: ${{ needs.detect.outputs.tag }}
+      VERSION: ${{ needs.detect.outputs.version }}
+      PRERELEASE: ${{ needs.detect.outputs.prerelease }}
+      PUBLISHED_AT: ${{ needs.detect.outputs.published_at }}
+      SHAREPOINT_TENANT_ID: ${{ vars.SHAREPOINT_TENANT_ID }}
+      SHAREPOINT_CLIENT_ID: ${{ vars.SHAREPOINT_CLIENT_ID }}
+      SHAREPOINT_SITE_ID: ${{ vars.SHAREPOINT_SITE_ID }}
+      # Optional; the script defaults to "NVMe CLI Windows Builds".
+      SHAREPOINT_LIST_NAME: ${{ vars.SHAREPOINT_LIST_NAME }}
+    steps:
+      # Checked out at the workflow's own ref (master), not the release tag:
+      # .github/micron only exists on Micron branches. Sparse, because the
+      # publisher script is all this job needs from the repository.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          sparse-checkout: .github/micron
+          sparse-checkout-cone-mode: true
+
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          pattern: windows-*
+          path: dist
+          merge-multiple: true
+
+      - name: Record the release on the TACT site
+        run: |
+          set -euo pipefail
+          ls -l dist/
+
+          # sha256sum writes "<hash>  <name>"; the row wants just the hash.
+          WIN64_SHA256="$(awk '{print $1}' \
+            "dist/nvme-cli-${VERSION}-win64.zip.sha256")"
+          ARM64_SHA256="$(awk '{print $1}' \
+            "dist/nvme-cli-${VERSION}-arm64.zip.sha256")"
+
+          # Identical on both architectures, so either file will do.
+          NVME_VERSION="$(cat "dist/nvme-version-win64.txt")"
+
+          DOWNLOAD="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+
+          python3 .github/micron/sharepoint-publish.py \
+            --create-list \
+            --tag "${TAG}" \
+            --version "${VERSION}" \
+            --prerelease "${PRERELEASE}" \
+            --published-at "${PUBLISHED_AT}" \
+            --nvme-version "${NVME_VERSION}" \
+            --win64-url "${DOWNLOAD}/nvme-cli-${VERSION}-win64.zip" \
+            --arm64-url "${DOWNLOAD}/nvme-cli-${VERSION}-arm64.zip" \
+            --win64-sha256 "${WIN64_SHA256}" \
+            --arm64-sha256 "${ARM64_SHA256}" \
+            --fork-release-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}" \
+            --upstream-release-url "https://github.com/linux-nvme/nvme-cli/releases/tag/${TAG}" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
   # Optional and off by default. The daily "Micron - Sync and Merge" already
   # brings the tag's commits into mingw by way of master, so merging the tag
   # here as well is redundant and only adds conflict surface. Kept as a manual
@@ -623,7 +727,7 @@ jobs:
 
   notify:
     name: notify on failure
-    needs: [detect, sync_tag, build, release, merge_mingw]
+    needs: [detect, sync_tag, build, release, sharepoint, merge_mingw]
     runs-on: ubuntu-latest
     # always() required - without it, GitHub skips this job when an upstream job
     # is skipped, ignoring the rest of the condition.
@@ -633,6 +737,7 @@ jobs:
        needs.sync_tag.result == 'failure' ||
        needs.build.result == 'failure' ||
        needs.release.result == 'failure' ||
+       needs.sharepoint.result == 'failure' ||
        needs.merge_mingw.result == 'failure')
     steps:
       - name: Determine failed job
@@ -650,6 +755,9 @@ jobs:
           elif [ "${{ needs.release.result }}" == "failure" ]; then
             echo "job_name=Release" >> $GITHUB_OUTPUT
             echo "job_step=publish GitHub release" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.sharepoint.result }}" == "failure" ]; then
+            echo "job_name=SharePoint" >> $GITHUB_OUTPUT
+            echo "job_step=update the TACT site" >> $GITHUB_OUTPUT
           else
             echo "job_name=Merge" >> $GITHUB_OUTPUT
             echo "job_step=merge tag into mingw" >> $GITHUB_OUTPUT

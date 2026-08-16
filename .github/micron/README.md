@@ -9,6 +9,7 @@ upstream `linux-nvme/nvme-cli`.
 .github/micron/
 ├── README.md
 ├── apply.sh                                    # projects the overlay onto the tree
+├── sharepoint-publish.py                       # called by the sharepoint job
 └── overlay/                                    # mirrors the repository root
     └── .github/workflows/micron-release.yml    # source of truth
 ```
@@ -42,6 +43,12 @@ projected copy has to be committed — the overlay copy alone is inert. That mea
 the file's content is stored twice, which is the deliberate cost of the pattern.
 `apply.sh --check` exists so the two can never silently disagree; wire it into a
 PR check if you want that enforced.
+
+`sharepoint-publish.py` sits here rather than under `overlay/` for the same
+reason `micron-sync-and-merge.yml` does: `.github/micron/` is a path upstream
+does not have, so an upstream sync can never overwrite it and there is nothing
+for the overlay to protect. Only files that share a directory with
+upstream-owned files need projecting.
 
 ## What is deliberately *not* here
 
