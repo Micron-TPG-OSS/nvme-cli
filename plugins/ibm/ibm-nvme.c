@@ -3,18 +3,16 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <ccan/endian/endian.h>
-
-#include "nvme-cmds.h"
 #include <libnvme.h>
 
-#include "nvme-print.h"
+#include <ccan/endian/endian.h>
+#include <shared/compiler-attributes-util.h>
+
 #include "cleanup.h"
 #include "global-ctx.h"
+#include "nvme-cmds.h"
+#include "nvme-print.h"
 #include "plugin.h"
-
-#define CREATE_CMD
-#include "ibm-nvme.h"
 
 #pragma pack(push, 1)
 struct nvme_ibm_log_f0_item {
@@ -600,4 +598,41 @@ static int get_ibm_persistent_event_log(int argc, char **argv,
 	}
 
 	return err;
+}
+
+static struct command get_ibm_addi_smart_log_cmd = {
+	.name = "crit-log",
+	.help = "Display IBM Smart Log Information",
+	.fn = get_ibm_addi_smart_log,
+};
+
+static struct command get_ibm_vpd_log_cmd = {
+	.name = "vpd",
+	.help = "Display IBM VPD Information",
+	.fn = get_ibm_vpd_log,
+};
+
+static struct command get_ibm_persistent_event_log_cmd = {
+	.name = "persist-event-log",
+	.help = "IBM specific Persistent Event Log",
+	.fn = get_ibm_persistent_event_log,
+};
+
+static struct command *commands[] = {
+	&get_ibm_addi_smart_log_cmd,
+	&get_ibm_vpd_log_cmd,
+	&get_ibm_persistent_event_log_cmd,
+	NULL,
+};
+
+static struct plugin plugin = {
+	.name = "ibm",
+	.desc = "IBM vendor specific extensions",
+	.version = NVME_VERSION,
+};
+
+static void __shr_constructor register_plugin(void)
+{
+	plugin_add_group(&plugin, NULL, commands);
+	register_extension(&plugin);
 }

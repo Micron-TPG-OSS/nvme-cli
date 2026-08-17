@@ -8,9 +8,7 @@
 #include <ccan/array_size/array_size.h>
 #include <ccan/endian/endian.h>
 
-#include "plugin.h"
 #include "nvme-print.h"
-
 #include "ocp-telemetry-decode.h"
 
 

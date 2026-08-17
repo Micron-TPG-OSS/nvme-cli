@@ -1,28 +1,26 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <inttypes.h>
-#include <errno.h>
-#include <limits.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <libnvme.h>
 
 #include <ccan/endian/endian.h>
+#include <shared/compiler-attributes-util.h>
 
-#include "nvme-cmds.h"
-#include "nvme-print.h"
 #include "cleanup.h"
 #include "global-ctx.h"
-#include "plugin.h"
-
-#define CREATE_CMD
-#include "inspur-nvme.h"
 #include "inspur-utils.h"
+#include "nvme-cmds.h"
+#include "nvme-print.h"
+#include "plugin.h"
 
 void show_r1_vendor_log(r1_cli_vendor_log_t *vendorlog)
 {
@@ -232,4 +230,27 @@ static int nvme_get_vendor_log(int argc, char **argv, struct command *acmd, stru
 	}
 
 	return err;
+}
+
+static struct command nvme_get_vendor_log_cmd = {
+	.name = "nvme-vendor-log",
+	.help = "Retrieve Inspur Vendor Log, show it",
+	.fn = nvme_get_vendor_log,
+};
+
+static struct command *commands[] = {
+	&nvme_get_vendor_log_cmd,
+	NULL,
+};
+
+static struct plugin plugin = {
+	.name = "inspur",
+	.desc = "Inspur vendor specific extensions",
+	.version = NVME_VERSION,
+};
+
+static void __shr_constructor register_plugin(void)
+{
+	plugin_add_group(&plugin, NULL, commands);
+	register_extension(&plugin);
 }

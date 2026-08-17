@@ -13,25 +13,21 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdint.h>
-#include <unistd.h>
-
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <libnvme.h>
 
 #include <ccan/minmax/minmax.h>
-
-#include <cleanup.h>
+#include <shared/compiler-attributes-util.h>
 #include <shared/fs-util.h>
 
 #include "argconfig.h"
+#include "cleanup.h"
 #include "global-ctx.h"
 #include "logging.h"
 #include "nvme-print.h"
 #include "plugin.h"
-
-#define CREATE_CMD
-#include "fw-plugin.h"
 
 static const char *ish = "Ignore Shutdown (for NVMe-MI command)";
 
@@ -496,4 +492,36 @@ static int fw_commit(int argc, char **argv, struct command *acmd, struct plugin 
 	fw_commit_print_mud(mud_supported, cmd.result);
 
 	return err;
+}
+
+static struct command fw_download_cmd = {
+	.name = "download",
+	.help = "Download new firmware",
+	.fn = fw_download,
+};
+
+static struct command fw_commit_cmd = {
+	.name = "commit",
+	.help = "Verify and commit firmware to a specific slot (fw-activate in old version < 1.2)",
+	.fn = fw_commit,
+	.alias = "activate",
+};
+
+static struct command *commands[] = {
+	&fw_download_cmd,
+	&fw_commit_cmd,
+	NULL,
+};
+
+static struct plugin plugin = {
+	.name = "fw",
+	.desc = "Manage NVMe controller firmware",
+	.version = NVME_VERSION,
+	.core = true,
+};
+
+static void __shr_constructor register_plugin(void)
+{
+	plugin_add_group(&plugin, NULL, commands);
+	register_extension(&plugin);
 }

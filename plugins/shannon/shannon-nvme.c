@@ -1,23 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-#include <fcntl.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <inttypes.h>
 
 #include <libnvme.h>
 
 #include <ccan/endian/endian.h>
+#include <shared/compiler-attributes-util.h>
 
-#include "nvme-cmds.h"
-#include "nvme-print.h"
 #include "cleanup.h"
 #include "global-ctx.h"
+#include "nvme-cmds.h"
+#include "nvme-print.h"
 #include "plugin.h"
-
-#define CREATE_CMD
-#include "shannon-nvme.h"
 
 enum {
 	PROGRAM_FAIL_CNT,
@@ -340,4 +338,48 @@ static int set_additional_feature(int argc, char **argv, struct command *acmd, s
 static int shannon_id_ctrl(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
 	return __id_ctrl(argc, argv, acmd, plugin, NULL);
+}
+
+static struct command get_additional_smart_log_cmd = {
+	.name = "smart-log-add",
+	.help = "Retrieve Shannon SMART Log, show it",
+	.fn = get_additional_smart_log,
+};
+
+static struct command set_additional_feature_cmd = {
+	.name = "set-additioal-feature",
+	.help = "Set additional Shannon feature",
+	.fn = set_additional_feature,
+};
+
+static struct command get_additional_feature_cmd = {
+	.name = "get-additional-feature",
+	.help = "Get additional Shannon feature",
+	.fn = get_additional_feature,
+};
+
+static struct command shannon_id_ctrl_cmd = {
+	.name = "id-ctrl",
+	.help = "Retrieve Shannon ctrl id, show it",
+	.fn = shannon_id_ctrl,
+};
+
+static struct command *commands[] = {
+	&get_additional_smart_log_cmd,
+	&set_additional_feature_cmd,
+	&get_additional_feature_cmd,
+	&shannon_id_ctrl_cmd,
+	NULL,
+};
+
+static struct plugin plugin = {
+	.name = "shannon",
+	.desc = "Shannon vendor specific extensions",
+	.version = NVME_VERSION,
+};
+
+static void __shr_constructor register_plugin(void)
+{
+	plugin_add_group(&plugin, NULL, commands);
+	register_extension(&plugin);
 }

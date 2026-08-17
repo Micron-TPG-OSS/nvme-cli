@@ -1,42 +1,37 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-#include <fcntl.h>
+#include <asm/byteorder.h>
+#include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <linux/fs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <linux/fs.h>
-#include <inttypes.h>
-#include <asm/byteorder.h>
-#include <sys/sysinfo.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <sys/ioctl.h>
-#include <dirent.h>
+#include <sys/stat.h>
+#include <sys/sysinfo.h>
+#include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <libnvme.h>
 
-#include <ccan/endian/endian.h>
 #include <ccan/array_size/array_size.h>
-
+#include <ccan/endian/endian.h>
 #include <shared/compiler-attributes-util.h>
-
 #include <shared/int-util.h>
 #include <shared/progress-util.h>
 #include <shared/temp-util.h>
 #include <shared/time-util.h>
 #include <shared/uint128-util.h>
 
+#include "global-ctx.h"
 #include "nvme-cmds.h"
 #include "nvme-print.h"
-#include "global-ctx.h"
 #include "plugin.h"
-#include "src/cleanup.h"
-
-#define CREATE_CMD
-#include "sfx-nvme.h"
 #include "sfx-types.h"
+#include "src/cleanup.h"
 
 #define SFX_PAGE_SHIFT						12
 #define SECTOR_SHIFT						9
@@ -2063,4 +2058,90 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 	}
 
 	return 0;
+}
+
+static struct command get_additional_smart_log_cmd = {
+	.name = "smart-log-add",
+	.help = "Retrieve ScaleFlux SMART Log, show it",
+	.fn = get_additional_smart_log,
+};
+
+static struct command get_lat_stats_log_cmd = {
+	.name = "lat-stats",
+	.help = "Retrieve ScaleFlux IO Latency Statistics log, show it",
+	.fn = get_lat_stats_log,
+};
+
+static struct command sfx_get_bad_block_cmd = {
+	.name = "get-bad-block",
+	.help = "Retrieve bad block table of block device, show it",
+	.fn = sfx_get_bad_block,
+};
+
+static struct command query_cap_info_cmd = {
+	.name = "query-cap",
+	.help = "Query current capacity info",
+	.fn = query_cap_info,
+};
+
+static struct command change_cap_cmd = {
+	.name = "change-cap",
+	.help = "Dynamic change capacity",
+	.fn = change_cap,
+};
+
+static struct command sfx_set_feature_cmd = {
+	.name = "set-feature",
+	.help = "Set a feature",
+	.fn = sfx_set_feature,
+};
+
+static struct command sfx_get_feature_cmd = {
+	.name = "get-feature",
+	.help = "Get a feature",
+	.fn = sfx_get_feature,
+};
+
+static struct command sfx_dump_evtlog_cmd = {
+	.name = "dump-evtlog",
+	.help = "dump evtlog into file and parse warning & error log",
+	.fn = sfx_dump_evtlog,
+};
+
+static struct command sfx_expand_cap_cmd = {
+	.name = "expand-cap",
+	.help = "expand the last namespace capacity lossless",
+	.fn = sfx_expand_cap,
+};
+
+static struct command sfx_status_cmd = {
+	.name = "status",
+	.help = "Retrieve the ScaleFlux status output, show it",
+	.fn = sfx_status,
+};
+
+static struct command *commands[] = {
+	&get_additional_smart_log_cmd,
+	&get_lat_stats_log_cmd,
+	&sfx_get_bad_block_cmd,
+	&query_cap_info_cmd,
+	&change_cap_cmd,
+	&sfx_set_feature_cmd,
+	&sfx_get_feature_cmd,
+	&sfx_dump_evtlog_cmd,
+	&sfx_expand_cap_cmd,
+	&sfx_status_cmd,
+	NULL,
+};
+
+static struct plugin plugin = {
+	.name = "sfx",
+	.desc = "ScaleFlux vendor specific extensions",
+	.version = NVME_VERSION,
+};
+
+static void __shr_constructor register_plugin(void)
+{
+	plugin_add_group(&plugin, NULL, commands);
+	register_extension(&plugin);
 }

@@ -1,28 +1,26 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-#include <fcntl.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <locale.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <stddef.h>
-#include <inttypes.h>
-#include <stdbool.h>
 #include <time.h>
-#include <locale.h>
+#include <unistd.h>
 
 #include <libnvme.h>
 
 #include <ccan/endian/endian.h>
-
-#include "nvme-cmds.h"
-#include "nvme-print.h"
-#include "cleanup.h"
-#include "global-ctx.h"
-#include "plugin.h"
+#include <shared/compiler-attributes-util.h>
 #include <shared/uint128-util.h>
 
-#define CREATE_CMD
-#include "virtium-nvme.h"
+#include "cleanup.h"
+#include "global-ctx.h"
+#include "nvme-cmds.h"
+#include "nvme-print.h"
+#include "plugin.h"
 
 #define MIN2(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -1062,4 +1060,38 @@ static int vt_show_identify(int argc, char **argv, struct command *acmd, struct 
 	vt_parse_detail_identify(&ctrl);
 
 	return err;
+}
+
+static struct command vt_save_smart_to_vtview_log_cmd = {
+	.name = "save-smart-to-vtview-log",
+	.help = "Periodically save smart attributes into a log file.\n"
+		"                             The data in this log file can be "
+		"analyzed using excel or using Virtium’s vtView.\n"
+		"                             Visit vtView.virtium.com to see full "
+		"potential uses of the data",
+	.fn = vt_save_smart_to_vtview_log,
+};
+
+static struct command vt_show_identify_cmd = {
+	.name = "show-identify",
+	.help = "Shows detail features and current settings",
+	.fn = vt_show_identify,
+};
+
+static struct command *commands[] = {
+	&vt_save_smart_to_vtview_log_cmd,
+	&vt_show_identify_cmd,
+	NULL,
+};
+
+static struct plugin plugin = {
+	.name = "virtium",
+	.desc = "Virtium vendor specific extensions",
+	.version = NVME_VERSION,
+};
+
+static void __shr_constructor register_plugin(void)
+{
+	plugin_add_group(&plugin, NULL, commands);
+	register_extension(&plugin);
 }

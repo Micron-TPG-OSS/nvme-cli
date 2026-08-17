@@ -1,24 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-#include <fcntl.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <inttypes.h>
 
 #include <libnvme.h>
 
 #include <shared/compiler-attributes-util.h>
 
-#include "nvme-cmds.h"
-#include "nvme-print.h"
 #include "cleanup.h"
 #include "global-ctx.h"
+#include "nvme-print.h"
 #include "plugin.h"
-
-#define CREATE_CMD
-#include "amzn-nvme.h"
 
 #define AMZN_NVME_STATS_LOGPAGE_ID 0xD0
 #define AMZN_NVME_STATS_DETAIL_IO_VERSION 1
@@ -692,4 +688,34 @@ static int get_stats(int argc, char **argv, struct command *acmd,
 
 done:
 	return rc;
+}
+
+static struct command id_ctrl_cmd = {
+	.name = "id-ctrl",
+	.help = "Send NVMe Identify Controller",
+	.fn = id_ctrl,
+};
+
+static struct command get_stats_cmd = {
+	.name = "stats",
+	.help = "Get EBS volume stats",
+	.fn = get_stats,
+};
+
+static struct command *commands[] = {
+	&id_ctrl_cmd,
+	&get_stats_cmd,
+	NULL,
+};
+
+static struct plugin plugin = {
+	.name = "amzn",
+	.desc = "Amazon vendor specific extensions",
+	.version = NVME_VERSION,
+};
+
+static void __shr_constructor register_plugin(void)
+{
+	plugin_add_group(&plugin, NULL, commands);
+	register_extension(&plugin);
 }

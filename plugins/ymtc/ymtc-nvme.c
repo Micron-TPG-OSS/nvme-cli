@@ -14,24 +14,21 @@
  *
  *   Author:  Bin Zhang<robin_zhang3@ymtc.com>
  */
-#include <fcntl.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
 #include <libnvme.h>
 
-#include "nvme-cmds.h"
-#include "nvme-print.h"
-#include "global-ctx.h"
-#include "plugin.h"
-#include "src/cleanup.h"
+#include <shared/compiler-attributes-util.h>
 #include <shared/int-util.h>
 
-
-#define CREATE_CMD
-#include "ymtc-nvme.h"
+#include "global-ctx.h"
+#include "nvme-print.h"
+#include "plugin.h"
+#include "src/cleanup.h"
 #include "ymtc-utils.h"
 
  /* sysfs paths for vendor ID and device ID */
@@ -443,4 +440,27 @@ static int get_additional_smart_log(int argc, char **argv, struct command *acmd,
 		nvme_show_status(err);
 
 	return err;
+}
+
+static struct command get_additional_smart_log_cmd = {
+	.name = "smart-log-add",
+	.help = "Retrieve YMTC SMART Log, show it",
+	.fn = get_additional_smart_log,
+};
+
+static struct command *commands[] = {
+	&get_additional_smart_log_cmd,
+	NULL,
+};
+
+static struct plugin plugin = {
+	.name = "ymtc",
+	.desc = "YMTC vendor specific extensions",
+	.version = NVME_VERSION,
+};
+
+static void __shr_constructor register_plugin(void)
+{
+	plugin_add_group(&plugin, NULL, commands);
+	register_extension(&plugin);
 }
