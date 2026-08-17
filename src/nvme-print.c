@@ -5,23 +5,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-
 #include <sys/stat.h>
+#include <time.h>
 
 #include <libnvme.h>
 
 #include <ccan/endian/endian.h>
 #include <ccan/minmax/minmax.h>
-
 #include <shared/int-util.h>
-#include <shared/temp-util.h>
 #include <shared/mmio-util.h>
+#include <shared/temp-util.h>
 
 #include "cleanup.h"
-#include "nvme-print.h"
 #include "nvme-models.h"
-#include "logging.h"
+#include "nvme-print.h"
 
 #define nvme_print(name, flags, ...)				\
 	do {							\
@@ -1827,8 +1824,8 @@ void nvme_show_verbose_key_value(const char *key, const char *val, ...)
 	va_end(ap);
 }
 
-void nvme_show_discovery_log(struct nvmf_discovery_log *log, uint64_t numrec,
-			     nvme_print_flags_t flags)
+void nvme_show_discovery_log(const struct nvmf_discovery_log *log,
+			     uint64_t numrec, nvme_print_flags_t flags)
 {
 	nvme_print(discovery_log, flags, log, numrec);
 }

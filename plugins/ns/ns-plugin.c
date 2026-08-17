@@ -15,20 +15,16 @@
 
 #include <ccan/array_size/array_size.h>
 #include <ccan/endian/endian.h>
-
-#include <cleanup.h>
+#include <shared/compiler-attributes-util.h>
 #include <shared/parse-util.h>
 #include <shared/suffix-util.h>
 
 #include "argconfig.h"
+#include "cleanup.h"
 #include "global-ctx.h"
 #include "logging.h"
-#include "nvme-cmds.h"
 #include "nvme-print.h"
 #include "plugin.h"
-
-#define CREATE_CMD
-#include "ns-plugin.h"
 
 static const char *endgid = "Endurance Group Identifier (ENDGID)";
 static const char *ish = "Ignore Shutdown (for NVMe-MI command)";
@@ -627,4 +623,56 @@ static int get_ns_id(int argc, char **argv, struct command *acmd, struct plugin 
 	nvme_show_result("%s: namespace-id:%d", libnvme_transport_handle_get_name(hdl), nsid);
 
 	return 0;
+}
+
+static struct command create_ns_cmd = {
+	.name = "create",
+	.help = "Creates a namespace with the provided parameters",
+	.fn = create_ns,
+};
+
+static struct command delete_ns_cmd = {
+	.name = "delete",
+	.help = "Deletes a namespace from the controller",
+	.fn = delete_ns,
+};
+
+static struct command attach_ns_cmd = {
+	.name = "attach",
+	.help = "Attaches a namespace to requested controller(s)",
+	.fn = attach_ns,
+};
+
+static struct command detach_ns_cmd = {
+	.name = "detach",
+	.help = "Detaches a namespace from requested controller(s)",
+	.fn = detach_ns,
+};
+
+static struct command get_ns_id_cmd = {
+	.name = "get-id",
+	.help = "Retrieve the namespace ID of opened block device",
+	.fn = get_ns_id,
+};
+
+static struct command *commands[] = {
+	&create_ns_cmd,
+	&delete_ns_cmd,
+	&attach_ns_cmd,
+	&detach_ns_cmd,
+	&get_ns_id_cmd,
+	NULL,
+};
+
+static struct plugin plugin = {
+	.name = "ns",
+	.desc = "Manage NVMe namespaces",
+	.version = NVME_VERSION,
+	.core = true,
+};
+
+static void __shr_constructor register_plugin(void)
+{
+	plugin_add_group(&plugin, NULL, commands);
+	register_extension(&plugin);
 }

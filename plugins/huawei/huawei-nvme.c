@@ -15,31 +15,27 @@
  *   Author:  Zou Ming<zouming.zouming@huawei.com>,
  *				Yang Feng <philip.yang@huawei.com>
  */
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <inttypes.h>
-#include <errno.h>
-#include <limits.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <libnvme.h>
 
 #include <ccan/endian/endian.h>
+#include <shared/compiler-attributes-util.h>
+#include <shared/suffix-util.h>
 
-#include "nvme-cmds.h"
 #include "cleanup.h"
 #include "global-ctx.h"
 #include "nvme-print.h"
 #include "plugin.h"
-
-#include <shared/suffix-util.h>
-
-#define CREATE_CMD
-#include "huawei-nvme.h"
 
 #define HW_SSD_PCI_VENDOR_ID 0x19E5
 #define ARRAY_NAME_LEN 80
@@ -400,4 +396,34 @@ static void huawei_do_id_ctrl(__u8 *vs, struct json_object *root)
 static int huawei_id_ctrl(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
 	return __id_ctrl(argc, argv, acmd, plugin, huawei_do_id_ctrl);
+}
+
+static struct command huawei_list_cmd = {
+	.name = "list",
+	.help = "List all Huawei NVMe devices and namespaces on machine",
+	.fn = huawei_list,
+};
+
+static struct command huawei_id_ctrl_cmd = {
+	.name = "id-ctrl",
+	.help = "Huawei identify controller",
+	.fn = huawei_id_ctrl,
+};
+
+static struct command *commands[] = {
+	&huawei_list_cmd,
+	&huawei_id_ctrl_cmd,
+	NULL,
+};
+
+static struct plugin plugin = {
+	.name = "huawei",
+	.desc = "Huawei vendor specific extensions",
+	.version = NVME_VERSION,
+};
+
+static void __shr_constructor register_plugin(void)
+{
+	plugin_add_group(&plugin, NULL, commands);
+	register_extension(&plugin);
 }

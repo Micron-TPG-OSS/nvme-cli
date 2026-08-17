@@ -14,29 +14,26 @@
  *
  */
 
-#include <stdio.h>
 #include <dirent.h>
-#include <sys/stat.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <errno.h>
-#include <string.h>
+#include <fcntl.h>
 #include <libgen.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <libnvme.h>
 
 #include <ccan/endian/endian.h>
+#include <shared/compiler-attributes-util.h>
+#include <shared/suffix-util.h>
 
-#include "nvme-cmds.h"
-#include "plugin.h"
 #include "cleanup.h"
 #include "global-ctx.h"
 #include "nvme-print.h"
-#include <shared/suffix-util.h>
-
-#define CREATE_CMD
-#include "netapp-nvme.h"
+#include "plugin.h"
 
 #define ONTAP_C2_LOG_ID		0xC2
 #define ONTAP_C2_LOG_SIZE	4096
@@ -1128,4 +1125,34 @@ static int netapp_ontapdevices(int argc, char **argv, struct command *acmd,
 
 	free(ontapdevices);
 	return 0;
+}
+
+static struct command netapp_smdevices_cmd = {
+	.name = "smdevices",
+	.help = "NetApp SMdevices",
+	.fn = netapp_smdevices,
+};
+
+static struct command netapp_ontapdevices_cmd = {
+	.name = "ontapdevices",
+	.help = "NetApp ONTAPdevices",
+	.fn = netapp_ontapdevices,
+};
+
+static struct command *commands[] = {
+	&netapp_smdevices_cmd,
+	&netapp_ontapdevices_cmd,
+	NULL,
+};
+
+static struct plugin plugin = {
+	.name = "netapp",
+	.desc = "NetApp vendor specific extensions",
+	.version = NVME_VERSION,
+};
+
+static void __shr_constructor register_plugin(void)
+{
+	plugin_add_group(&plugin, NULL, commands);
+	register_extension(&plugin);
 }

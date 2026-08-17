@@ -1,27 +1,25 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include <fcntl.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <inttypes.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <libnvme.h>
 
 #include <ccan/array_size/array_size.h>
 #include <ccan/endian/endian.h>
+#include <shared/compiler-attributes-util.h>
+#include <shared/parse-util.h>
 
+#include "cleanup.h"
+#include "global-ctx.h"
 #include "nvme-cmds.h"
 #include "nvme-print.h"
 #include "plugin.h"
-#include "cleanup.h"
-#include "global-ctx.h"
-#include <shared/parse-util.h>
-
-#define CREATE_CMD
-#include "fdp.h"
 
 static int fdp_configs(int argc, char **argv, struct command *acmd,
 		       struct plugin *plugin)
@@ -567,4 +565,77 @@ static int fdp_feature(int argc, char **argv, struct command *acmd, struct plugi
 	nvme_show_result("Success %s Endurance Group: %d, FDP configuration index: %d",
 	       (cfg.disable) ? "disabling" : "enabling", cfg.endgid, cfg.fdpcidx);
 	return err;
+}
+
+static struct command fdp_configs_cmd = {
+	.name = "configs",
+	.help = "List configurations",
+	.fn = fdp_configs,
+};
+
+static struct command fdp_usage_cmd = {
+	.name = "usage",
+	.help = "Show reclaim unit handle usage",
+	.fn = fdp_usage,
+};
+
+static struct command fdp_stats_cmd = {
+	.name = "stats",
+	.help = "Show statistics",
+	.fn = fdp_stats,
+};
+
+static struct command fdp_events_cmd = {
+	.name = "events",
+	.help = "List events affecting reclaim units and media usage",
+	.fn = fdp_events,
+};
+
+static struct command fdp_status_cmd = {
+	.name = "status",
+	.help = "Show reclaim unit handle status",
+	.fn = fdp_status,
+};
+
+static struct command fdp_update_cmd = {
+	.name = "update",
+	.help = "Update a reclaim unit handle",
+	.fn = fdp_update,
+};
+
+static struct command fdp_set_events_cmd = {
+	.name = "set-events",
+	.help = "Enable or disable events",
+	.fn = fdp_set_events,
+};
+
+static struct command fdp_feature_cmd = {
+	.name = "feature",
+	.help = "Show, enable or disable FDP configuration",
+	.fn = fdp_feature,
+};
+
+static struct command *commands[] = {
+	&fdp_configs_cmd,
+	&fdp_usage_cmd,
+	&fdp_stats_cmd,
+	&fdp_events_cmd,
+	&fdp_status_cmd,
+	&fdp_update_cmd,
+	&fdp_set_events_cmd,
+	&fdp_feature_cmd,
+	NULL,
+};
+
+static struct plugin plugin = {
+	.name = "fdp",
+	.desc = "Manage Flexible Data Placement enabled devices",
+	.version = NVME_VERSION,
+	.core = true,
+};
+
+static void __shr_constructor register_plugin(void)
+{
+	plugin_add_group(&plugin, NULL, commands);
+	register_extension(&plugin);
 }

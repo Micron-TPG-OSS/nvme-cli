@@ -1,25 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-#include <fcntl.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <inttypes.h>
 
 #include <libnvme.h>
 
 #include <ccan/endian/endian.h>
-
 #include <shared/compiler-attributes-util.h>
 
-#include "nvme-cmds.h"
-#include "nvme-print.h"
 #include "cleanup.h"
 #include "global-ctx.h"
+#include "nvme-cmds.h"
+#include "nvme-print.h"
 #include "plugin.h"
-
-#define CREATE_CMD
-#include "ssstc-nvme.h"
 
 struct  __packed nvme_additional_smart_log_item
 {
@@ -433,4 +429,27 @@ int ssstc_get_add_smart_log(int argc, char **argv, struct command *acmd, struct 
 	}
 	return err;
 
+}
+
+static struct command ssstc_get_add_smart_log_cmd = {
+	.name = "smart-log-add",
+	.help = "Retrieve ssstc SMART Log, show it",
+	.fn = ssstc_get_add_smart_log,
+};
+
+static struct command *commands[] = {
+	&ssstc_get_add_smart_log_cmd,
+	NULL,
+};
+
+static struct plugin plugin = {
+	.name = "ssstc",
+	.desc = "SSSTC vendor specific extensions",
+	.version = NVME_VERSION,
+};
+
+static void __shr_constructor register_plugin(void)
+{
+	plugin_add_group(&plugin, NULL, commands);
+	register_extension(&plugin);
 }

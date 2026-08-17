@@ -29,37 +29,34 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
-#include <sys/stat.h>
-#include <sys/types.h>
-
 #ifdef NVME_HAVE_NETDB
-#include <netdb.h>
-
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <sys/socket.h>
+#endif
+
+#ifdef NVME_HAVE_LIBKMOD
+#include <libkmod.h>
 #endif
 
 #include <libnvme.h>
 
 #include <ccan/endian/endian.h>
 #include <ccan/str/str.h>
-
 #include <shared/io-util.h>
-
-#ifdef NVME_HAVE_LIBKMOD
-#include <libkmod.h>
-#endif
-
-#include "config-convert.h"
-#include "global-ctx.h"
-#include "nvme-print.h"
-#include "fabrics.h"
-#include "cleanup.h"
-#include "logging.h"
 #include <shared/sig-util.h>
+
+#include "cleanup.h"
+#include "config-convert.h"
+#include "fabrics.h"
+#include "global-ctx.h"
+#include "logging.h"
+#include "nvme-print.h"
 
 #define MAX_DISC_ARGS		32
 #define MAX_DISC_RETRIES	10
@@ -144,7 +141,7 @@ void nvmf_args_to_params(struct libnvmf_params *params,
 				   fa->tls_key_identity);
 }
 
-static void save_discovery_log(char *raw, struct nvmf_discovery_log *log)
+static void save_discovery_log(char *raw, const struct nvmf_discovery_log *log)
 {
 	__cleanup_free char *path = NULL;
 	static unsigned int save_count;
@@ -257,7 +254,7 @@ static void hook_already_connected(struct libnvmf_context *fctx,
 }
 
 static void hook_discovery_log(struct libnvmf_context *fctx,
-		struct nvmf_discovery_log *log,
+		const struct nvmf_discovery_log *log,
 		uint64_t numrec, void *user_data)
 {
 	struct hook_fabrics_data *hfd = user_data;

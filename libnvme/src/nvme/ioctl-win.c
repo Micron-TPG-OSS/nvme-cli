@@ -29,6 +29,7 @@
 
 #include "cleanup.h"
 #include "ioctl.h"
+#include "loopback.h"
 #include "private.h"
 #include "private-ctrl-map.h"
 #include "types.h"
@@ -2159,6 +2160,11 @@ __shr_public int libnvme_exec_io_passthru(
 	if (!hdl || !cmd)
 		return -EINVAL;
 
+	cmd->result = 0;
+
+	if (hdl->type == LIBNVME_TRANSPORT_HANDLE_TYPE_LOOPBACK)
+		return __libnvme_loopback_io_passthru(hdl, cmd);
+
 	switch (cmd->opcode) {
 	case nvme_cmd_flush:
 		return submit_io_flush(hdl, cmd);
@@ -2198,8 +2204,13 @@ __shr_public int libnvme_exec_admin_passthru(
 	if (!hdl || !cmd)
 		return -EINVAL;
 
+	if (hdl->type == LIBNVME_TRANSPORT_HANDLE_TYPE_LOOPBACK)
+		return __libnvme_loopback_admin_passthru(hdl, cmd);
+
 	if (hdl->type != LIBNVME_TRANSPORT_HANDLE_TYPE_DIRECT)
 		return -ENOTSUP;
+
+	cmd->result = 0;
 
 	switch (cmd->opcode) {
 	case nvme_admin_get_log_page:

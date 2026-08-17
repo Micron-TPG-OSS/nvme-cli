@@ -1,21 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <errno.h>
+#include <fnmatch.h>
 #include <inttypes.h>
 #include <stdio.h>
-#include <fnmatch.h>
 
 #include <libnvme.h>
 
-#include "nvme-print.h"
-#include "plugin.h"
+#include <shared/compiler-attributes-util.h>
+
 #include "cleanup.h"
 #include "global-ctx.h"
-#include "fabrics.h"
-#include "logging.h"
-
-#define CREATE_CMD
-#include "nbft-plugin.h"
+#include "nvme-print.h"
+#include "plugin.h"
 
 static const char dash[100] = {[0 ... 98] = '-', [99] = '\0'};
 
@@ -700,4 +697,28 @@ int show_nbft(int argc, char **argv, struct command *acmd, struct plugin *plugin
 	}
 	libnvmf_nbft_free(ctx, head);
 	return ret;
+}
+
+static struct command show_nbft_cmd = {
+	.name = "show",
+	.help = "Show contents of ACPI NBFT tables",
+	.fn = show_nbft,
+};
+
+static struct command *commands[] = {
+	&show_nbft_cmd,
+	NULL,
+};
+
+static struct plugin plugin = {
+	.name = "nbft",
+	.desc = "ACPI NBFT table extensions",
+	.version = NVME_VERSION,
+	.core = true,
+};
+
+static void __shr_constructor register_plugin(void)
+{
+	plugin_add_group(&plugin, NULL, commands);
+	register_extension(&plugin);
 }

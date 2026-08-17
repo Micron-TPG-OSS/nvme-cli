@@ -17,12 +17,12 @@
 #include <sys/mman.h>
 #endif
 
-#include <libnvme.h>
 #include <libnvme-mi.h>
+#include <libnvme.h>
 
 #include <shared/fs-util.h>
-#include <cleanup.h>
 
+#include "cleanup.h"
 #include "logging.h"
 #include "nvme-print.h"
 #include "nvme-regs.h"

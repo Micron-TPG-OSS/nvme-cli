@@ -25,20 +25,19 @@
 #define BW_KIB	1024
 #define BW_MIB	(BW_KIB * 1024)
 
-#include <stdio.h>
 #include <stddef.h>
+#include <stdio.h>
 
 #include <libnvme.h>
 
 #include <ccan/array_size/array_size.h>
 #include <ccan/minmax/minmax.h>
+#include <shared/table-util.h>
 
 #include "cleanup.h"
+#include "dashboard.h"
 #include "global-ctx.h"
 #include "nvme-print.h"
-#include "logging.h"
-#include "dashboard.h"
-#include <shared/table-util.h>
 
 static double nvme_calc_util_percent(unsigned int ticks, double interval_ms)
 {
