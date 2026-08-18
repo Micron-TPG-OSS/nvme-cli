@@ -23,6 +23,53 @@
   TP4201. See `nvme-keys-gen-kxchap-secret(1)` and
   `nvme-keys-check-kxchap-secret(1)`.
 
+* NVMe Base Specification 2.4 (ECN122) renames the Reservation
+  Report data structures from "Registered Controller" to
+  "Registrant" throughout. `struct nvme_registered_ctrl` and
+  `struct nvme_registered_ctrl_ext` are now `struct nvme_registrant`
+  and `struct nvme_registrant_ext`; the `regctl`/`regctl_ds`/
+  `regctl_eds` fields of `struct nvme_resv_status` are now
+  `regstrnt`/`registrant_ds`/`registrant_eds`. `nvme resv-report`
+  output changes to match: the `regctl`/`regctls`/`regctlext` labels
+  and JSON keys are now `regstrnt`/`registrants`/`registrantext`.
+  Update any code or scripts that reference the old names.
+
+* NVMe Base Specification 2.4 (TP4150) renames the "Namespace
+  Attribute Changed" asynchronous event to "Attached Namespace
+  Attribute Changed", the "Changed Namespace List" log page to
+  "Changed Attached Namespace List", and the "Namespace Attribute
+  Notices" notice to "Attached Namespace Attribute Notices" (to
+  distinguish them from the new Allocated Namespace variants added
+  alongside them). `NVME_AER_NOTICE_NS_CHANGED` is now
+  `NVME_AER_NOTICE_ATTACHED_NS_CHANGED`, `NVME_LOG_LID_CHANGED_NS` is
+  now `NVME_LOG_LID_CHANGED_ATTACHED_NS`, and `NVME_CTRL_OAES_NA*` is
+  now `NVME_CTRL_OAES_NSAN*` (matching the spec's new OAES mnemonic).
+  `nvme discover --log-id=changed-ns` still works as a deprecated
+  alias for the new `changed-attached-ns`.
+
+* NVMe Base Specification 2.4 (TP4193) renames the "Create Exported
+  NVM Subsystem" and "Manage Exported NVM Subsystem" admin commands
+  to "Manage Exported NVM Subsystem Receive" and "...Send"
+  respectively. `nvme_admin_create_export_nvms` is now
+  `nvme_admin_manage_export_nvms_receive`, and
+  `nvme_admin_manage_export_nvms` is now
+  `nvme_admin_manage_export_nvms_send`. The opcode values (0x2a,
+  0x2d) are unchanged.
+
+* NVMe Management Interface Specification 2.2 (TP6039) adds a
+  Controller Health Status Changed Flags field to the Controller
+  Health Data Structure, and renames the NVM Subsystem Health Data
+  Structure's Composite Controller Status field to Composite
+  Controller Status Flags, to distinguish per-bit change flags from
+  the status/state bits they report. In libnvme,
+  `struct nvme_mi_ctrl_health_status` gains a `chscf` field (and
+  `enum nvme_mi_chscf`) carved out of what was previously trailing
+  reserved space, so its size is unchanged; and
+  `struct nvme_mi_nvm_ss_health_status`'s `ccs` field/`enum
+  nvme_mi_ccs` are renamed to `ccsf`/`enum nvme_mi_ccsf` with bit
+  names getting an `F` suffix (e.g. `NVME_MI_CCS_RDY` is now
+  `NVME_MI_CCSF_RDYF`) and a new `TCIDAF` bit.
+
 * `nvme gen-dhchap-key` emits the secret it was given rather than the
   key transformed from it, so its output differs whenever `--hmac` is
   non-zero. `--nqn`/`-n` fed only that transform and is now accepted

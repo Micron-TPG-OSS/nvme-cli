@@ -65,6 +65,64 @@ static int help(int argc, char **argv, struct plugin *plugin)
 	return 0;
 }
 
+enum ext_filter {
+	EXT_GROUP,	/* extension->group matches the given title */
+	EXT_CORE_ONLY,	/* core, not shown next to a built-in group */
+	EXT_VENDOR,	/* vendor (non-core) */
+};
+
+static bool extension_matches(struct plugin *extension, enum ext_filter filter,
+			      const char *group_title)
+{
+	switch (filter) {
+	case EXT_GROUP:
+		return extension->group && !strcmp(extension->group, group_title);
+	case EXT_CORE_ONLY:
+		return extension->core && !extension->group;
+	case EXT_VENDOR:
+		return !extension->core;
+	}
+	return false;
+}
+
+static int plugin_name_cmp(const void *a, const void *b)
+{
+	struct plugin *const *pa = a;
+	struct plugin *const *pb = b;
+
+	return strcmp((*pa)->name, (*pb)->name);
+}
+
+/*
+ * Collect extensions matching filter into a name-sorted, NULL-terminated
+ * array so the plugin listings in general_help() print alphabetically
+ * regardless of registration order. Caller must free() the result.
+ */
+static struct plugin **sorted_extensions(struct plugin *extensions, enum ext_filter filter,
+					 const char *group_title)
+{
+	struct plugin *extension;
+	struct plugin **list;
+	size_t count = 0, i = 0;
+
+	for (extension = extensions; extension; extension = extension->next)
+		if (extension_matches(extension, filter, group_title))
+			count++;
+
+	list = malloc((count + 1) * sizeof(*list));
+	if (!list)
+		return NULL;
+
+	for (extension = extensions; extension; extension = extension->next)
+		if (extension_matches(extension, filter, group_title))
+			list[i++] = extension;
+	list[i] = NULL;
+
+	qsort(list, count, sizeof(*list), plugin_name_cmp);
+
+	return list;
+}
+
 static void usage_cmd(struct plugin *plugin)
 {
 	struct program *prog = plugin->parent;
@@ -73,6 +131,18 @@ static void usage_cmd(struct plugin *plugin)
 		printf("usage: %s %s %s\n", prog->name, plugin->name, prog->usage);
 	else
 		printf("usage: %s %s\n", prog->name, prog->usage);
+}
+
+static void build_command_usage(char *use, size_t size, struct program *prog,
+				struct plugin *plugin, struct command *cmd)
+{
+	const char *device = cmd->no_device ? "" : " <device>";
+
+	if (!plugin->name)
+		snprintf(use, size, "%s %s%s [OPTIONS]", prog->name, cmd->name, device);
+	else
+		snprintf(use, size, "%s %s %s%s [OPTIONS]", prog->name, plugin->name,
+			cmd->name, device);
 }
 
 void plugin_add_group(struct plugin *plugin, const char *title,
@@ -107,6 +177,16 @@ void plugin_add_group(struct plugin *plugin, const char *title,
 	plugin->commands = merged;
 }
 
+static void print_device_desc(void)
+{
+	printf("'<device>' is one of:\n");
+	printf("  - an NVMe controller device (ex: /dev/nvme0)\n");
+	printf("  - an NVMe namespace device (ex: /dev/nvme0n1)\n");
+#ifdef CONFIG_MI
+	printf("  - a mctp address (ex: mctp:<net>,<eid>[:ctrl-id])\n");
+#endif
+}
+
 void general_help(struct plugin *plugin, char *str)
 {
 	struct program *prog = plugin->parent;
@@ -115,14 +195,29 @@ void general_help(struct plugin *plugin, char *str)
 	unsigned int padding = 15;
 	unsigned int curr_length = 0;
 	bool have_deprecated = false;
+	bool needs_device = false;
+
+	for (i = 0; plugin->commands[i]; i++) {
+		if (!plugin->commands[i]->no_device) {
+			needs_device = true;
+			break;
+		}
+	}
 
 	printf("%s-%s\n", prog->name, prog->version);
 
 	usage_cmd(plugin);
 
-	printf("\n");
-	shr_print_word_wrapped(prog->desc, 0, 0, stdout);
-	printf("\n");
+	if (prog->desc) {
+		printf("\n");
+		shr_print_word_wrapped(prog->desc, 0, 0, stdout);
+		printf("\n");
+	}
+
+	if (needs_device) {
+		printf("\n");
+		print_device_desc();
+	}
 
 	if (plugin->desc) {
 		printf("\n");
@@ -138,7 +233,7 @@ void general_help(struct plugin *plugin, char *str)
 	 * iterate through all commands to get maximum length
 	 * Still need to handle the case of ultra long strings, help messages, etc
 	 */
-	for (; plugin->commands[i]; i++) {
+	for (i = 0; plugin->commands[i]; i++) {
 		curr_length = 2 + strlen(plugin->commands[i]->name);
 		if (padding < curr_length)
 			padding = curr_length;
@@ -165,6 +260,31 @@ void general_help(struct plugin *plugin, char *str)
 				}
 				printf("  %-*s %s\n", padding, command->name, command->help);
 			}
+
+			/*
+			 * Core plugins tagged with .group are shown next to the
+			 * built-in group they relate to instead of the flat
+			 * "core NVMe/NVMeoF plugins" list further down.
+			 */
+			if (!plugin->name && group->title) {
+				__cleanup_free struct plugin **sorted =
+					sorted_extensions(prog->extensions->next, EXT_GROUP,
+							  group->title);
+				size_t j;
+
+				for (j = 0; sorted && sorted[j]; j++) {
+					extension = sorted[j];
+
+					if (str && !strstr(extension->name, str))
+						continue;
+					if (!header_printed) {
+						printf("\n\033[1m%s:\033[0m\n", group->title);
+						header_printed = true;
+					}
+					printf("  %-*s %s\n", padding, extension->name,
+					       extension->desc);
+				}
+			}
 		}
 	} else {
 		/* Not yet migrated to plugin_add_group(): flat listing. */
@@ -177,6 +297,7 @@ void general_help(struct plugin *plugin, char *str)
 		}
 	}
 
+	printf("\n");
 	if (!str || strstr("version", str))
 		printf("  %-*s %s\n", padding, "version", "Shows the program version");
 	if (!str || strstr("help", str))
@@ -199,36 +320,40 @@ void general_help(struct plugin *plugin, char *str)
 
 		extension = prog->extensions->next;
 		while (extension) {
-			if (extension->core)
+			if (extension->core && !extension->group)
 				have_core = true;
-			else
+			else if (!extension->core)
 				have_vendor = true;
 			extension = extension->next;
 		}
 
 		if (have_core) {
+			__cleanup_free struct plugin **sorted =
+				sorted_extensions(prog->extensions->next, EXT_CORE_ONLY, NULL);
+			size_t j;
+
 			printf("\nThe following are core NVMe/NVMeoF plugins:\n");
 			if (str)
 				printf("Note: Only extensions including %s\n", str);
 
-			extension = prog->extensions->next;
-			while (extension) {
-				if (extension->core && (!str || strstr(extension->name, str)))
-					printf("  %-*s %s\n", 15, extension->name, extension->desc);
-				extension = extension->next;
+			for (j = 0; sorted && sorted[j]; j++) {
+				if (!str || strstr(sorted[j]->name, str))
+					printf("  %-*s %s\n", 15, sorted[j]->name, sorted[j]->desc);
 			}
 		}
 
 		if (have_vendor) {
+			__cleanup_free struct plugin **sorted =
+				sorted_extensions(prog->extensions->next, EXT_VENDOR, NULL);
+			size_t j;
+
 			printf("\nThe following are vendor specific plugins:\n");
 			if (str)
 				printf("Note: Only extensions including %s\n", str);
 
-			extension = prog->extensions->next;
-			while (extension) {
-				if (!extension->core && (!str || strstr(extension->name, str)))
-					printf("  %-*s %s\n", 15, extension->name, extension->desc);
-				extension = extension->next;
+			for (j = 0; sorted && sorted[j]; j++) {
+				if (!str || strstr(sorted[j]->name, str))
+					printf("  %-*s %s\n", 15, sorted[j]->name, sorted[j]->desc);
 			}
 		}
 
@@ -318,12 +443,6 @@ int handle_plugin(int argc, char **argv, struct plugin *plugin)
 
 	str = argv[0];
 
-	if (!plugin->name)
-		snprintf(use, sizeof(use), "%s %s <device> [OPTIONS]", prog->name, str);
-	else
-		snprintf(use, sizeof(use), "%s %s %s <device> [OPTIONS]", prog->name, plugin->name, str);
-	argconfig_append_usage(use);
-
 	if (!strcmp(str, "help"))
 		return help(argc, argv, plugin);
 	if (!strcmp(str, "version"))
@@ -331,8 +450,11 @@ int handle_plugin(int argc, char **argv, struct plugin *plugin)
 
 	while (*cmd) {
 		if (!strcmp(str, (*cmd)->name) ||
-		    ((*cmd)->alias && !strcmp(str, (*cmd)->alias)))
+		    ((*cmd)->alias && !strcmp(str, (*cmd)->alias))) {
+			build_command_usage(use, sizeof(use), prog, plugin, *cmd);
+			argconfig_append_usage(use);
 			return (*cmd)->fn(argc, argv, *cmd, plugin);
+		}
 		if (!strncmp(str, (*cmd)->name, strlen(str))) {
 			if (cr) {
 				cr_valid = false;
@@ -345,7 +467,7 @@ int handle_plugin(int argc, char **argv, struct plugin *plugin)
 	}
 
 	if (cr && cr_valid) {
-		snprintf(use, sizeof(use), "%s %s <device> [OPTIONS]", prog->name, cr->name);
+		build_command_usage(use, sizeof(use), prog, plugin, cr);
 		argconfig_append_usage(use);
 		return cr->fn(argc, argv, cr, plugin);
 	}
