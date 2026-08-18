@@ -703,6 +703,7 @@ static struct command show_nbft_cmd = {
 	.name = "show",
 	.help = "Show contents of ACPI NBFT tables",
 	.fn = show_nbft,
+	.no_device = true,
 };
 
 static struct command *commands[] = {
@@ -715,6 +716,7 @@ static struct plugin plugin = {
 	.desc = "ACPI NBFT table extensions",
 	.version = NVME_VERSION,
 	.core = true,
+	.group = "Fabrics",
 };
 
 static void __shr_constructor register_plugin(void)

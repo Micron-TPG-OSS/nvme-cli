@@ -355,6 +355,11 @@ static int forward_to_log_plugin(const char *old_name, const char *subcmd,
 	return handle_plugin(argc + 1, sub_argv, log);
 }
 
+static int get_supported_log_pages(int argc, char **argv, struct command *acmd, struct plugin *plugin)
+{
+	return forward_to_log_plugin("supported-log-pages", "supported-pages", argc, argv);
+}
+
 static int get_telemetry_log(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
 	return forward_to_log_plugin("telemetry-log", "telemetry", argc, argv);
@@ -1167,6 +1172,14 @@ static struct command get_ns_id_cmd = {
 	.deprecated = true,
 };
 
+static struct command get_supported_log_pages_cmd = {
+	.name = "supported-log-pages",
+	.help = "Retrieve the Supported Log pages details, show it (deprecated, use 'nvme log "
+		"supported-pages')",
+	.fn = get_supported_log_pages,
+	.deprecated = true,
+};
+
 static struct command get_telemetry_log_cmd = {
 	.name = "telemetry-log",
 	.help = "Retrieve FW Telemetry log write to file (deprecated, use 'nvme log telemetry')",
@@ -1472,6 +1485,7 @@ static struct command gen_dhchap_key_cmd = {
 	.help = "Generate NVMeoF DH-HMAC-CHAP host secret (deprecated, use 'nvme keys gen-kxchap-secret')",
 	.fn = gen_dhchap_key,
 	.deprecated = true,
+	.no_device = true,
 };
 
 static struct command check_dhchap_key_cmd = {
@@ -1480,6 +1494,7 @@ static struct command check_dhchap_key_cmd = {
 		"check-kxchap-secret')",
 	.fn = check_dhchap_key,
 	.deprecated = true,
+	.no_device = true,
 };
 
 static struct command gen_tls_key_cmd = {
@@ -1487,6 +1502,7 @@ static struct command gen_tls_key_cmd = {
 	.help = "Generate NVMeoF TLS PSK (deprecated, use 'nvme keys gen-tls')",
 	.fn = gen_tls_key,
 	.deprecated = true,
+	.no_device = true,
 };
 
 static struct command check_tls_key_cmd = {
@@ -1494,6 +1510,7 @@ static struct command check_tls_key_cmd = {
 	.help = "Validate NVMeoF TLS PSK (deprecated, use 'nvme keys check-tls')",
 	.fn = check_tls_key,
 	.deprecated = true,
+	.no_device = true,
 };
 
 static struct command tls_key_cmd = {
@@ -1501,6 +1518,7 @@ static struct command tls_key_cmd = {
 	.help = "Manage NVMeoF TLS PSKs (deprecated, use 'nvme keys import/export/revoke')",
 	.fn = tls_key,
 	.deprecated = true,
+	.no_device = true,
 };
 
 #endif /* CONFIG_FABRICS */
@@ -1571,6 +1589,7 @@ static struct command *commands[] = {
 	&attach_ns_cmd,
 	&detach_ns_cmd,
 	&get_ns_id_cmd,
+	&get_supported_log_pages_cmd,
 	&get_telemetry_log_cmd,
 	&get_fw_log_cmd,
 	&get_changed_attach_ns_list_log_cmd,

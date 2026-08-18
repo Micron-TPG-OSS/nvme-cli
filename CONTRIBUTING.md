@@ -53,9 +53,10 @@ You may wish to add a new command or possibly an entirely new plug-in
 for some special extension outside the spec.
 
 Every command (built-in or plugin) is a `struct command`: a name, a help
-string, a callback, and optionally an alias or a `deprecated` flag. A
-group of commands is registered together with `plugin_add_group()`, and
-a named plugin additionally calls `register_extension()` once. 
+string, a callback, and optionally an alias, a `deprecated` flag, or a
+`no_device` flag. A group of commands is registered together with
+`plugin_add_group()`, and a named plugin additionally calls
+`register_extension()` once. 
 
 ### Add a command to an existing group
 
@@ -67,21 +68,21 @@ fit -- just add the one line to `src/meson.build`'s `sources` list. Each
 such file ends with a block like this one from `src/nvme-cmds-discovery.c`:
 
 ```c
-static struct command list_cmd = {
-	.name = "list",
-	.help = "List all NVMe devices and namespaces on machine",
-	.fn = list,
+static struct command get_log_cmd = {
+	.name = "get-log",
+	.help = "Generic NVMe get log, returns log in raw format",
+	.fn = get_log,
 };
 
 static struct command *commands[] = {
-	&list_cmd,
+	&get_log_cmd,
 	/* ... */
 	NULL,
 };
 
-static void __attribute__((constructor)) register_group(void)
+static void __shr_constructor register_group(void)
 {
-	plugin_add_group(&builtin, "Discovery & Logging", commands);
+	plugin_add_group(&builtin, "Log Page & Identify", commands);
 }
 ```
 
@@ -98,8 +99,12 @@ int f(int argc, char **argv, struct command *command, struct plugin *plugin);
 Use `.alias = "other-name"` for an alias, and `.deprecated = true` for a
 deprecated command (deprecated built-ins live in
 `src/nvme-cmds-deprecated.c`, gated by `#ifdef CONFIG_DEPRECATED_CMDS`).
+Set `.no_device = true` for a command that doesn't take a positional
+`<device>` argument (e.g. `nvme list` or `nvme gen-hostnqn`) -- this drops
+`<device>` from its usage line and, when none of a plugin's commands need
+one, from that plugin's `--help` output too.
 
-The `title` passed to `plugin_add_group()` (`"Discovery & Logging"` above)
+The `title` passed to `plugin_add_group()` (`"Log Page & Identify"` above)
 is the heading shown for that group's commands in `nvme help`; pass `NULL`
 for no heading (that's what plugins normally do, see below).
 
@@ -147,6 +152,13 @@ Then append `plugins/foo/foo-nvme.c` to the `all_plugins` dict in
 "Core" vs. "vendor" plugin is just the `.core` flag on `struct plugin` --
 it only affects which heading a plugin's listed under on `nvme help`. Both
 kinds work identically otherwise.
+
+A core plugin can also set `.group` to the title of a built-in group (see
+above) it's thematically related to, e.g. `.group = "Features"` for the
+`feat` plugin. When set, `nvme help` lists the plugin right after that
+group's commands instead of in the flat "core NVMe/NVMeoF plugins" list.
+This only affects display -- the plugin is still invoked as `nvme foo bar`,
+not merged into the flat top-level command namespace.
 
 #### Multi-file plugins
 

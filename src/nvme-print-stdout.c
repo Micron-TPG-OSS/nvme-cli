@@ -1990,7 +1990,7 @@ static void stdout_id_ctrl_oaes(__le32 ctrl_oaes)
 	__u32 anacn = NVME_CTRL_OAES_ANACN(oaes);
 	__u32 rsvd10 = (oaes >> 10) & 0x1;
 	__u32 fan = NVME_CTRL_OAES_FAN(oaes);
-	__u32 nace = NVME_CTRL_OAES_NAN(oaes);
+	__u32 nace = NVME_CTRL_OAES_NSAN(oaes);
 	__u32 rsvd0 = oaes & 0xFF;
 
 	printf("  [31:31] : %#x\tDiscovery Log Change Notice %sSupported\n",
@@ -2025,7 +2025,7 @@ static void stdout_id_ctrl_oaes(__le32 ctrl_oaes)
 		printf("  [10:10] : %#x\tReserved\n", rsvd10);
 	printf("  [9:9] : %#x\tFirmware Activation Notices %sSupported\n",
 		fan, fan ? "" : "Not ");
-	printf("  [8:8] : %#x\tNamespace Attribute Changed Event %sSupported\n",
+	printf("  [8:8] : %#x\tAttached Namespace Attribute Changed Event %sSupported\n",
 		nace, nace ? "" : "Not ");
 	if (rsvd0)
 		printf("  [7:0] : %#x\tReserved\n", rsvd0);
@@ -4396,14 +4396,14 @@ static void stdout_error_log(struct nvme_error_log_page *err_log, int entries,
 static void stdout_resv_report(struct nvme_resv_status *status, int bytes,
 			       bool eds)
 {
-	int i, j, regctl, entries;
+	int i, j, regstrnt, entries;
 
-	regctl = status->regctl[0] | (status->regctl[1] << 8);
+	regstrnt = status->regstrnt[0] | (status->regstrnt[1] << 8);
 
 	printf("\nNVME Reservation status:\n\n");
 	printf("gen       : %u\n", le32_to_cpu(status->gen));
 	printf("rtype     : %d\n", status->rtype);
-	printf("regctl    : %d\n", regctl);
+	printf("regstrnt  : %d\n", regstrnt);
 	printf("ptpls     : %d\n", status->ptpls);
 
 	/* check Extended Data Structure bit */
@@ -4413,38 +4413,38 @@ static void stdout_resv_report(struct nvme_resv_status *status, int bytes,
 		 * the buffer
 		 */
 		entries = (bytes - 24) / 24;
-		if (entries < regctl)
-			regctl = entries;
+		if (entries < regstrnt)
+			regstrnt = entries;
 
-		for (i = 0; i < regctl; i++) {
-			printf("regctl[%d] :\n", i);
+		for (i = 0; i < regstrnt; i++) {
+			printf("registrant[%d] :\n", i);
 			printf("  cntlid  : %x\n",
-				le16_to_cpu(status->regctl_ds[i].cntlid));
+				le16_to_cpu(status->registrant_ds[i].cntlid));
 			printf("  rcsts   : %x\n",
-				status->regctl_ds[i].rcsts);
+				status->registrant_ds[i].rcsts);
 			printf("  hostid  : %"PRIx64"\n",
-				le64_to_cpu(status->regctl_ds[i].hostid));
+				le64_to_cpu(status->registrant_ds[i].hostid));
 			printf("  rkey    : %"PRIx64"\n",
-				le64_to_cpu(status->regctl_ds[i].rkey));
+				le64_to_cpu(status->registrant_ds[i].rkey));
 		}
 	} else {
 		/* if status buffer was too small, don't loop past the end of the buffer */
 		entries = (bytes - 64) / 64;
-		if (entries < regctl)
-			regctl = entries;
+		if (entries < regstrnt)
+			regstrnt = entries;
 
-		for (i = 0; i < regctl; i++) {
-			printf("regctlext[%d] :\n", i);
+		for (i = 0; i < regstrnt; i++) {
+			printf("registrantext[%d] :\n", i);
 			printf("  cntlid     : %x\n",
-				le16_to_cpu(status->regctl_eds[i].cntlid));
+				le16_to_cpu(status->registrant_eds[i].cntlid));
 			printf("  rcsts      : %x\n",
-				status->regctl_eds[i].rcsts);
+				status->registrant_eds[i].rcsts);
 			printf("  rkey       : %"PRIx64"\n",
-				le64_to_cpu(status->regctl_eds[i].rkey));
+				le64_to_cpu(status->registrant_eds[i].rkey));
 			printf("  hostid     : ");
 			for (j = 0; j < 16; j++)
 				printf("%02x",
-					status->regctl_eds[i].hostid[j]);
+					status->registrant_eds[i].hostid[j]);
 			printf("\n");
 		}
 	}
@@ -5491,7 +5491,7 @@ static void stdout_feature_show_fields(enum nvme_features_id fid,
 		       NVME_FEAT_AE_TELEM(result) ? async : no_async);
 		printf("\tFirmware Activation Notices                               : %s\n",
 		       NVME_FEAT_AE_FW(result) ? async : no_async);
-		printf("\tNamespace Attribute Notices                               : %s\n",
+		printf("\tAttached Namespace Attribute Notices                      : %s\n",
 		       NVME_FEAT_AE_NAN(result) ? async : no_async);
 		printf("\tSMART / Health Critical Warnings                          : %s\n",
 		       NVME_FEAT_AE_SMART(result) ? async : no_async);

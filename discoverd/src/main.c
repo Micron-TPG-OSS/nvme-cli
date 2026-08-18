@@ -41,13 +41,13 @@
 
 // Exponential backoff for failed (re)connect attempts: 1s, 2s, 4s, ... capped
 // at 5 min. A dynamically-discovered DC (not NBFT- or config-sourced — a
-// referral or FC-kickstart find) additionally gives up after 72h of
-// unbroken failure and is dropped from tracking, since nothing but its own
-// retries vouches for it any more. Static and NBFT-sourced DCs represent
-// deliberate admin/firmware intent and always retry forever.
+// referral or FC-kickstart find) additionally gives up after
+// dc-giveup-hours (default 72h) of unbroken failure and is dropped from
+// tracking, since nothing but its own retries vouches for it any more.
+// Static and NBFT-sourced DCs represent deliberate admin/firmware intent
+// and always retry forever.
 #define RETRY_INITIAL_DELAY_SEC 1
 #define RETRY_MAX_DELAY_SEC     300
-#define DC_GIVEUP_USEC          (UINT64_C(72) * 3600 * UINT64_C(1000000))
 
 struct active_ctrl {
 	struct list_node entry;
@@ -58,6 +58,19 @@ struct active_ctrl {
 	unsigned int attempts;   // consecutive failed (re)connect attempts
 	uint64_t giveup_at_usec; // 0 = no deadline armed (ctrl_arm_giveup)
 	sd_event_source *retry_timer; // NULL when no retry pending
+
+	/*
+	 * EPCSD this DC's own referral entry carried in its parent's
+	 * Discovery Log Page, if this DC was reached via referral. Fallback
+	 * for when this DC's own self entry (SUBTYPE 03h) turns out to be
+	 * absent from its own Discovery Log Page. Unset for primary DCs
+	 * (statically configured, mDNS-discovered, or NBFT) — they have no
+	 * parent.
+	 */
+	bool parent_epcsd_known;
+	bool parent_epcsd; // meaningful only if parent_epcsd_known
+
+	sd_event_source *epcsd_poll_timer; // NULL when not EPCSD-parked
 };
 
 static LIST_HEAD(g_ctrls);
@@ -90,6 +103,7 @@ static void ctrl_free(struct active_ctrl *e)
 	if (!e)
 		return;
 	sd_event_source_unref(e->retry_timer);
+	sd_event_source_unref(e->epcsd_poll_timer);
 	tid_free(e->tid);
 	free(e->unit_name);
 	free(e->devname);
@@ -264,6 +278,8 @@ SHR_PTRARRAY_DEFINE(ioc_list, struct libnvmf_tid);
 struct dlp_fetch_ctx {
 	const struct libnvmf_config_conn *via_dc; // dc_tid's own conn, if any
 	struct ioc_list iocs;
+	bool self_seen;
+	bool epcsd; // meaningful only if self_seen
 };
 
 static void dlp_ioc_callback(const struct libnvmf_tid *t, void *user_data)
@@ -283,14 +299,64 @@ static void dlp_ioc_callback(const struct libnvmf_tid *t, void *user_data)
 		start_ctrl(t, false, is_nbft, fctx->via_dc);
 }
 
-static void dlp_dc_callback(const struct libnvmf_tid *t, void *user_data)
+/*
+ * Record the EPCSD bit @t's own referral entry carried in its parent's
+ * Discovery Log Page, as a fallback for when @t is later connected to and
+ * its own self entry turns out to be absent. A no-op if @t is not tracked
+ * yet (should_connect() rejected it, or start_ctrl() failed).
+ */
+static void record_parent_epcsd(const struct libnvmf_tid *t, bool epcsd)
+{
+	char *unit_name = tid_unit_name(t);
+	struct active_ctrl *e;
+
+	if (!unit_name)
+		return;
+
+	e = ctrl_find_by_unit(unit_name);
+	if (e) {
+		e->parent_epcsd_known = true;
+		e->parent_epcsd = epcsd;
+	}
+	free(unit_name);
+}
+
+static void dlp_dc_callback(const struct libnvmf_tid *t, bool epcsd,
+			    void *user_data)
 {
 	struct dlp_fetch_ctx *fctx = user_data;
 	bool is_nbft = inventory_is_nbft(ctx.inventory, t);
 
-	if (should_connect(t, NULL))
+	if (should_connect(t, NULL)) {
 		start_ctrl(t, true, is_nbft, fctx->via_dc);
+		record_parent_epcsd(t, epcsd);
+	}
 }
+
+static void dlp_self_callback(bool epcsd, void *user_data)
+{
+	struct dlp_fetch_ctx *fctx = user_data;
+
+	fctx->self_seen = true;
+	fctx->epcsd = epcsd;
+}
+
+/*
+ * Self entry seen: its own EPCSD. Else the parent's referral-entry view
+ * of this DC, if any. Else assume EPCSD=0, matching core libnvme's
+ * dc_decide().
+ */
+static bool dc_effective_epcsd(const struct dlp_fetch_ctx *fctx,
+			       const struct active_ctrl *e)
+{
+	if (fctx->self_seen)
+		return fctx->epcsd;
+	if (e && e->parent_epcsd_known)
+		return e->parent_epcsd;
+	return false;
+}
+
+static void epcsd_park(struct active_ctrl *e);
 
 static void fetch_and_process_dlp(const char *devname,
 				  const struct libnvmf_tid *dc_tid)
@@ -298,9 +364,19 @@ static void fetch_and_process_dlp(const char *devname,
 	struct dlp_fetch_ctx fctx = {
 		.via_dc = inventory_config_conn_for(ctx.inventory, dc_tid),
 	};
+	struct active_ctrl *e = ctrl_find_by_devname(devname);
+	bool epcsd;
 
 	dlp_fetch(&ctx, devname, dc_tid, dlp_ioc_callback, dlp_dc_callback,
-		  &fctx);
+		  dlp_self_callback, &fctx);
+
+	epcsd = dc_effective_epcsd(&fctx, e);
+	disc_dbg("%s: self entry %s, effective EPCSD=%d",
+		 libnvmf_tid_str(dc_tid), fctx.self_seen ? "seen" : "absent",
+		 epcsd);
+
+	if (e && e->is_dc && !epcsd)
+		epcsd_park(e);
 
 	if (fctx.iocs.len) {
 		if (ioc_list_append(&fctx.iocs, NULL) == 0) {
@@ -319,19 +395,25 @@ static void fetch_and_process_dlp(const char *devname,
 /*
  * Arm a dynamically-discovered DC's give-up deadline the first time it is
  * seen failing to (re)connect. Static/NBFT-sourced DCs and IOCs never get
- * one and retry forever.
+ * one and retry forever, and so does a dynamic DC when dc-giveup-hours is
+ * configured to 0.
  */
 static void ctrl_arm_giveup(struct active_ctrl *e)
 {
-	uint64_t now;
+	uint64_t now, giveup_usec;
 
 	if (e->giveup_at_usec || !e->is_dc)
 		return;
 	if (inventory_is_nbft(ctx.inventory, e->tid) ||
 	    inventory_config_conn_for(ctx.inventory, e->tid))
 		return;
+	if (!ctx.cfg->dc_giveup_hours)
+		return;
+
+	giveup_usec = (uint64_t)ctx.cfg->dc_giveup_hours *
+		      3600 * UINT64_C(1000000);
 	if (sd_event_now(ctx.event, CLOCK_BOOTTIME, &now) >= 0)
-		e->giveup_at_usec = now + DC_GIVEUP_USEC;
+		e->giveup_at_usec = now + giveup_usec;
 }
 
 static uint64_t backoff_delay_usec(unsigned int attempts)
@@ -429,6 +511,66 @@ static int retry_timeout(sd_event_source *src,
 		schedule_retry(e);
 	}
 	return 0;
+}
+
+static int epcsd_poll_timeout(sd_event_source *src,
+			      uint64_t usec __attribute__((unused)),
+			      void *user_data)
+{
+	struct active_ctrl *e = user_data;
+	int r;
+
+	sd_event_source_unref(src);
+	e->epcsd_poll_timer = NULL;
+
+	if (!inventory_is_desired(ctx.inventory, e->tid)) {
+		disc_info("%s - no longer desired, dropping",
+			  libnvmf_tid_str(e->tid));
+		ctrl_remove(e);
+		return 0;
+	}
+
+	disc_dbg("%s - EPCSD poll: reconnecting to re-check",
+		 libnvmf_tid_str(e->tid));
+	r = restart_or_start(e);
+	if (r < 0) {
+		disc_err("%s - EPCSD poll reconnect failed: %s",
+			 libnvmf_tid_str(e->tid), strerror(-r));
+		schedule_retry(e);
+	}
+	return 0;
+}
+
+/*
+ * Disconnect a DC whose effective EPCSD is 0 and arm a long poll timer to
+ * reconnect and re-check it later. Never retried with the failure
+ * backoff/give-up path — EPCSD=0 is an expected, stable outcome, not a
+ * connect failure.
+ */
+static void epcsd_park(struct active_ctrl *e)
+{
+	uint64_t now, interval;
+
+	if (e->epcsd_poll_timer)
+		return; // already parked
+
+	unit_stop(ctx.umgr, e->unit_name);
+
+	if (sd_event_now(ctx.event, CLOCK_BOOTTIME, &now) < 0)
+		return;
+
+	interval = (uint64_t)ctx.cfg->epcsd_poll_interval_minutes *
+		   60 * UINT64_C(1000000);
+
+	if (sd_event_add_time(ctx.event, &e->epcsd_poll_timer, CLOCK_BOOTTIME,
+			      now + interval, 0, epcsd_poll_timeout, e) < 0) {
+		disc_warn("%s - failed to arm EPCSD poll timer",
+			  libnvmf_tid_str(e->tid));
+		return;
+	}
+
+	disc_info("%s - EPCSD=0, disconnecting; re-checking in %u min",
+		 libnvmf_tid_str(e->tid), ctx.cfg->epcsd_poll_interval_minutes);
 }
 
 // Periodic FC kickstart (opt-in via fc-kickstart-interval-minutes).
@@ -556,6 +698,12 @@ static void on_nvme_remove(const char *devname,
 		disc_info("%s | %s - removed, not desired, dropping",
 			  libnvmf_tid_str(e->tid), devname);
 		ctrl_remove(e);
+		return;
+	}
+
+	if (e->epcsd_poll_timer) {
+		// Intentionally disconnected (EPCSD=0); the poll timer
+		// reconnects it, not this removal handler.
 		return;
 	}
 

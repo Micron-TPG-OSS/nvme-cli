@@ -256,6 +256,7 @@ static struct command registry_list_cmd = {
 	.name = "list",
 	.help = "List live registry entries",
 	.fn = registry_list,
+	.no_device = true,
 };
 
 static struct command registry_retrieve_cmd = {
@@ -289,6 +290,7 @@ static struct plugin plugin = {
 	.desc = "NVMeoF controller ownership registry",
 	.version = NVME_VERSION,
 	.core = true,
+	.group = "Fabrics",
 };
 
 static void __shr_constructor register_plugin(void)

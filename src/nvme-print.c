@@ -23,7 +23,7 @@
 #define nvme_print(name, flags, ...)				\
 	do {							\
 		struct print_ops *ops = nvme_print_ops(flags);	\
-		if (ops && ops->name && !nvme_args.dry_run)	\
+		if (nvme_print_check(ops, ops->name))		\
 			ops->name(__VA_ARGS__);			\
 	} while (false)
 
@@ -44,6 +44,24 @@ static struct print_ops *nvme_print_ops(nvme_print_flags_t flags)
 		ops = nvme_get_stdout_print_ops(flags);
 
 	return ops;
+}
+
+static bool nvme_print_check(struct print_ops *ops, void *func)
+{
+	if (!ops || !func)
+		return false;
+
+	/*
+	 * Always run init and the finish hooks to properly initialize
+	 * the output plugin.
+	 */
+	if (func == ops->show_init || func == ops->show_finish)
+		return true;
+
+	if (nvme_args.dry_run)
+		return false;
+
+	return true;
 }
 
 const char *nvme_ana_state_to_string(enum nvme_ana_state state)
@@ -96,8 +114,8 @@ const char *nvme_cmd_to_string(int admin, __u8 opcode)
 		case nvme_admin_clear_export_nvm_res:
 						return "Clear Exported NVM Resource Configuration";
 		case nvme_admin_fabric_zoning_send:return "Fabric Zoning Send";
-		case nvme_admin_create_export_nvms:return "Create Exported NVM Subsystem";
-		case nvme_admin_manage_export_nvms:return "Manage Exported NVM Subsystem";
+		case nvme_admin_manage_export_nvms_receive:return "Manage Exported NVM Subsystem Receive";
+		case nvme_admin_manage_export_nvms_send:return "Manage Exported NVM Subsystem Send";
 		case nvme_admin_manage_export_ns:return "Manage Exported Namespace";
 		case nvme_admin_manage_export_port:return "Manage Exported Port";
 		case nvme_admin_send_disc_log_page:return "Send Discovery Log Page";
@@ -846,7 +864,7 @@ const char *nvme_log_to_string(__u8 lid)
 	case NVME_LOG_LID_ERROR:			return "Error Information";
 	case NVME_LOG_LID_SMART:			return "SMART / Health Information";
 	case NVME_LOG_LID_FW_SLOT:			return "Firmware Slot Information";
-	case NVME_LOG_LID_CHANGED_NS:			return "Changed Namespace List";
+	case NVME_LOG_LID_CHANGED_ATTACHED_NS:		return "Changed Attached Namespace List";
 	case NVME_LOG_LID_CMD_EFFECTS:			return "Commands Supported and Effects";
 	case NVME_LOG_LID_DEVICE_SELF_TEST:		return "Device Self-test";
 	case NVME_LOG_LID_TELEMETRY_HOST:		return "Telemetry Host-Initiated";
@@ -1924,7 +1942,7 @@ void nvme_show_log(const char *devname, enum nvme_cmd_get_log_lid lid, __u32 nsi
 	case NVME_LOG_LID_FW_SLOT:
 		nvme_show_fw_log(log, devname, flags);
 		break;
-	case NVME_LOG_LID_CHANGED_NS:
+	case NVME_LOG_LID_CHANGED_ATTACHED_NS:
 		nvme_show_changed_ns_list_log(log, devname, flags, false);
 		break;
 	case NVME_LOG_LID_CMD_EFFECTS:
