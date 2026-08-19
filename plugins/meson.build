@@ -40,6 +40,7 @@ if host_system != 'windows'
     'huawei': ['plugins/huawei/huawei-nvme.c'],
     'micron': [
       'plugins/micron/micron-nvme.c',
+      'plugins/micron/micron-spdm.c',
       'plugins/micron/micron-utils.c',
       'plugins/micron/micron-utils-linux.c'
       ],
@@ -51,6 +52,7 @@ else
   all_plugins += {
     'micron': [
       'plugins/micron/micron-nvme.c',
+      'plugins/micron/micron-spdm.c',
       'plugins/micron/micron-utils.c',
       'plugins/micron/micron-utils-win.c'
       ],

@@ -129,6 +129,7 @@ adoc_sources_man1 = [
     'nvme-micron-selective-download',
     'nvme-micron-smart-add-log',
     'nvme-micron-smart-log',
+    'nvme-micron-spdm-cert',
     'nvme-micron-temperature-stats',
     'nvme-netapp-ontapdevices',
     'nvme-netapp-smdevices',

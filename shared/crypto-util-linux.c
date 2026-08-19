@@ -62,6 +62,44 @@ unsigned char *shr_md5(unsigned char *data, int datalen)
 
 	return hash;
 }
+
+/*
+ * Compute a plain (unkeyed) digest of the given buffer using @md.
+ * Returns byte stream (non-null terminated) upon success, NULL otherwise.
+ */
+static unsigned char *create_digest(const EVP_MD *md, unsigned int hash_size,
+		const unsigned char *data, size_t datalen)
+{
+	unsigned char *hash;
+	unsigned int hash_len;
+
+	hash = calloc(hash_size, 1);
+	if (!hash)
+		return NULL;
+
+	if (!EVP_Digest(data, datalen, hash, &hash_len, md, NULL) ||
+	    hash_len != hash_size) {
+		free(hash);
+		return NULL;
+	}
+
+	return hash;
+}
+
+unsigned char *shr_sha256(const unsigned char *data, size_t datalen)
+{
+	return create_digest(EVP_sha256(), SHR_SHA256_SIZE, data, datalen);
+}
+
+unsigned char *shr_sha384(const unsigned char *data, size_t datalen)
+{
+	return create_digest(EVP_sha384(), SHR_SHA384_SIZE, data, datalen);
+}
+
+unsigned char *shr_sha512(const unsigned char *data, size_t datalen)
+{
+	return create_digest(EVP_sha512(), SHR_SHA512_SIZE, data, datalen);
+}
 #else /* CONFIG_OPENSSL */
 unsigned char *shr_hmac_sha256(unsigned char *data, int datalen,
 		unsigned char *key, int keylen)
@@ -71,6 +109,24 @@ unsigned char *shr_hmac_sha256(unsigned char *data, int datalen,
 }
 
 unsigned char *shr_md5(unsigned char *data, int datalen)
+{
+	fprintf(stderr, "%s: nvme-cli was built without OpenSSL support\n", __func__);
+	return NULL;
+}
+
+unsigned char *shr_sha256(const unsigned char *data, size_t datalen)
+{
+	fprintf(stderr, "%s: nvme-cli was built without OpenSSL support\n", __func__);
+	return NULL;
+}
+
+unsigned char *shr_sha384(const unsigned char *data, size_t datalen)
+{
+	fprintf(stderr, "%s: nvme-cli was built without OpenSSL support\n", __func__);
+	return NULL;
+}
+
+unsigned char *shr_sha512(const unsigned char *data, size_t datalen)
 {
 	fprintf(stderr, "%s: nvme-cli was built without OpenSSL support\n", __func__);
 	return NULL;

@@ -36,6 +36,7 @@
 
 #include "field-parser.h"
 #include "global-ctx.h"
+#include "micron-spdm.h"
 #include "micron-utils.h"
 #include "nvme-cmds.h"
 #include "nvme-pci-ids.h"
@@ -4513,6 +4514,12 @@ static struct command id_ctrl_cmd = {
 	.fn = micron_id_ctrl,
 };
 
+static struct command vs_spdm_cert_cmd = {
+	.name = "vs-spdm-cert",
+	.help = "Retrieve and classify the SPDM certificate chain",
+	.fn = micron_spdm_cert,
+};
+
 static struct command *commands[] = {
 	&select_download_cmd,
 	&vs_temperature_stats_cmd,
@@ -4540,6 +4547,7 @@ static struct command *commands[] = {
 	&vs_vendor_telemetry_log_cmd,
 	&smart_log_cmd,
 	&id_ctrl_cmd,
+	&vs_spdm_cert_cmd,
 	NULL,
 };
 

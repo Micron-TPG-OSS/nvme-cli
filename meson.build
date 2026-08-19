@@ -176,6 +176,7 @@ conf.set('CONFIG_DEPRECATED_CMDS', want_deprecated_cmds,
 if host_system == 'windows'
     kernel32_dep = cc.find_library('kernel32', required: true)
     bcrypt_dep = cc.find_library('bcrypt', required: true)
+    crypt32_dep = cc.find_library('crypt32', required: true)
     setupapi_dep = cc.find_library('setupapi', required: true)
     cfgmgr32_dep = cc.find_library('cfgmgr32', required: true)
     winpthread_dep = cc.find_library('winpthread', required: true)
@@ -615,12 +616,16 @@ if want_nvme
         shared_dep,
         json_c_dep,
         libkmod_dep,
+        # shared/x509-util-linux.c and crypto-util-linux.c call OpenSSL
+        # directly; a no-op dependency on non-Linux hosts.
+        openssl_dep,
     ]
 
     if host_system == 'windows'
         link_deps += [
             kernel32_dep,
             bcrypt_dep,
+            crypt32_dep,
         ]
 
         if is_static

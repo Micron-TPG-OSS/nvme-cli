@@ -1,0 +1,138 @@
+nvme-micron-spdm-cert(1)
+========================
+
+NAME
+----
+nvme-micron-spdm-cert - Retrieve and classify the SPDM certificate chain of a
+Micron device
+
+SYNOPSIS
+--------
+[verse]
+'nvme' [<global-options>] 'micron vs-spdm-cert' <device>
+			[--slot=<NUM> | -s <NUM>]
+			[--output-file=<FILE> | -f <FILE>]
+			[--secp=<NUM>] [--conn-id=<NUM>]
+			[--output-format=<fmt> | -o <fmt>]
+
+DESCRIPTION
+-----------
+Retrieves the SPDM (DMTF DSP0274) certificate chain from a device certificate
+slot and reports whether the device presents a *self-signed* certificate or a
+*full chain* terminating at a self-signed root CA. Per-certificate Issuer,
+Subject, Common Name, serial number and validity dates are printed so an
+operator can confirm the device's origin without a separate SPDM tool or a
+manual ASN.1 decode.
+
+The <device> parameter is mandatory and may be either the NVMe character
+device (ex: /dev/nvme0), or a namespace block device (ex: /dev/nvme0n1).
+
+The requester handshake is carried in band over NVMe Security Send and Security
+Receive using the SPDM-over-Storage binding (DMTF DSP0286), so no MCTP endpoint
+or PCIe DOE mailbox access is needed and the command works the same on Linux and
+Windows. The messages exchanged are, in order:
+
+* *GET_VERSION* (0x84) - resets the connection and selects the highest mutually
+  supported SPDM version. Version 1.1 or later is required.
+* *GET_CAPABILITIES* (0xE1) - records the responder timing exponent and, on
+  1.2 and later, the DataTransferSize used to chunk the certificate read.
+* *NEGOTIATE_ALGORITHMS* (0xE3) - selects the base hash algorithm, one of
+  SHA-256, SHA-384 or SHA-512.
+* *GET_DIGESTS* (0x81) - returns the populated slot mask and a digest per
+  populated slot.
+* *GET_CERTIFICATE* (0x82) - returns the chain a portion at a time until no
+  remainder is left.
+
+The retrieved chain is then hashed with the negotiated algorithm and compared
+against the *GET_DIGESTS* value for the slot, and the *RootHash* in the chain
+header is compared against a hash of the root certificate. Both comparisons are
+reported as PASS or FAIL; either failing means the chain that was read is not
+the one the device attested to, and the command exits non-zero.
+
+No SPDM session is established and no certificate signature or trust path is
+verified. Use `--output-file` and a tool such as `openssl` for verification
+beyond the digest checks.
+
+The command requires the controller to report Security Send/Receive support in
+Identify Controller OACS, and requires firmware that implements the SPDM storage
+binding. It is not restricted to a particular Micron model number, because SPDM
+support is a firmware rather than a hardware capability.
+
+OPTIONS
+-------
+-s <NUM>::
+--slot=<NUM>::
+	Certificate slot to read, 0 to 7. Defaults to 0, which on Micron drives
+	holds the CA chain.
+
+-f <FILE>::
+--output-file=<FILE>::
+	Write the certificate chain exactly as the device returned it,
+	including the DSP0274 chain header, to <FILE>. Written before the chain
+	is parsed, so it is available even when parsing fails.
+
+--secp=<NUM>::
+	Override the NVMe security protocol used for the SPDM messages.
+	Defaults to 0xE8, the value DSP0286 assigns to SPDM. Only needed on
+	firmware that predates the published binding.
+
+--conn-id=<NUM>::
+	SPDM storage connection ID, carried in SPSP1. Defaults to 0.
+
+-o <fmt>::
+--output-format=<fmt>::
+	Set the reporting format to 'normal' or 'json'. Only one output format
+	can be used at a time.
+
+include::global-options.txt[]
+
+EXAMPLES
+--------
+* Retrieve and classify the chain in slot 0
++
+------------
+# nvme micron vs-spdm-cert /dev/nvme0
+SPDM certificate chain, slot 0
+
+SPDM version              : 1.2
+Negotiated hash algorithm : SHA-384
+Certificate count         : 4
+Classification            : full chain (terminates at a self-signed root CA)
+Chain digest check        : PASS
+Root hash check           : PASS
+Micron origin             : yes
+
+Certificate 0 (root)
+  Subject      : CN=Micron Root CA,O=Micron Technology\, Inc.,C=US
+  Issuer       : CN=Micron Root CA,O=Micron Technology\, Inc.,C=US
+  ...
+
+Certificate 3 (leaf)
+  Subject      : CN=M7600-T01234567,OU=SSD,O=Micron Technology\, Inc.,C=US
+  Issuer       : CN=Micron Device CA,O=Micron Technology\, Inc.,C=US
+  Common name  : M7600-T01234567
+  Self-signed  : no
+------------
+
+* Produce machine-readable output for automation
++
+------------
+# nvme micron vs-spdm-cert /dev/nvme0 --output-format=json
+------------
+
+* Save the raw chain and inspect the leaf certificate with openssl
++
+------------
+# nvme micron vs-spdm-cert /dev/nvme0 --output-file=chain.der
+# openssl x509 -in chain.der -inform DER -text -noout
+------------
+
+* Show the Security Send/Receive encoding without touching the device
++
+------------
+# nvme micron vs-spdm-cert /dev/nvme0 --dry-run -v
+------------
+
+NVME
+----
+Part of the nvme-user suite

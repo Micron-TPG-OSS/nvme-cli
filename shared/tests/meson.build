@@ -266,6 +266,24 @@ test_crypto_util = executable(
 
 test('shared - crypto-util', test_crypto_util)
 
+test_x509_util_deps = [
+    config_dep,
+    shared_dep,
+]
+if host_system == 'windows'
+    test_x509_util_deps += [crypt32_dep]
+else
+    test_x509_util_deps += [openssl_dep]
+endif
+
+test_x509_util = executable(
+    'test-x509-util',
+    ['test-x509-util.c'],
+    dependencies: test_x509_util_deps,
+)
+
+test('shared - x509-util', test_x509_util)
+
 test_sig_util = executable(
     'test-sig-util',
     ['test-sig-util.c'],

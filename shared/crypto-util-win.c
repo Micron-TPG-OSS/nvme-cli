@@ -2,6 +2,7 @@
 /*
  * This file is part of nvme-cli.
  */
+#include <limits.h>
 #include <stdlib.h>
 
 #include <windows.h>
@@ -19,14 +20,18 @@
  * given hash algorithm; this function uses Windows BCrypt services
  */
 static unsigned char *create_hash(LPCWSTR algo, int hash_size,
-		unsigned char *data, int datalen, unsigned char *key,
-		int keylen)
+		const unsigned char *data, size_t datalen,
+		unsigned char *key, int keylen)
 {
 	BCRYPT_ALG_HANDLE alg_handle = NULL;
 	BCRYPT_HASH_HANDLE hash_handle = NULL;
 	unsigned char *hash = NULL;
 	NTSTATUS status;
 	ULONG flags = 0;
+
+	/* BCryptHashData() takes a ULONG length. */
+	if (datalen > (size_t)ULONG_MAX)
+		return NULL;
 
 	if (key != NULL && keylen > 0)
 		flags = BCRYPT_ALG_HANDLE_HMAC_FLAG;
@@ -40,7 +45,7 @@ static unsigned char *create_hash(LPCWSTR algo, int hash_size,
 	if (!BCRYPT_SUCCESS(status))
 		goto out;
 
-	status = BCryptHashData(hash_handle, data, datalen, 0);
+	status = BCryptHashData(hash_handle, (PUCHAR)data, (ULONG)datalen, 0);
 	if (!BCRYPT_SUCCESS(status))
 		goto out;
 
@@ -88,4 +93,23 @@ unsigned char *shr_md5(unsigned char *data, int datalen)
 			   datalen,
 			   NULL,
 			   0);
+}
+
+/* Plain (unkeyed) SHA2 digests. A NULL key selects a non-HMAC hash. */
+unsigned char *shr_sha256(const unsigned char *data, size_t datalen)
+{
+	return create_hash(BCRYPT_SHA256_ALGORITHM, SHR_SHA256_SIZE,
+			   data, datalen, NULL, 0);
+}
+
+unsigned char *shr_sha384(const unsigned char *data, size_t datalen)
+{
+	return create_hash(BCRYPT_SHA384_ALGORITHM, SHR_SHA384_SIZE,
+			   data, datalen, NULL, 0);
+}
+
+unsigned char *shr_sha512(const unsigned char *data, size_t datalen)
+{
+	return create_hash(BCRYPT_SHA512_ALGORITHM, SHR_SHA512_SIZE,
+			   data, datalen, NULL, 0);
 }

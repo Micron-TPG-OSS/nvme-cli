@@ -27,6 +27,7 @@ sources = [
     'uint128-util.c',
     'uuid-util.c',
     'wrap-util.c',
+    'x509-util.c',
 ]
 
 if host_system == 'windows'
@@ -35,6 +36,7 @@ if host_system == 'windows'
         'crypto-util-win.c',
         'proc-util-win.c',
         'sig-util-win.c',
+        'x509-util-win.c',
     ]
 else
     sources += [
@@ -43,11 +45,15 @@ else
         'crypto-util-linux.c',
         'proc-util-linux.c',
         'sig-util-linux.c',
+        'x509-util-linux.c',
     ]
 endif
 
 shared_deps = [ccan_dep]
-if host_system != 'windows'
+if host_system == 'windows'
+    # x509-util-win.c uses the crypt32 certificate APIs.
+    shared_deps += [crypt32_dep]
+else
     shared_deps += [openssl_dep]
 endif
 
