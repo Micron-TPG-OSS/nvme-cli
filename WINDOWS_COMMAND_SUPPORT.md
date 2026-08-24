@@ -28,7 +28,7 @@ These commands are fully implemented and verified working on Windows.
 | `error-log` | Retrieve Error Log, show it | |
 | `effects-log` | Retrieve Command Effects Log, show it | Usage: `--csi=0` |
 | `endurance-log` | Retrieve Endurance Group Log, show it | |
-| `persistent-event-log` | Retrieve Persistent Event Log, show it | `--action=[0,2,3]` |
+| `persistent-event-log` | Retrieve Persistent Event Log, show it | `--action=[0,1,2,3]` |
 | `endurance-event-agg-log` | Retrieve Endurance Group Event Aggregate Log, show it | |
 | `lba-status-log` | Retrieve LBA Status Information Log, show it | |
 | `phy-rx-eom-log` | Retrieve Physical Interface Receiver Eye Opening Measurement, show it | |
@@ -96,6 +96,8 @@ been fully tested.
 | `delete-ns` | Deletes a namespace from the controller | Only supported in WinPE |
 | `attach-ns` | Attaches a namespace to requested controller(s) | Only supported in WinPE |
 | `detach-ns` | Detaches a namespace from requested controller(s) | Only supported in WinPE |
+| `nvme-mi-recv` | Submit a NVMe-MI Receive command, return results | Only supported in WinPE |
+| `nvme-mi-send` | Submit a NVMe-MI Send command, return results | Only supported in WinPE |
 
 ## Supported by Windows but Not Implemented
 
@@ -174,13 +176,6 @@ These commands are not supported by Windows NVMe drivers or are Linux-specific.
 |---------|-------------|
 | `io-mgmt-recv` | I/O Management Receive |
 | `io-mgmt-send` | I/O Management Send |
-
-### NVMe-MI Commands
-
-| Command | Description |
-|---------|-------------|
-| `nvme-mi-recv` | Submit a NVMe-MI Receive command, return results |
-| `nvme-mi-send` | Submit a NVMe-MI Send command, return results |
 
 ### NVMe-oF (Fabrics) Commands
 
