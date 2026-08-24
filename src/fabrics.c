@@ -190,7 +190,6 @@ static int setup_common_context(struct libnvmf_context *fctx,
 struct hook_fabrics_data {
 	nvme_print_flags_t flags;
 	char *raw;
-	bool idempotent;
 };
 
 static bool hook_decide_retry(struct libnvmf_context *fctx, int err,
@@ -235,20 +234,13 @@ static void hook_already_connected(struct libnvmf_context *fctx,
 		const char *transport, const char *traddr,
 		const char *trsvcid, void *user_data)
 {
-	struct hook_fabrics_data *hfd = user_data;
-
-	if (nvme_args.quiet)
-		return;
-
-	if (hfd->idempotent) {
-		nvme_show_verbose_info(
-			"already connected to hostnqn=%s,nqn=%s,transport=%s,traddr=%s,trsvcid=%s",
-			libnvme_host_get_hostnqn(host), subsysnqn,
-			transport, traddr, trsvcid);
-		return;
-	}
-
-	nvme_show_error("already connected to hostnqn=%s,nqn=%s,transport=%s,traddr=%s,trsvcid=%s",
+	/*
+	 * Already-connected is reported through the exit code alone; this is
+	 * just extra detail for --verbose, not a message a script should
+	 * have to filter out of normal output.
+	 */
+	nvme_show_verbose_info(
+		"already connected to hostnqn=%s,nqn=%s,transport=%s,traddr=%s,trsvcid=%s",
 		libnvme_host_get_hostnqn(host), subsysnqn,
 		transport, traddr, trsvcid);
 }
@@ -1091,7 +1083,6 @@ do_connect:
 	struct hook_fabrics_data hfd = {
 		.flags = flags,
 		.raw = raw,
-		.idempotent = idempotent,
 	};
 	ret = create_common_context(ctx, &fa, &hfd, &fctx);
 	if (ret)
@@ -1121,14 +1112,14 @@ do_connect:
 	}
 
 	ret = libnvmf_connect(ctx, fctx);
-	if (idempotent && (ret == -EALREADY || ret == -ENVME_CONNECT_ALREADY))
+	if (ret == -ENVME_CONNECT_ALREADY && idempotent)
 		ret = 0;
 	if (ret) {
 		/*
 		 * hook_already_connected() already reported the specific
 		 * reason; the generic message here would just overwrite it.
 		 */
-		if (ret != -EALREADY && ret != -ENVME_CONNECT_ALREADY)
+		if (ret != -ENVME_CONNECT_ALREADY)
 			nvme_show_error("failed to connect: %s",
 				libnvme_strerror(-ret));
 		return ret;
