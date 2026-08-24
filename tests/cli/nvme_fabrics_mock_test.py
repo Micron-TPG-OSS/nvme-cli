@@ -435,10 +435,73 @@ class FabricsMockCLITest(unittest.TestCase):
         """Test how connect handles EALREADY (already connected) error gracefully."""
         self.server.connect_errno = 114  # EALREADY
         subsysnqn = "nqn.2014-08.org.nvmexpress:uuid:my-io-subsys-1"
+
+        # Without --verbose, EALREADY is reported through the exit code alone --
+        # no "already connected" text on either stream, so scripts don't have to
+        # filter it out of normal output.
         res = self._run('connect', '-t', 'tcp', '-a', '192.168.1.10', '-s', '4420', '-n', subsysnqn,
                         expect_fail=True)
-        # nvme-cli connect handles EALREADY gracefully and prints 'already connected' to stdout.
+        self.assertNotIn("already connected", res.stdout)
+        self.assertNotIn("already connected", res.stderr)
+
+        # -v surfaces the detail. nvme-cli reports it itself (rather than relying
+        # on libnvme's own internal logging), so it lands on stdout as info --
+        # nvme-cli's own --verbose output is not the same thing as libnvme's
+        # internal logging, which is what moved to stderr.
+        res = self._run('connect', '-t', 'tcp', '-a', '192.168.1.10', '-s', '4420', '-n', subsysnqn,
+                        '-v', expect_fail=True)
         self.assertIn("already connected", res.stdout)
+
+    def test_connect_already_connected_idempotent(self):
+        """--idempotent turns EALREADY into success (exit 0) instead of a
+        failure, still silent unless --verbose is given."""
+        self.server.connect_errno = 114  # EALREADY
+        subsysnqn = "nqn.2014-08.org.nvmexpress:uuid:my-io-subsys-1"
+
+        res = self._run('connect', '-t', 'tcp', '-a', '192.168.1.10', '-s', '4420', '-n', subsysnqn,
+                        '--idempotent')
+        self.assertNotIn("already connected", res.stdout)
+        self.assertNotIn("already connected", res.stderr)
+
+        res = self._run('connect', '-t', 'tcp', '-a', '192.168.1.10', '-s', '4420', '-n', subsysnqn,
+                        '--idempotent', '-v')
+        self.assertIn("already connected", res.stdout)
+
+    def test_connect_already_connected_precheck(self):
+        """A second connect to an already-live target is caught by
+        libnvmf_connect()'s own precheck (lookup_live_ctrl()), before any
+        ioctl is attempted. The CLI relies on for --idempotent and for
+        knowing not to print its own generic "failed to connect" message
+        on top of hook_already_connected()'s on the correct error code."""
+        subsysnqn = "nqn.2014-08.org.nvmexpress:uuid:my-io-subsys-1"
+        # Each nvme invocation auto-generates its own random hostnqn/hostid
+        # unless one is pinned, landing in a different in-memory host object.
+        # lookup_live_ctrl() only searches the *current* host's own
+        # subsystems, so without a shared identity the second process could
+        # never recognize this as already connected, no matter what the
+        # fake sysfs tree says.
+        hostnqn = "nqn.2014-08.org.nvmexpress:uuid:22222222-2222-2222-2222-222222222222"
+        connect_args = ('connect', '-t', 'tcp', '-a', '192.168.1.10', '-s', '4420', '-n', subsysnqn,
+                        '--hostnqn', hostnqn)
+
+        self._run(*connect_args)
+        self.assertTrue(self._ctrl_path(0).exists(), "Mock controller directory was not created under sysfs")
+
+        # Plain connect: fails, silently unless -v, and without a second,
+        # generic "failed to connect" message alongside it.
+        res = self._run(*connect_args, expect_fail=True)
+        self.assertNotIn("already connected", res.stdout)
+        self.assertNotIn("already connected", res.stderr)
+        self.assertNotIn("failed to connect", res.stderr)
+
+        res = self._run(*connect_args, '-v', expect_fail=True)
+        self.assertIn("already connected", res.stdout)
+        self.assertNotIn("failed to connect", res.stderr)
+
+        # --idempotent: succeeds instead.
+        res = self._run(*connect_args, '--idempotent')
+        self.assertNotIn("already connected", res.stdout)
+        self.assertNotIn("already connected", res.stderr)
 
     def test_custom_identify(self):
         """Test getting custom Identify Controller fields steered by environment."""
@@ -560,9 +623,10 @@ class FabricsMockCLITest(unittest.TestCase):
         self.server.discovery_entries = [self._self_entry(addr, eflags=0)]
 
         # -v raises the log level to WARN so the "not persisting" message shows up.
+        # It's libnvme's own internal diagnostic, so it lands on stderr, not stdout.
         res = self._run('discover', '-t', 'tcp', '-a', addr, '--persistent=auto', '-v')
         self._assert_disconnected(self._DISCOVERY_INSTANCE)
-        self.assertIn("EPCSD", res.stdout)
+        self.assertIn("EPCSD", res.stderr)
 
     def test_discover_persistent_auto_no_self_entry_disconnects(self):
         """No self-entry (SUBTYPE=03h) at all is defined identically to EPCSD=0."""
