@@ -894,6 +894,152 @@ static void test_mi_config_set_freq_invalid(libnvme_mi_ep_t ep)
 	shr_assert(rc == 4);
 }
 
+/* test: PDA read request layout (opcode, DFORMAT, DOFST, DLEN), and that a
+ * response shorter than the caller's buffer updates *data_len accordingly */
+static int test_mi_pda_read_cb(struct libnvme_mi_ep *ep,
+			    struct libnvme_mi_req *req,
+			    struct libnvme_mi_resp *resp,
+			    void *data)
+{
+	struct nvme_mi_mi_resp_hdr *mi_resp;
+	uint8_t *buf, *rs_data;
+	__u32 dofst, dlen;
+
+	shr_assert(req->hdr_len == sizeof(struct nvme_mi_mi_req_hdr));
+	shr_assert(req->data_len == 0);
+
+	/* validate req as raw bytes */
+	buf = (void *)req->hdr;
+	shr_assert(buf[4] == nvme_mi_mi_opcode_pda_read);
+	/* DFORMAT is the first reserved byte, following the opcode */
+	shr_assert(buf[5] == nvme_mi_pda_dformat_512b);
+
+	/* cdw0: DOFST, cdw1: DLEN */
+	dofst = buf[8] | buf[9] << 8 | buf[10] << 16 | buf[11] << 24;
+	dlen = buf[12] | buf[13] << 8 | buf[14] << 16 | buf[15] << 24;
+	shr_assert(dofst == 0x1000);
+	shr_assert(dlen == 4);
+
+	shr_assert(resp->data_len >= 2);
+
+	mi_resp = (void *)resp->hdr;
+	mi_resp->status = 0;
+	resp->hdr_len = sizeof(*mi_resp);
+
+	/* return fewer bytes than the caller's buffer can hold */
+	rs_data = resp->data;
+	rs_data[0] = 0xa5;
+	rs_data[1] = 0x5a;
+	resp->data_len = 2;
+
+	test_transport_resp_calc_mic(resp);
+	return 0;
+}
+
+static void test_mi_pda_read(libnvme_mi_ep_t ep)
+{
+	unsigned char buf[16] = { 0 };
+	size_t data_len = sizeof(buf);
+	int rc;
+
+	test_set_transport_callback(ep, test_mi_pda_read_cb, NULL);
+
+	rc = libnvme_mi_mi_pda_read(ep, nvme_mi_pda_dformat_512b, 0x1000, 4,
+				 buf, &data_len);
+	shr_assert(rc == 0);
+	shr_assert(data_len == 2);
+	shr_assert(buf[0] == 0xa5 && buf[1] == 0x5a);
+}
+
+/* test: PDA write request layout (opcode, DFORMAT, DOFST, DLEN) and payload */
+static int test_mi_pda_write_cb(struct libnvme_mi_ep *ep,
+			     struct libnvme_mi_req *req,
+			     struct libnvme_mi_resp *resp,
+			     void *data)
+{
+	struct nvme_mi_mi_resp_hdr *mi_resp;
+	uint8_t *buf, *rq_data;
+	__u32 dofst, dlen;
+	int i;
+
+	shr_assert(req->hdr_len == sizeof(struct nvme_mi_mi_req_hdr));
+	shr_assert(req->data_len == 4);
+
+	buf = (void *)req->hdr;
+	shr_assert(buf[4] == nvme_mi_mi_opcode_pda_write);
+	shr_assert(buf[5] == nvme_mi_pda_dformat_byte);
+
+	dofst = buf[8] | buf[9] << 8 | buf[10] << 16 | buf[11] << 24;
+	dlen = buf[12] | buf[13] << 8 | buf[14] << 16 | buf[15] << 24;
+	shr_assert(dofst == 0x20);
+	shr_assert(dlen == 4);
+
+	rq_data = req->data;
+	for (i = 0; i < 4; i++)
+		shr_assert(rq_data[i] == i + 1);
+
+	mi_resp = (void *)resp->hdr;
+	mi_resp->status = 0;
+	resp->hdr_len = sizeof(*mi_resp);
+	resp->data_len = 0;
+
+	test_transport_resp_calc_mic(resp);
+	return 0;
+}
+
+static void test_mi_pda_write(libnvme_mi_ep_t ep)
+{
+	unsigned char buf[4] = { 1, 2, 3, 4 };
+	int rc;
+
+	test_set_transport_callback(ep, test_mi_pda_write_cb, NULL);
+
+	rc = libnvme_mi_mi_pda_write(ep, nvme_mi_pda_dformat_byte, 0x20, 4,
+				  buf, sizeof(buf));
+	shr_assert(rc == 0);
+}
+
+/* test: PDA write zeroes request layout (opcode, DFORMAT, DOFST, DLEN) */
+static int test_mi_pda_write_zeroes_cb(struct libnvme_mi_ep *ep,
+				    struct libnvme_mi_req *req,
+				    struct libnvme_mi_resp *resp,
+				    void *data)
+{
+	struct nvme_mi_mi_resp_hdr *mi_resp;
+	uint8_t *buf;
+	__u32 dofst, dlen;
+
+	shr_assert(req->hdr_len == sizeof(struct nvme_mi_mi_req_hdr));
+	shr_assert(req->data_len == 0);
+
+	buf = (void *)req->hdr;
+	shr_assert(buf[4] == nvme_mi_mi_opcode_pda_write_zeroes);
+	shr_assert(buf[5] == nvme_mi_pda_dformat_4kib);
+
+	dofst = buf[8] | buf[9] << 8 | buf[10] << 16 | buf[11] << 24;
+	dlen = buf[12] | buf[13] << 8 | buf[14] << 16 | buf[15] << 24;
+	shr_assert(dofst == 1);
+	shr_assert(dlen == 2);
+
+	mi_resp = (void *)resp->hdr;
+	mi_resp->status = 0;
+	resp->hdr_len = sizeof(*mi_resp);
+	resp->data_len = 0;
+
+	test_transport_resp_calc_mic(resp);
+	return 0;
+}
+
+static void test_mi_pda_write_zeroes(libnvme_mi_ep_t ep)
+{
+	int rc;
+
+	test_set_transport_callback(ep, test_mi_pda_write_zeroes_cb, NULL);
+
+	rc = libnvme_mi_mi_pda_write_zeroes(ep, nvme_mi_pda_dformat_4kib, 1, 2);
+	shr_assert(rc == 0);
+}
+
 /* Get Features callback, implementing Arbitration (which doesn't return
  * additional data) and Timestamp (which does).
  */
@@ -1767,6 +1913,7 @@ struct nvme_sanitize_nvm_args {
 	bool oipbp;
 	bool ndas;
 	bool emvs;
+	bool preq;
 };
 
 static int test_admin_sanitize_nvm_cb(struct libnvme_mi_ep *ep,
@@ -1790,6 +1937,7 @@ static int test_admin_sanitize_nvm_cb(struct libnvme_mi_ep *ep,
 
 	shr_assert(((rq_hdr[45] >> 0) & 0x1) == args->oipbp);
 	shr_assert(((rq_hdr[45] >> 1) & 0x1) == args->ndas);
+	shr_assert(((rq_hdr[45] >> 3) & 0x1) == args->preq);
 
 	ovrpat = (__u32)rq_hdr[51] << 24 | rq_hdr[50] << 16 |
 		rq_hdr[49] << 8 | rq_hdr[48];
@@ -1817,10 +1965,11 @@ static void test_admin_sanitize_nvm(struct libnvme_mi_ep *ep)
 	args.owpass = 0xf;
 	args.oipbp = 0x0;
 	args.ndas = 0x1;
+	args.preq = 0x1;
 	args.ovrpat = ~0x04030201;
 
 	nvme_init_sanitize_nvm(&cmd, args.sanact, args.ause, args.owpass,
-		args.oipbp, args.ndas, args.emvs, args.ovrpat);
+		args.oipbp, args.ndas, args.emvs, args.preq, args.ovrpat);
 	rc = libnvme_exec_admin_passthru(hdl, &cmd);
 	shr_assert(!rc);
 
@@ -1829,10 +1978,11 @@ static void test_admin_sanitize_nvm(struct libnvme_mi_ep *ep)
 	args.owpass = 0x0;
 	args.oipbp = 0x1;
 	args.ndas = 0x0;
+	args.preq = 0x0;
 	args.ovrpat = 0x04030201;
 
 	nvme_init_sanitize_nvm(&cmd, args.sanact, args.ause, args.owpass,
-		args.oipbp, args.ndas, args.emvs, args.ovrpat);
+		args.oipbp, args.ndas, args.emvs, args.preq, args.ovrpat);
 	rc = libnvme_exec_admin_passthru(hdl, &cmd);
 	shr_assert(!rc);
 }
@@ -2090,6 +2240,9 @@ struct test {
 	DEFINE_TEST(mi_config_get_mtu),
 	DEFINE_TEST(mi_config_set_freq),
 	DEFINE_TEST(mi_config_set_freq_invalid),
+	DEFINE_TEST(mi_pda_read),
+	DEFINE_TEST(mi_pda_write),
+	DEFINE_TEST(mi_pda_write_zeroes),
 	DEFINE_TEST(get_features),
 	DEFINE_TEST(set_features),
 	DEFINE_TEST(admin_id_alloc_ns_list),
