@@ -55,6 +55,11 @@ void libnvme_free_global_ctx(struct libnvme_global_ctx *ctx);
  * This is the supported way to record the registry owner;
  * libnvme_create_global_ctx() deliberately takes no owner parameter.
  *
+ * See also: libnvmf_get_owner_from_tid() and libnvmf_get_owner_from_fctx()
+ * (fabrics.h) to look up who owns a candidate connection before connecting
+ * it, and libnvmf_registry_retrieve() (registry.h) to read a live
+ * controller's registry entry directly.
+ *
  * Return: 0 on success, -EINVAL or -ENOMEM on error.
  */
 int libnvme_set_owner(struct libnvme_global_ctx *ctx, const char *owner);
@@ -177,7 +182,7 @@ struct libnvme_mi_ep *libnvme_transport_handle_get_mi_ep(
  * transport handle
  * @hdl:	Transport handle
  *
- * Return: Device file name, otherwise -1.
+ * Return: Device file name, otherwise NULL.
  */
 const char *libnvme_transport_handle_get_name(
 		struct libnvme_transport_handle *hdl);
