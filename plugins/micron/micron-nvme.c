@@ -4267,6 +4267,7 @@ static int micron_cloud_boot_SSD_version(int argc, char **argv,
 	if (err == 0) {
 		if (ctrl.vs[536] != MICRON_CUST_ID_GG) {
 			nvme_show_error("cloud-boot-SSD-version option is not supported for specified drive");
+			err = -ENOTSUP;
 			goto out;
 		}
 	} else {
@@ -4318,6 +4319,7 @@ static int micron_device_waf(int argc, char **argv, struct command *acmd,
 	if (err == 0) {
 		if (ctrl.vs[536] != MICRON_CUST_ID_GG) {
 			nvme_show_error("vs-device-waf option is not supported for specified drive");
+			err = -ENOTSUP;
 			goto out;
 		}
 	} else {
@@ -4387,6 +4389,7 @@ static int micron_cloud_log(int argc, char **argv, struct command *acmd,
 	if (err == 0) {
 		if (ctrl.vs[536] != MICRON_CUST_ID_GG) {
 			nvme_show_error("vs-cloud-log option is not supported for specified drive");
+			err = -ENOTSUP;
 			goto out;
 		}
 	} else {
