@@ -22,6 +22,9 @@ from ...nvme_test import TestNVMe
 
 logger = logging.getLogger(__name__)
 
+# Pass to run_plugin_cmd() to omit the device argument entirely.
+NO_DEVICE = ""
+
 
 class TestPlugin(TestNVMe):
     """Base class for all plugin tests.
@@ -53,7 +56,8 @@ class TestPlugin(TestNVMe):
 
         Args:
             command: The plugin subcommand name.
-            device: Device path to operate on (defaults to self.ctrl).
+            device: Device path to operate on (defaults to self.ctrl), or
+                NO_DEVICE to leave the device argument off entirely.
             args: Additional arguments string.
 
         Returns:
