@@ -5,6 +5,7 @@
 micron_tests = [
     'micron_clear_pcie_correctable_errors_test.py',
     'micron_id_ctrl_test.py',
+    'micron_smart_log_test.py',
     'micron_vs_drive_info_test.py',
     'micron_vs_fw_activate_history_test.py',
     'micron_vs_internal_log_test.py',
