@@ -52,6 +52,7 @@ _LEGACY_COMMANDS = {
     "log error": "error-log",
     "log fw": "fw-log",
     "log lba-status": "lba-status-log",
+    "log supported-pages": "supported-log-pages",
 }
 _command_cache = {}
 
