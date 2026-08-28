@@ -3880,7 +3880,7 @@ static int micron_logpage_dir(int argc, char **argv, struct command *acmd,
 		printf("%02Xh    : %s\n", log_list[i].log_id, log_list[i].desc);
 	}
 
-	return err;
+	return 0;
 }
 
 static int micron_cloud_boot_SSD_version(int argc, char **argv,

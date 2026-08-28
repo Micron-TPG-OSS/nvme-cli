@@ -77,13 +77,7 @@ class TestMicronLogPageDirectory(TestMicron):
     """Test suite for the micron log-page-directory plugin command."""
 
     def _run_dir(self, device=None, args=""):
-        """Run log-page-directory and return the CompletedProcess result.
-
-        The return code is deliberately not asserted here: it currently
-        reflects the last log page probe rather than whether the listing
-        printed (see test_exit_status_is_zero_when_listing_printed), so
-        output assertions must not be gated on it.
-        """
+        """Run log-page-directory and return the CompletedProcess result."""
         return self.run_plugin_cmd(_COMMAND, device=device, args=args)
 
     def _listed_pages(self, stdout, context=""):
@@ -195,14 +189,8 @@ class TestMicronLogPageDirectory(TestMicron):
         )
 
     def test_exit_status_is_zero_when_listing_printed(self):
-        """log-page-directory exits 0 once it has printed a listing.
+        """log-page-directory exits 0 once it has printed a listing."""
 
-        Intentionally failing: the probe loop leaves err set to the result of
-        the *last* log page tried, 0xC3 Latency Monitor Log, and returns it
-        (plugins/micron/micron-nvme.c:3876-3883).  This assertion happens to
-        pass on a drive that supports 0xC3 and fails on any drive that does
-        not, even though the listing printed correctly.
-        """
         result = self._run_dir()
         pages = self._listed_pages(result.stdout)
 
