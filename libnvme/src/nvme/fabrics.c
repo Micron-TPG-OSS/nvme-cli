@@ -1546,21 +1546,59 @@ static int ctrl_instance(struct libnvme_ctrl *c)
 	return instance;
 }
 
+enum registry_action {
+	REG_NONE,	/* leave the entry alone */
+	REG_CLAIM,	/* record @owner, overwriting any entry */
+	REG_CLEAR,	/* delete the entry */
+};
+
 /*
- * Best-effort registry update after a successful connect: record ownership
- * when an owner is set, otherwise clear any stale entry for a recycled
- * instance.  Failures are logged but never fail the connection.
+ * Decide what a successful connect does to the registry entry. Pure
+ * function, no I/O, so it is directly unit-testable.
+ *
+ * @owner: ctx->owner. NULL means --owner was never given, "" means an
+ *         explicit disown, and a name means a claim.
+ * @fresh: whether the kernel just created this controller for us. A
+ *         controller that already existed may belong to another
+ *         orchestrator, so an unstated intent must not touch its entry.
+ *         A fresh one cannot legitimately be owned by anybody, so its
+ *         entry is cleared to drop what a recycled instance number left
+ *         behind.
+ */
+static enum registry_action registry_action_on_connect(const char *owner,
+						       bool fresh)
+{
+	if (owner && *owner)
+		return REG_CLAIM;
+
+	if (fresh || owner)
+		return REG_CLEAR;
+
+	return REG_NONE;
+}
+
+/*
+ * Best-effort registry update after a successful connect. Failures are
+ * logged but never fail the connection.
  */
 static void registry_update_on_connect(struct libnvme_global_ctx *ctx,
-				       int instance)
+				       int instance, bool fresh)
 {
 	int ret;
 
-	if (ctx->owner)
+	switch (registry_action_on_connect(ctx->owner, fresh)) {
+	case REG_CLAIM:
 		ret = libnvmf_registry_create_instance(ctx, instance,
 						       ctx->owner);
-	else
+		break;
+	case REG_CLEAR:
 		ret = libnvmf_registry_delete_instance(ctx, instance);
+		break;
+	case REG_NONE:
+	default:
+		return;
+	}
+
 	if (ret)
 		libnvme_msg(ctx, LIBNVME_LOG_WARN,
 			    "nvme%d: registry update failed: %s\n",
@@ -1624,7 +1662,7 @@ static int __nvmf_add_ctrl(struct libnvme_global_ctx *ctx, const char *argstr)
 		if (!*p)
 			continue;
 		if (sscanf(p, "instance=%d", &instance) == 1) {
-			registry_update_on_connect(ctx, instance);
+			registry_update_on_connect(ctx, instance, true);
 			return instance;
 		}
 	}
@@ -1634,10 +1672,63 @@ static int __nvmf_add_ctrl(struct libnvme_global_ctx *ctx, const char *argstr)
 }
 
 
+static void nvme_parse_tls_args(const char *keyring, const char *tls_key,
+				const char *tls_key_identity,
+				struct libnvme_fabrics_config *cfg, struct libnvme_ctrl *c)
+{
+	if (keyring) {
+		char *endptr;
+		long id = strtol(keyring, &endptr, 0);
+
+		if (endptr != keyring)
+			cfg->keyring_id = id;
+		else
+			libnvme_ctrl_set_keyring(c, keyring);
+	}
+
+	if (tls_key_identity)
+		libnvme_ctrl_set_tls_key_identity(c, tls_key_identity);
+
+	if (tls_key) {
+		char *endptr;
+		long id = strtol(tls_key, &endptr, 0);
+
+		if (endptr != tls_key)
+			cfg->tls_key_id = id;
+		else
+			libnvme_ctrl_set_tls_key(c, tls_key);
+	}
+}
+
 __shr_public int libnvmf_create_ctrl(struct libnvme_global_ctx *ctx,
 		struct libnvmf_context *fctx, struct libnvme_ctrl **cp)
 {
-	return libnvme_create_ctrl(ctx, &fctx->ctrl_params, cp);
+	struct libnvme_ctrl *c;
+	int ret;
+
+	ret = libnvme_create_ctrl(ctx, &fctx->ctrl_params, &c);
+	if (ret)
+		return ret;
+
+	/*
+	 * The credentials live on @fctx next to, not inside, ctrl_params,
+	 * so libnvme_create_ctrl() cannot carry them over. Apply them here
+	 * or a controller created from a context that has them would
+	 * silently connect without.
+	 */
+	if (fctx->hostkey) {
+		libnvme_ctrl_set_kxchap_host_key(c, fctx->hostkey);
+		if (fctx->ctrlkey)
+			libnvme_ctrl_set_kxchap_ctrl_key(c, fctx->ctrlkey);
+	}
+
+	nvme_parse_tls_args(fctx->keyring, fctx->tls_key,
+		fctx->tls_key_identity, &fctx->ctrl_params.cfg, c);
+	update_config(c, &fctx->ctrl_params.cfg);
+
+	*cp = c;
+
+	return 0;
 }
 
 __shr_public int libnvmf_add_ctrl(struct libnvme_host *h, struct libnvme_ctrl *c)
@@ -2679,34 +2770,6 @@ static int set_discovery_kato(struct libnvmf_context *fctx,
 		params->cfg.keep_alive_tmo = 0;
 
 	return tmo;
-}
-
-static void nvme_parse_tls_args(const char *keyring, const char *tls_key,
-				const char *tls_key_identity,
-				struct libnvme_fabrics_config *cfg, struct libnvme_ctrl *c)
-{
-	if (keyring) {
-		char *endptr;
-		long id = strtol(keyring, &endptr, 0);
-
-		if (endptr != keyring)
-			cfg->keyring_id = id;
-		else
-			libnvme_ctrl_set_keyring(c, keyring);
-	}
-
-	if (tls_key_identity)
-		libnvme_ctrl_set_tls_key_identity(c, tls_key_identity);
-
-	if (tls_key) {
-		char *endptr;
-		long id = strtol(tls_key, &endptr, 0);
-
-		if (endptr != tls_key)
-			cfg->tls_key_id = id;
-		else
-			libnvme_ctrl_set_tls_key(c, tls_key);
-	}
 }
 
 enum dc_ownership {
@@ -4051,7 +4114,7 @@ __shr_public int libnvmf_connect(
 
 		write_devid_file(fctx, devid_fd, c);
 		if (instance >= 0)
-			registry_update_on_connect(ctx, instance);
+			registry_update_on_connect(ctx, instance, false);
 		if (fctx->hooks.already_connected)
 			fctx->hooks.already_connected(fctx, h,
 				libnvme_ctrl_get_subsysnqn(c),
@@ -4062,19 +4125,9 @@ __shr_public int libnvmf_connect(
 		return -ENVME_CONNECT_ALREADY;
 	}
 
-	err = libnvme_create_ctrl(ctx, &fctx->ctrl_params, &c);
+	err = libnvmf_create_ctrl(ctx, fctx, &c);
 	if (err)
 		return err;
-
-	if (fctx->hostkey) {
-		libnvme_ctrl_set_kxchap_host_key(c, fctx->hostkey);
-		if (fctx->ctrlkey)
-			libnvme_ctrl_set_kxchap_ctrl_key(c, fctx->ctrlkey);
-	}
-
-	nvme_parse_tls_args(fctx->keyring, fctx->tls_key,
-		fctx->tls_key_identity, &fctx->ctrl_params.cfg, c);
-	update_config(c, &fctx->ctrl_params.cfg);
 
 	/*
 	 * We are connecting to a discovery controller, so let's treat
@@ -4104,7 +4157,7 @@ __shr_public int libnvmf_connect(
 					write_devid_file(fctx, devid_fd, winner);
 					if (instance >= 0)
 						registry_update_on_connect(ctx,
-							instance);
+							instance, false);
 				}
 			}
 
