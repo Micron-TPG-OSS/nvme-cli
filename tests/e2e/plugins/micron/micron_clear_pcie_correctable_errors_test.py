@@ -41,6 +41,8 @@ import re
 
 from .micron_test import TestMicron
 
+_COMMAND = "clear-pcie-correctable-errors"
+
 _WINDOWS_AER_UNSUPPORTED_MSG = "register writes not supported on the current platform"
 _AER_CLEAR_FAILED_MSG = "Failed to clear error count"
 _AER_READBACK_FAILED_MSG = "Failed to retrieve error count"
@@ -60,9 +62,7 @@ class TestMicronClearPcieCorrectableErrors(TestMicron):
 
     def _run_clear(self, device=None, args=""):
         """Run clear-pcie-correctable-errors and return the CompletedProcess result."""
-        return self.run_plugin_cmd(
-            "clear-pcie-correctable-errors", device=device, args=args
-        )
+        return self.run_plugin_cmd(_COMMAND, device=device, args=args)
 
     def _is_clear_supported(self):
         """Return True if clear-pcie-correctable-errors can succeed on this
@@ -90,22 +90,8 @@ class TestMicronClearPcieCorrectableErrors(TestMicron):
             )
 
     def test_bad_device_returns_error(self):
-        """clear-pcie-correctable-errors fails with a message when the device does not exist.
-
-        Exercises the parse_and_open failure branch.
-        """
-        device = "/dev/nvme-nonexistent-test-device"
-        result = self._run_clear(device=device)
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            "Expected non-zero exit code for a non-existent device",
-        )
-        self.assertTrue(
-            device in result.stderr,
-            f"Expected {device!r} in stderr, "
-            f"got: {result.stderr!r}",
-        )
+        """clear-pcie-correctable-errors fails when the device does not exist."""
+        self.check_bad_device_name(_COMMAND)
 
     def test_command_exits_zero_on_success(self):
         """clear-pcie-correctable-errors exits 0 when the drive is reachable.
@@ -114,7 +100,7 @@ class TestMicronClearPcieCorrectableErrors(TestMicron):
         the drive model present in the test environment.
         """
         self._skip_if_clear_unavailable()
-        result = self.run_plugin_cmd_check("clear-pcie-correctable-errors")
+        result = self.run_plugin_cmd_check(_COMMAND)
 
         self.assertEqual(
             result.returncode, 0,
@@ -132,9 +118,7 @@ class TestMicronClearPcieCorrectableErrors(TestMicron):
         correctable value to stdout.
         """
         self._skip_if_clear_unavailable()
-        result = self.run_plugin_cmd_check(
-            "clear-pcie-correctable-errors", args="--verbose"
-        )
+        result = self.run_plugin_cmd_check(_COMMAND, args="--verbose")
         stdout = result.stdout
         stderr = result.stderr
 
@@ -169,7 +153,7 @@ class TestMicronClearPcieCorrectableErrors(TestMicron):
         by test_verbose_output_reports_cleared instead.
         """
         self._skip_if_clear_unavailable()
-        result = self.run_plugin_cmd_check("clear-pcie-correctable-errors")
+        result = self.run_plugin_cmd_check(_COMMAND)
         stdout = result.stdout
 
         if _AER_STDOUT_MARKER not in stdout:
@@ -198,8 +182,8 @@ class TestMicronClearPcieCorrectableErrors(TestMicron):
         idempotently.
         """
         self._skip_if_clear_unavailable()
-        result1 = self.run_plugin_cmd_check("clear-pcie-correctable-errors")
-        result2 = self.run_plugin_cmd_check("clear-pcie-correctable-errors")
+        result1 = self.run_plugin_cmd_check(_COMMAND)
+        result2 = self.run_plugin_cmd_check(_COMMAND)
 
         self.assertEqual(
             result1.returncode, 0,
@@ -221,11 +205,10 @@ class TestMicronClearPcieCorrectableErrors(TestMicron):
         the shared ctrl-based support probe applies here too.
         """
         self._skip_if_clear_unavailable()
-        result = self.run_plugin_cmd_check(
-            "clear-pcie-correctable-errors", device=self.ns1
-        )
+        result = self.run_plugin_cmd_check(_COMMAND, device=self.ns1)
+
         self.assertEqual(
             result.returncode, 0,
             f"Expected exit code 0 for namespace device, "
             f"got {result.returncode}; stderr={result.stderr!r}",
-            )
+        )

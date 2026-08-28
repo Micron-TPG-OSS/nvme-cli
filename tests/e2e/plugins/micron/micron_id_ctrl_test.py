@@ -29,7 +29,6 @@ from ....nvme_test import to_decimal
 _COMMAND = "id-ctrl"
 
 _IDENTIFY_HEADER = "NVME Identify Controller:"
-_INVALID_FORMAT_MSG = "Invalid output format"
 
 # Identify Controller data structure size, per the NVMe specification
 _BINARY_SIZE = 4096
@@ -63,39 +62,12 @@ class TestMicronIdCtrl(TestMicron):
         return self.parse_json_output(result.stdout, f"nvme {name} -o json")
 
     def test_bad_device_returns_error(self):
-        """The command fails and names the device that could not be opened.
-
-        Only the device name is asserted, not the OS strerror text appended
-        to it, which differs between Windows and Linux.
-        """
-        device = "/dev/nvme-nonexistent-test-device"
-        result = self.run_plugin_cmd(_COMMAND, device=device)
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            f"Expected non-zero exit code from micron {_COMMAND} for a "
-            "non-existent device",
-        )
-        self.assertIn(
-            device, result.stderr,
-            f"Expected {device!r} in stderr of micron {_COMMAND}, "
-            f"got: {result.stderr!r}",
-        )
+        """The command fails and names the device that could not be opened."""
+        self.check_bad_device_name(_COMMAND)
 
     def test_invalid_output_format_returns_error(self):
         """An unrecognised --output-format value is rejected."""
-        result = self.run_plugin_cmd(_COMMAND, args="--output-format=notaformat")
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            f"Expected non-zero exit code from micron {_COMMAND} for an "
-            "invalid --output-format value",
-        )
-        self.assertIn(
-            _INVALID_FORMAT_MSG, result.stderr,
-            f"Expected {_INVALID_FORMAT_MSG!r} in stderr of "
-            f"micron {_COMMAND}, got: {result.stderr!r}",
-        )
+        self.check_output_format_rejected(_COMMAND, "notaformat")
 
     def test_json_keys_are_superset_of_core(self):
         """micron id-ctrl JSON emits every core 'id ctrl' key and adds pms."""
