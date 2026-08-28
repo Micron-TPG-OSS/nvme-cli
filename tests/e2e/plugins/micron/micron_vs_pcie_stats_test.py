@@ -27,7 +27,9 @@ import re
 
 from .micron_test import TestMicron
 
-_UNSUPPORTED_MODEL_MSG = "Unsupported drive model for vs-pcie-stats command"
+_COMMAND = "vs-pcie-stats"
+
+_UNSUPPORTED_MODEL_MSG = f"Unsupported drive model for {_COMMAND} command"
 _WINDOWS_AER_UNSUPPORTED_MSG = "register reads not supported on the current platform"
 _AER_READ_FAILED_MSG = "Failed to retrieve error count"
 _UNSUPPORTED_MSGS = (
@@ -68,7 +70,7 @@ class TestMicronVsPcieStats(TestMicron):
 
     def _run_pcie_stats(self, device=None, args=""):
         """Run vs-pcie-stats and return the CompletedProcess result."""
-        return self.run_plugin_cmd("vs-pcie-stats", device=device, args=args)
+        return self.run_plugin_cmd(_COMMAND, device=device, args=args)
 
     def _is_unsupported(self, result):
         """True if a vs-pcie-stats CompletedProcess result reports a
@@ -104,13 +106,8 @@ class TestMicronVsPcieStats(TestMicron):
             # Explicitly specify JSON output. Don't rely on default behavior.
             # Allow the caller to use a different json format flag if desired.
             args += " --output-format=json"
-        result = self.run_plugin_cmd_check("vs-pcie-stats", args=args)
-        try:
-            return json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            self.fail(
-                f"stdout is not valid JSON: {exc}\nstdout={result.stdout!r}"
-            )
+        result = self.run_plugin_cmd_check(_COMMAND, args=args)
+        return self.parse_json_output(result.stdout, f"micron {_COMMAND} {args}")
 
     def _pcie_stats_object(self, args=""):
         """Return the first stats object from the 'PCIE Stats' JSON array."""
@@ -126,36 +123,17 @@ class TestMicronVsPcieStats(TestMicron):
         return array[0]
 
     def test_bad_device_returns_error(self):
-        """vs-pcie-stats fails with a message when the device does not exist."""
-        device = "/dev/nvme-nonexistent-test-device"
-        result = self._run_pcie_stats(device=device, args="--output-format=normal")
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            "Expected non-zero exit code for a non-existent device",
-        )
-        self.assertIn(
-            device, result.stderr,
-            f"Expected {device!r} in stderr, got: {result.stderr!r}",
-        )
+        """vs-pcie-stats fails when the device does not exist."""
+        self.check_bad_device_name(_COMMAND, args="--output-format=normal")
 
     def test_invalid_output_format_returns_error(self):
-        """vs-pcie-stats fails with a message for an unrecognised --output-format."""
-        result = self._run_pcie_stats(args="--output-format=notaformat")
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            "Expected non-zero exit code for an invalid --output-format value",
-        )
-        self.assertIn(
-            "Invalid output format", result.stderr,
-            f"Expected 'Invalid output format' in stderr, got: {result.stderr!r}",
-        )
+        """An unrecognised --output-format value is rejected."""
+        self.check_output_format_rejected(_COMMAND, "notaformat")
 
     def test_default_output_is_normal(self):
         """vs-pcie-stats produces text output by default (no format flag)."""
         self._skip_if_pcie_stats_unavailable()
-        result = self.run_plugin_cmd_check("vs-pcie-stats")
+        result = self.run_plugin_cmd_check(_COMMAND)
 
         self.assertTrue(
             result.stdout.strip(),
@@ -174,17 +152,7 @@ class TestMicronVsPcieStats(TestMicron):
     def test_output_format_json_produces_valid_json(self):
         """vs-pcie-stats produces valid JSON when --output-format=json is passed."""
         self._skip_if_pcie_stats_unavailable()
-        result = self.run_plugin_cmd_check(
-            "vs-pcie-stats", args="--output-format=json"
-        )
-
-        try:
-            data = json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            self.fail(
-                f"stdout is not valid JSON (--output-format=json): {exc}\n"
-                f"stdout={result.stdout!r}"
-            )
+        data = self.run_supported_cmd_json(_COMMAND)
 
         self.assertIn(
             "PCIE Stats", data,
@@ -267,7 +235,7 @@ class TestMicronVsPcieStats(TestMicron):
         """vs-pcie-stats produces non-empty output with --output-format=normal."""
         self._skip_if_pcie_stats_unavailable()
         result = self.run_plugin_cmd_check(
-            "vs-pcie-stats", args="--output-format=normal"
+            _COMMAND, args="--output-format=normal"
         )
 
         self.assertTrue(
@@ -279,7 +247,7 @@ class TestMicronVsPcieStats(TestMicron):
         """vs-pcie-stats text output is not valid JSON for the normal format."""
         self._skip_if_pcie_stats_unavailable()
 
-        result = self.run_plugin_cmd_check("vs-pcie-stats", args="--output-format=normal")
+        result = self.run_plugin_cmd_check(_COMMAND, args="--output-format=normal")
 
         try:
             json.loads(result.stdout)
@@ -300,7 +268,7 @@ class TestMicronVsPcieStats(TestMicron):
         """
         self._skip_if_pcie_stats_unavailable()
 
-        result = self.run_plugin_cmd_check("vs-pcie-stats", args="--output-format=normal")
+        result = self.run_plugin_cmd_check(_COMMAND, args="--output-format=normal")
         stdout = result.stdout
 
         if "PCIE Stats:" in stdout:
@@ -353,7 +321,7 @@ class TestMicronVsPcieStats(TestMicron):
         stats = self._pcie_stats_object()
         json_any_nonzero = any(stats[f] != 0 for f in ALL_FIELDS)
 
-        result = self.run_plugin_cmd_check("vs-pcie-stats", args="--output-format=normal")
+        result = self.run_plugin_cmd_check(_COMMAND, args="--output-format=normal")
         stdout = result.stdout
 
         if "PCIE Stats:" in stdout:
@@ -387,16 +355,8 @@ class TestMicronVsPcieStats(TestMicron):
         """
         self._skip_if_pcie_stats_unavailable()
 
-        result_ctrl = self.run_plugin_cmd_check(
-            "vs-pcie-stats", device=self.ctrl, args="--output-format=json")
-        result_ns = self.run_plugin_cmd_check(
-            "vs-pcie-stats", device=self.ns1, args="--output-format=json")
-
-        try:
-            data_ctrl = json.loads(result_ctrl.stdout)
-            data_ns = json.loads(result_ns.stdout)
-        except json.JSONDecodeError as exc:
-            self.fail(f"Output is not valid JSON: {exc}")
+        data_ctrl = self.run_supported_cmd_json(_COMMAND, device=self.ctrl)
+        data_ns = self.run_supported_cmd_json(_COMMAND, device=self.ns1)
 
         stats_ctrl = data_ctrl["PCIE Stats"][0]
         stats_ns = data_ns["PCIE Stats"][0]

@@ -23,17 +23,13 @@ Tests in this module verify:
   * Error detection for a non-existent device and an invalid output format.
 """
 
-import json
-
 from .micron_test import TestMicron
+
+_COMMAND = "vs-temperature-stats"
 
 
 class TestMicronVsTemperatureStats(TestMicron):
     """Test suite for the micron vs-temperature-stats plugin command."""
-
-    def _run_temp(self, device=None, args=""):
-        """Run vs-temperature-stats and return the CompletedProcess result."""
-        return self.run_plugin_cmd("vs-temperature-stats", device=device, args=args)
 
     def _active_sensor_indices(self):
         """Return the 1-based indices of active temperature sensors from nvme log smart.
@@ -45,39 +41,20 @@ class TestMicronVsTemperatureStats(TestMicron):
         )
         self.assertEqual(result.returncode, 0,
                          f"nvme log smart failed: {result.stderr}")
-        data = json.loads(result.stdout)
+        data = self.parse_json_output(result.stdout, "nvme log smart")
         return [i for i in range(1, 9) if f"temperature_sensor_{i}" in data]
 
     def test_bad_device_returns_error(self):
-        """vs-temperature-stats fails with a message when the device does not exist."""
-        device = "/dev/nvme-nonexistent-test-device"
-        result = self._run_temp(device=device)
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            "Expected non-zero exit code for a non-existent device",
-        )
-        self.assertIn(
-            device, result.stderr,
-            f"Expected {device!r} in stderr, got: {result.stderr!r}",
-        )
+        """vs-temperature-stats fails when the device does not exist."""
+        self.check_bad_device_name(_COMMAND)
 
     def test_invalid_output_format_returns_error(self):
-        """vs-temperature-stats fails with a message for an unrecognised --output-format."""
-        result = self._run_temp(args="--output-format=notaformat")
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            "Expected non-zero exit code for an invalid --output-format value",
-        )
-        self.assertIn(
-            "Invalid output format", result.stderr,
-            f"Expected 'Invalid output format' in stderr, got: {result.stderr!r}",
-        )
+        """An unrecognised --output-format value is rejected."""
+        self.check_output_format_rejected(_COMMAND, "notaformat")
 
     def test_default_output_is_text(self):
         """vs-temperature-stats produces human-readable text output by default."""
-        result = self.run_plugin_cmd_check("vs-temperature-stats")
+        result = self.run_plugin_cmd_check(_COMMAND)
 
         self.assertIn(
             "Micron temperature information", result.stdout,
@@ -91,7 +68,7 @@ class TestMicronVsTemperatureStats(TestMicron):
     def test_output_format_normal_flag(self):
         """vs-temperature-stats produces text output when --output-format=normal is passed."""
         result = self.run_plugin_cmd_check(
-            "vs-temperature-stats", args="--output-format=normal"
+            _COMMAND, args="--output-format=normal"
         )
 
         self.assertIn(
@@ -105,17 +82,7 @@ class TestMicronVsTemperatureStats(TestMicron):
 
     def test_output_format_json_flag_produces_valid_json(self):
         """vs-temperature-stats produces valid JSON when --output-format=json is passed."""
-        result = self.run_plugin_cmd_check(
-            "vs-temperature-stats", args="--output-format=json"
-        )
-
-        try:
-            data = json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            self.fail(
-                f"stdout is not valid JSON (--output-format=json): {exc}\n"
-                f"stdout={result.stdout!r}"
-            )
+        data = self.run_supported_cmd_json(_COMMAND)
 
         self.assertIn(
             "Micron temperature information", data,
@@ -134,8 +101,7 @@ class TestMicronVsTemperatureStats(TestMicron):
 
     def test_json_temperature_value_has_celsius_suffix(self):
         """vs-temperature-stats JSON output formats temperatures as '<N> C'."""
-        result = self.run_plugin_cmd_check("vs-temperature-stats", args="--output-format=json")
-        data = json.loads(result.stdout)
+        data = self.run_supported_cmd_json(_COMMAND)
         temp_str = data["Micron temperature information"][0]["Current Composite Temperature"]
 
         self.assertRegex(
@@ -145,7 +111,7 @@ class TestMicronVsTemperatureStats(TestMicron):
 
     def test_text_temperature_value_has_celsius_suffix(self):
         """vs-temperature-stats text output formats temperatures as '<N> C'."""
-        result = self.run_plugin_cmd_check("vs-temperature-stats")
+        result = self.run_plugin_cmd_check(_COMMAND)
 
         self.assertRegex(
             result.stdout, r"Current Composite Temperature\s*:\s*\d+ C",
@@ -162,8 +128,7 @@ class TestMicronVsTemperatureStats(TestMicron):
         """
         active = self._active_sensor_indices()
 
-        result = self.run_plugin_cmd_check("vs-temperature-stats", args="--output-format=json")
-        data = json.loads(result.stdout)
+        data = self.run_supported_cmd_json(_COMMAND)
         stats = data["Micron temperature information"][0]
 
         for i in active:
@@ -197,7 +162,7 @@ class TestMicronVsTemperatureStats(TestMicron):
         """
         active = self._active_sensor_indices()
 
-        result = self.run_plugin_cmd_check("vs-temperature-stats")
+        result = self.run_plugin_cmd_check(_COMMAND)
 
         for i in active:
             self.assertRegex(

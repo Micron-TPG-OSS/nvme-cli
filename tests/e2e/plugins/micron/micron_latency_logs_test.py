@@ -21,8 +21,6 @@ Tests in this module verify:
   * Equivalent output for the controller and namespace device paths.
 """
 
-import json
-
 from .micron_test import TestMicron
 
 _COMMAND = "latency-logs"
@@ -38,19 +36,9 @@ _ENTRY_COUNT = 16
 class TestMicronLatencyLogs(TestMicron):
     """Test suite for the micron latency-logs command."""
 
-    def _run_logs(self, device=None, args=""):
-        """Run latency-logs and return the CompletedProcess result."""
-        return self.run_plugin_cmd(_COMMAND, device=device, args=args)
-
-    def _logs_stdout(self, args=""):
-        """Return latency-logs stdout, skipping if log page is not supported.
-
-        The support probe always runs without a format flag: with -o json the
-        failure is reported as a JSON object on stdout instead of a message on
-        stderr, which the unsupported-reason matcher cannot see.
-        """
-        self.skip_unless_command_supported(_COMMAND)
-        return self.run_plugin_cmd_check(_COMMAND, args=args).stdout
+    def _logs_stdout(self):
+        """Return latency-logs stdout, skipping if the log is not supported."""
+        return self.run_supported_cmd(_COMMAND).stdout
 
     def _logs_rows(self, stdout):
         """Return the non-empty CSV rows that follow the header."""
@@ -64,22 +52,8 @@ class TestMicronLatencyLogs(TestMicron):
         return [line for line in lines[start:] if line]
 
     def test_bad_device_returns_error(self):
-        """latency-logs fails when the device does not exist.
-
-        Only the device name is asserted because the OS strerror text appended
-        to it differs between Windows and Linux.
-        """
-        device = "/dev/nvme-nonexistent-test-device"
-        result = self._run_logs(device=device)
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            "Expected non-zero exit code for a non-existent device",
-        )
-        self.assertIn(
-            device, result.stderr,
-            f"Expected {device!r} in stderr, got: {result.stderr!r}",
-        )
+        """latency-logs fails when the device does not exist."""
+        self.check_bad_device_name(_COMMAND)
 
     def test_prints_csv_header(self):
         """latency-logs prints the fixed CSV column header."""
@@ -124,13 +98,7 @@ class TestMicronLatencyLogs(TestMicron):
         A namespace path resolves to its parent controller, so the log page
         read and its output are identical.
         """
-        result = self._run_logs(device=self.ns1)
-        self.skip_if_result_unsupported(_COMMAND, result)
-        self.assertEqual(
-            result.returncode, 0,
-            f"latency-logs failed for {self.ns1}: rc={result.returncode}, "
-            f"stderr={result.stderr!r}",
-        )
+        result = self.run_supported_cmd(_COMMAND, device=self.ns1)
 
         rows = self._logs_rows(result.stdout)
         self.assertEqual(
