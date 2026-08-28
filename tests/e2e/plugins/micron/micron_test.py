@@ -23,6 +23,11 @@ _UNSUPPORTED_DRIVE_PATTERNS = (
 
 _INVALID_LOG_PAGE = "Invalid Log Page"
 
+_INVALID_FORMAT_MSG = "Invalid output format"
+
+# A device path no drive can have, used to exercise the open failure path.
+_BAD_DEVICE = "/dev/nvme-nonexistent-test-device"
+
 # Log pages per command that generate Invalid Log Page message if not supported.
 _COMMAND_LOG_PAGES = {
     "vs-smart-ext-log": (0xE1, 0xD0),
@@ -142,7 +147,6 @@ class TestMicron(TestPlugin):
             TestMicron._support_cache[key] = self._unsupported_reason(command, result)
         return TestMicron._support_cache[key]
 
-
     def skip_unless_command_supported(self, command, args=""):
         """Skip the test if the command is not supported on this drive.
 
@@ -161,12 +165,91 @@ class TestMicron(TestPlugin):
         if reason:
             self.skipTest(f"micron {command} unsupported on this drive: {reason}")
 
-    def validate_hex_field_table(self, stdout, context=""):
-        """Parse and validate print_log() style text output.
+    def run_supported_cmd(self, command, device=None, args=""):
+        """Run a command and require it to succeed on a drive that supports it.
 
-        The shared field-table path emits one "%-40s : %-4s" line per field,
-        optionally preceded by a header line with no " : " separator (for
-        example "SMART Extended Log:0xE1").  Returns {label: value}.
+        Skips rather than fails when the command is unsupported on the current drive.
+        Returns the CompletedProcess result when the command is supported and succeeds.
+        """
+        result = self.run_plugin_cmd(command, device=device, args=args)
+        self.skip_if_result_unsupported(command, result)
+        self.assertEqual(
+            result.returncode, 0,
+            f"micron {command} failed: rc={result.returncode}, "
+            f"stderr={result.stderr!r}",
+        )
+        return result
+
+    def run_supported_cmd_json(self, command, device=None, args="--output-format=json"):
+        """Run a command in JSON mode and require it to succeed on a drive that supports it.
+
+        Skips rather than fails when the command is unsupported on the current drive.
+        Returns the parsed JSON object when the command is supported and succeeds.
+        """
+        result = self.run_supported_cmd(command, device=device, args=args)
+        return self.parse_json_output(result.stdout, f"micron {command} {args}")
+
+    def check_bad_device_name(self, command, args=""):
+        """A non-existent device must fail and name the device.
+
+        Only the device path is asserted; the OS strerror text appended to it
+        differs between Windows and Linux.
+        """
+        result = self.run_plugin_cmd(command, device=_BAD_DEVICE, args=args)
+
+        self.assertNotEqual(
+            result.returncode, 0,
+            f"Expected non-zero exit from micron {command} for a "
+            f"non-existent device",
+        )
+        self.assertIn(
+            _BAD_DEVICE, result.stderr,
+            f"Expected {_BAD_DEVICE!r} in stderr of micron {command}, "
+            f"got: {result.stderr!r}",
+        )
+        return result
+
+    def check_output_format_rejected(self, command, value):
+        """An --output-format the command does not implement must be rejected."""
+        result = self.run_plugin_cmd(command, args=f"--output-format={value}")
+
+        self.assertNotEqual(
+            result.returncode, 0,
+            f"Expected micron {command} to reject --output-format={value}",
+        )
+        self.assertIn(
+            _INVALID_FORMAT_MSG, result.stderr,
+            f"Expected {_INVALID_FORMAT_MSG!r} in stderr of micron {command}, "
+            f"got: {result.stderr!r}",
+        )
+        return result
+
+    def check_unsupported_drive_fails(self, command, message):
+        """A command run on an unsupported drive must report message and fail.
+
+        If unsupported drive is reported, asserts that the return code is non-zero.
+        Skips if no unsupported-drive message is found.
+        """
+        result = self.run_plugin_cmd(command)
+        if message not in result.stderr:
+            self.skipTest(
+                f"micron {command} supports the current drive; "
+                f"cannot test unsupported-drive path"
+            )
+
+        self.assertNotEqual(
+            result.returncode, 0,
+            f"Expected non-zero exit for unsupported drive on micron {command}"
+            f"got rc=0 with stderr={result.stderr!r}"
+        )
+        return result
+
+    def hex_fields_from_table(self, stdout, context=""):
+        """Evaluate table of named hex fields. Return dictionary of {label: value}.
+
+        Expects print_log() style text output. The shared field-table path emits
+        one "%-40s : %-4s" line per field, optionally preceded by a header line
+        with no " : " separator (for example "SMART Extended Log:0xE1").
         """
         where = f" ({context})" if context else ""
         fields = {}
@@ -192,11 +275,11 @@ class TestMicron(TestPlugin):
         )
         return fields
 
-    def validate_hex_table_object(self, data, allowed_keys, context=""):
-        """Validate print_log() style JSON output and return its field object.
+    def hex_fields_from_json(self, data, allowed_keys, context=""):
+        """Evaluate JSON data with named hex fields. Return dictionary of {label: value}.
 
-        The JSON form is a single top-level key (which varies with the log page
-        the drive supports) mapping to a one-element array of field objects.
+        Expects print_log() style JSON output. The JSON format is a single
+        top-level key mapping to a one-element array of field objects.
         """
         where = f" ({context})" if context else ""
         self.assertEqual(
@@ -228,7 +311,8 @@ class TestMicron(TestPlugin):
             f"Expected an object under {key!r}{where}, got: {type(fields)}",
         )
         self.assertGreater(
-            len(fields), 0, f"Expected at least one field under {key!r}{where}",
+            len(fields), 0,
+            f"Expected at least one field under {key!r}{where}",
         )
         for label, value in fields.items():
             self.assertRegex(
@@ -237,3 +321,69 @@ class TestMicron(TestPlugin):
                 f"{value!r}",
             )
         return fields
+
+    def check_hex_fields_json(self, command, allowed_keys):
+        """Run the command in JSON mode and assert that the output is a well-formed hex fields object."""
+        self.hex_fields_from_json(
+            self.run_supported_cmd_json(command), allowed_keys, command)
+
+    def check_hex_fields_table(self, command):
+        """Run the command and assert that the output is a well-formed hex fields table."""
+        self.hex_fields_from_table(
+            self.run_supported_cmd(command).stdout, command)
+
+    def check_text_and_json_hex_fields_match(self, command, allowed_keys):
+        """The text and JSON formats must report identical fields and values."""
+        text_fields = self.hex_fields_from_table(
+            self.run_supported_cmd(command).stdout, command)
+        json_fields = self.hex_fields_from_json(
+            self.run_supported_cmd_json(command), allowed_keys, command)
+
+        self.assertEqual(
+            set(text_fields), set(json_fields),
+            f"micron {command} text and JSON field sets differ; "
+            f"text-only={set(text_fields) - set(json_fields)}, "
+            f"JSON-only={set(json_fields) - set(text_fields)}",
+        )
+        for label, value in json_fields.items():
+            self.assertEqual(
+                text_fields[label], value,
+                f"micron {command} field {label!r} differs between text "
+                f"({text_fields[label]!r}) and JSON ({value!r})",
+            )
+
+    def check_required_hex_fields_present(self, command, allowed_keys, required_labels):
+        """Every field defined for the reported log page must be present.
+
+        required_labels maps each top-level JSON key to the field labels its log
+        page defines.
+        """
+        data = self.run_supported_cmd_json(command)
+        key = next(iter(data))
+        fields = self.hex_fields_from_json(data, allowed_keys, command)
+
+        for label in required_labels[key]:
+            self.assertIn(
+                label, fields,
+                f"Expected field {label!r} for log page {key!r}, "
+                f"got: {list(fields)}",
+            )
+
+    def check_ns_hex_fields_match_ctrl(self, command, allowed_keys):
+        """The namespace path must report the same fields as the controller.
+
+        A namespace path resolves to its parent controller, so both read the
+        same log.
+        """
+        ctrl_fields = self.hex_fields_from_json(
+            self.run_supported_cmd_json(command, device=self.ctrl),
+            allowed_keys, command)
+        ns_fields = self.hex_fields_from_json(
+            self.run_supported_cmd_json(command, device=self.ns1),
+            allowed_keys, command)
+
+        self.assertEqual(
+            set(ctrl_fields), set(ns_fields),
+            f"micron {command} field set differs between {self.ctrl} and "
+            f"{self.ns1}",
+        )

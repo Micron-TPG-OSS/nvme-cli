@@ -26,6 +26,8 @@ import re
 
 from .micron_test import TestMicron
 
+_COMMAND = "log-page-directory"
+
 _HEADER_TITLE = "Supported log page list"
 _HEADER_COLUMNS = "Log ID : Description"
 
@@ -82,7 +84,7 @@ class TestMicronLogPageDirectory(TestMicron):
         printed (see test_exit_status_is_zero_when_listing_printed), so
         output assertions must not be gated on it.
         """
-        return self.run_plugin_cmd("log-page-directory", device=device, args=args)
+        return self.run_plugin_cmd(_COMMAND, device=device, args=args)
 
     def _listed_pages(self, stdout, context=""):
         """Return {log_id: description} parsed from the listing rows.
@@ -116,22 +118,8 @@ class TestMicronLogPageDirectory(TestMicron):
         return pages
 
     def test_bad_device_returns_error(self):
-        """log-page-directory fails when the device does not exist.
-
-        Only the device path is asserted; the OS strerror text appended to it
-        differs between Windows and Linux.
-        """
-        device = "/dev/nvme-nonexistent-test-device"
-        result = self._run_dir(device=device)
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            "Expected non-zero exit code for a non-existent device",
-        )
-        self.assertIn(
-            device, result.stderr,
-            f"Expected {device!r} in stderr, got: {result.stderr!r}",
-        )
+        """log-page-directory fails when the device does not exist."""
+        self.check_bad_device_name(_COMMAND)
 
     def test_output_starts_with_header_lines(self):
         """log-page-directory prints its two header lines before any row."""

@@ -139,10 +139,7 @@ class TestMicronVsFwActivateHistory(TestMicron):
         """
         self._history_text(device=device)
         result = self.run_plugin_cmd_check(_COMMAND, device=device, args=args)
-        try:
-            return json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            self.fail(f"stdout is not valid JSON: {exc}\nstdout={result.stdout!r}")
+        return self.parse_json_output(result.stdout, f"micron {_COMMAND} {args}")
 
     def _history_object(self, device=None, args="--output-format=json"):
         """Return the "vs-fw-activation-history" object from the JSON output."""
@@ -192,56 +189,20 @@ class TestMicronVsFwActivateHistory(TestMicron):
         return rows
 
     def test_bad_device_returns_error(self):
-        """vs-fw-activate-history fails when the device does not exist.
-
-        Only the device name is asserted because the OS strerror text
-        appended to it differs between Windows and Linux.
-        """
-        device = "/dev/nvme-nonexistent-test-device"
-        result = self._run_fw_history(device=device)
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            "Expected non-zero exit code for a non-existent device",
-        )
-        self.assertIn(
-            device, result.stderr,
-            f"Expected {device!r} in stderr, got: {result.stderr!r}",
-        )
+        """vs-fw-activate-history fails when the device does not exist."""
+        self.check_bad_device_name(_COMMAND)
 
     def test_invalid_output_format_returns_error(self):
-        """vs-fw-activate-history fails for an unrecognised --output-format.
+        """An unrecognised --output-format value is rejected.
 
         The format is validated before the drive model and log page are
         checked, so this holds on any drive.
         """
-        result = self._run_fw_history(args="--output-format=notaformat")
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            "Expected non-zero exit code for an invalid --output-format value",
-        )
-        self.assertIn(
-            "Invalid output format", result.stderr,
-            f"Expected 'Invalid output format' in stderr, got: {result.stderr!r}",
-        )
+        self.check_output_format_rejected(_COMMAND, "notaformat")
 
     def test_binary_output_format_rejected(self):
-        """vs-fw-activate-history rejects --output-format=binary.
-
-        This command advertises only normal|json, so binary is an invalid
-        format rather than an alternative encoding.
-        """
-        result = self._run_fw_history(args="--output-format=binary")
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            "Expected non-zero exit code for --output-format=binary",
-        )
-        self.assertIn(
-            "Invalid output format", result.stderr,
-            f"Expected 'Invalid output format' in stderr, got: {result.stderr!r}",
-        )
+        """--output-format=binary is rejected; the command emits text or JSON."""
+        self.check_output_format_rejected(_COMMAND, "binary")
 
     def test_default_output_is_text(self):
         """vs-fw-activate-history produces the text table by default."""

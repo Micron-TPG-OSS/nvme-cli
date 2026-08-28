@@ -30,8 +30,10 @@ import re
 
 from .micron_test import TestMicron
 
+_COMMAND = "vs-drive-info"
+
 _MICRON_HW_INFORMATION_KEY = "Micron Drive HW Information"
-_UNSUPPORTED_MSG = "Unsupported drive for vs-drive-info cmd"
+_UNSUPPORTED_MSG = f"Unsupported drive for {_COMMAND} cmd"
 
 # Field labels shared by the JSON (keys) and text ("Label: value") branches.
 _DRIVE_HW_VERSION = "Drive Hardware Version"
@@ -58,7 +60,7 @@ class TestMicronVsDriveInfo(TestMicron):
 
     def _run_drive_info(self, device=None, args=""):
         """Run vs-drive-info and return the CompletedProcess result."""
-        return self.run_plugin_cmd("vs-drive-info", device=device, args=args)
+        return self.run_plugin_cmd(_COMMAND, device=device, args=args)
 
     def _is_drive_info_available(self):
         """Return True if drive info is available for the current drive. """
@@ -85,11 +87,8 @@ class TestMicronVsDriveInfo(TestMicron):
         Skips the test if the drive is unsupported on this platform.
         """
         self._skip_if_unavailable()
-        result = self.run_plugin_cmd_check("vs-drive-info", args=args)
-        try:
-            return json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            self.fail(f"stdout is not valid JSON: {exc}\nstdout={result.stdout!r}")
+        result = self.run_plugin_cmd_check(_COMMAND, args=args)
+        return self.parse_json_output(result.stdout, f"micron {_COMMAND} {args}")
 
     def _drive_info_object(self, args="--output-format=json"):
         """Return the single info object from the JSON array."""
@@ -118,49 +117,18 @@ class TestMicronVsDriveInfo(TestMicron):
         return present
 
     def test_bad_device_returns_error(self):
-        """vs-drive-info fails when the device does not exist.
-
-        Exercises the parse_and_open failure branch.  Only the device name
-        prefix is asserted because the OS strerror text appended to it differs
-        between Windows and Linux.
-        """
-        device = "/dev/nvme-nonexistent-test-device"
-        result = self._run_drive_info(device=device)
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            "Expected non-zero exit code for a non-existent device",
-        )
-        self.assertIn(
-            device, result.stderr,
-            f"Expected {device!r} in stderr, got: {result.stderr!r}",
-        )
+        """vs-drive-info fails when the device does not exist."""
+        self.check_bad_device_name(_COMMAND)
 
     def test_invalid_output_format_returns_error(self):
-        """vs-drive-info fails for an unrecognised --output-format value.
+        """An unrecognised --output-format value is rejected.
 
-        The global --output-format flag accepts "normal" or "json". On this
-        command the unsupported-drive-model check runs before --output-format
-        is validated, so an unsupported drive reports that instead -- skip
-        rather than fail in that case (unlike e.g. vs-internal-log, where
-        argument validation runs first; the check order isn't consistent
-        across plugin commands).
+        The unsupported-drive-model check runs before --output-format is
+        validated, so an unsupported drive reports that instead and the
+        format check is unreachable.
         """
-        result = self._run_drive_info(args="--output-format=notaformat")
-        if result.returncode != 0 and _UNSUPPORTED_MSG in result.stderr:
-            self.skipTest(
-                f"vs-drive-info reports an unsupported drive on this platform "
-                f"(stderr: {_UNSUPPORTED_MSG!r})"
-            )
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            "Expected non-zero exit code for an invalid --output-format value",
-        )
-        self.assertIn(
-            "Invalid output format", result.stderr,
-            f"Expected 'Invalid output format' in stderr, got: {result.stderr!r}",
-        )
+        self._skip_if_unavailable()
+        self.check_output_format_rejected(_COMMAND, "notaformat")
 
     def test_default_output_is_text(self):
         """vs-drive-info produces human-readable text by default.
@@ -169,7 +137,7 @@ class TestMicronVsDriveInfo(TestMicron):
         "Drive Hardware Version:" line, and must not parse as JSON.
         """
         self._skip_if_unavailable()
-        result = self.run_plugin_cmd_check("vs-drive-info")
+        result = self.run_plugin_cmd_check(_COMMAND)
 
         self.assertRegex(
             result.stdout, r"Drive Hardware Version\s*:\s*\d+\.\d+",
@@ -183,7 +151,7 @@ class TestMicronVsDriveInfo(TestMicron):
     def test_explicit_normal_format_is_text(self):
         """vs-drive-info produces text output when --output-format=normal is passed."""
         self._skip_if_unavailable()
-        result = self.run_plugin_cmd_check("vs-drive-info", args="--output-format=normal")
+        result = self.run_plugin_cmd_check(_COMMAND, args="--output-format=normal")
 
         self.assertRegex(
             result.stdout, r"Drive Hardware Version\s*:\s*\d+\.\d+",
@@ -233,7 +201,7 @@ class TestMicronVsDriveInfo(TestMicron):
     def test_text_always_has_drive_hardware_version(self):
         """vs-drive-info text output always contains a 'Drive Hardware Version:' line."""
         self._skip_if_unavailable()
-        result = self.run_plugin_cmd_check("vs-drive-info")
+        result = self.run_plugin_cmd_check(_COMMAND)
 
         self.assertRegex(
             result.stdout, r"Drive Hardware Version\s*:\s*\d+\.\d+",
@@ -276,7 +244,7 @@ class TestMicronVsDriveInfo(TestMicron):
         present its value must be a non-empty string.
         """
         obj = self._drive_info_object()
-        result_text = self.run_plugin_cmd_check("vs-drive-info")
+        result_text = self.run_plugin_cmd_check(_COMMAND)
         text_has = _BOOT_SPEC_VERSION in self._text_labels_present(result_text.stdout)
         json_has = _BOOT_SPEC_VERSION in obj
 
@@ -317,7 +285,7 @@ class TestMicronVsDriveInfo(TestMicron):
         obj = self._drive_info_object()
         json_labels = set(obj.keys())
 
-        result_text = self.run_plugin_cmd_check("vs-drive-info")
+        result_text = self.run_plugin_cmd_check(_COMMAND)
         text_labels = self._text_labels_present(result_text.stdout)
 
         self.assertEqual(
@@ -332,7 +300,7 @@ class TestMicronVsDriveInfo(TestMicron):
         obj = self._drive_info_object()
         json_version = obj[_DRIVE_HW_VERSION]
 
-        result_text = self.run_plugin_cmd_check("vs-drive-info")
+        result_text = self.run_plugin_cmd_check(_COMMAND)
         m = re.search(r"Drive Hardware Version\s*:\s*(\d+\.\d+)", result_text.stdout)
         self.assertIsNotNone(
             m,
@@ -352,25 +320,15 @@ class TestMicronVsDriveInfo(TestMicron):
         field set must match that of the controller path.
         """
         # Probe availability against the namespace path specifically.
-        ns_probe = self.run_plugin_cmd("vs-drive-info", device=self.ns1)
+        ns_probe = self.run_plugin_cmd(_COMMAND, device=self.ns1)
         if ns_probe.returncode != 0 and _UNSUPPORTED_MSG in ns_probe.stderr:
             self.skipTest(
                 f"vs-drive-info reports an unsupported drive on this platform "
                 f"(stderr: {_UNSUPPORTED_MSG!r})"
             )
 
-        result_ctrl = self.run_plugin_cmd_check(
-            "vs-drive-info", device=self.ctrl, args="--output-format=json"
-        )
-        result_ns = self.run_plugin_cmd_check(
-            "vs-drive-info", device=self.ns1, args="--output-format=json"
-        )
-
-        try:
-            data_ctrl = json.loads(result_ctrl.stdout)
-            data_ns = json.loads(result_ns.stdout)
-        except json.JSONDecodeError as exc:
-            self.fail(f"Output is not valid JSON: {exc}")
+        data_ctrl = self.run_supported_cmd_json(_COMMAND, device=self.ctrl)
+        data_ns = self.run_supported_cmd_json(_COMMAND, device=self.ns1)
 
         keys_ctrl = set(data_ctrl[_MICRON_HW_INFORMATION_KEY][0].keys())
         keys_ns = set(data_ns[_MICRON_HW_INFORMATION_KEY][0].keys())
