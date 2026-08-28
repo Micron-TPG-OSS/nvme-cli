@@ -25,8 +25,6 @@ Tests in this module verify:
   * Error detection for a non-existent device.
 """
 
-import json
-
 from .micron_test import TestMicron
 
 _COMMAND = "vs-nand-stats"
@@ -71,122 +69,34 @@ _REQUIRED_LABELS = {
 class TestMicronVsNandStats(TestMicron):
     """Test suite for the micron vs-nand-stats plugin command."""
 
-    def _run_nand_stats(self, device=None, args=""):
-        """Run vs-nand-stats, skipping if the drive cannot serve the log."""
-        result = self.run_plugin_cmd(_COMMAND, device=device, args=args)
-        self.skip_if_result_unsupported(_COMMAND, result)
-        self.assertEqual(
-            result.returncode, 0,
-            f"micron {_COMMAND} failed: rc={result.returncode}, "
-            f"stderr={result.stderr!r}",
-        )
-        return result
-
-    def _nand_stats_json(self, device=None):
-        """Return the parsed JSON output of vs-nand-stats."""
-        result = self._run_nand_stats(device=device, args="--output-format=json")
-        try:
-            return json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            self.fail(
-                f"micron {_COMMAND} --output-format=json produced invalid JSON: "
-                f"{exc}\nstdout={result.stdout!r}"
-            )
-
     def test_text_field_table(self):
         """Text output is a well-formed '<label> : 0x<hex>' field table."""
-        result = self._run_nand_stats()
-
-        self.validate_hex_field_table(result.stdout, _COMMAND)
+        self.check_hex_fields_table(_COMMAND)
 
     def test_json_field_object(self):
         """JSON output holds one known log-page key with a field object."""
-        self.validate_hex_table_object(self._nand_stats_json(), _JSON_KEYS, _COMMAND)
+        self.check_hex_fields_json(_COMMAND, _JSON_KEYS)
 
     def test_text_and_json_fields_match(self):
         """The text and JSON forms report identical fields and values."""
-        text_fields = self.validate_hex_field_table(self._run_nand_stats().stdout, _COMMAND)
-        json_fields = self.validate_hex_table_object(
-            self._nand_stats_json(), _JSON_KEYS, _COMMAND
-        )
-
-        self.assertEqual(
-            set(text_fields), set(json_fields),
-            f"micron {_COMMAND} text and JSON field sets differ; "
-            f"text-only={set(text_fields) - set(json_fields)}, "
-            f"JSON-only={set(json_fields) - set(text_fields)}",
-        )
-        for label, value in json_fields.items():
-            self.assertEqual(
-                text_fields[label], value,
-                f"micron {_COMMAND} field {label!r} differs between text "
-                f"({text_fields[label]!r}) and JSON ({value!r})",
-            )
+        self.check_text_and_json_hex_fields_match(_COMMAND, _JSON_KEYS)
 
     def test_required_labels_present(self):
         """Every field label defined for the reported log page is present."""
-        data = self._nand_stats_json()
-        key = next(iter(data))
-        fields = self.validate_hex_table_object(data, _JSON_KEYS, _COMMAND)
-
-        for label in _REQUIRED_LABELS[key]:
-            self.assertIn(
-                label, fields,
-                f"Expected field {label!r} for log page {key!r}, "
-                f"got: {list(fields)}",
-            )
+        self.check_required_hex_fields_present(_COMMAND, _JSON_KEYS, _REQUIRED_LABELS)
 
     def test_binary_output_format_rejected(self):
         """--output-format=binary is rejected; the command emits text or JSON."""
-        result = self.run_plugin_cmd(_COMMAND, args="--output-format=binary")
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            f"Expected micron {_COMMAND} to reject binary output",
-        )
-        self.assertIn(
-            "Invalid output format", result.stderr,
-            f"Expected 'Invalid output format' in stderr, got: {result.stderr!r}",
-        )
+        self.check_output_format_rejected(_COMMAND, "binary")
 
     def test_invalid_output_format_returns_error(self):
         """An unrecognised --output-format is rejected."""
-        result = self.run_plugin_cmd(_COMMAND, args="--output-format=notaformat")
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            f"Expected micron {_COMMAND} to reject an invalid --output-format",
-        )
-        self.assertIn(
-            "Invalid output format", result.stderr,
-            f"Expected 'Invalid output format' in stderr, got: {result.stderr!r}",
-        )
+        self.check_output_format_rejected(_COMMAND, "notaformat")
 
     def test_namespace_path_matches_controller(self):
         """The namespace path reports the same fields as the controller path."""
-        ctrl_fields = self.validate_hex_table_object(
-            self._nand_stats_json(device=self.ctrl), _JSON_KEYS, self.ctrl
-        )
-        ns_fields = self.validate_hex_table_object(
-            self._nand_stats_json(device=self.ns1), _JSON_KEYS, self.ns1
-        )
-
-        self.assertEqual(
-            set(ctrl_fields), set(ns_fields),
-            f"micron {_COMMAND} field set differs between {self.ctrl} and "
-            f"{self.ns1}",
-        )
+        self.check_ns_hex_fields_match_ctrl(_COMMAND, _JSON_KEYS)
 
     def test_bad_device_returns_error(self):
         """A non-existent device fails with the device path in the message."""
-        device = "/dev/nvme-nonexistent-test-device"
-        result = self.run_plugin_cmd(_COMMAND, device=device)
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            "Expected non-zero exit code for a non-existent device",
-        )
-        self.assertIn(
-            device, result.stderr,
-            f"Expected {device!r} in stderr, got: {result.stderr!r}",
-        )
+        self.check_bad_device_name(_COMMAND)

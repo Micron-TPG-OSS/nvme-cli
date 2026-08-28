@@ -19,7 +19,6 @@ Tests in this module verify:
   * JSON output wraps the same string in a "result" object.
 """
 
-import json
 import re
 
 from ..plugin_test import NO_DEVICE
@@ -68,14 +67,9 @@ class TestMicronPluginVersion(TestMicron):
         """JSON output must report the text output under a "result" key."""
         text = self._run_version(command).stdout.strip()
         result = self._run_version(command, args="--output-format=json")
-
-        try:
-            data = json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            self.fail(
-                f"micron {command} --output-format=json produced invalid JSON: "
-                f"{exc}\nstdout={result.stdout!r}"
-            )
+        data = self.parse_json_output(
+            result.stdout, f"micron {command} --output-format=json"
+        )
 
         self.assertEqual(
             data, {"result": text},
