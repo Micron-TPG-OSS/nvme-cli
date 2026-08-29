@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Unit tests for the connection configuration read-side Python bindings
-(nvme.config_read() / nvme.config_validate()).
+(nvme.config_read() / nvme.config_defaults() / nvme.config_host() /
+nvme.config_validate()).
 
 Each test points at a throwaway file under /tmp -- the config file is reached
 by an explicit path, so no sandbox rerouting (set_test_base_dir()) is needed,
@@ -163,6 +164,175 @@ controller = transport=tcp;traddr=192.168.1.20;trsvcid=4420
 """)
         with self.assertRaises(OSError):
             nvme.config_validate(self.ctx, self.conf)
+
+
+class TestConfigDefaults(unittest.TestCase):
+    """The defaults that apply to a controller with no configured origin."""
+
+    def setUp(self):
+        self.ctx = nvme.GlobalCtx()
+        self.tmpdir = tempfile.TemporaryDirectory(prefix='nvme-config-test-',
+                                                    dir='/tmp')
+        self.conf = os.path.join(self.tmpdir.name, 'nvme-fabrics.conf')
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+        self.ctx = None
+
+    def test_absent_config_returns_empty_sets(self):
+        missing = os.path.join(self.tmpdir.name, 'does-not-exist.conf')
+        self.assertEqual(nvme.config_defaults(self.ctx, missing),
+                         {'dc': {}, 'ioc': {}})
+
+    def test_absent_sections_return_empty_sets(self):
+        _write(self.conf, """
+[Subsystem]
+nqn        = nqn.2024-01.com.example:data.vol1
+controller = transport=tcp;traddr=192.168.1.20;trsvcid=4420
+""")
+        self.assertEqual(nvme.config_defaults(self.ctx, self.conf),
+                         {'dc': {}, 'ioc': {}})
+
+    def test_each_class_gets_its_own_defaults(self):
+        _write(self.conf, """
+[Discovery Controller Defaults]
+keep-alive-tmo = 30
+ctrl-loss-tmo  = 600
+
+[I/O Controller Defaults]
+ctrl-loss-tmo = 900
+nr-io-queues  = 4
+""")
+        defaults = nvme.config_defaults(self.ctx, self.conf)
+        self.assertEqual(defaults['dc'],
+                         {'keep-alive-tmo': '30', 'ctrl-loss-tmo': '600'})
+        self.assertEqual(defaults['ioc'],
+                         {'ctrl-loss-tmo': '900', 'nr-io-queues': '4'})
+
+    def test_endpoint_overrides_are_not_defaults(self):
+        """A value set on a section belongs to that endpoint, not to the
+        class it happens to be in."""
+        _write(self.conf, """
+[I/O Controller Defaults]
+ctrl-loss-tmo = 900
+
+[Subsystem]
+nqn           = nqn.2024-01.com.example:data.vol1
+ctrl-loss-tmo = 1800
+controller    = transport=tcp;traddr=192.168.1.20;trsvcid=4420
+""")
+        self.assertEqual(nvme.config_defaults(self.ctx, self.conf)['ioc'],
+                         {'ctrl-loss-tmo': '900'})
+
+    def test_drop_in_overlays_are_excluded(self):
+        """A drop-in's *Defaults section is scoped to that drop-in's own
+        connections. A controller discovered at runtime cannot be attributed
+        to a drop-in, so only the top-level scope is reported."""
+        _write(self.conf, """
+[I/O Controller Defaults]
+ctrl-loss-tmo = 600
+""")
+        dropin_dir = self.conf + '.d'
+        os.mkdir(dropin_dir)
+        _write(os.path.join(dropin_dir, 'persona.conf'), """
+[Host]
+hostnqn = nqn.2014-08.org.nvmexpress:uuid:aaaaaaaa-0000-0000-0000-000000000001
+hostid  = aaaaaaaa-0000-0000-0000-000000000001
+
+[I/O Controller Defaults]
+ctrl-loss-tmo   = 1800
+reconnect-delay = 20
+
+[Subsystem]
+nqn        = nqn.2024-01.com.example:data.vol1
+controller = transport=tcp;traddr=192.168.1.20;trsvcid=4420
+""")
+        # The top-level value, not the drop-in's, and nothing the drop-in
+        # alone introduces.
+        self.assertEqual(nvme.config_defaults(self.ctx, self.conf)['ioc'],
+                         {'ctrl-loss-tmo': '600'})
+
+        # The drop-in's own connection still gets its file-scoped overlay.
+        conn, = nvme.config_read(self.ctx, self.conf)
+        self.assertEqual(conn['params']['ctrl-loss-tmo'], '1800')
+        self.assertEqual(conn['params']['reconnect-delay'], '20')
+
+
+class TestConfigHost(unittest.TestCase):
+    """The top-level [Host] identity."""
+
+    def setUp(self):
+        self.ctx = nvme.GlobalCtx()
+        self.tmpdir = tempfile.TemporaryDirectory(prefix='nvme-config-test-',
+                                                    dir='/tmp')
+        self.conf = os.path.join(self.tmpdir.name, 'nvme-fabrics.conf')
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+        self.ctx = None
+
+    def test_absent_config_returns_empty_dict(self):
+        missing = os.path.join(self.tmpdir.name, 'does-not-exist.conf')
+        self.assertEqual(nvme.config_host(self.ctx, missing), {})
+
+    def test_no_host_section_returns_empty_dict(self):
+        _write(self.conf, """
+[Subsystem]
+nqn        = nqn.2024-01.com.example:data.vol1
+controller = transport=tcp;traddr=192.168.1.20;trsvcid=4420
+""")
+        self.assertEqual(nvme.config_host(self.ctx, self.conf), {})
+
+    def test_identity_without_any_connection(self):
+        """A [Host] and nothing else: no connections, but an identity. This is
+        the host that connects only what it discovers."""
+        _write(self.conf, """
+[Host]
+hostnqn     = nqn.2014-08.org.nvmexpress:uuid:aaaaaaaa-0000-0000-0000-000000000001
+hostid      = aaaaaaaa-0000-0000-0000-000000000001
+hostsymname = solo
+""")
+        self.assertEqual(nvme.config_read(self.ctx, self.conf), [])
+        self.assertEqual(nvme.config_host(self.ctx, self.conf), {
+            'hostnqn': 'nqn.2014-08.org.nvmexpress:uuid:aaaaaaaa-0000-0000-0000-000000000001',
+            'hostid': 'aaaaaaaa-0000-0000-0000-000000000001',
+            'hostsymname': 'solo',
+        })
+
+    def test_unset_keys_are_omitted(self):
+        """An absent key is omitted rather than reported empty, so the caller
+        can tell "not configured" from "configured to nothing"."""
+        _write(self.conf, """
+[Host]
+hostsymname = symname-only
+""")
+        self.assertEqual(nvme.config_host(self.ctx, self.conf),
+                         {'hostsymname': 'symname-only'})
+
+    def test_drop_in_persona_is_not_reported(self):
+        """A drop-in's persona belongs to that drop-in's own connections."""
+        _write(self.conf, """
+[I/O Controller Defaults]
+ctrl-loss-tmo = 600
+""")
+        dropin_dir = self.conf + '.d'
+        os.mkdir(dropin_dir)
+        _write(os.path.join(dropin_dir, 'persona.conf'), """
+[Host]
+hostnqn = nqn.2014-08.org.nvmexpress:uuid:aaaaaaaa-0000-0000-0000-000000000002
+hostid  = aaaaaaaa-0000-0000-0000-000000000002
+
+[Subsystem]
+nqn        = nqn.2024-01.com.example:data.vol1
+controller = transport=tcp;traddr=192.168.1.20;trsvcid=4420
+""")
+        self.assertEqual(nvme.config_host(self.ctx, self.conf), {})
+
+        # ...but the drop-in's own connection is made under it.
+        conn, = nvme.config_read(self.ctx, self.conf)
+        self.assertEqual(
+            conn['hostnqn'],
+            'nqn.2014-08.org.nvmexpress:uuid:aaaaaaaa-0000-0000-0000-000000000002')
 
 
 if __name__ == '__main__':

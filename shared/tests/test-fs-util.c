@@ -74,6 +74,39 @@ static bool test_basename(void)
 	return pass;
 }
 
+static bool check_len(const char *name, size_t got, size_t want)
+{
+	if (got == want) {
+		printf(" - %s [PASS]\n", name);
+		return true;
+	}
+
+	printf(" - %s: got %zu, want %zu [FAIL]\n", name, got, want);
+	return false;
+}
+
+static bool test_dir_prefix_len(void)
+{
+	static const char *path = "/a/b/c";
+	const char *name = shr_basename(path);
+	bool pass = true;
+
+	printf("test_dir_prefix_len:\n");
+
+	pass &= check_len("counts up to and including the '/'",
+			   shr_dir_prefix_len(path), 5);
+	pass &= check_len("no slash at all → 0",
+			   shr_dir_prefix_len("noslash"), 0);
+	pass &= check_len("trailing slash keeps the whole path",
+			   shr_dir_prefix_len("/trailing/"), 10);
+	pass &= check_len("bare \"/\" → 1", shr_dir_prefix_len("/"), 1);
+	pass &= check_len("empty input → 0", shr_dir_prefix_len(""), 0);
+	pass &= check_bool("advancing path by it lands on shr_basename()",
+			    path + shr_dir_prefix_len(path) == name);
+
+	return pass;
+}
+
 static bool test_dirname(void)
 {
 	struct {
@@ -293,6 +326,14 @@ static bool test_mkdir_from_fname(void)
 	pass &= check_ret("bare filename without directories is a no-op success",
 			   ret, 0);
 
+	snprintf(fname, sizeof(fname), "%s/level1/level3/", base);
+	ret = shr_mkdir_from_fname(fname, 0755);
+	pass &= check_ret("a path ending in '/' has no file name to strip",
+			   ret, 0);
+	snprintf(fname, sizeof(fname), "%s/level1/level3", base);
+	pass &= check_bool("its last component is created, not dropped",
+			    dir_is_writable(fname));
+
 	{
 		char toolong[PATH_MAX + 10];
 
@@ -305,6 +346,7 @@ static bool test_mkdir_from_fname(void)
 	}
 
 	/* Clean up what we created, deepest first. */
+	shr_rmdir("shr-test-mkdir-fname-dir/level1/level3");
 	shr_rmdir("shr-test-mkdir-fname-dir/level1/level2");
 	shr_rmdir("shr-test-mkdir-fname-dir/level1");
 	shr_rmdir("shr-test-mkdir-fname-dir");
@@ -532,6 +574,7 @@ int main(void)
 	bool pass = true;
 
 	pass &= test_basename();
+	pass &= test_dir_prefix_len();
 	pass &= test_dirname();
 	pass &= test_mkdir();
 	pass &= test_mkdir_p();
