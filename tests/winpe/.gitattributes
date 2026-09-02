@@ -1,0 +1,3 @@
+# cmd.exe mis-parses goto and call targets in batch files that use bare LF,
+# so these must keep CRLF endings in the working tree.
+*.bat text eol=crlf
