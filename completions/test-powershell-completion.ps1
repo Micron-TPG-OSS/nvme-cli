@@ -17,16 +17,16 @@
 
 $ErrorActionPreference = 'Stop'
 
-# PowerShell has no '< file' stdin redirection, so pipe the fixture into the
-# generator (which reads JSON on stdin and writes the completer to its path arg).
+# Pass the fixture as the generator's input path argument rather than piping it
+# in: PowerShell's native-command pipeline re-encodes text and can corrupt JSON.
 $python = Get-Command python3 -ErrorAction SilentlyContinue
 if (-not $python) { $python = Get-Command python -ErrorAction SilentlyContinue }
 if (-not $python) { Write-Error 'python3 not found'; exit 1 }
 
 $generated = Join-Path ([System.IO.Path]::GetTempPath()) `
     ("nvme-completion-{0}.ps1" -f [System.IO.Path]::GetRandomFileName())
-Get-Content -Raw "$PSScriptRoot/test-command-metadata.json" |
-    & $python.Source "$PSScriptRoot/generate-completions.py" --powershell $generated
+& $python.Source "$PSScriptRoot/generate-completions.py" `
+    "$PSScriptRoot/test-command-metadata.json" --powershell $generated
 if ($LASTEXITCODE -ne 0) { Write-Error 'failed to generate PowerShell completion from fixture'; exit 1 }
 . $generated
 Remove-Item $generated -ErrorAction SilentlyContinue

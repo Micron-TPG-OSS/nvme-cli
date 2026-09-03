@@ -204,7 +204,8 @@ class GenerateCompletionsSortedTest(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-            assert r.returncode == 0, r.stderr
+            if r.returncode != 0:
+                raise RuntimeError(r.stderr)
             cls.by_shell[shell] = EXTRACTORS[shell](r.stdout)
 
     def test_command_sets_agree_across_shells(self):

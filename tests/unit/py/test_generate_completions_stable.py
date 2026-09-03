@@ -71,7 +71,8 @@ class GenerateCompletionsStableTest(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        assert r.returncode == 0, r.stderr
+        if r.returncode != 0:
+            raise RuntimeError(r.stderr)
         return r.stdout
 
     def test_baseline_is_nonempty(self):
