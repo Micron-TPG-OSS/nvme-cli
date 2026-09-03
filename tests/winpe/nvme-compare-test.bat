@@ -52,9 +52,14 @@ if /i "%~1"=="--out"         (set "OUTROOT=%~2" & shift & shift & goto :args)
 rem Options that belong to the format suite, accepted so that run-all.bat can
 rem forward one set of arguments to both suites.
 if /i "%~1"=="--skip-crypto"  (shift & goto :args)
+if /i "%~1"=="--no-probe"     (shift & goto :args)
+if /i "%~1"=="--skip-io"      (shift & goto :args)
 if /i "%~1"=="--nsid"         (set "NSID=%~2" & shift & shift & goto :args)
 if /i "%~1"=="--alt-lbaf"     (shift & shift & goto :args)
 if /i "%~1"=="--verify-block" (shift & shift & goto :args)
+if /i "%~1"=="--cntlid"       (shift & shift & goto :args)
+if /i "%~1"=="--test-nsze"    (shift & shift & goto :args)
+if /i "%~1"=="--probe-max"    (shift & shift & goto :args)
 echo ERROR: unknown option %~1
 goto :usage
 

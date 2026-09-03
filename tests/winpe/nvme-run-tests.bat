@@ -8,8 +8,9 @@ rem
 rem   nvme-run-tests.bat --yes --ns nvme0n1 --ctrl nvme0
 rem
 rem The suites run in order of what they disturb: the nvme-mi suite reads only,
-rem the compare suite leaves the namespace intact, and the format suite erases
-rem it.
+rem the compare suite leaves the namespace intact, the format suite erases it,
+rem and the ns management suite may have to delete namespaces to make room for
+rem the one it tests with.
 
 setlocal EnableExtensions
 
@@ -30,6 +31,11 @@ echo.
 echo ################ format nvm test ################
 call "%HERE%nvme-format-test.bat" %*
 if errorlevel 1 set "FAILED=%FAILED% format"
+
+echo.
+echo ################ ns management test ################
+call "%HERE%nvme-ns-mgmt-test.bat" %*
+if errorlevel 1 set "FAILED=%FAILED% ns-mgmt"
 
 echo.
 if not defined FAILED (

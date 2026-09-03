@@ -36,6 +36,7 @@ if /i "%~1"=="mistat"   goto :sub_mistat
 if /i "%~1"=="mibytes"  goto :sub_mibytes
 if /i "%~1"=="winpe"    goto :sub_winpe
 if /i "%~1"=="tools"    goto :sub_tools
+if /i "%~1"=="wait"     goto :sub_wait
 if /i "%~1"=="summary"  goto :sub_summary
 echo nvme-test-lib: unknown subcommand: %~1
 exit /b 1
@@ -537,6 +538,29 @@ reg /? >nul 2>&1
 if errorlevel 9009 set "HAVE_REG=0"
 findstr /? >nul 2>&1
 if errorlevel 9009 set "HAVE_FINDSTR=0"
+exit /b 0
+
+rem ---------------------------------------------------------------- wait ----
+rem wait <seconds>
+rem
+rem Sleeps for at least <seconds>.  timeout is not in every WinPE image and
+rem refuses to run when stdin is redirected, and ping needs the TCP/IP stack, so
+rem both are tried before falling back to a spin loop.  Sleeping too long is
+rem harmless for every caller: they are all waiting for Windows to finish
+rem rebuilding its device tree.
+:sub_wait
+set "__ws=%~2"
+if not defined __ws set "__ws=1"
+timeout /t %__ws% /nobreak >nul 2>&1
+if not errorlevel 1 exit /b 0
+set /a "__wp=__ws+1"
+ping -n %__wp% 127.0.0.1 >nul 2>&1
+if not errorlevel 1 exit /b 0
+for /L %%s in (1,1,%__ws%) do call :spin
+exit /b 0
+
+:spin
+for /L %%i in (1,1,500000) do @rem
 exit /b 0
 
 rem ------------------------------------------------------------- summary ----

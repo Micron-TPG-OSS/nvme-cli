@@ -58,7 +58,12 @@ if /i "%~1"=="--out"          (set "OUTROOT=%~2" & shift & shift & goto :args)
 rem Options that belong to the compare suite, accepted so that run-all.bat can
 rem forward one set of arguments to both suites.
 if /i "%~1"=="--big"          (shift & goto :args)
+if /i "%~1"=="--no-probe"     (shift & goto :args)
+if /i "%~1"=="--skip-io"      (shift & goto :args)
 if /i "%~1"=="--start-block"  (shift & shift & goto :args)
+if /i "%~1"=="--cntlid"       (shift & shift & goto :args)
+if /i "%~1"=="--test-nsze"    (shift & shift & goto :args)
+if /i "%~1"=="--probe-max"    (shift & shift & goto :args)
 echo ERROR: unknown option %~1
 goto :usage
 

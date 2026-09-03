@@ -56,10 +56,15 @@ rem suite reads only, so --yes carries no meaning here.
 if /i "%~1"=="--yes"          (shift & goto :args)
 if /i "%~1"=="--big"          (shift & goto :args)
 if /i "%~1"=="--skip-crypto"  (shift & goto :args)
+if /i "%~1"=="--no-probe"     (shift & goto :args)
+if /i "%~1"=="--skip-io"      (shift & goto :args)
 if /i "%~1"=="--nsid"         (shift & shift & goto :args)
 if /i "%~1"=="--start-block"  (shift & shift & goto :args)
 if /i "%~1"=="--alt-lbaf"     (shift & shift & goto :args)
 if /i "%~1"=="--verify-block" (shift & shift & goto :args)
+if /i "%~1"=="--cntlid"       (shift & shift & goto :args)
+if /i "%~1"=="--test-nsze"    (shift & shift & goto :args)
+if /i "%~1"=="--probe-max"    (shift & shift & goto :args)
 echo ERROR: unknown option %~1
 goto :usage
 

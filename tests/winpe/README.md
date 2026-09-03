@@ -12,15 +12,19 @@ WinPE:
 - **Compare** (NVM opcode 05h, `libnvme_exec_io_passthru()` in the same file)
 - **NVMe-MI Send and NVMe-MI Receive** (admin opcodes 1Dh and 1Eh,
   `submit_storage_protocol_command()` in the same file)
+- **Namespace Management and Namespace Attachment** (admin opcodes 0Dh and 15h,
+  `submit_storage_protocol_command()` in the same file)
 
 Every suite reads the identify data first and adapts to the drive, so a
 controller that does not support Compare, an LBA format with metadata, or an
 NVMe-MI command the drive does not implement, produces skips rather than
 failures.
 
-**Two of the three tests destroy data.** The compare suite overwrites the LBA
-range it uses; the format suite erases the whole namespace. Both refuse to run
-without `--yes`. The nvme-mi suite reads only and needs no confirmation.
+**Three of the four tests change the drive.** The compare suite overwrites the
+LBA range it uses; the format suite erases the whole namespace; the ns
+management suite creates a namespace and deletes existing ones when it has to
+make room for it. All three refuse to run without `--yes`. The nvme-mi suite
+reads only and needs no confirmation.
 
 ## Files
 
@@ -29,8 +33,9 @@ without `--yes`. The nvme-mi suite reads only and needs no confirmation.
 | `nvme-mi-test.bat` | NVMe-MI Send and Receive suite, read only |
 | `nvme-compare-test.bat` | Compare command suite |
 | `nvme-format-test.bat` | Format NVM suite |
-| `nvme-run-tests.bat` | Runs all three and reports a combined result |
-| `nvme-test-lib.bat` | Shared helpers: case bookkeeping, command runner, identify field parsing, NVMe-MI response parsing, pattern files |
+| `nvme-ns-mgmt-test.bat` | Namespace create, attach, detach and delete suite |
+| `nvme-run-tests.bat` | Runs all four and reports a combined result |
+| `nvme-test-lib.bat` | Shared helpers: case bookkeeping, command runner, identify field parsing, NVMe-MI response parsing, pattern files, sleeping |
 
 ## Running
 
@@ -46,9 +51,11 @@ nvme-mi-test.bat --nvme X:\nvme.exe --ctrl nvme0
 rem Run against a device.
 nvme-compare-test.bat --yes --nvme X:\nvme.exe --ns nvme0n1
 nvme-format-test.bat  --yes --nvme X:\nvme.exe --ns nvme0n1 --ctrl nvme0
+nvme-ns-mgmt-test.bat --yes --nvme X:\nvme.exe --ns nvme0n1 --ctrl nvme0
 
-rem All three, in order of what they disturb: nvme-mi reads only, compare
-rem leaves the namespace intact, format erases it.
+rem All four, in order of what they disturb: nvme-mi reads only, compare leaves
+rem the namespace intact, format erases it, and ns management may have to delete
+rem namespaces to make room for the one it tests with.
 nvme-run-tests.bat --yes --nvme X:\nvme.exe --ns nvme0n1 --ctrl nvme0
 ```
 
@@ -59,7 +66,10 @@ Each suite writes a log and its scratch files under `%TEMP%\nvme-<suite>-test`;
 `--out DIR` puts them somewhere else, which matters when `%TEMP%` lives on a
 read-only or tiny RAM disk. `--help` lists the remaining options
 (`--timeout`, `--start-block`, `--nsid`, `--alt-lbaf`, `--verify-block`,
-`--skip-crypto`, `--big`, `--assume-winpe`).
+`--skip-crypto`, `--big`, `--assume-winpe`, `--cntlid`, `--test-nsze`,
+`--probe-max`, `--no-probe`, `--skip-io`). Every suite accepts the options of
+all the others and ignores the ones that do not apply, so `nvme-run-tests.bat`
+can forward one argument set to all four.
 
 The exit code is 0 when no case failed, 1 when one did, and 2 when the suite
 never started (missing `--yes`, bad option, unusable work directory). Skips do
@@ -180,6 +190,114 @@ That last point is worth keeping in mind when reading a non-WinPE run: the cases
 that expect the drive to reject something pass there because libnvme refuses
 SES=0 before the drive is ever reached. Only a WinPE run exercises them for real.
 
+## What the ns management suite checks
+
+`nvme ns create`, `attach`, `detach` and `delete`, in the order
+`tests/e2e/nvme_attach_detach_ns_test.py` uses them. The suite works on a
+namespace of its own and puts the drive back the way it found it:
+
+1. **Option validation** — a missing `--namespace-id`, an attach or detach on a
+   namespace handle instead of a controller handle, a controller id list that
+   does not parse, `--flbas` together with `--block-size`, a block size that is
+   not a power of two, a create with neither, `--azr` on a namespace that is not
+   zoned, and `--nphndls` without the handles. These fail inside nvme-cli.
+2. **Recording the layout** — the active namespace list, then the size, capacity,
+   format, protection settings and sharing capabilities of every namespace the
+   drive lets it see (see *Namespaces the Windows driver does not show* below).
+   The commands that would rebuild that layout are written to `ns-restore.txt` in
+   the work directory before anything is changed, and echoed to the log.
+3. **Dry run** — all four commands with `--dry-run` exit 0 and leave the active
+   namespace list alone, and `--ish` outside NVMe-MI is reported.
+4. **A namespace of its own** — a create of the size given by `--test-nsze`,
+   default 0x10000 blocks. A drive with unallocated capacity accepts it and keeps
+   all of its namespaces. A drive whose capacity is fully allocated does not, so
+   the suite frees the highest allocated namespace, detaching it first when it is
+   attached, and tries again. Highest first keeps the namespaces that survive
+   contiguous, which is what lets the restore give the deleted ones their
+   original namespace ids back. A create larger than the drive has to be
+   rejected.
+5. **The commands themselves** — create leaves the namespace unattached; attach
+   makes it active with the size and format it was created with; attach without
+   `--controllers` fills the controller list from the `cntlid` that identify
+   controller reports; a write and read back of the first blocks once Windows has
+   enumerated the new namespace; detach makes it inactive again; a controller id
+   the subsystem does not have is rejected; delete removes it; a second delete of
+   the same namespace id is rejected; and an attach of the deleted namespace id
+   is rejected, where the same attach succeeded while the namespace was only
+   detached.
+6. **Restore** — the test namespace is removed, every namespace that had to be
+   deleted is recreated with its recorded configuration and reattached, and the
+   active namespace list and the primary namespace's size and format are checked
+   against what was recorded. **Only the layout is restored, never the data.**
+
+Expectations follow the identify data and the environment:
+
+- OACS bit 3 or bit 4 clear means the controller implements neither command, so
+  the suite only checks that all four are refused and stops.
+- Outside WinPE all four are refused with "not supported" before the drive is
+  reached. `--dry-run` does not change that: the ENOTSUP check in
+  `libnvme_exec_admin_passthru()` comes before the dry run short circuit inside
+  `submit_storage_protocol_command()`, so a dry run cannot exit 0 there either.
+- `ns delete` carries no data, which is the case that needs the zero length
+  data-out padding in `submit_storage_protocol_command()`. A delete that fails
+  with "Invalid argument", or with an invalid request status without reaching the
+  controller, is that padding regressing.
+- Attaching an already attached namespace and detaching an already detached one
+  are recorded rather than checked: the specification asks for Namespace Already
+  Attached and Namespace Not Attached, and drives differ.
+
+### Waiting for Windows after an attach or a detach
+
+An attach or a detach makes Windows add or remove the disk it keeps for the
+namespace, and while it rebuilds its device tree the controller cannot be opened
+by name at all: libnvme resolves `nvme0` by scanning that tree, so the next
+command fails with `nvme0: No such file or directory`. It recovers on its own
+after a moment.
+
+Every command that changes which namespaces are attached is therefore followed by
+a wait for the controller handle to answer again, and the checks that read the
+namespace list poll for up to ten seconds rather than reading it once, the same
+way `attach_ns()` in `tests/nvme_test.py` waits for the block device to appear on
+Linux. The log says `nvme0 came back after N tries` when the wait was needed,
+which is worth noticing: it means the drive itself was fine and Windows was
+still catching up.
+
+Two namespace list views back that up. The controller's own active namespace list
+is the primary one; when identify cannot be issued at all, the suite falls back to
+the `Node` column of `nvme list`, which carries the namespace ids Windows has
+enumerated for the controller. A run says which view decided a case:
+
+```
+namespace 4 is in the active namespace list
+namespace 4 is in the nodes nvme list prints
+```
+
+An empty `nvme list` is read as "not known" rather than as "nothing is attached",
+because a scan that runs during the rebuild looks exactly like a drive with no
+namespaces. That keeps a slow re-enumeration a skip instead of a false failure.
+
+### Namespaces the Windows driver does not show
+
+Identify Namespace answers *success with a zero filled structure* for every
+namespace id that is not active, so it cannot tell an unallocated namespace from
+an allocated one that is detached. The suite reads a zero size as "not attached"
+only, and proves a delete through the attach that has to be rejected afterwards.
+
+Telling the two apart needs the allocated namespace list (Identify CNS 10h,
+`id ns-list --all`) or Identify Allocated Namespace (CNS 11h, `id ns --force`),
+and the Windows driver answers "not supported" to both on the hosts tested so
+far. The suite tries them anyway and falls back to probing every namespace id up
+to `nn`, capped by `--probe-max`, with an attach: an attach that succeeds means
+the namespace was allocated all along, so its configuration is read while it is
+attached and it is detached again right away. `--no-probe` turns that off, and
+then a namespace that is allocated but not attached is invisible and would not be
+restored, which the log says in as many words.
+
+A namespace the inventory never saw is never deleted on purpose — only the
+recorded ones are freed. The one exception is the broadcast `ns delete`, which
+the suite reaches only when it has deleted every namespace it knows about and
+still cannot create one.
+
 ## External tools
 
 A WinPE image carries no guaranteed set of System32 tools, so nothing the suites
@@ -200,6 +318,7 @@ when not:
 | `fc` | byte exact file comparison | falls back to `certutil` MD5, then to comparing the first 1023 bytes; the log names the method |
 | `certutil` | MD5 fallback for the above | as above |
 | `reg` | WinPE detection | falls back to the presence of `startnet.cmd`, and `--assume-winpe` overrides either way |
+| `timeout` | sleeping while Windows re-enumerates | falls back to `ping`, then to a spin loop |
 | `fsutil` | metadata buffer for a namespace with `ms>0` | those cases skip |
 
 The first 1023 byte comparison is not exact. It is enough to tell the two
@@ -215,6 +334,18 @@ used so a reader knows.
   namespace to an LBA format with `ms=0` and `pi=0` first.
 - The suites use one namespace. Multi-namespace behaviour of a broadcast format
   is not verified beyond the command completing.
+- The ns management suite restores the namespace layout, not the data in it. It
+  also cannot reproduce the original namespace ids when the recorded set has
+  gaps, because `ns create` takes no namespace id and the controller assigns the
+  lowest one that is free; the log warns when the set is not contiguous from 1.
+- The namespace id of the namespace the suite creates comes from the `nsid:` line
+  that `ns create --verbose` prints, which is completion queue entry dword 0. A
+  driver that does not pass that back stops the suite right after the create
+  rather than let it guess which namespace is its own.
+- The write and read back on the new namespace needs Windows to have enumerated
+  it: libnvme maps `nvme0nX` onto a `\\.\PhysicalDrive` by SCSI logical unit. The
+  suite resets the controller once to trigger that and skips the IO when the
+  handle still does not answer.
 - The nvme-mi suite reads response data out of the hex dump, which means only
   the first 16 bytes are available to it. That covers every structure it
   decodes, but only the first seven entries of the Optionally Supported Command
