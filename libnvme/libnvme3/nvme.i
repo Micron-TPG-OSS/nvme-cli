@@ -41,6 +41,18 @@ static inline PyObject *Py_NewRef(PyObject *obj)
 "Ctrl          An NVMe or NVMe-oF controller; connect, discover, disconnect.\n"
 "Namespace     A namespace within a subsystem or controller.\n"
 "\n"
+"Functions\n"
+"---------\n"
+"read_hostnqn(ctx)   The configured host NQN: the GlobalCtx default if\n"
+"                    one is set, otherwise /etc/nvme/hostnqn.\n"
+"read_hostid(ctx)    The configured host ID, resolved the same way.\n"
+"host_get_ids(ctx, hostnqn_arg=None, hostid_arg=None)\n"
+"                    The identity a connect will use, fully resolved:\n"
+"                    the _arg values (a command-line override, if the\n"
+"                    application has one), then the first host in the\n"
+"                    tree, then the two functions above, then derived\n"
+"                    or generated. Returns a (hostnqn, hostid) tuple.\n"
+"\n"
 "Scan attached NVMe devices::\n"
 "\n"
 "    import nvme\n"
@@ -62,7 +74,6 @@ static inline PyObject *Py_NewRef(PyObject *obj)
 "        log = c.discover()\n"
 "\n"
 "All classes support the context manager protocol (the ``with`` statement).\n"
-"read_hostnqn() and read_hostid() return the system-wide host NQN and ID.\n"
 %enddef
 %module(docstring=MODULE_DOCSTRING) nvme
 %feature("autodoc", "1");
@@ -320,16 +331,20 @@ static int set_fctx_from_dict(struct libnvme_global_ctx *ctx,
 PyObject *read_hostnqn(struct libnvme_global_ctx *ctx)
 {
 	char *val = libnvmf_read_hostnqn(ctx);
-	PyObject *obj = val ? PyUnicode_FromString(val) : Py_NewRef(Py_None);
+	PyObject *obj = Py_BuildValue("s", val);
+
 	free(val);
+
 	return obj;
 }
 
 PyObject *read_hostid(struct libnvme_global_ctx *ctx)
 {
 	char *val = libnvmf_read_hostid(ctx);
-	PyObject *obj = val ? PyUnicode_FromString(val) : Py_NewRef(Py_None);
+	PyObject *obj = Py_BuildValue("s", val);
+
 	free(val);
+
 	return obj;
 }
 
@@ -338,7 +353,6 @@ PyObject *host_get_ids(struct libnvme_global_ctx *ctx,
 		       const char *hostid_arg)
 {
 	char *hostnqn = NULL, *hostid = NULL;
-	PyObject *hostnqn_obj = NULL, *hostid_obj = NULL;
 	PyObject *obj;
 	int err;
 
@@ -349,28 +363,11 @@ PyObject *host_get_ids(struct libnvme_global_ctx *ctx,
 		return NULL;
 	}
 
-	hostnqn_obj = hostnqn ? PyUnicode_FromString(hostnqn) : Py_NewRef(Py_None);
-	hostid_obj = hostid ? PyUnicode_FromString(hostid) : Py_NewRef(Py_None);
-	if (!hostnqn_obj || !hostid_obj) {
-		Py_XDECREF(hostnqn_obj);
-		Py_XDECREF(hostid_obj);
-		free(hostnqn);
-		free(hostid);
-		return NULL;
-	}
+	obj = Py_BuildValue("(ss)", hostnqn, hostid);
 
-	obj = PyTuple_New(2);
-	if (!obj) {
-		Py_DECREF(hostnqn_obj);
-		Py_DECREF(hostid_obj);
-		free(hostnqn);
-		free(hostid);
-		return NULL;
-	}
-	PyTuple_SET_ITEM(obj, 0, hostnqn_obj);
-	PyTuple_SET_ITEM(obj, 1, hostid_obj);
 	free(hostnqn);
 	free(hostid);
+
 	return obj;
 }
 
@@ -883,7 +880,7 @@ PyObject *registry_retrieve(struct libnvme_global_ctx *ctx,
 	return str;
 }
 
-static void _registry_collect_device(const char *device, void *user_data)
+static int _registry_collect_device(const char *device, void *user_data)
 {
 	PyObject *str = PyUnicode_FromString(device);
 
@@ -891,6 +888,7 @@ static void _registry_collect_device(const char *device, void *user_data)
 		PyList_Append((PyObject *)user_data, str);
 		Py_DECREF(str);
 	}
+	return 0;
 }
 
 PyObject *registry_devices(struct libnvme_global_ctx *ctx)
@@ -1464,18 +1462,25 @@ struct libnvme_ns *libnvme_ctrl_first_ns(struct libnvme_ctrl *c);
 struct libnvme_ns *libnvme_ctrl_next_ns(struct libnvme_ctrl *c, struct libnvme_ns *n);
 
 %extend libnvme_global_ctx {
-	%feature("autodoc", "__init__(self, owner=None)\n"
+	%feature("autodoc", "__init__(self, owner=None, hostnqn=None, hostid=None)\n"
 		"\n"
 		"Create the root context for the libnvme device tree.\n"
 		"\n"
-		"Scans the NVMe topology on creation.\n"
+		"The device tree starts empty. Call scan_topology() to\n"
+		"populate it.\n"
 		"Supports use as a context manager (``with GlobalCtx() as ctx:``).\n"
 		"\n"
 		"Args:\n"
 		"    owner: Orchestrator identity (e.g. 'stas', 'nbft').\n"
 		"           Pass None if this process does not participate\n"
-		"           in the ownership registry.") libnvme_global_ctx;
-	libnvme_global_ctx(const char *owner = NULL) {
+		"           in the ownership registry.\n"
+		"    hostnqn: Default host NQN. Pass None to use\n"
+		"           $SYSCONFDIR/nvme/hostnqn.\n"
+		"    hostid: Default host identifier. Pass None to use\n"
+		"           $SYSCONFDIR/nvme/hostid.") libnvme_global_ctx;
+	libnvme_global_ctx(const char *owner = NULL,
+			   const char *hostnqn = NULL,
+			   const char *hostid = NULL) {
 		struct libnvme_global_ctx *ctx;
 
 		ctx = libnvme_create_global_ctx();
@@ -1486,7 +1491,10 @@ struct libnvme_ns *libnvme_ctrl_next_ns(struct libnvme_ctrl *c, struct libnvme_n
 		if (owner)
 			libnvme_set_owner(ctx, owner);
 
-		libnvme_scan_topology(ctx, NULL, NULL);
+		if (hostnqn)
+			libnvme_set_hostnqn(ctx, hostnqn);
+		if (hostid)
+			libnvme_set_hostid(ctx, hostid);
 
 		return ctx;
 	}
@@ -1520,7 +1528,22 @@ struct libnvme_ns *libnvme_ctrl_next_ns(struct libnvme_ctrl *c, struct libnvme_n
 	        yield h
 	        h = _libnvme_next_host(self, h)
 	%}
-	%feature("autodoc", "Rescan the NVMe topology and update the device tree.") refresh_topology;
+	%feature("autodoc", "Scan the NVMe topology and add what is found to "
+		"the device tree.\n"
+		"\n"
+		"Only adds: a device already in the tree is updated in place, "
+		"and nothing is removed. Objects held by the caller stay "
+		"valid.") scan_topology;
+	void scan_topology() {
+		libnvme_scan_topology($self, NULL, NULL);
+	}
+	%feature("autodoc", "Discard the device tree and scan the NVMe "
+		"topology again.\n"
+		"\n"
+		"Destructive: every host, subsystem, controller and namespace "
+		"is freed before the scan, so any object the caller still "
+		"holds becomes invalid. Use it to drop devices that have gone "
+		"away; use scan_topology() to pick up new ones.") refresh_topology;
 	void refresh_topology() {
 		libnvme_refresh_topology($self);
 	}
