@@ -784,15 +784,7 @@ if want_nvme
         endforeach
     endif
 
-    install_data(
-        'completions/bash-nvme-completion.sh',
-        rename: 'nvme',
-        install_dir: datadir / 'bash-completion/completions',
-    )
-    install_data(
-        'completions/_nvme',
-        install_dir: datadir / 'zsh/site-functions',
-    )
+    subdir('completions')
 
     subdir('Documentation')
 endif
