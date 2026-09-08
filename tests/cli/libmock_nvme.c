@@ -21,7 +21,20 @@
  * controls the whole scenario, not this shim.
  */
 
+/*
+ * This file defines open()/open64()/openat()/openat64()/fstat()/fstat64()
+ * as distinct, separately-interposed symbols, so _FILE_OFFSET_BITS must
+ * stay undefined here: otherwise glibc's LFS headers would "#define open
+ * open64" etc. and silently rename this file's own open() definition into
+ * a second open64(), colliding with the explicit one. On the 32-bit
+ * architectures Debian/Ubuntu have migrated to 64-bit time_t (e.g. armhf),
+ * the cross-gcc implicitly sets _TIME_BITS=64, which glibc's headers
+ * refuse to pair with an unset/non-64 _FILE_OFFSET_BITS -- so that has to
+ * come undefined too, for the same "let this TU pick its own copy of these
+ * macros, independent of the project-wide -D_FILE_OFFSET_BITS=64" reason.
+ */
 #undef _FILE_OFFSET_BITS
+#undef _TIME_BITS
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -121,6 +134,40 @@ struct __attribute__((packed)) ipc_response {
 	uint32_t data_len;	/* payload length (follows immediately) */
 };
 
+/*
+ * This process may be running as real target-arch code (a cross build
+ * under qemu-user), while nvme_mock_ipc.py on the other end of the socket
+ * is always native host-arch Python. Those are only the same "native" byte
+ * order on a non-cross run, so the wire format is explicit little-endian
+ * (matching nvme_mock_ipc.py's "<" struct formats) rather than whatever
+ * this process's native order happens to be.
+ */
+static void ipc_request_encode(struct ipc_request *r)
+{
+	r->type     = htole32(r->type);
+	r->fd       = htole32(r->fd);
+	r->data_len = htole32(r->data_len);
+	r->request  = htole32(r->request);
+	r->nsid     = htole32(r->nsid);
+	r->cdw10    = htole32(r->cdw10);
+	r->cdw11    = htole32(r->cdw11);
+	r->cdw12    = htole32(r->cdw12);
+	r->cdw13    = htole32(r->cdw13);
+	r->cdw14    = htole32(r->cdw14);
+	r->cdw15    = htole32(r->cdw15);
+	r->lpo      = htole64(r->lpo);
+	r->req_len  = htole32(r->req_len);
+}
+
+static void ipc_response_decode(struct ipc_response *r)
+{
+	r->status    = (int32_t)le32toh((uint32_t)r->status);
+	r->errno_val = (int32_t)le32toh((uint32_t)r->errno_val);
+	r->sc_status = (int32_t)le32toh((uint32_t)r->sc_status);
+	r->result    = le32toh(r->result);
+	r->data_len  = le32toh(r->data_len);
+}
+
 typedef int (*orig_open_t)(const char *pathname, int flags, ...);
 typedef int (*orig_open64_t)(const char *pathname, int flags, ...);
 typedef int (*orig_openat_t)(int dirfd, const char *pathname, int flags, ...);
@@ -131,6 +178,7 @@ typedef int (*orig_ioctl_t)(int fd, unsigned long request, ...);
 typedef int (*orig_close_t)(int fd);
 typedef int (*orig_fstat_t)(int fd, struct stat *buf);
 typedef int (*orig_fstat64_t)(int fd, struct stat64 *buf);
+typedef int (*orig_fstat64_time64_t)(int fd, void *buf);
 
 static orig_open_t orig_open;
 static orig_open64_t orig_open64;
@@ -139,9 +187,11 @@ static orig_openat64_t orig_openat64;
 static orig_write_t orig_write;
 static orig_read_t orig_read;
 static orig_ioctl_t orig_ioctl;
+static orig_ioctl_t orig_ioctl_time64;
 static orig_close_t orig_close;
 static orig_fstat_t orig_fstat;
 static orig_fstat64_t orig_fstat64;
+static orig_fstat64_time64_t orig_fstat64_time64;
 
 static int mock_fabrics_fd = -1;
 static int mock_fabrics_manager_fd = -1;
@@ -180,9 +230,11 @@ static void init_orig_functions(void)
 	orig_write = (orig_write_t)dlsym(RTLD_NEXT, "write");
 	orig_read = (orig_read_t)dlsym(RTLD_NEXT, "read");
 	orig_ioctl = (orig_ioctl_t)dlsym(RTLD_NEXT, "ioctl");
+	orig_ioctl_time64 = (orig_ioctl_t)dlsym(RTLD_NEXT, "__ioctl_time64");
 	orig_close = (orig_close_t)dlsym(RTLD_NEXT, "close");
 	orig_fstat = (orig_fstat_t)dlsym(RTLD_NEXT, "fstat");
 	orig_fstat64 = (orig_fstat64_t)dlsym(RTLD_NEXT, "fstat64");
+	orig_fstat64_time64 = (orig_fstat64_time64_t)dlsym(RTLD_NEXT, "__fstat64_time64");
 }
 
 static int connect_ipc_socket(void)
@@ -442,6 +494,7 @@ static void *read_ipc_response(int ipc_fd, struct ipc_response *resp)
 		resp->errno_val = EIO;
 		return NULL;
 	}
+	ipc_response_decode(resp);
 
 	if (!resp->data_len)
 		return NULL;
@@ -486,6 +539,7 @@ ssize_t write(int fd, const void *buf, size_t count)
 		.data_len = count,
 	};
 
+	ipc_request_encode(&req);
 	orig_write(ipc_fd, &req, sizeof(req));
 	orig_write(ipc_fd, buf, count);
 
@@ -561,6 +615,7 @@ static int handle_passthru_ioctl(int instance, unsigned long request,
 		.req_len = cmd->data_len,
 	};
 
+	ipc_request_encode(&req);
 	orig_write(ipc_fd, &req, sizeof(req));
 
 	resp_data = read_ipc_response(ipc_fd, &resp);
@@ -598,18 +653,10 @@ static int handle_passthru_ioctl(int instance, unsigned long request,
 	return resp.sc_status;
 }
 
-int ioctl(int fd, unsigned long request, ...)
+static int mock_ioctl(int fd, unsigned long request, void *argp, orig_ioctl_t fallback)
 {
 	int instance = mock_ctrl_instance(fd);
-	va_list args;
-	void *argp;
 	int ret;
-
-	init_orig_functions();
-
-	va_start(args, request);
-	argp = va_arg(args, void *);
-	va_end(args);
 
 	if (instance >= 0 &&
 			(request == LIBNVME_IOCTL_ADMIN_CMD ||
@@ -621,7 +668,21 @@ int ioctl(int fd, unsigned long request, ...)
 			return ret;
 	}
 
-	return orig_ioctl(fd, request, argp);
+	return fallback(fd, request, argp);
+}
+
+int ioctl(int fd, unsigned long request, ...)
+{
+	va_list args;
+	void *argp;
+
+	init_orig_functions();
+
+	va_start(args, request);
+	argp = va_arg(args, void *);
+	va_end(args);
+
+	return mock_ioctl(fd, request, argp, orig_ioctl);
 }
 
 int __ioctl(int fd, unsigned long request, ...)
@@ -634,6 +695,20 @@ int __ioctl(int fd, unsigned long request, ...)
 	va_end(args);
 
 	return ioctl(fd, request, argp);
+}
+
+int __ioctl_time64(int fd, unsigned long request, ...)
+{
+	va_list args;
+	void *argp;
+
+	init_orig_functions();
+
+	va_start(args, request);
+	argp = va_arg(args, void *);
+	va_end(args);
+
+	return mock_ioctl(fd, request, argp, orig_ioctl_time64);
 }
 
 int close(int fd)
@@ -685,4 +760,25 @@ int fstat64(int fd, struct stat64 *buf)
 	}
 
 	return orig_fstat64(fd, buf);
+}
+
+int __fstat64_time64(int fd, void *buf)
+{
+	bool is_block;
+	int ret;
+
+	init_orig_functions();
+
+	/*
+	 * buf's real layout is unknown here, so unlike fstat()/fstat64() this
+	 * can't memset() the whole thing and fabricate it from scratch. Let the
+	 * real call fill in a correctly-sized, correctly-shaped struct, then
+	 * only patch st_mode -- its offset is unaffected by the time64
+	 * transition.
+	 */
+	ret = orig_fstat64_time64(fd, buf);
+	if (ret == 0 && mock_ctrl_is_block(fd, &is_block))
+		((struct stat *)buf)->st_mode = (is_block ? S_IFBLK : S_IFCHR) | 0600;
+
+	return ret;
 }
