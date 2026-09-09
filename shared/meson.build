@@ -22,6 +22,7 @@ sources = [
     'nqn-util.c',
     'parse-util.c',
     'progress-util.c',
+    'sha256-util.c',
     'suffix-util.c',
     'table-util.c',
     'time-util.c',
@@ -40,6 +41,7 @@ if host_system == 'windows'
 else
     sources += [
         'fs-util-linux.c',
+        'machine-id-util-linux.c',
         'net-util-linux.c',
         'crypto-util-linux.c',
         'proc-util-linux.c',
