@@ -135,9 +135,13 @@ char *process_field_size_6(int offset, char *sfield, __u8 *buf)
 
 char *process_field_size_default(int offset, char *sfield, __u8 *buf, int size)
 {
-	/* "0x" prefix + 2 hex chars per byte + null terminator */
-	char *datastr = malloc(size * 2 + 3);
+	char *datastr;
 
+	if (size <= 0)
+		return NULL;
+
+	/* "0x" prefix + 2 hex chars per byte + null terminator */
+	datastr = malloc(size * 2 + 3);
 	if (!datastr)
 		return NULL;
 
