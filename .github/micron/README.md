@@ -8,7 +8,8 @@ upstream `linux-nvme/nvme-cli`.
 ```
 .github/micron/
 ├── README.md
-└── sharepoint-publish.py                       # called by the sharepoint job
+├── sharepoint-publish.py                       # called by the sharepoint job
+└── smoke-test.sh                               # called by the build job
 ```
 
 ## Why the files live where they do
