@@ -7,6 +7,8 @@
  */
 #pragma once
 
+#include <nvme/nvme-types-fabrics.h>
+
 #include "ctx.h"
 #include "tid.h"
 
@@ -17,11 +19,11 @@
  *   subtype == NVME_NQN_NVME (I/O controller):       ioc_callback is called.
  *   subtype == NVME_NQN_DISC (referral DC):          dc_callback is called.
  *   subtype == NVME_NQN_CURR (this DC's self entry): self_callback is called.
- *   DUPRETINFO flag set: entry is skipped.
  *
- * self_callback is called at most once, with the self entry's EPCSD bit
- * (EFLAGS bit 1). It is not called at all if the log page carries no self
- * entry; the caller must supply its own fallback for that case.
+ * self_callback is called once per self entry, with that entry's EPCSD bit
+ * (EFLAGS bit 1); a multi-port DC may publish several. It is not called at
+ * all if the log page carries no self entry; the caller must supply its own
+ * fallback for that case.
  *
  * dc_callback is passed the referral entry's own EPCSD bit, i.e. this DC's
  * report of whether the referred-to DC supports persistent connections.
@@ -41,3 +43,19 @@ int dlp_fetch(struct discoverd_ctx *ctx, const char *devname,
 				 void *user_data),
 	      void (*self_callback)(bool epcsd, void *user_data),
 	      void *user_data);
+
+/*
+ * Dispatch an already-fetched Discovery Log Page, the second half of
+ * dlp_fetch(). Split out so the entry dispatch can be unit tested against a
+ * synthetic log page, without a device or a fabrics connection.
+ *
+ * log: a Discovery Log Page; numrec is read from its own header.
+ */
+void dlp_process_log(const struct nvmf_discovery_log *log,
+		     const struct libnvmf_tid *dc_tid,
+		     void (*ioc_callback)(const struct libnvmf_tid *t,
+					  void *user_data),
+		     void (*dc_callback)(const struct libnvmf_tid *t,
+					 bool epcsd, void *user_data),
+		     void (*self_callback)(bool epcsd, void *user_data),
+		     void *user_data);
