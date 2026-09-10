@@ -304,6 +304,18 @@ jobs:
           # Full history so meson's git describe yields the exact tag.
           fetch-depth: 0
 
+      # The checkout above is the upstream tag, and an upstream tag's tree has
+      # no .github/micron/ -- these files exist only on this fork's branches.
+      # So fetch the sanity-check script from the ref this workflow is running
+      # from, into a subdirectory rather than on top of the source tree. It
+      # lands untracked, which "git describe --dirty" ignores.
+      - name: Check out the Micron CI helpers
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: .micron-ci
+          sparse-checkout: .github/micron
+          sparse-checkout-cone-mode: true
+
       - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
         with:
           msystem: ${{ matrix.msystem }}
@@ -384,6 +396,17 @@ jobs:
           set -euxo pipefail
           meson test -C .build-release
 
+      # The unit tests above exercise library code; this is the step that runs
+      # the program. --expect-version also ties the binary we are about to
+      # package to the tag we think we are building, which the "git describe"
+      # check earlier can only assert about the source tree.
+      - name: Sanity-run nvme.exe
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          bash .micron-ci/.github/micron/smoke-test.sh \
+            --expect-version "${VERSION}" .build-release/nvme.exe
+
       - name: Verify no MinGW runtime deps
         shell: msys2 {0}
         run: |
@@ -452,6 +475,44 @@ jobs:
             echo "zip=${ZIP}"
             echo "nvme_version=${NVME_VERSION}"
           } >> "$GITHUB_OUTPUT"
+
+      # Everything above ran inside the MSYS2 shell, where /ucrt64/bin is on
+      # PATH -- so a runtime DLL dependency would quietly resolve there. Unpack
+      # the asset we are about to publish and run it from plain Windows with a
+      # PATH holding only system directories, which is what a clean machine
+      # looks like. This complements the import-table check above: that reads
+      # the PE header, this catches anything the binary loads later with
+      # LoadLibrary.
+      - name: Sanity-run the packaged zip on a clean PATH
+        shell: pwsh
+        env:
+          ZIP: ${{ steps.package.outputs.zip }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $clean = Join-Path $env:RUNNER_TEMP 'clean-run'
+          Remove-Item -Recurse -Force $clean -ErrorAction SilentlyContinue
+          Expand-Archive -Path "dist/$env:ZIP" -DestinationPath $clean
+          $exe = Join-Path $clean 'nvme.exe'
+
+          $env:PATH = "$env:SystemRoot\system32;$env:SystemRoot"
+
+          # Deliberately no "2>&1": with $ErrorActionPreference = 'Stop',
+          # pwsh 7 turns a native command's redirected stderr into a
+          # terminating error, which would fail the step on a mere warning.
+          $out = & $exe version
+          $out | Out-Host
+          if ($LASTEXITCODE -ne 0) {
+              throw "nvme version exited $LASTEXITCODE outside MSYS2"
+          }
+          if ($out -notmatch [regex]::Escape("nvme version $env:VERSION")) {
+              throw "packaged nvme.exe does not report version $env:VERSION"
+          }
+
+          & $exe list -o json | Out-Host
+          if ($LASTEXITCODE -ne 0) {
+              throw "nvme list exited $LASTEXITCODE outside MSYS2"
+          }
 
       - name: Report
         shell: msys2 {0}
