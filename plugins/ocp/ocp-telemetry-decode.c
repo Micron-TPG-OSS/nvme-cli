@@ -1319,8 +1319,7 @@ int parse_event_fifo(unsigned int fifo_num, unsigned char *pfifo_start,
 			struct json_object *pstats_array =
 				((pevent_fifos_object != NULL) ? json_create_array() : NULL);
 
-			if (pStaticSnapshotEvent != NULL &&
-				pStaticSnapshotEvent->stat_data_size > 0) {
+			if (pStaticSnapshotEvent->stat_data_size > 0) {
 				__u8 *pstatistic_entry =
 					(__u8 *)pStaticSnapshotEvent +
 					sizeof(struct nvme_ocp_telemetry_event_descriptor);
