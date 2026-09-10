@@ -259,7 +259,7 @@ static int set_additional_feature(int argc, char **argv, struct command *acmd, s
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	__cleanup_libnvme_free void *buf = NULL;
-	int ffd = STDIN_FILENO;
+	__cleanup_fd int ffd = STDIN_FILENO;
 	__u64 result;
 	int err;
 
@@ -310,8 +310,9 @@ static int set_additional_feature(int argc, char **argv, struct command *acmd, s
 	if (buf) {
 		if (strlen(cfg.file)) {
 			ffd = open(cfg.file, O_RDONLY);
-			if (ffd <= 0) {
-				nvme_show_error("no firmware file provided");
+			if (ffd < 0) {
+				nvme_show_error("Failed to open file %s: %s",
+						cfg.file, libnvme_strerror(errno));
 				return -EINVAL;
 			}
 		}
