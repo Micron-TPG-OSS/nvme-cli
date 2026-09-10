@@ -282,7 +282,7 @@ static int sndk_do_cap_udui(struct libnvme_transport_handle *hdl, char *file,
 	int ret = 0;
 	int output;
 	ssize_t written = 0;
-	struct nvme_telemetry_log *log;
+	struct nvme_telemetry_log *log, *tmp;
 	__u32 udui_log_hdr_size = sizeof(struct nvme_telemetry_log);
 	__u32 chunk_size = xfer_size;
 	__u64 total_size;
@@ -307,7 +307,14 @@ static int sndk_do_cap_udui(struct libnvme_transport_handle *hdl, char *file,
 
 	total_size = (le32_to_cpu(log->dalb4) + 1) * 512;
 
-	log = (struct nvme_telemetry_log *)realloc(log, chunk_size);
+	tmp = (struct nvme_telemetry_log *)realloc(log, chunk_size);
+	if (!tmp) {
+		nvme_show_error("%s: ERROR: log realloc failed : status %s, size 0x%x\n",
+			__func__, libnvme_strerror(errno), chunk_size);
+		ret = -1;
+		goto out;
+	}
+	log = tmp;
 
 	output = shr_open_rawdata(file, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 	if (output < 0) {
