@@ -2663,6 +2663,19 @@ __shr_public int libnvmf_uri_parse(
 		   &uri->scheme, &uri->protocol) < 1)
 		return -EINVAL;
 
+	/*
+	 * The scheme and transport protocol are a fixed, small vocabulary
+	 * ("nvme", "tcp"/"rdma"/"fc"), unlike the host/subsystem NQNs that can
+	 * also appear in this URI -- so, unlike those, normalizing case here
+	 * costs nothing. Boot Specification section 3.1.2.5.3 spells the DHCP
+	 * root-path form in upper case ("NVME<+PROTOCOL>://..."), and both that
+	 * and mixed case are otherwise rejected by validate_uri()'s
+	 * case-sensitive comparisons below.
+	 */
+	shr_strtolower(uri->scheme);
+	if (uri->protocol)
+		shr_strtolower(uri->protocol);
+
 	/* split userinfo */
 	host = strrchr(authority, '@');
 	if (host) {
@@ -3118,11 +3131,6 @@ static void dc_walk_referral(struct libnvme_global_ctx *ctx,
 	struct libnvme_ctrl *cl;
 	int err;
 
-	if (eflags & NVMF_DISC_EFLAGS_DUPRETINFO) {
-		dc_log_decision(fctx, e, &d, "duplicate information");
-		return;
-	}
-
 	if (depth >= NVMF_MAX_REFERRAL_DEPTH) {
 		dc_log_decision(fctx, e, &d,
 			"referral depth limit reached, not descending");
@@ -3310,6 +3318,14 @@ static int _nvmf_discover(struct libnvme_global_ctx *ctx,
 		const char *transport;
 		__u16 eflags;
 
+		/*
+		 * A self entry describes this same Discovery subsystem.
+		 * Real DCs publish one for the port already connected;
+		 * a multi-port DC may also list its other ports. Base spec
+		 * 2.4 makes acting on either a "may", and a log page entry
+		 * carries no source address or interface, so the only local
+		 * path available is the one this connection already uses.
+		 */
 		if (e->subtype == NVME_NQN_CURR)
 			continue;
 
