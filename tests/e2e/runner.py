@@ -144,6 +144,7 @@ class E2ETestResult(unittest.TestResult):
         self._stderr_stream = stderr_stream
         self._test_count = 0
         self._test_start_time = None
+        self._subtest_failed = False
         self.records = []
 
     def _description(self, test: unittest.TestCase) -> str:
@@ -179,6 +180,34 @@ class E2ETestResult(unittest.TestResult):
     def startTest(self, test: unittest.TestCase) -> None:
         super().startTest(test)
         self._test_start_time = time.time()
+        self._subtest_failed = False
+
+    def addSubTest(self, test: unittest.TestCase, subtest: unittest.TestCase,
+                   outcome: object) -> None:
+        """Report a failing subtest as a failure of its parent test.
+
+        unittest calls neither addSuccess() nor addFailure() for a test
+        whose subtests failed, so without this a self.subTest() failure
+        would produce no TAP line at all and the run would look clean.
+
+        One line per test method, not per subtest, so the count still
+        matches the plan emitted up front. Every failing subtest's
+        traceback is written out under that one line.
+        """
+        super().addSubTest(test, subtest, outcome)
+        if outcome is None:
+            return
+
+        if not self._subtest_failed:
+            self._subtest_failed = True
+            self._test_count += 1
+            self._stdout_stream.write('not ok {} - {}\n'.format(
+                self._test_count, self._description(test)))
+            self._stdout_stream.flush()
+            self._add_record(test, 'fail', self._format_traceback(outcome))
+
+        self._stderr_stream.write(f'  # subtest: {subtest}\n')
+        self._output_traceback(self._format_traceback(outcome))
 
     def addSuccess(self, test: unittest.TestCase) -> None:
         super().addSuccess(test)
@@ -406,8 +435,10 @@ def main() -> None:
 
     os.environ[CONFIG_ENV_VAR] = json.dumps(build_config(args))
 
-    run_tests(args.test_module, args.json_report, enabled_plugins)
-    sys.exit(0)
+    # meson reads the TAP stream and judges the run from that, but a
+    # standalone invocation only has the exit status to go on.
+    passed = run_tests(args.test_module, args.json_report, enabled_plugins)
+    sys.exit(0 if passed else 1)
 
 
 if __name__ == '__main__':

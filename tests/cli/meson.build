@@ -102,5 +102,17 @@ if python3.found()
                  env: cli_test_env,
                  depends: [nvme_exe, mock_nvme_lib])
         endif
+
+        if 'ocp' in selected_plugins
+            test('nvme-cli - ocp-smart-add-log-cli',
+                 python3,
+                 args: [
+                     files('nvme_ocp_smart_add_log_test.py'),
+                     nvme_exe,
+                     mock_nvme_lib,
+                 ],
+                 env: cli_test_env,
+                 depends: [nvme_exe, mock_nvme_lib])
+        endif
     endif
 endif
