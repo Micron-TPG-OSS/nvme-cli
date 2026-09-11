@@ -754,11 +754,8 @@ int parse_ocp_telemetry_string_log(int event_fifo_num, int identifier, int debug
 		struct nvme_ocp_telemetry_string_header *pocp_ts_header =
 			(struct nvme_ocp_telemetry_string_header *)pstring_buffer;
 
-		if (*pocp_ts_header->fifo_ascii_string[event_fifo_num-1] != '\0')
-			memcpy(description, pocp_ts_header->fifo_ascii_string[event_fifo_num-1],
-			       16);
-		else
-			description = "";
+		memcpy(description, pocp_ts_header->fifo_ascii_string[event_fifo_num-1], 16);
+		description[16] = '\0';
 
 		return 0;
 	}
@@ -1108,17 +1105,14 @@ int parse_event_fifo(unsigned int fifo_num, unsigned char *pfifo_start,
 
 	int status = 0, ret = 0;
 	unsigned int event_fifo_number = fifo_num + 1;
-	char *description = (char *)malloc((40 + 1) * sizeof(char));
-
-	memset(description, 0, sizeof(40));
+	char description[OCP_TELEMETRY_DESCRIPTION_MAX] = "";
 
 	status =
 		parse_ocp_telemetry_string_log(event_fifo_number, 0, 0, EVENT_STRING, description);
 
 	if (status != 0) {
 		nvme_show_error("Failed to get C9 String. status: %d", status);
-		ret = -1;
-		goto free_desc;
+		return -1;
 	}
 
 	char event_fifo_name[100] = {0};
@@ -1273,7 +1267,7 @@ int parse_event_fifo(unsigned int fifo_num, unsigned char *pfifo_start,
 					pevent_descriptor->debug_event_class_type,
 					pevent_descriptor->event_id,
 					pevent_descriptor->event_data_size);
-				goto free_desc;
+				return ret;
 			}
 
 			if (pevent_descriptor_obj != NULL && pevent_fifo_array != NULL)
@@ -1325,8 +1319,7 @@ int parse_event_fifo(unsigned int fifo_num, unsigned char *pfifo_start,
 			struct json_object *pstats_array =
 				((pevent_fifos_object != NULL) ? json_create_array() : NULL);
 
-			if (pStaticSnapshotEvent != NULL &&
-				pStaticSnapshotEvent->stat_data_size > 0) {
+			if (pStaticSnapshotEvent->stat_data_size > 0) {
 				__u8 *pstatistic_entry =
 					(__u8 *)pStaticSnapshotEvent +
 					sizeof(struct nvme_ocp_telemetry_event_descriptor);
@@ -1345,8 +1338,6 @@ int parse_event_fifo(unsigned int fifo_num, unsigned char *pfifo_start,
 		json_object_add_value_array(pevent_fifos_object, event_fifo_name,
 			pevent_fifo_array);
 
-free_desc:
-	free(description);
 	return ret;
 }
 
