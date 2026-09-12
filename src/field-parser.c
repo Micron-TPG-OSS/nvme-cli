@@ -22,6 +22,8 @@ void print_formatted_var_size_str(const char *msg, const __u8 *pdata, size_t dat
 
 	/* Allocate 2 chars for each value in the data + 2 bytes for the null terminator */
 	description_str = (char *) calloc(1, data_size*2 + 2);
+	if (!description_str)
+		return;
 
 	for (size_t i = 0; i < data_size; ++i) {
 		sprintf(temp_buffer, "%02X", pdata[i]);
@@ -135,9 +137,13 @@ char *process_field_size_6(int offset, char *sfield, __u8 *buf)
 
 char *process_field_size_default(int offset, char *sfield, __u8 *buf, int size)
 {
-	/* "0x" prefix + 2 hex chars per byte + null terminator */
-	char *datastr = malloc(size * 2 + 3);
+	char *datastr;
 
+	if (size <= 0)
+		return NULL;
+
+	/* "0x" prefix + 2 hex chars per byte + null terminator */
+	datastr = malloc(size * 2 + 3);
 	if (!datastr)
 		return NULL;
 
