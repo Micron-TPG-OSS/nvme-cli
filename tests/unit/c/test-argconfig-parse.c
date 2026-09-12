@@ -159,7 +159,12 @@ void toval_test(struct toval_test *test)
 {
 	const char *desc = "Test argconfig parse";
 	int ret;
-	char *argv[] = { "test-argconfig", test->arg };
+	/* NULL-terminated like a real main()'s argv: an option with a
+	 * required argument and nothing attached makes getopt look at
+	 * argv[argc], which is a NULL check in glibc but an unguarded
+	 * dereference in the BSD getopt mingw-w64 ships.
+	 */
+	char *argv[] = { "test-argconfig", test->arg, NULL };
 
 	OPT_VALS(opt_vals) = {
 		VAL_BYTE("one", 1),
@@ -215,7 +220,7 @@ static void optional_string_test(void)
 	};
 
 	{
-		char *argv[] = { "test-argconfig" };
+		char *argv[] = { "test-argconfig", NULL };
 
 		cfg.optstr = optstr_unset;
 		ret = argconfig_parse(1, argv, desc, opts);
@@ -226,7 +231,7 @@ static void optional_string_test(void)
 	}
 
 	{
-		char *argv[] = { "test-argconfig", "--optstr=given" };
+		char *argv[] = { "test-argconfig", "--optstr=given", NULL };
 
 		cfg.optstr = optstr_unset;
 		ret = argconfig_parse(2, argv, desc, opts);
@@ -237,7 +242,7 @@ static void optional_string_test(void)
 	}
 
 	{
-		char *argv[] = { "test-argconfig", "--optstr" };
+		char *argv[] = { "test-argconfig", "--optstr", NULL };
 
 		cfg.optstr = optstr_unset;
 		ret = argconfig_parse(2, argv, desc, opts);
@@ -258,7 +263,7 @@ static void optional_string_test(void)
 static void combined_opts_test(void)
 {
 	const char *desc = "Test combined options";
-	char *argv[] = { "test-argconfig", "--flag", "--suffix=42", "--uint=7" };
+	char *argv[] = { "test-argconfig", "--flag", "--suffix=42", "--uint=7", NULL };
 	int ret;
 
 	cfg.flag = false;
@@ -275,7 +280,7 @@ static void combined_opts_test(void)
 		OPT_END()
 	};
 
-	ret = argconfig_parse(ARRAY_SIZE(argv), argv, desc, opts);
+	ret = argconfig_parse(ARRAY_SIZE(argv) - 1, argv, desc, opts);
 	if (ret) {
 		printf("ERROR: combined options: parse failed: %d\n", ret);
 		test_rc = 1;
@@ -555,7 +560,7 @@ static void do_global_parse_test(const struct global_parse_test *test)
  */
 static void global_parse_missing_arg_test(void)
 {
-	char *argv[] = { "prog", "--count" };
+	char *argv[] = { "prog", "--count", NULL };
 	unsigned int count = 0;
 	int ret;
 
@@ -564,7 +569,7 @@ static void global_parse_missing_arg_test(void)
 		OPT_END()
 	};
 
-	ret = argconfig_parse_global(ARRAY_SIZE(argv), argv, opts);
+	ret = argconfig_parse_global(ARRAY_SIZE(argv) - 1, argv, opts);
 	if (ret != -EINVAL) {
 		printf("ERROR: global_parse: '--count' with no value: ret=%d expected=%d\n",
 		       ret, -EINVAL);
