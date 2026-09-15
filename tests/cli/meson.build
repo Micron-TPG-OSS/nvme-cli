@@ -102,5 +102,19 @@ if python3.found()
                  env: cli_test_env,
                  depends: [nvme_exe, mock_nvme_lib])
         endif
+
+        # Most of this suite goes through -o json, and the ocp JSON printer
+        # (ocp-print-json.c) is only built with json-c.
+        if 'ocp' in selected_plugins and json_c_dep.found()
+            test('nvme-cli - ocp-smart-add-log-cli',
+                 python3,
+                 args: [
+                     files('nvme_ocp_smart_add_log_test.py'),
+                     nvme_exe,
+                     mock_nvme_lib,
+                 ],
+                 env: cli_test_env,
+                 depends: [nvme_exe, mock_nvme_lib])
+        endif
     endif
 endif
