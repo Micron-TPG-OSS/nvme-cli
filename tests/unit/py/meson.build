@@ -35,4 +35,17 @@ if python3.found()
         ],
         timeout: 60,
     )
+
+    # TAP/JSON bookkeeping of the e2e runner's result class.  It drives the
+    # class with synthetic test cases, so it needs neither the nvme binary nor
+    # a device and runs even when e2e tests are not configured.
+    test(
+        'nvme-cli - e2e-runner-tap',
+        python3,
+        args: [
+            files('test_e2e_runner_tap.py'),
+            meson.project_source_root() / 'tests' / 'e2e' / 'runner.py',
+        ],
+        timeout: 60,
+    )
 endif
