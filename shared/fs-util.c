@@ -36,9 +36,9 @@ int shr_mkdir_p(const char *path, mode_t mode)
 			continue;
 		*p = '\0';
 		ret = shr_mkdir(buf, mode);
+		*p = '/';
 		if (ret < 0 && ret != -EEXIST)
 			return ret;
-		*p = '/';
 	}
 	ret = shr_mkdir(buf, mode);
 	return (ret == 0 || ret == -EEXIST) ? 0 : ret;
@@ -142,4 +142,37 @@ unsigned char *shr_read_file(const char *dir, const char *path, long *size, int 
 	}
 
 	return buf;
+}
+
+char *shr_read_file_as_string(const char *dir, const char *path, long *size, int retries)
+{
+	unsigned char *raw;
+	char *str;
+	long raw_size = -1;
+
+	/*
+	 * shr_read_file() reports an empty file as NULL with *size == 0,
+	 * indistinguishable by pointer alone from an error -- but an empty
+	 * file is valid string content (""). raw_size starts at -1 so that
+	 * an error path that returns without touching it (e.g. open
+	 * failure) isn't mistaken for that empty-file case.
+	 */
+	raw = shr_read_file(dir, path, &raw_size, retries);
+	if (!raw && raw_size != 0)
+		return NULL;
+
+	str = malloc(raw_size + 1);
+	if (!str) {
+		free(raw);
+		return NULL;
+	}
+	if (raw_size)
+		memcpy(str, raw, raw_size);
+	str[raw_size] = '\0';
+	free(raw);
+
+	if (size)
+		*size = raw_size;
+
+	return str;
 }

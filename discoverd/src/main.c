@@ -71,6 +71,11 @@ struct active_ctrl {
 	bool parent_epcsd_known;
 	bool parent_epcsd; // meaningful only if parent_epcsd_known
 
+	// This DC's resolved "persistent" setting is "force": keep it
+	// connected regardless of what its own EPCSD bit reports.
+	bool force_persistent;
+	bool force_persistent_logged; // disc_info_once() marker
+
 	sd_event_source *epcsd_poll_timer; // NULL when not EPCSD-parked
 };
 
@@ -112,7 +117,7 @@ static void ctrl_free(struct active_ctrl *e)
 }
 
 static int ctrl_add(const char *unit_name, const struct libnvmf_tid *t,
-		    bool is_dc)
+		    bool is_dc, const struct libnvmf_params *params)
 {
 	struct active_ctrl *e;
 
@@ -126,6 +131,9 @@ static int ctrl_add(const char *unit_name, const struct libnvmf_tid *t,
 	e->unit_name = strdup(unit_name);
 	e->tid = libnvmf_tid_dup(t);
 	e->is_dc = is_dc;
+	e->force_persistent = params &&
+		shr_streqcase0(libnvmf_params_get(params, "persistent"),
+			       "force");
 	if (!e->unit_name || !e->tid) {
 		ctrl_free(e);
 		return -ENOMEM;
@@ -263,7 +271,7 @@ static void start_ctrl(const struct libnvmf_tid *t, bool is_dc, bool is_nbft,
 	r = is_dc ? unit_start_dc(ctx.umgr, t, params, is_nbft)
 		  : unit_start_ioc(ctx.umgr, t, params, is_nbft);
 	if (r >= 0) {
-		ctrl_add(unit_name, t, is_dc);
+		ctrl_add(unit_name, t, is_dc, params);
 		disc_dbg("%s: requested %s unit", libnvmf_tid_str(t),
 			 is_dc ? "DC" : "IOC");
 	} else {
@@ -376,8 +384,14 @@ static void fetch_and_process_dlp(const char *devname,
 		 libnvmf_tid_str(dc_tid), fctx.self_seen ? "seen" : "absent",
 		 epcsd);
 
-	if (e && e->is_dc && !epcsd)
-		epcsd_park(e);
+	if (e && e->is_dc && !epcsd) {
+		if (e->force_persistent)
+			disc_info_once(&e->force_persistent_logged,
+					"%s - EPCSD=0, but persistent=force: staying connected",
+					libnvmf_tid_str(dc_tid));
+		else
+			epcsd_park(e);
+	}
 
 	if (fctx.iocs.len) {
 		if (ioc_list_append(&fctx.iocs, NULL) == 0) {
@@ -785,7 +799,7 @@ static char *find_devname_for_tid(const struct libnvmf_tid *t)
 		return NULL;
 
 	while (!match && (ent = readdir(d))) {
-		struct libnvmf_tid *dt;
+		__cleanup_tid struct libnvmf_tid *dt = NULL;
 		bool is_dc;
 
 		if (ent->d_name[0] == '.')
@@ -795,7 +809,6 @@ static char *find_devname_for_tid(const struct libnvmf_tid *t)
 			continue;
 		if (tid_same(dt, t))
 			match = strdup(ent->d_name);
-		tid_free(dt);
 	}
 	closedir(d);
 	return match;
@@ -835,8 +848,10 @@ static void startup_audit(void)
 
 				if (t) {
 					struct active_ctrl *e;
+					const struct libnvmf_params *params =
+						params_for(t, is_dc, NULL);
 
-					ctrl_add(unit_name, t, is_dc);
+					ctrl_add(unit_name, t, is_dc, params);
 					e = ctrl_find_by_unit(unit_name);
 					if (e)
 						e->devname = strdup(devid);
@@ -903,7 +918,7 @@ static void startup_audit(void)
 		while ((ent = readdir(d))) {
 			const char *devname = ent->d_name;
 			char *existing_unit;
-			struct libnvmf_tid *t;
+			__cleanup_tid struct libnvmf_tid *t = NULL;
 			bool is_nbft, is_dc;
 
 			if (devname[0] == '.')
@@ -921,14 +936,12 @@ static void startup_audit(void)
 			if (!inventory_is_desired(ctx.inventory, t)) {
 				disc_info("%s | %s - not desired, skipping",
 					  libnvmf_tid_str(t), devname);
-				tid_free(t);
 				continue;
 			}
 
 			is_nbft = inventory_is_nbft(ctx.inventory, t);
 			if (should_connect(t, devname))
 				start_ctrl(t, is_dc, is_nbft, NULL);
-			tid_free(t);
 		}
 		closedir(d);
 	}

@@ -37,7 +37,9 @@
 #include <ccan/endian/endian.h>
 #include <ccan/minmax/minmax.h>
 #include <shared/compiler-attributes-util.h>
+#include <shared/crypto-util.h>
 #include <shared/fs-util.h>
+#include <shared/io-util.h>
 #include <shared/parse-util.h>
 #include <shared/time-util.h>
 #include <shared/uint128-util.h>
@@ -275,6 +277,8 @@
 /* Capture Diagnostics */
 #define WDC_NVME_CAP_DIAG_HEADER_TOC_SIZE		WDC_NVME_LOG_SIZE_DATA_LEN
 #define WDC_NVME_CAP_DIAG_OPCODE			0xE6
+/* Sanity bound on the device-reported Capture Diagnostics log length. */
+#define WDC_NVME_CAP_DIAG_LENGTH_MAX			(1U << 30)
 #define WDC_NVME_CAP_DIAG_CMD_OPCODE			0xC6
 #define WDC_NVME_CAP_DIAG_SUBCMD			0x00
 #define WDC_NVME_CAP_DIAG_CMD				0x00
@@ -769,8 +773,11 @@ struct ocp_cloud_smart_log {
 	__u8 endurance_estimate[16];
 	__u64 pcie_link_retraining_cnt;
 	__u64 power_state_change_cnt;
-	char  lowest_permitted_fw_rev[8];
-	__u8 rsvd216[278];
+	union {
+		char  lowest_permitted_fw_rev[8]; /* log_page_version >= 4 */
+		__u8  hardware_revision[16];      /* log_page_version == 3 */
+	};
+	__u8 rsvd224[270];
 	__u16 log_page_version;
 	__u8 log_page_guid[16];
 };
@@ -2095,13 +2102,11 @@ static __u64 wdc_get_enc_drive_capabilities(struct libnvme_global_ctx *ctx,
 				uuid_index) == false) {
 			nvme_show_error("ERROR: SNDK: 0xC2 Log Page not supported, index: %d",
 					uuid_index);
-			ret = -1;
 			goto out;
 		}
 
 		if (!get_dev_mgment_data(ctx, hdl, &dev_mng_log)) {
 			nvme_show_error("ERROR: SNDK: 0xC2 Log Page not found");
-			ret = -1;
 			goto out;
 		}
 
@@ -2648,7 +2653,6 @@ static bool get_dev_mgmt_log_page_lid_data(struct libnvme_transport_handle *hdl,
 	}
 
 	/* Check the log data to see if the WD version of log page ID's is found */
-	length = sizeof(struct wdc_c2_log_page_header);
 	hdr_ptr = (struct wdc_c2_log_page_header *)data;
 	sph = NULL;
 	found = wdc_get_dev_mng_log_entry(le32_to_cpu(hdr_ptr->length), log_id, hdr_ptr, &sph);
@@ -3215,8 +3219,6 @@ static int wdc_do_cap_telemetry_log(struct libnvme_global_ctx *ctx,
 	int ctrl_init = 0;
 	__u64 result;
 	void *buf = NULL;
-	__u8 *data_ptr = NULL;
-	int data_written = 0, data_remaining = 0;
 	struct libnvme_passthru_cmd cmd;
 	struct nvme_id_ctrl ctrl;
 	__u64 capabilities = 0;
@@ -3301,31 +3303,13 @@ static int wdc_do_cap_telemetry_log(struct libnvme_global_ctx *ctx,
 	}
 
 	/*
-	 *Continuously pull data until the offset hits the end of the last
-	 *block.
+	 * Continuously pull data until the offset hits the end of the last
+	 * block.
 	 */
-	data_written = 0;
-	data_remaining = full_size;
-	data_ptr = (__u8 *)log;
-
-	while (data_remaining) {
-		data_written = write(output, data_ptr, data_remaining);
-
-		if (data_written < 0) {
-			data_remaining = data_written;
-			break;
-		} else if (data_written <= data_remaining) {
-			data_remaining -= data_written;
-			data_ptr += data_written;
-		} else {
-			/* Unexpected overwrite */
-			nvme_show_error("Failure: Unexpected telemetry log overwrite - data_remaining = 0x%x, data_written = 0x%x",
-					data_remaining, data_written);
-			break;
-		}
-	}
-
-	if (shr_fsync(output) < 0) {
+	err = shr_write_all(output, log, full_size);
+	if (err)
+		nvme_show_error("ERROR: %s: write: %s", __func__, libnvme_strerror(-err));
+	else if (shr_fsync(output) < 0) {
 		nvme_show_error("ERROR: %s: fsync: %s", __func__, libnvme_strerror(errno));
 		err = -1;
 	}
@@ -3375,6 +3359,14 @@ static int wdc_do_cap_diag(struct libnvme_global_ctx *ctx, struct libnvme_transp
 
 		if (!cap_diag_length) {
 			nvme_show_error("INFO: WDC: Capture Diagnostics log is empty");
+		} else if (cap_diag_length < WDC_NVME_LOG_SIZE_HDR_LEN) {
+			nvme_show_error("%s: ERROR: Capture Diagnostics log length 0x%x is smaller than the header (0x%x)",
+					__func__, cap_diag_length, WDC_NVME_LOG_SIZE_HDR_LEN);
+			ret = -1;
+		} else if (cap_diag_length > WDC_NVME_CAP_DIAG_LENGTH_MAX) {
+			nvme_show_error("%s: ERROR: Capture Diagnostics log length 0x%x exceeds maximum 0x%x",
+					__func__, cap_diag_length, WDC_NVME_CAP_DIAG_LENGTH_MAX);
+			ret = -1;
 		} else {
 			ret = wdc_do_dump_e6(hdl,
 					 WDC_NVME_CAP_DIAG_OPCODE,
@@ -7200,7 +7192,7 @@ static int wdc_get_c0_log_page_sn(struct libnvme_global_ctx *ctx, struct libnvme
 static int wdc_get_c0_log_page(struct libnvme_global_ctx *ctx, struct libnvme_transport_handle *hdl, char *format, int uuid_index,
 			       __u32 namespace_id)
 {
-	uint32_t device_id, read_vendor_id;
+	uint32_t device_id = 0, read_vendor_id;
 	nvme_print_flags_t fmt;
 	int ret;
 	__u8 *data;
@@ -7219,6 +7211,10 @@ static int wdc_get_c0_log_page(struct libnvme_global_ctx *ctx, struct libnvme_tr
 	}
 
 	ret = nvme_get_pci_ids(ctx, hdl, &read_vendor_id, &device_id, NULL, NULL, NULL);
+	if (ret) {
+		nvme_show_error("ERROR: WDC: failed to read PCI IDs: %s", libnvme_strerror(-ret));
+		return ret;
+	}
 
 	switch (device_id) {
 	case WDC_NVME_SN640_DEV_ID:
@@ -7477,7 +7473,7 @@ static int wdc_print_fw_act_history_log(__u8 *data, int num_entries, int fmt,
 
 static int wdc_get_ca_log_page(struct libnvme_global_ctx *ctx, struct libnvme_transport_handle *hdl, char *format)
 {
-	uint32_t read_device_id, read_vendor_id;
+	uint32_t read_device_id = 0, read_vendor_id;
 	struct wdc_ssd_ca_perf_stats *perf;
 	nvme_print_flags_t fmt;
 	__u32 cust_id;
@@ -7507,6 +7503,10 @@ static int wdc_get_ca_log_page(struct libnvme_global_ctx *ctx, struct libnvme_tr
 	}
 
 	ret = nvme_get_pci_ids(ctx, hdl, &read_vendor_id, &read_device_id, NULL, NULL, NULL);
+	if (ret) {
+		nvme_show_error("ERROR: WDC: failed to read PCI IDs: %s", libnvme_strerror(-ret));
+		return ret;
+	}
 
 	switch (read_device_id) {
 	case WDC_NVME_SN200_DEV_ID:
@@ -8165,7 +8165,7 @@ static void wdc_show_cloud_smart_log_json(struct ocp_cloud_smart_log *log)
 			json_object_add_value_string(root, "lowest_permitted_fw_rev", lowest_fr);
 		} else
 			json_object_add_value_uint128(root, "hardware_revision",
-					le128_to_cpu((__u8 *)&log->lowest_permitted_fw_rev[0]));
+					le128_to_cpu(log->hardware_revision));
 	}
 	json_object_add_value_uint(root, "log_page_version",
 			smart_log_ver);
@@ -8269,8 +8269,7 @@ static void wdc_show_cloud_smart_log_normal(struct ocp_cloud_smart_log *log,
 					log->lowest_permitted_fw_rev);
 		else
 			printf("Hardware Revision                            : %s\n",
-					uint128_t_to_string(le128_to_cpu(
-							(__u8 *)&log->lowest_permitted_fw_rev[0])));
+					uint128_t_to_string(le128_to_cpu(log->hardware_revision)));
 	}
 	printf("Log Page Version                             : %" PRIu16 "\n",
 			smart_log_ver);
@@ -8434,7 +8433,7 @@ static int wdc_cu_smart_log(int argc, char **argv, struct command *acmd,
 	struct libnvme_passthru_cmd cmd;
 	int ret = 0;
 	__u64 capabilities = 0;
-	uint32_t read_device_id, read_vendor_id;
+	uint32_t read_device_id = 0, read_vendor_id;
 	nvme_print_flags_t fmt;
 	__u8 *data;
 
@@ -8483,6 +8482,10 @@ static int wdc_cu_smart_log(int argc, char **argv, struct command *acmd,
 		}
 
 		ret = nvme_get_pci_ids(ctx, hdl, &read_vendor_id, &read_device_id, NULL, NULL, NULL);
+		if (ret) {
+			nvme_show_error("ERROR: WDC: failed to read PCI IDs: %s", libnvme_strerror(-ret));
+			return ret;
+		}
 
 		switch (read_device_id) {
 		case WDC_NVME_SN861_DEV_ID:
@@ -9365,7 +9368,7 @@ static int wdc_get_fw_act_history_C2(struct libnvme_global_ctx *ctx, struct libn
 		return ret;
 	}
 
-	ret = nvme_get_pci_ids(ctx, hdl, &vendor_id, &device_id, NULL, NULL, NULL);
+	nvme_get_pci_ids(ctx, hdl, &vendor_id, &device_id, NULL, NULL, NULL);
 
 	data = (__u8 *)malloc(sizeof(__u8) * WDC_FW_ACT_HISTORY_C2_LOG_BUF_LEN);
 	if (!data) {
@@ -10353,7 +10356,7 @@ static int wdc_do_drive_essentials(struct libnvme_global_ctx *ctx, struct libnvm
 		}
 	}
 
-	ret = wdc_read_debug_directory(hdl, bufferFolderPath, serialNo, timeString);
+	wdc_read_debug_directory(hdl, bufferFolderPath, serialNo, timeString);
 
 	/* Get Dump Trace Data */
 	wdc_UtilsSnprintf(fileName, MAX_PATH_LEN, "%s%s%s_%s_%s.bin", (char *)bufferFolderPath, WDC_DE_PATH_SEPARATOR, "dumptrace", serialNo, timeString);
@@ -12359,6 +12362,7 @@ static int wdc_enc_get_log(int argc, char **argv, struct command *acmd, struct p
 	const char *log = "Enclosure Log Page ID.";
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
+	__cleanup_file FILE *output_file = NULL;
 	FILE *output_fd;
 	int xfer_size = 0;
 	int len;
@@ -12409,12 +12413,13 @@ static int wdc_enc_get_log(int argc, char **argv, struct command *acmd, struct p
 		xfer_size = (xfer_size) ? xfer_size : WDC_NVME_ENC_LOG_SIZE_CHUNK;
 		len = !cfg.file ? 0 : strlen(cfg.file);
 		if (len > 0) {
-			output_fd = fopen(cfg.file, "wb");
-			if (!output_fd) {
+			output_file = fopen(cfg.file, "wb");
+			if (!output_file) {
 				nvme_show_error("%s: ERROR: opening:%s: %s", __func__, cfg.file,
 					libnvme_strerror(errno));
 				return -EINVAL;
 			}
+			output_fd = output_file;
 		} else {
 			output_fd = stdout;
 		}
@@ -12448,7 +12453,6 @@ static int wdc_enc_submit_move_data(struct libnvme_transport_handle *hdl, char *
 				    int xfer_size, FILE *out, int log_id,
 				    int cdw14, int cdw15)
 {
-	struct timespec time;
 	uint32_t response_size, more;
 	int err;
 	int handle;
@@ -12476,9 +12480,12 @@ static int wdc_enc_submit_move_data(struct libnvme_transport_handle *hdl, char *
 		.cdw15      = cdw15,
 	};
 
-	clock_gettime(CLOCK_REALTIME, &time);
-	srand(time.tv_nsec);
-	handle = random(); /* Handle to associate send request with receive request */
+	/* Handle to associate send request with receive request */
+	if (shr_getrandom(&handle, sizeof(handle)) != 0) {
+		nvme_show_error("%s: ERROR: failed to generate a random handle", __func__);
+		free(buf);
+		return -1;
+	}
 	nvme_cmd.cdw11 = handle;
 
 #ifdef WDC_NVME_CLI_DEBUG

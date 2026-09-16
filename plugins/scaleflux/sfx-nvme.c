@@ -1443,14 +1443,14 @@ static int nvme_expand_cap(struct libnvme_transport_handle *hdl, __u32 namespace
 			 libnvme_transport_handle_get_name(hdl));
 
 	num = scandir("/dev", &devices, filter_namespace, alphasort);
-	if (num <= 0) {
+	if (num < 0) {
 		err = num;
 		goto ret;
 	}
 
-	if (strcmp(dev_name, devices[num-1]->d_name)) {
+	if (!num || strcmp(dev_name, devices[num-1]->d_name)) {
 		nvme_show_error("Expand namespace not the last one");
-		err = EINVAL;
+		err = -EINVAL;
 		goto free_devices;
 	}
 
@@ -1567,7 +1567,7 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 	struct nvme_additional_smart_log additional_smart_log = { 0 };
 	struct sfx_freespace_ctx sfx_freespace = { 0 };
 	unsigned int pcie_correctable, pcie_fatal, pcie_nonfatal;
-	unsigned long long capacity;
+	unsigned long long capacity = 0;
 	bool capacity_valid = false;
 	bool pcie_cor_valid, pcie_fatal_valid, pcie_nonfatal_valid;
 	int err, fd, len, sector_size;

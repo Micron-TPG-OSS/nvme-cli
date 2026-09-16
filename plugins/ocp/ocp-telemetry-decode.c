@@ -758,7 +758,7 @@ int parse_ocp_telemetry_string_log(int event_fifo_num, int identifier, int debug
 			memcpy(description, pocp_ts_header->fifo_ascii_string[event_fifo_num-1],
 			       16);
 		else
-			description = "";
+			description[0] = '\0';
 
 		return 0;
 	}
@@ -1110,7 +1110,12 @@ int parse_event_fifo(unsigned int fifo_num, unsigned char *pfifo_start,
 	unsigned int event_fifo_number = fifo_num + 1;
 	char *description = (char *)malloc((40 + 1) * sizeof(char));
 
-	memset(description, 0, sizeof(40));
+	if (!description) {
+		nvme_show_error("Failed to allocate description buffer");
+		return -1;
+	}
+
+	memset(description, 0, 40 + 1);
 
 	status =
 		parse_ocp_telemetry_string_log(event_fifo_number, 0, 0, EVENT_STRING, description);
@@ -1664,6 +1669,11 @@ int print_ocp_telemetry_normal(struct ocp_telemetry_parse_options *options)
 {
 	int status = 0;
 	char file_path[PATH_MAX];
+
+	if (ptelemetry_buffer == NULL) {
+		nvme_show_error("No telemetry data to parse.");
+		return -1;
+	}
 
 	if (options->output_file != NULL) {
 		sprintf(file_path, "%s.%s", options->output_file, "txt");

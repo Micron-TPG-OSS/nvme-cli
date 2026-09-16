@@ -489,6 +489,7 @@ static bool test_nvmf_sanitize_addrs(struct libnvme_global_ctx *ctx)
 	params.subsysnqn = "nqn.2024-01.com.example:test";
 	params.traddr = "192.168.1.10";
 	params.host_traddr = "storage.example.com";
+	c = NULL;
 	libnvme_create_ctrl(ctx, &params, &c);
 	CHECK(c, "ctrl created with hostname host_traddr");
 	if (!c)
@@ -507,6 +508,7 @@ static bool test_nvmf_sanitize_addrs(struct libnvme_global_ctx *ctx)
 	/* A hostname traddr is rejected the same way. */
 	params.traddr = "storage.example.com";
 	params.host_traddr = NULL;
+	c = NULL;
 	libnvme_create_ctrl(ctx, &params, &c);
 	CHECK(c, "ctrl created with hostname traddr");
 	if (!c)
@@ -521,6 +523,7 @@ static bool test_nvmf_sanitize_addrs(struct libnvme_global_ctx *ctx)
 
 	/* An uncompressed IPv6 traddr is canonicalized. */
 	params.traddr = "2001:0db8:0000:0000:0000:0000:0000:0001";
+	c = NULL;
 	libnvme_create_ctrl(ctx, &params, &c);
 	CHECK(c, "ctrl created with uncompressed IPv6 traddr");
 	if (!c)
@@ -540,6 +543,7 @@ static bool test_nvmf_sanitize_addrs(struct libnvme_global_ctx *ctx)
 	 * call, same as host_iface.
 	 */
 	params.traddr = "fe80::1%nonexistent0";
+	c = NULL;
 	libnvme_create_ctrl(ctx, &params, &c);
 	CHECK(c, "ctrl created with bad-zone scoped IPv6 traddr");
 	if (!c)
@@ -556,6 +560,7 @@ static bool test_nvmf_sanitize_addrs(struct libnvme_global_ctx *ctx)
 	/* fc: a WWN traddr is left untouched (not an IP transport). */
 	params.transport = "fc";
 	params.traddr = "nn-0x1:pn-0x2";
+	c = NULL;
 	libnvme_create_ctrl(ctx, &params, &c);
 	CHECK(c, "ctrl created with fc WWN traddr");
 	if (!c)
@@ -572,6 +577,7 @@ static bool test_nvmf_sanitize_addrs(struct libnvme_global_ctx *ctx)
 	/* loop: no traddr at all -- nothing to sanitize. */
 	params.transport = "loop";
 	params.traddr = NULL;
+	c = NULL;
 	libnvme_create_ctrl(ctx, &params, &c);
 	CHECK(c, "ctrl created for loop transport");
 	if (!c)
@@ -739,6 +745,72 @@ static bool test_dc_decide(struct libnvme_global_ctx *ctx)
 	d = dc_decide(&fctx, "nqn", DC_OWNED, false, 0, &dup_only);
 	p = d;
 	CHECK(p, "DC_OWNED, AUTO, parent DUPRETINFO only: disconnect=%d", d);
+	pass &= p;
+
+	return pass;
+}
+
+/* -------------------------------------------------------------------------
+ * dc_entry_is_self — is this entry, among possibly several a multi-homed
+ * DC reports (Base spec 2.4, Figure 320, subtype 03h), the self entry
+ * for this connection
+ * -------------------------------------------------------------------------
+ */
+static bool test_dc_entry_is_self(void)
+{
+	struct libnvme_ctrl c = {
+		.transport = "tcp",
+		.traddr = "192.168.1.116",
+		.trsvcid = "8009",
+	};
+	struct nvmf_disc_log_entry e = { 0 };
+	bool pass = true, p;
+
+	printf("\ntest_dc_entry_is_self:\n");
+
+	e.subtype = NVME_NQN_CURR;
+	e.trtype = NVMF_TRTYPE_TCP;
+	memcpy(e.traddr, "192.168.1.116", 13);
+	memcpy(e.trsvcid, "8009", 4);
+
+	p = dc_entry_is_self(&c, &e);
+	CHECK(p, "self entry, matching transport/traddr/trsvcid: is self");
+	pass &= p;
+
+	memset(&e, 0, sizeof(e));
+	e.subtype = NVME_NQN_CURR;
+	e.trtype = NVMF_TRTYPE_TCP;
+	memcpy(e.traddr, "192.168.2.116", 13);
+	memcpy(e.trsvcid, "8009", 4);
+	p = !dc_entry_is_self(&c, &e);
+	CHECK(p, "same transport, different traddr (other port): not self");
+	pass &= p;
+
+	memset(&e, 0, sizeof(e));
+	e.subtype = NVME_NQN_CURR;
+	e.trtype = NVMF_TRTYPE_RDMA;
+	memcpy(e.traddr, "192.168.1.116", 13);
+	memcpy(e.trsvcid, "8009", 4);
+	p = !dc_entry_is_self(&c, &e);
+	CHECK(p, "same traddr/trsvcid, different transport: not self");
+	pass &= p;
+
+	memset(&e, 0, sizeof(e));
+	e.subtype = NVME_NQN_CURR;
+	e.trtype = NVMF_TRTYPE_TCP;
+	memcpy(e.traddr, "192.168.1.116", 13);
+	memcpy(e.trsvcid, "8010", 4);
+	p = !dc_entry_is_self(&c, &e);
+	CHECK(p, "same transport/traddr, different trsvcid: not self");
+	pass &= p;
+
+	memset(&e, 0, sizeof(e));
+	e.subtype = NVME_NQN_NVME;
+	e.trtype = NVMF_TRTYPE_TCP;
+	memcpy(e.traddr, "192.168.1.116", 13);
+	memcpy(e.trsvcid, "8009", 4);
+	p = !dc_entry_is_self(&c, &e);
+	CHECK(p, "matching addressing, wrong subtype: not self");
 	pass &= p;
 
 	return pass;
@@ -1031,6 +1103,7 @@ int main(int argc, char *argv[])
 	test_nvmf_sanitize_addrs(ctx);
 	test_unescape_uri();
 	test_dc_decide(ctx);
+	test_dc_entry_is_self();
 	test_registry_action_on_connect();
 	test_create_ctrl_credentials(ctx);
 	test_generate_hostid(ctx);

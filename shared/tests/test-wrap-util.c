@@ -2,6 +2,7 @@
 /*
  * This file is part of nvme-cli.
  */
+#include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,8 +22,20 @@ static char *capture(const char *s, int indent, int start)
 	FILE *stream = tmpfile();
 	size_t n;
 
+	if (!stream) {
+		perror("tmpfile");
+		exit(1);
+	}
+
 	shr_print_word_wrapped(s, indent, start, stream);
+
+	errno = 0;
 	rewind(stream);
+	if (errno) {
+		perror("rewind");
+		exit(1);
+	}
+
 	n = fread(buf, 1, sizeof(buf) - 1, stream);
 	buf[n] = '\0';
 	fclose(stream);

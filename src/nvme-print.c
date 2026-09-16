@@ -30,28 +30,50 @@
 #define nvme_print_output_format(name, ...)			\
 	nvme_print(name, nvme_is_output_format_json() ? JSON : NORMAL, ##__VA_ARGS__);
 
-char *alloc_error = "Could not allocate string";
-char *feat_ae_dlpcn = "Discovery Log Page Change Notices";
-char *feat_ae_hdlpcn = "Host Discovery Log Page Change Notification";
-char *feat_ae_adlpcn = "AVE Discovery Log Page Change Notification";
-char *feat_ae_pmdrlpcn = "Pull Model DDC Request Log Page Change Notification";
-char *feat_ae_zdcn = "Zone Descriptor Changed Notices";
-char *feat_ae_rlccn = "Rate Limiting Configuration Change Notices";
-char *feat_ae_lhcn = "Lost Host Communication Notices";
-char *feat_ae_ccrcn = "Cross-Controller Reset Completed Notices";
-char *feat_ae_ansan = "Allocated Namespace Attribute Notices";
-char *feat_ae_rgrp0 = "Reachability Group";
-char *feat_ae_rassn = "Reachability Association";
-char *feat_ae_tthry = "Temperature Threshold Hysteresis Recovery";
-char *feat_ae_nnsshdn = "Normal NVM Subsystem Shutdown";
-char *feat_ae_ega = "Endurance Group Event Aggregate Log Change Notices";
-char *feat_ae_lbas = "LBA Status Information Notices";
-char *feat_ae_pla = "Predictable Latency Event Aggregate Log Change Notices";
-char *feat_ae_ana = "Asymmetric Namespace Access Change Notices";
-char *feat_ae_telem = "Telemetry Log Notices";
-char *feat_ae_fw = "Firmware Activation Notices";
-char *feat_ae_nan = "Attached Namespace Attribute Notices";
-char *feat_ae_smart = "SMART / Health Critical Warnings";
+const char *alloc_error = "Could not allocate string";
+const char *feat_ae_dlpcn = "Discovery Log Page Change Notices";
+const char *feat_ae_hdlpcn = "Host Discovery Log Page Change Notification";
+const char *feat_ae_adlpcn = "AVE Discovery Log Page Change Notification";
+const char *feat_ae_pmdrlpcn =
+	"Pull Model DDC Request Log Page Change Notification";
+const char *feat_ae_zdcn = "Zone Descriptor Changed Notices";
+const char *feat_ae_rlccn = "Rate Limiting Configuration Change Notices";
+const char *feat_ae_lhcn = "Lost Host Communication Notices";
+const char *feat_ae_ccrcn = "Cross-Controller Reset Completed Notices";
+const char *feat_ae_ansan = "Allocated Namespace Attribute Notices";
+const char *feat_ae_rgrp0 = "Reachability Group";
+const char *feat_ae_rassn = "Reachability Association";
+const char *feat_ae_tthry = "Temperature Threshold Hysteresis Recovery";
+const char *feat_ae_nnsshdn = "Normal NVM Subsystem Shutdown";
+const char *feat_ae_ega = "Endurance Group Event Aggregate Log Change Notices";
+const char *feat_ae_lbas = "LBA Status Information Notices";
+const char *feat_ae_pla =
+	"Predictable Latency Event Aggregate Log Change Notices";
+const char *feat_ae_ana = "Asymmetric Namespace Access Change Notices";
+const char *feat_ae_telem = "Telemetry Log Notices";
+const char *feat_ae_fw = "Firmware Activation Notices";
+const char *feat_ae_nan = "Attached Namespace Attribute Notices";
+const char *feat_ae_smart = "SMART / Health Critical Warnings";
+const char *prop_cap[][2] = {
+	{ "Maximum Queue Entries Supported", "MQES" },
+	{ "Contiguous Queues Required", "CQR" },
+	{ "Arbitration Mechanism Supported", "AMS" },
+	{ "Timeout", "TO" },
+	{ "Doorbell Stride", "DSTRD" },
+	{ "NVM Subsystem Reset Supported", "NSSRS" },
+	{ "Command Sets Supported", "CSS" },
+	{ "Boot Partition Support", "BPS" },
+	{ "Controller Power Scope", "CPS" },
+	{ "Memory Page Size Minimum", "MPSMIN" },
+	{ "Memory Page Size Maximum", "MPSMAX" },
+	{ "Persistent Memory Region Supported", "PMRS" },
+	{ "Controller Memory Buffer Supported", "CMBS" },
+	{ "NVM Subsystem Shutdown Supported", "NSSS" },
+	{ "Controller Ready Independent of Media Support", "CRIMS" },
+	{ "Controller Ready With Media Support", "CRWMS" },
+	{ "NVM Subsystem Shutdown Enhancements Supported", "NSSES" },
+	{ "", "" }
+};
 
 static struct print_ops *nvme_print_ops(nvme_print_flags_t flags)
 {
@@ -368,9 +390,9 @@ void nvme_show_boot_part_log(void *bp_log, const char *devname,
 }
 
 void nvme_show_phy_rx_eom_log(struct nvme_phy_rx_eom_log *log, __u16 controller,
-	nvme_print_flags_t flags)
+	size_t len, nvme_print_flags_t flags)
 {
-	nvme_print(phy_rx_eom_log, flags, log, controller);
+	nvme_print(phy_rx_eom_log, flags, log, controller, len);
 }
 
 void nvme_show_media_unit_stat_log(struct nvme_media_unit_stat_log *mus_log,
@@ -2041,7 +2063,7 @@ void nvme_show_log(const char *devname, enum nvme_cmd_get_log_lid lid, __u32 nsi
 		nvme_show_mgmt_addr_list_log(log, flags);
 		break;
 	case NVME_LOG_LID_PHY_RX_EOM:
-		nvme_show_phy_rx_eom_log(log, lsi, flags);
+		nvme_show_phy_rx_eom_log(log, lsi, len, flags);
 		break;
 	case NVME_LOG_LID_REACHABILITY_GROUPS:
 		nvme_show_reachability_groups_log(log, len, flags);
@@ -2094,4 +2116,37 @@ void nvme_show_log(const char *devname, enum nvme_cmd_get_log_lid lid, __u32 nsi
 	default:
 		break;
 	}
+}
+
+const char *nvme_support_str(bool support)
+{
+	if (support)
+		return "Supported";
+
+	return "Not Supported";
+}
+
+const char *nvme_yes_str(bool yes)
+{
+	if (yes)
+		return "Yes";
+
+	return "No";
+}
+
+const char *prop_cap_cps_str(uint8_t cps)
+{
+	switch (cps) {
+	case NVME_CAP_CPS_NONE:
+		return "Not Reported";
+	case NVME_CAP_CPS_CTRL:
+		return "Controller scope";
+	case NVME_CAP_CPS_DOMAIN:
+		return "Domain scope";
+	case NVME_CAP_CPS_NVMS:
+	default:
+		break;
+	}
+
+	return "NVM subsystem scope";
 }
