@@ -88,7 +88,6 @@ int sndk_get_pci_ids(struct libnvme_global_ctx *ctx, struct libnvme_transport_ha
 		id[strlen(id) - 1] = '\0';
 
 	*vendor_id = strtol(id, NULL, 0);
-	ret = 0;
 
 	fd = open(did, O_RDONLY);
 	if (fd < 0) {
@@ -295,18 +294,30 @@ bool sndk_nvme_parse_dev_status_log_entry(void *log_data,
 bool sndk_nvme_parse_dev_status_log_str(void *log_data,
 		__u32 entry_id,
 		char *ret_data,
+		size_t ret_data_size,
 		__u32 *ret_data_len)
 {
 	struct sndk_c2_log_subpage_header *entry_data = NULL;
 	struct sndk_c2_cbs_data *entry_str_data = NULL;
+	__u32 entry_len, entry_total_len, max_payload_len;
+
+	if (!ret_data || !ret_data_len || ret_data_size == 0)
+		return false;
 
 	if (sndk_parse_dev_mng_log_entry(log_data, entry_id, &entry_data)) {
 		if (entry_data) {
 			entry_str_data = (struct sndk_c2_cbs_data *)&entry_data->data;
-			memcpy(ret_data,
-				(void *)&entry_str_data->data,
-				le32_to_cpu(entry_str_data->length));
-			*ret_data_len = le32_to_cpu(entry_str_data->length);
+			entry_len = le32_to_cpu(entry_str_data->length);
+			entry_total_len = le32_to_cpu(entry_data->length);
+			if (entry_total_len < sizeof(struct sndk_c2_log_subpage_header))
+				return false;
+			max_payload_len = entry_total_len -
+				sizeof(struct sndk_c2_log_subpage_header);
+			if (entry_len > max_payload_len || entry_len >= ret_data_size)
+				return false;
+			memcpy(ret_data, (void *)&entry_str_data->data, entry_len);
+			ret_data[entry_len] = '\0';
+			*ret_data_len = entry_len;
 			return true;
 		}
 	}
@@ -755,13 +766,11 @@ __u64 sndk_get_enc_drive_capabilities(struct libnvme_global_ctx *ctx,
 				uuid_index) == false) {
 			nvme_show_error("ERROR: SNDK: 0xC2 Log Page not supported, ");
 			nvme_show_error("uuid_index: %d", uuid_index);
-			ret = -1;
 			goto out;
 		}
 
 		if (!sndk_get_dev_mgment_data(ctx, hdl, &dev_mng_log)) {
 			nvme_show_error("ERROR: SNDK: 0xC2 Log Page not found");
-			ret = -1;
 			goto out;
 		}
 
@@ -775,6 +784,7 @@ __u64 sndk_get_enc_drive_capabilities(struct libnvme_global_ctx *ctx,
 		if (!sndk_nvme_parse_dev_status_log_str(dev_mng_log,
 				SNDK_C2_MARKETING_NAME_ID,
 				(char *)marketing_name,
+				sizeof(marketing_name),
 				&market_name_len))
 			nvme_show_error("ERROR: SNDK: Get Marketing Name Failed");
 

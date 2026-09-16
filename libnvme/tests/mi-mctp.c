@@ -1091,7 +1091,10 @@ enum libnvme_mi_aem_handler_next_action aem_handler(struct libnvme_mi_ep *ep, si
 
 		for (int i = 0; i < num_events; i++) {
 			struct libnvme_mi_event *e = libnvme_mi_aem_get_next_event(ep);
-			uint8_t idx = e->aeoi;
+			uint8_t idx;
+
+			shr_assert(e);
+			idx = e->aeoi;
 
 			shr_assert(fn_data->events[idx]);
 			shr_assert(fn_data->host_enabled_map.enabled[idx]);
@@ -1198,6 +1201,10 @@ static void test_mi_aem_ep_based_failure_helper(struct libnvme_mi_ep *ep,
 	default:
 		shr_assert(false);//Unexpected
 	}
+
+	/* fn_data is about to go out of scope; don't leave peer->tx_data
+	 * dangling for whatever the next test does with peer. */
+	peer->tx_data = NULL;
 }
 
 /* test: Check validation of endpoint messages in various stages of aem handling */

@@ -28,10 +28,6 @@
 #define NAME_LEN 128
 #define BUF_LEN 320
 #define VAL_LEN 4096
-#define BYTE_TO_BIT(byte) ((byte) * 8)
-#define MS_TO_SEC(time) ((time) / 1000)
-#define MS500_TO_MS(time) ((time) * 500)
-#define MS500_TO_SEC(time) (MS_TO_SEC(MS500_TO_MS(time)))
 
 #define array_add_obj json_array_add_value_object
 #define array_add_str json_array_add_value_string
@@ -43,14 +39,17 @@
 #define obj_add_uint json_object_add_value_uint
 #define obj_add_uint128 json_object_add_value_uint128
 #define obj_add_uint64 json_object_add_value_uint64
-#define obj_add_str json_object_add_value_string
 #define obj_add_uint_02x json_object_add_uint_02x
 #define obj_add_uint_0x json_object_add_uint_0x
 #define obj_add_byte_array json_object_add_byte_array
 #define obj_add_nprix64 json_object_add_nprix64
 #define obj_add_uint_0nx json_object_add_uint_0nx
 #define obj_add_0nprix64 json_object_add_0nprix64
-#define obj_add_string json_object_add_string
+#define obj_add_str json_object_add_string
+
+#define json_prop_cap(r, fld, val, ...) \
+	json_prop_field(r, prop_cap[fld][0], prop_cap[fld][1], val, \
+	##__VA_ARGS__)
 
 static const uint8_t zero_uuid[16] = { 0 };
 static struct print_ops json_print_ops;
@@ -282,11 +281,14 @@ static void json_nvme_id_ns_lbaf(struct nvme_id_ns *ns, int i, struct json_objec
 
 	if (verbose_mode()) {
 		obj_add_int(lbaf, "LBA Format", i);
-		obj_add_string(lbaf, "Metadata Size", "%d bytes", le16_to_cpu(ns->lbaf[i].ms));
-		obj_add_string(lbaf, "Data Size", "%d bytes", 1 << ns->lbaf[i].ds);
-		obj_add_string(lbaf, "Relative Performance", "0x%x %s", ns->lbaf[i].rp,
-			       ns->lbaf[i].rp == 3 ? "Degraded" : ns->lbaf[i].rp == 2 ? "Good" :
-			       ns->lbaf[i].rp == 1 ? "Better" : "Best");
+		obj_add_str(lbaf, "Metadata Size", "%d bytes",
+			    le16_to_cpu(ns->lbaf[i].ms));
+		obj_add_str(lbaf, "Data Size", "%d bytes", 1 << ns->lbaf[i].ds);
+		obj_add_str(lbaf, "Relative Performance", "0x%x %s",
+			    ns->lbaf[i].rp,
+			    ns->lbaf[i].rp == 3 ? "Degraded" :
+			    ns->lbaf[i].rp == 2 ? "Good" :
+			    ns->lbaf[i].rp == 1 ? "Better" : "Best");
 		obj_add_str(lbaf, "in use", i == flbas ? "yes" : "no");
 	} else {
 		obj_add_int(lbaf, "lbaf", i);
@@ -955,7 +957,25 @@ add:
 	obj_add_array(r, "List of Valid Reports", valid);
 }
 
-static void json_registers_cap(struct nvme_bar_cap *cap, struct json_object *r)
+static void json_prop_field(struct json_object *r, const char *name,
+			    const char *symbol, const char *val, ...)
+{
+	__cleanup_free char *value = NULL;
+	char json_str[STR_LEN];
+	va_list ap;
+
+	va_start(ap, val);
+
+	if (vasprintf(&value, val, ap) < 0)
+		value = NULL;
+
+	va_end(ap);
+
+	sprintf(json_str, "%s (%s)", name, symbol);
+	obj_add_str(r, json_str, value);
+}
+
+static void json_registers_cap(uint64_t cap, struct json_object *r)
 {
 	char json_str[STR_LEN];
 	struct json_object *cssa = json_create_array();
@@ -963,55 +983,53 @@ static void json_registers_cap(struct nvme_bar_cap *cap, struct json_object *r)
 	struct json_object *amsa = json_create_array();
 	struct json_object *amso = json_create_object();
 
-	sprintf(json_str, "%"PRIx64"", *(uint64_t *)cap);
+	sprintf(json_str, "%"PRIx64"", cap);
 	obj_add_str(r, "cap", json_str);
 
-	obj_add_str(r, "NVM Subsystem Shutdown Enhancements Supported (NSSES)",
-			cap->nsses ? "Supported" : "Not supported");
-	obj_add_str(r, "Controller Ready With Media Support (CRWMS)",
-		     cap->crwms ? "Supported" : "Not supported");
-	obj_add_str(r, "Controller Ready Independent of Media Support (CRIMS)",
-		     cap->crims ? "Supported" : "Not supported");
-	obj_add_str(r, "NVM Subsystem Shutdown Supported (NSSS)",
-		     cap->nsss ? "Supported" : "Not supported");
-	obj_add_str(r, "Controller Memory Buffer Supported (CMBS):",
-		     cap->cmbs ? "Supported" : "Not supported");
-	obj_add_str(r, "Persistent Memory Region Supported (PMRS)",
-		     cap->pmrs ? "Supported" : "Not supported");
+	json_prop_cap(r, PROP_CAP_NSSES, nvme_support_str(NVME_CAP_NSSES(cap)));
+	json_prop_cap(r, PROP_CAP_CRWMS,
+		      nvme_support_str(NVME_CAP_CRMS(cap) & NVME_CAP_CRWMS));
+	json_prop_cap(r, PROP_CAP_CRIMS,
+		      nvme_support_str(NVME_CAP_CRMS(cap) & NVME_CAP_CRIMS));
+	json_prop_cap(r, PROP_CAP_NSSS, nvme_support_str(NVME_CAP_NSSS(cap)));
+	json_prop_cap(r, PROP_CAP_CMBS, nvme_support_str(NVME_CAP_CMBS(cap)));
+	json_prop_cap(r, PROP_CAP_PMRS, nvme_support_str(NVME_CAP_PMRS(cap)));
+	json_prop_cap(r, PROP_CAP_MPSMAX, "%u bytes",
+		      1 << (12 + NVME_CAP_MPSMAX(cap)));
+	json_prop_cap(r, PROP_CAP_MPSMIN, "%u bytes",
+		      1 << (12 + NVME_CAP_MPSMIN(cap)));
+	json_prop_cap(r, PROP_CAP_CPS, prop_cap_cps_str(NVME_CAP_CPS(cap)));
+	json_prop_cap(r, PROP_CAP_BPS, nvme_yes_str(NVME_CAP_BPS(cap)));
 
-	sprintf(json_str, "%u bytes", 1 << (12 + cap->mpsmax));
-	obj_add_str(r, "Memory Page Size Maximum (MPSMAX)", json_str);
-
-	sprintf(json_str, "%u bytes", 1 << (12 + cap->mpsmin));
-	obj_add_str(r, "Memory Page Size Minimum (MPSMIN)", json_str);
-
-	obj_add_str(r, "Controller Power Scope (CPS)", !cap->cps ? "Not Reported" : cap->cps == 1 ?
-		     "Controller scope" : cap->cps == 2 ? "Domain scope" : "NVM subsystem scope");
-	obj_add_str(r, "Boot Partition Support (BPS)", cap->bps ? "Yes" : "No");
-
-	obj_add_array(r, "Command Sets Supported (CSS)", cssa);
-	obj_add_str(csso, "NVM command set", cap->css & 1 ? "Supported" : "Not supported");
+	sprintf(json_str, "%s (%s)", prop_cap[PROP_CAP_CSS][0],
+		prop_cap[PROP_CAP_CSS][1]);
+	obj_add_array(r, json_str, cssa);
+	obj_add_str(csso, "NVM command set",
+		    nvme_support_str(NVME_CAP_CSS(cap) & NVME_CAP_CSS_NVM));
 	obj_add_str(csso, "One or more I/O Command Sets",
-		    cap->css & 0x40 ? "Supported" : "Not supported");
-	obj_add_str(csso, cap->css & 0x80 ? "Only Admin Command Set" : "I/O Command Set",
-		    "Supported");
+		    nvme_support_str(NVME_CAP_CSS(cap) & NVME_CAP_CSS_CSI));
+	obj_add_str(csso, NVME_CAP_CSS(cap) & NVME_CAP_CSS_ADMIN ?
+		    "Only Admin Command Set" : "I/O Command Set", "Supported");
 	array_add_obj(cssa, csso);
 
-	obj_add_str(r, "NVM Subsystem Reset Supported (NSSRS)", cap->nssrs ? "Yes" : "No");
+	json_prop_cap(r, PROP_CAP_NSSRS, nvme_yes_str(NVME_CAP_NSSRS(cap)));
 
-	sprintf(json_str, "%u bytes", 1 << (2 + cap->dstrd));
-	obj_add_str(r, "Doorbell Stride (DSTRD)", json_str);
+	json_prop_cap(r, PROP_CAP_DSTRD, "%u bytes",
+		      1 << (2 + NVME_CAP_DSTRD(cap)));
 
-	sprintf(json_str, "%u ms", MS500_TO_MS(cap->to));
-	obj_add_str(r, "Timeout (TO)", json_str);
+	json_prop_cap(r, PROP_CAP_TO, "%u ms", MS500_TO_MS(NVME_CAP_TO(cap)));
 
-	obj_add_array(r, "Arbitration Mechanism Supported (AMS)", amsa);
+	sprintf(json_str, "%s (%s)", prop_cap[PROP_CAP_AMS][0],
+		prop_cap[PROP_CAP_AMS][1]);
+	obj_add_array(r, json_str, amsa);
 	obj_add_str(amso, "Weighted Round Robin with Urgent Priority Class",
-		    cap->ams & 2 ? "Supported" : "Not supported");
+		    nvme_support_str(NVME_CAP_AMS(cap)));
 	array_add_obj(amsa, amso);
 
-	obj_add_str(r, "Contiguous Queues Required (CQR)", cap->cqr ? "Yes" : "No");
-	obj_add_uint(r, "Maximum Queue Entries Supported (MQES)", cap->mqes + 1);
+	json_prop_cap(r, PROP_CAP_CQR, nvme_yes_str(NVME_CAP_CQR(cap)));
+	sprintf(json_str, "%s (%s)", prop_cap[PROP_CAP_MQES][0],
+		prop_cap[PROP_CAP_MQES][1]);
+	obj_add_uint(r, json_str, NVME_CAP_MQES(cap) + 1);
 }
 
 static void json_registers_version(__u32 vs, struct json_object *r)
@@ -1408,7 +1426,7 @@ static void json_single_property_human(int offset, uint64_t value64, struct json
 
 	switch (offset) {
 	case NVME_REG_CAP:
-		json_registers_cap((struct nvme_bar_cap *)&value64, r);
+		json_registers_cap(value64, r);
 		break;
 	case NVME_REG_VS:
 		json_registers_version(value32, r);
@@ -2249,8 +2267,8 @@ static char *json_eom_printable_eye(struct nvme_eom_lane_desc *lane,
 				    struct json_object *r)
 {
 	char *eye = (char *)lane->eye_desc;
-	uint16_t nrows = le16_to_cpu(lane->nrows);
-	uint16_t ncols = le16_to_cpu(lane->ncols);
+	size_t nrows = le16_to_cpu(lane->nrows);
+	size_t ncols = le16_to_cpu(lane->ncols);
 	struct json_object *eye_array = NULL;
 	char *printable_start = NULL;
 	char *printable = NULL;
@@ -2272,13 +2290,13 @@ static char *json_eom_printable_eye(struct nvme_eom_lane_desc *lane,
 	if (!printable)
 		goto fail_free_eye_array;
 
-	for (int i = 0; i < nrows; i++) {
+	for (size_t i = 0; i < nrows; i++) {
 		char *row = malloc(ncols + 1);
 
 		if (!row)
 			goto fail_free_eye_printable;
 
-		for (int j = 0; j < ncols; j++) {
+		for (size_t j = 0; j < ncols; j++) {
 			char ch = eye[i * ncols + j];
 			*printable++ = ch;
 			row[j] = ch;
@@ -2298,7 +2316,7 @@ static char *json_eom_printable_eye(struct nvme_eom_lane_desc *lane,
 	return printable_start;
 
 fail_free_eye_printable:
-	free(printable);
+	free(printable_start);
 fail_free_eye_array:
 	json_free_object(eye_array);
 
@@ -2306,31 +2324,28 @@ fail_free_eye_array:
 }
 
 static void json_phy_rx_eom_descs(struct nvme_phy_rx_eom_log *log,
-			struct json_object *r, char **allocated_eyes)
+			struct json_object *r, char **allocated_eyes, size_t len)
 {
-	void *p = log->descs;
-	uint16_t num_descs = le16_to_cpu(log->nd);
-	int i;
+	struct eom_desc_iter it;
+	struct nvme_eom_lane_desc *desc;
 	struct json_object *descs = json_create_array();
+	int i = 0;
 
 	obj_add_array(r, "descs", descs);
 
-	for (i = 0; i < num_descs; i++) {
-		struct nvme_eom_lane_desc *desc = p;
+	eom_desc_iter_init(&it, log, len);
+
+	while ((desc = eom_desc_iter_next(&it))) {
+		int idx = i++;
 		__cleanup_free char *hexstr = NULL;
-		unsigned char *vsdata = NULL;
-		unsigned int vsdataoffset = 0;
-		uint16_t nrows, ncols, edlen;
+		unsigned char *vsdata;
+		uint16_t vsdatalen;
 		struct json_object *jdesc;
 		char *hexdata;
 
 		jdesc = json_create_object();
-		if (!desc)
+		if (!jdesc)
 			return;
-
-		nrows = le16_to_cpu(desc->nrows);
-		ncols = le16_to_cpu(desc->ncols);
-		edlen = le16_to_cpu(desc->edlen);
 
 		obj_add_uint(jdesc, "lid", desc->mstatus);
 		obj_add_uint(jdesc, "lane", desc->lane);
@@ -2339,18 +2354,26 @@ static void json_phy_rx_eom_descs(struct nvme_phy_rx_eom_log *log,
 		obj_add_uint(jdesc, "bottom", le16_to_cpu(desc->bottom));
 		obj_add_uint(jdesc, "left", le16_to_cpu(desc->left));
 		obj_add_uint(jdesc, "right", le16_to_cpu(desc->right));
-		obj_add_uint(jdesc, "nrows", nrows);
-		obj_add_uint(jdesc, "ncols", ncols);
-		obj_add_uint(jdesc, "edlen", edlen);
+		obj_add_uint(jdesc, "nrows", le16_to_cpu(desc->nrows));
+		obj_add_uint(jdesc, "ncols", le16_to_cpu(desc->ncols));
+		obj_add_uint(jdesc, "edlen", le16_to_cpu(desc->edlen));
+
+		vsdata = eom_desc_iter_vsdata(&it, desc, &vsdatalen);
+		if (!vsdata) {
+			json_free_object(jdesc);
+			continue;
+		}
 
 		if (NVME_EOM_ODP_PEFP(log->odp))
-			allocated_eyes[i] = json_eom_printable_eye(desc, jdesc);
+			allocated_eyes[idx] = json_eom_printable_eye(desc, jdesc);
 
-		if (edlen == 0)
+		if (vsdatalen == 0) {
+			json_free_object(jdesc);
 			continue;
+		}
 
 		/* 2 hex chars + space per byte */
-		hexstr = malloc(edlen * 3 + 1);
+		hexstr = malloc(vsdatalen * 3 + 1);
 
 		if (!hexstr) {
 			json_free_object(jdesc);
@@ -2358,12 +2381,9 @@ static void json_phy_rx_eom_descs(struct nvme_phy_rx_eom_log *log,
 		}
 
 		/* Hex dump Vendor Specific Eye Data */
-		vsdataoffset = (nrows * ncols) + sizeof(struct nvme_eom_lane_desc);
-		vsdata = (unsigned char *)((unsigned char *)desc + vsdataoffset);
-
 		hexdata = hexstr;
 
-		for (int offset = 0; offset < edlen; offset++)
+		for (int offset = 0; offset < vsdatalen; offset++)
 			hexdata += sprintf(hexdata, "%02X ", vsdata[offset]);
 		/* remove trailing space */
 		*(hexdata - 1) = '\0';
@@ -2371,17 +2391,21 @@ static void json_phy_rx_eom_descs(struct nvme_phy_rx_eom_log *log,
 		obj_add_str(jdesc, "vsdata_hex", hexstr);
 
 		array_add_obj(descs, jdesc);
-
-		p += log->dsize;
 	}
 }
 
-static void json_phy_rx_eom_log(struct nvme_phy_rx_eom_log *log, __u16 controller)
+static void json_phy_rx_eom_log(struct nvme_phy_rx_eom_log *log, __u16 controller, size_t len)
 {
 	int i;
+	uint16_t num_descs;
 	struct json_object *r = json_r;
 
 	__cleanup_free char **allocated_eyes = NULL;
+
+	if (len < sizeof(*log))
+		return;
+
+	num_descs = le16_to_cpu(log->nd);
 
 	obj_add_uint(r, "lid", log->lid);
 	obj_add_uint(r, "eomip", log->eomip);
@@ -2404,13 +2428,13 @@ static void json_phy_rx_eom_log(struct nvme_phy_rx_eom_log *log, __u16 controlle
 
 	if (log->eomip == NVME_PHY_RX_EOM_COMPLETED) {
 		/* Save Printable Eye strings allocated to free later */
-		allocated_eyes = malloc(log->nd * sizeof(char *));
+		allocated_eyes = calloc(num_descs, sizeof(char *));
 		if (allocated_eyes)
-			json_phy_rx_eom_descs(log, r, allocated_eyes);
+			json_phy_rx_eom_descs(log, r, allocated_eyes, len);
 	}
 
 	if (allocated_eyes) {
-		for (i = 0; i < log->nd; i++) {
+		for (i = 0; i < num_descs; i++) {
 			/* Free any Printable Eye strings allocated */
 			free(allocated_eyes[i]);
 		}
@@ -2531,23 +2555,42 @@ static void json_supported_cap_config_log(
 static void json_nvme_fdp_configs(struct nvme_fdp_config_log *log, size_t len)
 {
 	struct json_object *r, *obj_configs;
+	unsigned char *p, *end;
 	uint16_t n;
-
-	void *p = log->configs;
 
 	r = json_r;
 	obj_configs = json_create_array();
 
+	if (len < sizeof(*log)) {
+		obj_add_array(r, "configs", obj_configs);
+		return;
+	}
+
+	p = (unsigned char *)log->configs;
+	end = (unsigned char *)log + len;
 	n = le16_to_cpu(log->n);
 
 	obj_add_uint(r, "n", n);
 
 	for (int i = 0; i < n + 1; i++) {
-		struct nvme_fdp_config_desc *config = p;
-		uint16_t nruh = le16_to_cpu(config->nruh);
+		struct nvme_fdp_config_desc *config = (struct nvme_fdp_config_desc *)p;
+		uint16_t nruh, size, max_nruh;
+		struct json_object *obj_config, *obj_ruhs;
 
-		struct json_object *obj_config = json_create_object();
-		struct json_object *obj_ruhs = json_create_array();
+		if (!shr_buf_has_room(p, end, sizeof(*config)))
+			break;
+
+		size = le16_to_cpu(config->size);
+		if (size < sizeof(*config) || !shr_buf_has_room(p, end, size))
+			break;
+
+		nruh = le16_to_cpu(config->nruh);
+		max_nruh = (size - sizeof(*config)) / sizeof(struct nvme_fdp_ruh_desc);
+		if (nruh > max_nruh)
+			nruh = max_nruh;
+
+		obj_config = json_create_object();
+		obj_ruhs = json_create_array();
 
 		obj_add_uint(obj_config, "fdpa", config->fdpa);
 		obj_add_uint(obj_config, "vss", config->vss);
@@ -2569,7 +2612,7 @@ static void json_nvme_fdp_configs(struct nvme_fdp_config_log *log, size_t len)
 
 		array_add_obj(obj_configs, obj_config);
 
-		p += config->size;
+		p += size;
 	}
 
 	obj_add_array(r, "configs", obj_configs);
@@ -2799,7 +2842,7 @@ static void json_ctrl_registers_cap(void *bar, struct json_object *r)
 	uint64_t cap = shr_mmio_read64(bar + NVME_REG_CAP);
 
 	if (verbose_mode())
-		json_registers_cap((struct nvme_bar_cap *)&cap, obj_create_array_obj(r, "cap"));
+		json_registers_cap(cap, obj_create_array_obj(r, "cap"));
 	else
 		obj_add_uint64(r, "cap", cap);
 }
@@ -5520,9 +5563,9 @@ static void json_output_error_status(int status, const char *msg, va_list ap)
 	__cleanup_free char *value = NULL;
 
 	if (vasprintf(&value, msg, ap) < 0)
-		value = alloc_error;
+		value = NULL;
 
-	sprintf(json_str, "Error: %s", value);
+	sprintf(json_str, "Error: %s", value ? value : alloc_error);
 	r = obj_create(json_str);
 
 	if (status < 0) {

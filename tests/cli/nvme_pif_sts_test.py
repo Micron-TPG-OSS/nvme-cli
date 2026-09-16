@@ -150,12 +150,13 @@ class PIFStsCLITest(unittest.TestCase):
     def test_16b_guard_ref_tag_over_boundary_fails(self):
         res = self._verify(sts=8, pif=PIF_16B_GUARD,
                            ref_tag=0x1000000, storage_tag=0, expect_fail=True)
-        self.assertIn("Reference tag larger than allowed by PIF", res.stdout + res.stderr)
+        self.assertIn("Reference tag larger than the 24-bit width allowed by 16b Guard PIF (STS=8)",
+                     res.stdout + res.stderr)
 
     def test_16b_guard_storage_tag_over_boundary_fails(self):
         res = self._verify(sts=8, pif=PIF_16B_GUARD,
                            ref_tag=0, storage_tag=0x100, expect_fail=True)
-        self.assertIn("Storage tag larger than storage tag size", res.stdout + res.stderr)
+        self.assertIn("Storage tag larger than the STS-defined 8-bit width", res.stdout + res.stderr)
 
     def test_32b_guard_ref_tag_at_boundary_succeeds(self):
         """32B Guard: ref tag is (80 - STS) bits, checked only for STS>16.
@@ -165,7 +166,8 @@ class PIFStsCLITest(unittest.TestCase):
     def test_32b_guard_ref_tag_over_boundary_fails(self):
         res = self._verify(sts=64, pif=PIF_32B_GUARD,
                            ref_tag=0x10000, storage_tag=0, expect_fail=True)
-        self.assertIn("Reference tag larger than allowed by PIF", res.stdout + res.stderr)
+        self.assertIn("Reference tag larger than the 16-bit width allowed by 32b Guard PIF (STS=64)",
+                     res.stdout + res.stderr)
 
     def test_64b_guard_ref_tag_at_boundary_succeeds(self):
         """64B Guard: ref tag is (48 - STS) bits. STS=40 -> 8 bits.
@@ -175,7 +177,59 @@ class PIFStsCLITest(unittest.TestCase):
     def test_64b_guard_ref_tag_over_boundary_fails(self):
         res = self._verify(sts=40, pif=PIF_64B_GUARD,
                            ref_tag=0x100, storage_tag=0, expect_fail=True)
-        self.assertIn("Reference tag larger than allowed by PIF", res.stdout + res.stderr)
+        self.assertIn("Reference tag larger than the 8-bit width allowed by 64b Guard PIF (STS=40)",
+                     res.stdout + res.stderr)
+
+    # ------------------------------------------------------------------ #
+    # STS outside the PIF's spec-mandated range (NVM Command Set spec,   #
+    # Figure 119): invalid_tags() used to only reject STS values beyond  #
+    # the PIF's full field width, which both let spec-invalid values     #
+    # through and (for 32B Guard, before its fix) computed a negative/   #
+    # oversized shift amount for some of them.                          #
+    # ------------------------------------------------------------------ #
+
+    def test_16b_guard_sts_at_new_limit_succeeds(self):
+        """16B Guard: STS=32 leaves a 0-bit ref tag, still valid."""
+        self._verify(sts=32, pif=PIF_16B_GUARD, ref_tag=0, storage_tag=0)
+
+    def test_16b_guard_sts_over_new_limit_fails(self):
+        res = self._verify(sts=33, pif=PIF_16B_GUARD,
+                           ref_tag=0, storage_tag=0, expect_fail=True)
+        self.assertIn("Storage tag size (STS=33) larger than the 32-bit maximum allowed by 16b Guard PIF",
+                     res.stdout + res.stderr)
+
+    def test_32b_guard_sts_at_new_limit_succeeds(self):
+        """32B Guard: STS=64 is the spec-mandated maximum, still valid."""
+        self._verify(sts=64, pif=PIF_32B_GUARD, ref_tag=0, storage_tag=0)
+
+    def test_32b_guard_sts_over_new_limit_fails(self):
+        """32B Guard's field is 80 bits wide, but the spec caps STS at 64,
+        not 80: STS in (64, 80] must be rejected, not silently encoded."""
+        res = self._verify(sts=65, pif=PIF_32B_GUARD,
+                           ref_tag=0, storage_tag=0, expect_fail=True)
+        self.assertIn("Storage tag size (STS=65) outside the 16-64 range allowed by 32b Guard PIF",
+                     res.stdout + res.stderr)
+
+    def test_32b_guard_sts_at_new_min_succeeds(self):
+        """32B Guard: STS=16 is the spec-mandated minimum, still valid."""
+        self._verify(sts=16, pif=PIF_32B_GUARD, ref_tag=0, storage_tag=0)
+
+    def test_32b_guard_sts_below_new_min_fails(self):
+        """Unlike 16B/64B Guard, 32B Guard's STS may not go below 16."""
+        res = self._verify(sts=15, pif=PIF_32B_GUARD,
+                           ref_tag=0, storage_tag=0, expect_fail=True)
+        self.assertIn("Storage tag size (STS=15) outside the 16-64 range allowed by 32b Guard PIF",
+                     res.stdout + res.stderr)
+
+    def test_64b_guard_sts_at_new_limit_succeeds(self):
+        """64B Guard: STS=48 leaves a 0-bit ref tag, still valid."""
+        self._verify(sts=48, pif=PIF_64B_GUARD, ref_tag=0, storage_tag=0)
+
+    def test_64b_guard_sts_over_new_limit_fails(self):
+        res = self._verify(sts=49, pif=PIF_64B_GUARD,
+                           ref_tag=0, storage_tag=0, expect_fail=True)
+        self.assertIn("Storage tag size (STS=49) larger than the 48-bit maximum allowed by 64b Guard PIF",
+                     res.stdout + res.stderr)
 
     def test_elbaf_uses_the_in_use_lba_format_index(self):
         """get_pif_sts() must index ELBAF by the FLBAS-selected format, not

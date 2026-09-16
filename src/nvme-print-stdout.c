@@ -47,6 +47,10 @@ enum simple_list_col {
 	SIMPLE_LIST_COL_FW_REV,
 };
 
+#define stdout_prop_cap(fld, val, ...) \
+	stdout_prop_field(prop_cap[fld][0], prop_cap[fld][1], 41, 59, \
+	val, ##__VA_ARGS__)
+
 static const uint8_t zero_uuid[16] = { 0 };
 static const uint8_t invalid_uuid[16] = {[0 ... 15] = 0xff };
 static const char dash[100] = {[0 ... 99] = '-'};
@@ -969,30 +973,28 @@ static void stdout_phy_rx_eom_odp(uint8_t odp)
 static void stdout_eom_printable_eye(struct nvme_eom_lane_desc *lane)
 {
 	char *eye = (char *)lane->eye_desc;
-	int i, j;
+	size_t nrows = le16_to_cpu(lane->nrows);
+	size_t ncols = le16_to_cpu(lane->ncols);
+	size_t i, j;
 
 	printf("Printable Eye:\n");
-	for (i = 0; i < le16_to_cpu(lane->nrows); i++) {
-		for (j = 0; j < le16_to_cpu(lane->ncols); j++)
-			printf("%c", eye[i * le16_to_cpu(lane->ncols) + j]);
+	for (i = 0; i < nrows; i++) {
+		for (j = 0; j < ncols; j++)
+			printf("%c", eye[i * ncols + j]);
 		printf("\n");
 	}
 }
 
-static void stdout_phy_rx_eom_descs(struct nvme_phy_rx_eom_log *log)
+static void stdout_phy_rx_eom_descs(struct nvme_phy_rx_eom_log *log, size_t len)
 {
-	void *p = log->descs;
-	int i;
+	struct eom_desc_iter it;
+	struct nvme_eom_lane_desc *desc;
 
-	for (i = 0; i < log->nd; i++) {
-		struct nvme_eom_lane_desc *desc = p;
-		unsigned char *vsdata = NULL;
-		size_t vsdataoffset;
-		uint16_t nrows, ncols, edlen;
+	eom_desc_iter_init(&it, log, len);
 
-		nrows = le16_to_cpu(desc->nrows);
-		ncols = le16_to_cpu(desc->ncols);
-		edlen = le16_to_cpu(desc->edlen);
+	while ((desc = eom_desc_iter_next(&it))) {
+		unsigned char *vsdata;
+		uint16_t vsdatalen;
 
 		printf("Measurement Status: %s\n",
 			desc->mstatus ? "Successful" : "Not Successful");
@@ -1002,31 +1004,33 @@ static void stdout_phy_rx_eom_descs(struct nvme_phy_rx_eom_log *log)
 		printf("Bottom: %u\n", le16_to_cpu(desc->bottom));
 		printf("Left: %u\n", le16_to_cpu(desc->left));
 		printf("Right: %u\n", le16_to_cpu(desc->right));
-		printf("Number of Rows: %u\n", nrows);
-		printf("Number of Columns: %u\n", ncols);
+		printf("Number of Rows: %u\n", le16_to_cpu(desc->nrows));
+		printf("Number of Columns: %u\n", le16_to_cpu(desc->ncols));
 		printf("Eye Data Length: %u\n", desc->edlen);
+
+		vsdata = eom_desc_iter_vsdata(&it, desc, &vsdatalen);
+		if (!vsdata)
+			continue;
 
 		if (NVME_EOM_ODP_PEFP(log->odp))
 			stdout_eom_printable_eye(desc);
 
 		/* Eye Data field is vendor specific */
-		if (edlen == 0)
+		if (vsdatalen == 0)
 			continue;
 
-		vsdataoffset = (size_t)nrows * ncols +
-			       sizeof(struct nvme_eom_lane_desc);
-		vsdata = (unsigned char *)desc + vsdataoffset;
 		printf("Eye Data:\n");
-		d(vsdata, edlen, 16, 1);
+		d(vsdata, vsdatalen, 16, 1);
 		printf("\n");
-
-		p += log->dsize;
 	}
 }
 
-static void stdout_phy_rx_eom_log(struct nvme_phy_rx_eom_log *log, __u16 controller)
+static void stdout_phy_rx_eom_log(struct nvme_phy_rx_eom_log *log, __u16 controller, size_t len)
 {
 	int human = stdout_print_ops.flags & VERBOSE;
+
+	if (len < sizeof(*log))
+		return;
 
 	printf("Physical Interface Receiver Eye Opening Measurement Log for controller ID: %u\n", controller);
 	printf("Log ID: %u\n", log->lid);
@@ -1052,7 +1056,7 @@ static void stdout_phy_rx_eom_log(struct nvme_phy_rx_eom_log *log, __u16 control
 	printf("Estimated Time for Best Quality: %u\n", le16_to_cpu(log->etbest));
 
 	if (log->eomip == NVME_PHY_RX_EOM_COMPLETED)
-		stdout_phy_rx_eom_descs(log);
+		stdout_phy_rx_eom_descs(log, len);
 }
 
 static void stdout_media_unit_stat_log(struct nvme_media_unit_stat_log *mus_log)
@@ -1100,14 +1104,23 @@ static void stdout_fdp_config_fdpa(uint8_t fdpa)
 
 static void stdout_fdp_configs(struct nvme_fdp_config_log *log, size_t len)
 {
-	void *p = log->configs;
+	unsigned char *p, *end;
 	int human = stdout_print_ops.flags & VERBOSE;
 	uint16_t n;
 
+	if (len < sizeof(*log))
+		return;
+
+	p = (unsigned char *)log->configs;
+	end = (unsigned char *)log + len;
 	n = le16_to_cpu(log->n) + 1;
 
 	for (int i = 0; i < n; i++) {
-		struct nvme_fdp_config_desc *config = p;
+		struct nvme_fdp_config_desc *config = (struct nvme_fdp_config_desc *)p;
+		uint16_t size, nruh, max_nruh;
+
+		if (!shr_buf_has_room(p, end, sizeof(*config)))
+			break;
 
 		printf("FDP Attributes: %#x\n", config->fdpa);
 		if (human)
@@ -1120,14 +1133,23 @@ static void stdout_fdp_configs(struct nvme_fdp_config_log *log, size_t len)
 		printf("Reclaim Unit Nominal Size: %"PRIu64"\n", le64_to_cpu(config->runs));
 		printf("Estimated Reclaim Unit Time Limit: %"PRIu32"\n", le32_to_cpu(config->erutl));
 
+		size = le16_to_cpu(config->size);
+		if (size < sizeof(*config) || !shr_buf_has_room(p, end, size))
+			break;
+
+		nruh = le16_to_cpu(config->nruh);
+		max_nruh = (size - sizeof(*config)) / sizeof(struct nvme_fdp_ruh_desc);
+		if (nruh > max_nruh)
+			nruh = max_nruh;
+
 		printf("Reclaim Unit Handle List:\n");
-		for (int j = 0; j < le16_to_cpu(config->nruh); j++) {
+		for (int j = 0; j < nruh; j++) {
 			struct nvme_fdp_ruh_desc *ruh = &config->ruhs[j];
 
 			printf("  [%d]: %s\n", j, ruh->ruht == NVME_FDP_RUHT_INITIALLY_ISOLATED ? "Initially Isolated" : "Persistently Isolated");
 		}
 
-		p += config->size;
+		p += size;
 	}
 }
 
@@ -1384,38 +1406,67 @@ static void stdout_subsystem_list(struct libnvme_global_ctx *ctx, bool show_ana)
 	stdout_subsystem(ctx, show_ana);
 }
 
-static void stdout_registers_cap(struct nvme_bar_cap *cap)
+static void stdout_prop_field(const char *name, const char *symbol,
+			      unsigned int prop_width, unsigned int col_width,
+			      const char *val, ...)
 {
-	printf("\tNVM Subsystem Shutdown Enhancements Supported (NSSES)      : %s\n",
-		cap->nsses ? "Supported" : "Not Supported");
-	printf("\tController Ready With Media Support (CRWMS)                : %s\n",
-	       cap->crwms ? "Supported" : "Not Supported");
-	printf("\tController Ready Independent of Media Support (CRIMS)      : %s\n",
-	       cap->crims ? "Supported" : "Not Supported");
-	printf("\tNVM Subsystem Shutdown Supported   (NSSS)                  : %s\n", cap->nsss ? "Supported" : "Not Supported");
-	printf("\tController Memory Buffer Supported (CMBS)                  : The Controller Memory Buffer is %s\n",
-	       cap->cmbs ? "Supported" : "Not Supported");
-	printf("\tPersistent Memory Region Supported (PMRS)                  : The Persistent Memory Region is %s\n",
-	       cap->pmrs ? "Supported" : "Not Supported");
-	printf("\tMemory Page Size Maximum         (MPSMAX)                  : %u bytes\n", 1 << (12 + cap->mpsmax));
-	printf("\tMemory Page Size Minimum         (MPSMIN)                  : %u bytes\n", 1 << (12 + cap->mpsmin));
-	printf("\tController Power Scope              (CPS)                  : %s\n",
-	       !cap->cps ? "Not Reported" : cap->cps == 1 ? "Controller scope" :
-	       cap->cps == 2 ? "Domain scope" : "NVM subsystem scope");
-	printf("\tBoot Partition Support              (BPS)                  : %s\n", cap->bps ? "Yes" : "No");
-	printf("\tCommand Sets Supported              (CSS)                  : NVM command set is %s\n",
-	       cap->css & 0x01 ? "Supported" : "Not Supported");
-	printf("\t                                                             One or more I/O Command Sets are %s\n",
-	       cap->css & 0x40 ? "Supported" : "Not Supported");
-	printf("\t                                                             %s\n",
-	       cap->css & 0x80 ? "Only Admin Command Set Supported" : "I/O Command Set is Supported");
-	printf("\tNVM Subsystem Reset Supported     (NSSRS)                  : %s\n", cap->nssrs ? "Yes" : "No");
-	printf("\tDoorbell Stride                   (DSTRD)                  : %u bytes\n", 1 << (2 + cap->dstrd));
-	printf("\tTimeout                              (TO)                  : %u ms\n", cap->to * 500);
-	printf("\tArbitration Mechanism Supported     (AMS)                  : Weighted Round Robin with Urgent Priority Class is %s\n",
-	       cap->ams & 0x01 ? "Supported" : "Not supported");
-	printf("\tContiguous Queues Required          (CQR)                  : %s\n", cap->cqr ? "Yes" : "No");
-	printf("\tMaximum Queue Entries Supported    (MQES)                  : %u\n\n", cap->mqes + 1);
+	int prop_len = strlen(name) + strlen(symbol) + 3;
+	int name_width = prop_width - strlen(symbol) - 3;
+	bool pad = col_width > prop_len;
+	int pad_len = prop_len < prop_width ? col_width - prop_width : pad ?
+	    col_width - prop_len : 0;
+	__cleanup_free char *value = NULL;
+	va_list ap;
+
+	va_start(ap, val);
+
+	if (vasprintf(&value, val, ap) < 0)
+		value = NULL;
+
+	va_end(ap);
+
+	if (strlen(name))
+		printf("\t%-*s (%s)%*s: %s\n", name_width, name, symbol,
+		       pad_len, pad ? " " : "", value);
+	else
+		printf("\t%*s %s\n", col_width + 1, " ", value);
+}
+
+static void stdout_registers_cap(uint64_t cap)
+{
+	stdout_prop_cap(PROP_CAP_NSSES, nvme_support_str(NVME_CAP_NSSES(cap)));
+	stdout_prop_cap(PROP_CAP_CRWMS,
+			nvme_support_str(NVME_CAP_CRMS(cap) & NVME_CAP_CRWMS));
+	stdout_prop_cap(PROP_CAP_CRIMS,
+			nvme_support_str(NVME_CAP_CRMS(cap) & NVME_CAP_CRIMS));
+	stdout_prop_cap(PROP_CAP_NSSS, nvme_support_str(NVME_CAP_NSSS(cap)));
+	stdout_prop_cap(PROP_CAP_PMRS, "The Persistent Memory Region is %s",
+			nvme_support_str(NVME_CAP_PMRS(cap)));
+	stdout_prop_cap(PROP_CAP_MPSMAX, "%u bytes",
+			1 << (12 + NVME_CAP_MPSMAX(cap)));
+	stdout_prop_cap(PROP_CAP_MPSMIN, "%u bytes",
+			1 << (12 + NVME_CAP_MPSMIN(cap)));
+	stdout_prop_cap(PROP_CAP_CPS, prop_cap_cps_str(NVME_CAP_CPS(cap)));
+	stdout_prop_cap(PROP_CAP_BPS, nvme_yes_str(NVME_CAP_BPS(cap)));
+	stdout_prop_cap(PROP_CAP_CSS, "NVM command set is %s",
+			nvme_support_str(NVME_CAP_CSS(cap) & NVME_CAP_CSS_NVM));
+	stdout_prop_cap(PROP_CAP_NONE, "One or more I/O Command Sets are %s",
+			nvme_support_str(NVME_CAP_CSS(cap) & NVME_CAP_CSS_CSI));
+	stdout_prop_cap(PROP_CAP_NONE, NVME_CAP_CSS(cap) & NVME_CAP_CSS_ADMIN ?
+			"Only Admin Command Set Supported" :
+			"I/O Command Set is Supported");
+	stdout_prop_cap(PROP_CAP_NSSRS, nvme_yes_str(NVME_CAP_NSSRS(cap)));
+	stdout_prop_cap(PROP_CAP_DSTRD, "%u bytes",
+			1 << (2 + NVME_CAP_DSTRD(cap)));
+	stdout_prop_cap(PROP_CAP_TO, "%"PRIu64" ms",
+			MS500_TO_MS(NVME_CAP_TO(cap)));
+	stdout_prop_cap(PROP_CAP_AMS,
+			"Weighted Round Robin with Urgent Priority Class is %s",
+			nvme_support_str(NVME_CAP_AMS(cap) & NVME_CAP_AMS_WRR));
+	stdout_prop_cap(PROP_CAP_NONE, "Vendor Specific is %s",
+			nvme_support_str(NVME_CAP_AMS(cap) & NVME_CAP_AMS_VS));
+	stdout_prop_cap(PROP_CAP_CQR, nvme_yes_str(NVME_CAP_CQR(cap)));
+	stdout_prop_cap(PROP_CAP_MQES, "%"PRIu64"\n", NVME_CAP_MQES(cap) + 1);
 }
 
 static void stdout_registers_version(__u32 vs)
@@ -1745,7 +1796,7 @@ static void stdout_ctrl_register_human(int offset, uint64_t value, bool support)
 {
 	switch (offset) {
 	case NVME_REG_CAP:
-		stdout_registers_cap((struct nvme_bar_cap *)&value);
+		stdout_registers_cap(value);
 		break;
 	case NVME_REG_VS:
 		stdout_registers_version(value);
@@ -6391,6 +6442,8 @@ static void stdout_tabular_subsystem_topology_multipath(struct libnvme_subsystem
 							      0);
 				snprintf(iopolicy_info, sizeof(iopolicy_info),
 					"%d", queue_depth);
+			} else {
+				snprintf(iopolicy_info, sizeof(iopolicy_info), "--");
 			}
 
 			ret = subsystem_topology_multipath_add_row(t,

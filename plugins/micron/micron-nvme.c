@@ -306,8 +306,8 @@ static int RemoveDirRecursive(const char *path)
 
 		if (snprintf(child, sizeof(child), "%s/%s", path, entry->d_name) >=
 		    (int)sizeof(child)) {
-			errno = ENAMETOOLONG;
 			closedir(dir);
+			errno = ENAMETOOLONG;
 			return -1;
 		}
 
@@ -320,14 +320,20 @@ static int RemoveDirRecursive(const char *path)
 		 * to attempt recursive removal.
 		 */
 		if (errno != EISDIR && errno != EPERM && errno != EACCES) {
+			int saved_errno = errno;
+
 			closedir(dir);
+			errno = saved_errno;
 			return -1;
 		}
 
 		if (RemoveDirRecursive(child) < 0) {
-			if (errno == ENOENT)
+			int saved_errno = errno;
+
+			if (saved_errno == ENOENT)
 				continue;
 			closedir(dir);
+			errno = saved_errno;
 			return -1;
 		}
 	}
@@ -2620,7 +2626,6 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 	}
 
 	*logSize = (dalb + 1) * bs;
-	err = 0;
 	log = libnvme_realloc(log, (size_t)(*logSize));
 	if (!log) {
 		nvme_show_error("Failed to allocate memory for %s telemetry data (%u bytes)",
@@ -3136,6 +3141,10 @@ static int micron_fw_activation_history(int argc, char **argv, struct command *a
 		nvme_show_error("No entries were found in fw activation history log");
 		goto out;
 	}
+
+	/* device-supplied entry count stays within the fixed table */
+	if (le32_to_cpu(table->num_entries) > ARRAY_SIZE(table->entries))
+		table->num_entries = cpu_to_le32(ARRAY_SIZE(table->entries));
 
 	if (is_json) {
 		root = json_create_object();
