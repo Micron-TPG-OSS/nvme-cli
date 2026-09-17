@@ -149,10 +149,14 @@ def make_mock_env(mock_lib, ipc_sock_path):
     return env
 
 
-def run_nvme(nvme_bin, env, sysfs_dir, base_dir, *args):
+def run_nvme(nvme_bin, env, sysfs_dir, base_dir, *args, stdout_path=None):
     """Runs `nvme_bin *args` under libmock_nvme.c. Returns the completed
     subprocess.Popen result, with stdout/stderr captured as text. Callers
-    check .returncode/.stdout/.stderr themselves."""
+    check .returncode/.stdout/.stderr themselves.
+
+    @stdout_path redirects the command's stdout to that file instead of
+    capturing it, so binary output reaches the caller unperturbed by text
+    decoding."""
     cmd = [
         nvme_bin,
         '--set-options', f'test-sysfs-dir={sysfs_dir},test-base-dir={base_dir}',
@@ -168,8 +172,10 @@ def run_nvme(nvme_bin, env, sysfs_dir, base_dir, *args):
     # intact.
     env = dict(env)
     ld_preload = env.pop("LD_PRELOAD", "")
+    redirect = f' > {shlex.quote(stdout_path)}' if stdout_path else ''
     wrapped_cmd = [
-        '/bin/sh', '-c', f'export LD_PRELOAD={shlex.quote(ld_preload)}; exec "$@"',
+        '/bin/sh', '-c',
+        f'export LD_PRELOAD={shlex.quote(ld_preload)}; exec "$@"{redirect}',
         'nvme-mock-wrapper',
     ] + cmd
 
