@@ -11,10 +11,11 @@ prints its own rendering of it, adding the operational lifetime energy
 consumed (olec) and interval power measurement (ipm) fields.  It is
 declared NVME_ARGS_OUTPUT_FORMATS(JSON | NORMAL), so binary is rejected.
 
+The added fields, the temperature conversion and the option surface are
+covered without hardware in micron_smart_log_mock_test.py.  The tests here
+run the comparison against core using a real drive's log.
+
 Tests in this module verify:
-  * Error handling for a non-existent device and an invalid
-    --output-format value.
-  * --output-format=binary is rejected.
   * The JSON output adds device/temperature_kelvin/temperature_celsius/
     olec/ipm, spells several core counters differently, and agrees
     numerically with core "log smart" everywhere the two overlap.
@@ -100,27 +101,6 @@ class TestMicronSmartLog(TestMicron):
         )
         return headers[0]
 
-    def test_bad_device_returns_error(self):
-        """The command fails and names the device that could not be opened."""
-        self.check_bad_device_name(_COMMAND)
-
-    def test_invalid_output_format_returns_error(self):
-        """An unrecognised --output-format value is rejected."""
-        self.check_output_format_rejected(_COMMAND, "notaformat")
-
-    def test_binary_output_format_rejected(self):
-        """--output-format=binary is rejected with no output on stdout.
-
-        micron smart-log is declared NVME_ARGS_OUTPUT_FORMATS(JSON | NORMAL).
-        """
-        result = self.check_output_format_rejected(_COMMAND, "binary")
-
-        self.assertEqual(
-            result.stdout, "",
-            f"Expected no stdout from the rejected command, "
-            f"got: {result.stdout!r}",
-        )
-
     def test_json_adds_micron_fields(self):
         """The JSON output adds the device and Micron power fields.
 
@@ -153,7 +133,7 @@ class TestMicronSmartLog(TestMicron):
         micron = self._micron_json()
         core = self._core_json()
 
-        shared = set(micron) & set(core) - {"device"}
+        shared = (set(micron) & set(core)) - {"device"}
         self.assertTrue(
             shared.issuperset(_SHARED_KEYS),
             f"Expected {list(_SHARED_KEYS)} to be shared with core "

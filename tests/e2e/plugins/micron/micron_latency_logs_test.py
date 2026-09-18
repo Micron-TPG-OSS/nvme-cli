@@ -15,9 +15,12 @@ by a column-name header.
 
 The command ignores --output-format, always generating CSV output.
 
+The CSV header, the per-column decoding and the error paths are covered
+without hardware in micron_latency_mock_test.py.  The tests here check that a
+real drive returns a full ring.
+
 Tests in this module verify:
-  * Error handling for a non-existent device.
-  * The CSV header text, entry count and per-row column count.
+  * One CSV row per entry in the fixed-size log.
   * Equivalent output for the controller and namespace device paths.
 """
 
@@ -29,7 +32,6 @@ _CSV_HEADER = (
     "Timestamp, Latency, CmdTag, Opcode, Fuse, Psdt, Cid, Nsid, "
     "Slba_L, Slba_H, Nlb, DEAC, PRINFO, FUA, LR"
 )
-_COLUMNS = tuple(name.strip() for name in _CSV_HEADER.split(","))
 _ENTRY_COUNT = 16
 
 
@@ -51,20 +53,6 @@ class TestMicronLatencyLogs(TestMicron):
         start = lines.index(_CSV_HEADER) + 1
         return [line for line in lines[start:] if line]
 
-    def test_bad_device_returns_error(self):
-        """latency-logs fails when the device does not exist."""
-        self.check_bad_device_name(_COMMAND)
-
-    def test_prints_csv_header(self):
-        """latency-logs prints the fixed CSV column header."""
-        stdout = self._logs_stdout()
-
-        self.assertIn(
-            _CSV_HEADER, stdout,
-            f"Expected CSV header {_CSV_HEADER!r} in stdout, "
-            f"got: {stdout!r}",
-        )
-
     def test_has_one_row_per_entry(self):
         """latency-logs prints one row per entry in the fixed-size log."""
         rows = self._logs_rows(self._logs_stdout())
@@ -73,24 +61,6 @@ class TestMicronLatencyLogs(TestMicron):
             len(rows), _ENTRY_COUNT,
             f"Expected {_ENTRY_COUNT} CSV rows, got {len(rows)}: {rows!r}",
         )
-
-    def test_rows_match_header_column_count(self):
-        """Every latency-logs row holds one decimal value per header column."""
-        rows = self._logs_rows(self._logs_stdout())
-
-        for row in rows:
-            values = row.split(",")
-            self.assertEqual(
-                len(values), len(_COLUMNS),
-                f"Expected {len(_COLUMNS)} columns to match the header "
-                f"{_COLUMNS!r}, got {len(values)} in row: {row!r}",
-            )
-            for column, value in zip(_COLUMNS, values):
-                self.assertRegex(
-                    value, r"^\d+$",
-                    f"Column {column!r} is not an unsigned decimal value in "
-                    f"row {row!r}: {value!r}",
-                )
 
     def test_namespace_device_produces_same_row_count(self):
         """latency-logs accepts a namespace path and reports the same rows.

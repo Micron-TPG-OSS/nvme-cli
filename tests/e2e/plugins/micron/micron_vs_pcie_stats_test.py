@@ -13,16 +13,19 @@ others expose the AER error-status bits read from the PCIe registers.  On
 Windows, drives that rely on register reads are unsupported, so the command
 fails with -ENOTSUP; the tests probe for this at runtime and skip gracefully.
 
+The three routes, the field decoding, and the option surface are covered
+without hardware in micron_pcie_errors_mock_test.py.  The tests here read a
+real device's error state.
+
 Tests in this module verify:
-  * Error detection for a non-existent device and an invalid output format.
-  * JSON output: the top-level "PCIE Stats" single-element array and its
-    full set of named correctable and uncorrectable error fields.
+  * JSON error values are non-negative integers.
   * Text output for whichever model-specific branch the drive exercises.
   * Consistency between the JSON and text representations, and between the
     controller and namespace device paths.
+  * Windows never reaching the AER registers, nor reporting values as if it
+    had -- the only coverage of the Windows register-read stub.
 """
 
-import json
 import re
 
 from .micron_test import TestMicron
@@ -37,6 +40,10 @@ _UNSUPPORTED_MSGS = (
     _WINDOWS_AER_UNSUPPORTED_MSG,
     _AER_READ_FAILED_MSG,
 )
+
+# Printed only by the generic-model branch, which is reached only once the AER
+# registers have been read successfully.
+_AER_GENERIC_MARKER = "Device correctable errors detected:"
 
 # Expected PCIe error field names, in the order the command emits them.
 
@@ -122,76 +129,78 @@ class TestMicronVsPcieStats(TestMicron):
                          f"Expected exactly one stats object, got {len(array)}")
         return array[0]
 
-    def test_bad_device_returns_error(self):
-        """vs-pcie-stats fails when the device does not exist."""
-        self.check_bad_device_name(_COMMAND, args="--output-format=normal")
+    def test_windows_cannot_read_the_aer_registers(self):
+        """On Windows no drive reaches the AER registers, and none pretends to.
 
-    def test_invalid_output_format_returns_error(self):
-        """An unrecognised --output-format value is rejected."""
-        self.check_output_format_rejected(_COMMAND, "notaformat")
+        micron_get_pcie_aer_errors() is a stub returning -ENOTSUP on Windows
+        (plugins/micron/micron-utils-win.c); the Linux build spawns setpci
+        against a sysfs BDF instead.  The stub lives in the Windows-only source
+        file, so the LD_PRELOAD mock suite cannot reach it at all and this is
+        its only coverage.
 
-    def test_default_output_is_normal(self):
-        """vs-pcie-stats produces text output by default (no format flag)."""
-        self._skip_if_pcie_stats_unavailable()
-        result = self.run_plugin_cmd_check(_COMMAND)
+        Only two outcomes are therefore possible here: the M5407 vendor-counter
+        route succeeds without consulting the registers, or the command fails
+        naming the platform limitation.  Both are asserted, rather than keying
+        the skip on the failure message -- that would let a stub which began
+        reporting success with fabricated zero counters select itself out of
+        the test instead of failing it.
 
-        self.assertTrue(
-            result.stdout.strip(),
-            "Expected non-empty default stdout, got empty output",
+        _AER_GENERIC_MARKER is the sharper of the two checks: its branch runs
+        only after a successful register read, so it cannot legitimately appear
+        on Windows for any drive.
+        """
+        if not self.is_windows():
+            self.skipTest(
+                "micron_get_pcie_aer_errors() only stubs out register reads "
+                "on Windows; Linux reads them via setpci"
+            )
+
+        result = self._run_pcie_stats(args="--output-format=normal")
+
+        self.assertNotIn(
+            _AER_GENERIC_MARKER, result.stdout,
+            f"Reported AER register values on a platform that cannot read "
+            f"them, so these counts are fabricated: {result.stdout!r}",
         )
 
-        try:
-            json.loads(result.stdout)
-            self.fail(
-                f"Default output parsed as JSON unexpectedly; "
-                f"stdout={result.stdout!r}"
+        if result.returncode != 0:
+            self.assertIn(
+                _WINDOWS_AER_UNSUPPORTED_MSG, result.stderr,
+                f"Failed without naming the platform limitation, so the "
+                f"reason is indistinguishable from a drive or I/O error: "
+                f"{result.stderr!r}",
             )
-        except (json.JSONDecodeError, ValueError):
-            pass  # expected: default output is text, not JSON
 
-    def test_output_format_json_produces_valid_json(self):
-        """vs-pcie-stats produces valid JSON when --output-format=json is passed."""
-        self._skip_if_pcie_stats_unavailable()
-        data = self.run_supported_cmd_json(_COMMAND)
+    def test_json_output_is_well_formed_either_way(self):
+        """JSON mode emits one parseable document whether or not it succeeds.
+
+        Note the failure message is written to stdout as the document body and
+        stderr stays empty, so _is_unsupported() cannot see it -- which is why
+        the other helpers here probe in normal mode.  A caller piping JSON has
+        to get a complete object either way, never a truncated stats document.
+        """
+        result = self._run_pcie_stats(args="--output-format=json")
+        data = self.parse_json_output(
+            result.stdout, f"micron {_COMMAND} --output-format=json"
+        )
+
+        if result.returncode == 0:
+            self.assertIn(
+                "PCIE Stats", data,
+                f"Reported success without a 'PCIE Stats' key, got: "
+                f"{list(data.keys())}",
+            )
+            return
 
         self.assertIn(
-            "PCIE Stats", data,
-            f"Expected 'PCIE Stats' key with --output-format=json, "
-            f"got keys: {list(data.keys())}",
+            "error", data,
+            f"Failed without an 'error' key naming the reason, got: "
+            f"{list(data.keys())}",
         )
-
-    def test_json_pcie_stats_is_single_element_array(self):
-        """vs-pcie-stats JSON output wraps the stats object in a one-element array."""
-        data = self._run_pcie_stats_json()
-        array = data["PCIE Stats"]
-
-        self.assertIsInstance(array, list,
-                              "'PCIE Stats' must be a JSON array")
-        self.assertEqual(len(array), 1,
-                         f"Expected exactly one element in 'PCIE Stats' array, "
-                         f"got {len(array)}")
-
-    def test_json_output_contains_all_correctable_error_fields(self):
-        """vs-pcie-stats JSON output contains all 10 correctable error fields."""
-        stats = self._pcie_stats_object()
-
-        for field in CORRECTABLE_FIELDS:
-            self.assertIn(
-                field, stats,
-                f"Expected correctable error field '{field}' in JSON stats, "
-                f"got keys: {list(stats.keys())}",
-            )
-
-    def test_json_output_contains_all_uncorrectable_error_fields(self):
-        """vs-pcie-stats JSON output contains all 6 uncorrectable error fields."""
-        stats = self._pcie_stats_object()
-
-        for field in UNCORRECTABLE_FIELDS:
-            self.assertIn(
-                field, stats,
-                f"Expected uncorrectable error field '{field}' in JSON stats, "
-                f"got keys: {list(stats.keys())}",
-            )
+        self.assertNotIn(
+            "PCIE Stats", data,
+            "Statistics were reported for a route that could not read them",
+        )
 
     def test_json_error_values_are_non_negative_integers(self):
         """vs-pcie-stats JSON error values are non-negative integers.
@@ -211,52 +220,6 @@ class TestMicronVsPcieStats(TestMicron):
                 val, 0,
                 f"Expected non-negative value for '{field}', got {val}",
             )
-
-    def test_json_has_exactly_16_error_fields(self):
-        """vs-pcie-stats JSON stats object contains exactly 16 error fields.
-
-        10 correctable + 6 uncorrectable, with no extra or missing keys.
-        """
-        stats = self._pcie_stats_object()
-
-        extra = set(stats.keys()) - set(ALL_FIELDS)
-        self.assertFalse(
-            extra,
-            f"Unexpected extra keys in JSON stats object: {extra}",
-        )
-
-        missing = set(ALL_FIELDS) - set(stats.keys())
-        self.assertFalse(
-            missing,
-            f"Missing keys in JSON stats object: {missing}",
-        )
-
-    def test_output_format_normal_flag_succeeds(self):
-        """vs-pcie-stats produces non-empty output with --output-format=normal."""
-        self._skip_if_pcie_stats_unavailable()
-        result = self.run_plugin_cmd_check(
-            _COMMAND, args="--output-format=normal"
-        )
-
-        self.assertTrue(
-            result.stdout.strip(),
-            "Expected non-empty stdout with --output-format=normal, got empty output",
-        )
-
-    def test_normal_output_is_not_json(self):
-        """vs-pcie-stats text output is not valid JSON for the normal format."""
-        self._skip_if_pcie_stats_unavailable()
-
-        result = self.run_plugin_cmd_check(_COMMAND, args="--output-format=normal")
-
-        try:
-            json.loads(result.stdout)
-            self.fail(
-                f"--output-format=normal output parsed as JSON unexpectedly; "
-                f"stdout={result.stdout!r}"
-            )
-        except (json.JSONDecodeError, ValueError):
-            pass  # expected: text output is not JSON
 
     def test_normal_format_text_content(self):
         """vs-pcie-stats text output contains the expected fields for this hardware.

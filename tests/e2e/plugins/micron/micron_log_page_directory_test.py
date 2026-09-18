@@ -12,13 +12,13 @@ log page IDs, issues a small Get Log Page for each one, and prints the ID
 and description of every page the drive accepts.  Output is a plain text
 table only.
 
+The row format, the known-page table and the exit status are covered without
+hardware in micron_log_page_directory_mock_test.py.  The tests here check the
+listing a real drive produces.
+
 Tests in this module verify:
-  * The two header lines and the "<ID>h    : <description>" row format.
-  * Every listed ID/description pair comes from the known table in the
-    plugin source, with no duplicate IDs.
   * The mandatory SMART / Health Information page (02h) is always listed.
-  * The exit status is 0 whenever the listing printed.
-  * Error handling for a non-existent device.
+  * --output-format=normal matches the default output.
   * The controller and namespace device paths list the same log pages.
 """
 
@@ -111,50 +111,6 @@ class TestMicronLogPageDirectory(TestMicron):
         )
         return pages
 
-    def test_bad_device_returns_error(self):
-        """log-page-directory fails when the device does not exist."""
-        self.check_bad_device_name(_COMMAND)
-
-    def test_output_starts_with_header_lines(self):
-        """log-page-directory prints its two header lines before any row."""
-        result = self._run_dir()
-        lines = result.stdout.splitlines()
-
-        self.assertGreaterEqual(
-            len(lines), 2,
-            f"Expected at least the two header lines, got: {result.stdout!r}",
-        )
-        self.assertEqual(
-            lines[0], _HEADER_TITLE,
-            f"Expected first line {_HEADER_TITLE!r}, got: {lines[0]!r}",
-        )
-        self.assertEqual(
-            lines[1], _HEADER_COLUMNS,
-            f"Expected second line {_HEADER_COLUMNS!r}, got: {lines[1]!r}",
-        )
-
-    def test_every_row_matches_known_log_page_table(self):
-        """Every listed row is a known ID paired with its documented description.
-
-        A mismatch means the printed description drifted from the table the
-        command probes.
-        """
-        result = self._run_dir()
-        pages = self._listed_pages(result.stdout)
-
-        for log_id, desc in sorted(pages.items()):
-            self.assertIn(
-                log_id, _KNOWN_LOG_PAGES,
-                f"Log page {log_id:02X}h is not in the known table, "
-                f"listed as {desc!r}",
-            )
-            self.assertEqual(
-                desc, _KNOWN_LOG_PAGES[log_id],
-                f"Log page {log_id:02X}h description differs from the known "
-                f"table: got {desc!r}, expected "
-                f"{_KNOWN_LOG_PAGES[log_id]!r}",
-            )
-
     def test_smart_health_log_page_is_listed(self):
         """log-page-directory always lists 02h SMART / Health Information.
 
@@ -186,19 +142,6 @@ class TestMicronLogPageDirectory(TestMicron):
             f"--output-format=normal listing differs from the default:\n"
             f"  default: {default.stdout!r}\n"
             f"  normal:  {normal.stdout!r}",
-        )
-
-    def test_exit_status_is_zero_when_listing_printed(self):
-        """log-page-directory exits 0 once it has printed a listing."""
-
-        result = self._run_dir()
-        pages = self._listed_pages(result.stdout)
-
-        self.assertEqual(
-            result.returncode, 0,
-            f"Expected exit status 0 after listing "
-            f"{len(pages)} log pages, got rc={result.returncode}, "
-            f"stderr: {result.stderr!r}",
         )
 
     def test_namespace_lists_same_log_pages_as_controller(self):
