@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # This file is part of nvme-cli.
+# Copyright (c) 2026 Micron Technology, Inc.
+#
+# Authors: Broc Going <bgoing@micron.com>
 """Tests for "nvme ocp smart-add-log" against a mocked controller.
 
 The C0 SMART / Health Information Extended log page is 512 bytes of
@@ -38,22 +41,15 @@ Usage: python3 nvme_ocp_smart_add_log_test.py <nvme-binary> <mock-lib>
 """
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-from pathlib import Path
 
 from nvme_mock_ipc import (MockIPCServer, make_mock_env,
                            resolve_mock_lib_path, run_nvme)
 
-# The layout table lives with the OCP e2e tests, which share it. Meson
-# puts the source root on PYTHONPATH; add it here too so a standalone
-# run works from any directory.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-
-from tests.e2e.plugins.ocp import ocp_c0_layout as layout  # noqa: E402
+from tests.e2e.plugins.ocp import ocp_c0_layout as layout
 
 _NVME_BIN = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith('-') else 'nvme'
 _MOCK_LIB = resolve_mock_lib_path("./libmock_nvme.so")
@@ -121,15 +117,13 @@ class OCPMockServer(MockIPCServer):
     asked for the log page. Anything else succeeds with zeroes."""
 
     def __init__(self, sock_path):
+        """Serve the OCP test commands over @sock_path."""
         super().__init__(sock_path)
         self.page = layout.pack(version=layout.MAX_LOG_PAGE_VERSION)
-        # None: no OCP UUID in the list, so the plugin must fall back to
-        # UUID index 0.
         self.uuid_slot = 0
         self.uuid_filler_count = 0
         self.log_sc_status = 0
-        # Serve fewer bytes than asked for, to model a short transfer.
-        self.truncate_to = None
+        self.truncate_to = None  # Default to no truncation.
         self.log_requests = []
 
     def handle_ioctl(self, conn, fd, request, opcode, nsid,
@@ -161,20 +155,26 @@ class OCPSmartAddLogTestBase(unittest.TestCase):
     DEVICE = '/dev/nvme0'
 
     def setUp(self):
-        self.sysfs_dir = tempfile.mkdtemp(prefix='nvme-ocp-sysfs-', dir='/tmp')
-        self.base_dir = tempfile.mkdtemp(prefix='nvme-ocp-base-', dir='/tmp')
-        self.ipc_dir = tempfile.mkdtemp(prefix='nvme-ocp-ipc-', dir='/tmp')
+        """Everything here is torn down through addCleanup(), so a failure
+        part way in still releases what was set up before it."""
+        self.sysfs_dir = self._temp_dir('nvme-ocp-sysfs-')
+        self.base_dir = self._temp_dir('nvme-ocp-base-')
+        self.ipc_dir = self._temp_dir('nvme-ocp-ipc-')
         self.ipc_sock_path = os.path.join(self.ipc_dir, "ipc.sock")
 
         self.server = OCPMockServer(self.ipc_sock_path)
         self.server.start()
+        # Cleanups run last-registered-first, so the server stops accepting
+        # before join() waits on its thread, and before the socket's
+        # directory goes away.
+        self.addCleanup(self.server.join)
+        self.addCleanup(self.server.shutdown)
         self.env = make_mock_env(_MOCK_LIB, self.ipc_sock_path)
 
-    def tearDown(self):
-        self.server.shutdown()
-        self.server.join()
-        for d in (self.sysfs_dir, self.base_dir, self.ipc_dir):
-            shutil.rmtree(d, ignore_errors=True)
+    def _temp_dir(self, prefix):
+        tmp = tempfile.TemporaryDirectory(prefix=prefix, dir='/tmp')
+        self.addCleanup(tmp.cleanup)
+        return tmp.name
 
     def run_smart(self, *args, device=None, encoding='utf-8'):
         return run_nvme(_NVME_BIN, self.env, self.sysfs_dir, self.base_dir,

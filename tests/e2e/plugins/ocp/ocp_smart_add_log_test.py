@@ -10,7 +10,7 @@ carries in its own log page version field. Three printers render it --
 text, JSON format version 1, and JSON format version 2 (the default) --
 and each gates the same fields on that version.
 
-Field values, version gating and the option surface at every log page versin
+Field values, version gating and the option surface at every log page version
 are tested without hardware by tests/cli/nvme_ocp_smart_add_log_test.py.
 This tests in this module focus on the plugin's ability to read a real drive
 and decode its C0 log page correctly.  Tests read the raw C0 log page using
