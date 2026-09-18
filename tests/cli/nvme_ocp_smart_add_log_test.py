@@ -30,7 +30,8 @@ Tests in this module verify:
   * The log page GUID is rendered correctly, and a page carrying a
     different GUID is rejected.
   * The Get Log Page command carries the OCP UUID index in CDW14 and
-    NVME_NSID_ALL as its namespace.
+    NVME_NSID_ALL as its namespace, and a controller whose UUID list
+    holds no OCP entry is refused instead of being read with index 0.
   * Output-mode and error handling: -o binary, -o json format version
     selection, invalid format and format-version values, a failing Get
     Log Page, a truncated page, and a nonexistent device.
@@ -81,6 +82,7 @@ _DEFAULT_JSON_FORMAT_VERSION = 2
 
 _UNKNOWN_GUID_MSG = "Unknown GUID in C0 Log Page data"
 _READ_FAILURE_MSG = "Failure reading the C0 Log Page"
+_NO_UUID_MSG = "No OCP UUID index found"
 
 _SC_INVALID_LOG_PAGE = 0x09
 
@@ -446,17 +448,29 @@ class TestOCPSmartAddLogCommand(OCPSmartAddLogTestBase):
                     self.server.log_requests[-1]['cdw14'] & 0x7F,
                     expected_index)
 
-    def test_uuid_index_is_zero_without_an_ocp_entry(self):
+    def test_a_uuid_list_without_the_ocp_entry_is_rejected(self):
+        """A controller that does not advertise the OCP UUID has no OCP
+        C0 layout to report, so the command is refused rather than issued
+        with a default UUID index."""
         self.server.uuid_slot = None
         self.server.uuid_filler_count = 2
-        self.assertOk(self.run_smart('-o', 'json'))
-        self.assertEqual(self.server.log_requests[-1]['cdw14'] & 0x7F, 0)
+        result = self.run_smart()
+        self.assertNotEqual(
+            result.returncode, 0,
+            'a UUID list without the OCP entry must not exit 0')
+        self.assertIn(_NO_UUID_MSG, result.stdout + result.stderr)
+        self.assertEqual(self.server.log_requests, [],
+                         'the log page was requested without a UUID index')
 
-    def test_uuid_index_is_zero_with_an_empty_list(self):
+    def test_an_empty_uuid_list_is_rejected(self):
         self.server.uuid_slot = None
         self.server.uuid_filler_count = 0
-        self.assertOk(self.run_smart('-o', 'json'))
-        self.assertEqual(self.server.log_requests[-1]['cdw14'] & 0x7F, 0)
+        result = self.run_smart()
+        self.assertNotEqual(result.returncode, 0,
+                            'an empty UUID list must not exit 0')
+        self.assertIn(_NO_UUID_MSG, result.stdout + result.stderr)
+        self.assertEqual(self.server.log_requests, [],
+                         'the log page was requested without a UUID index')
 
     def test_log_is_requested_for_all_namespaces(self):
         self.assertOk(self.run_smart('-o', 'json'))
