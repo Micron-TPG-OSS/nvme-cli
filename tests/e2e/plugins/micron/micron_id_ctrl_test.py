@@ -9,9 +9,11 @@
 The micron id-ctrl command extends the core id-ctrl command, appending the
 vendor specific power measurement support (pms) field to the core rendering.
 
+The pms decoding, the option surface and the comparison against core are
+covered without hardware in micron_id_ctrl_mock_test.py.  The tests here run
+the same comparison against a real controller's identify data.
+
 Tests in this module verify:
-  * Error handling for a non-existent device and an invalid
-    --output-format value.
   * The JSON output is a superset of core "id ctrl" JSON -- it adds only
     "pms", and every shared key holds an identical value.
   * The added "pms" key is the CTRATT Power Measurement Support bit.
@@ -60,14 +62,6 @@ class TestMicronIdCtrl(TestMicron):
             f"stderr={result.stderr!r}",
         )
         return self.parse_json_output(result.stdout, f"nvme {name} -o json")
-
-    def test_bad_device_returns_error(self):
-        """The command fails and names the device that could not be opened."""
-        self.check_bad_device_name(_COMMAND)
-
-    def test_invalid_output_format_returns_error(self):
-        """An unrecognised --output-format value is rejected."""
-        self.check_output_format_rejected(_COMMAND, "notaformat")
 
     def test_json_keys_are_superset_of_core(self):
         """micron id-ctrl JSON emits every core 'id ctrl' key and adds pms."""

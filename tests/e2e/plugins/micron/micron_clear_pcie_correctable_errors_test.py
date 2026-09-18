@@ -26,6 +26,9 @@ Which path runs depends on the drive model present in the test
 environment, so the tests probe for support and assert only the
 behaviour common to whichever path is exercised.
 
+The route each drive model takes, the AER failure paths and the argument
+surface are covered without hardware in micron_pcie_errors_mock_test.py.
+
 Tests in this module verify:
   * Successful exit for controller and namespace device paths.
   * The verbose success message across every path (on stdout or stderr;
@@ -33,7 +36,7 @@ Tests in this module verify:
     AER/sysfs read-back value on stdout.
   * A read-back correctable error count of zero after an AER clear.
   * Idempotency: clearing an already-cleared register still succeeds.
-  * Error detection for a non-existent device (parse_and_open failure).
+  * Windows never reaching the AER registers.
   * Graceful skipping when the platform does not support the command.
 """
 
@@ -89,9 +92,47 @@ class TestMicronClearPcieCorrectableErrors(TestMicron):
                 "clear-pcie-correctable-errors is not supported on this drive/platform"
             )
 
-    def test_bad_device_returns_error(self):
-        """clear-pcie-correctable-errors fails when the device does not exist."""
-        self.check_bad_device_name(_COMMAND)
+    def test_windows_cannot_write_the_aer_registers(self):
+        """On Windows no drive reaches the AER registers.
+
+        micron_clear_pcie_aer_correctable_errors() is a stub returning -ENOTSUP
+        on Windows (plugins/micron/micron-utils-win.c).  Mock tests are not
+        supported on Windows, so this path needs to be exercised on hardware.
+
+        Only two outcomes are possible here: a vendor clear route
+        (set-features 0xC3, or the M5407 0xD6 command) succeeds without
+        touching the registers, or the command fails naming the platform
+        limitation.
+        """
+        if not self.is_windows():
+            self.skipTest(
+                "micron_clear_pcie_aer_correctable_errors() only stubs out "
+                "register writes on Windows; Linux writes them via setpci"
+            )
+
+        result = self._run_clear(args="--verbose")
+        combined = result.stdout + result.stderr
+
+        self.assertNotIn(
+            _AER_STDOUT_MARKER, combined,
+            f"Reported an AER register read-back on a platform that cannot "
+            f"reach the registers, so the value is fabricated; "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+
+        if result.returncode != 0:
+            self.assertNotIn(
+                _VERBOSE_CLEARED_MSG, combined,
+                f"Claimed the errors were cleared while failing, so a caller "
+                f"cannot tell the clear did not happen; "
+                f"stdout={result.stdout!r} stderr={result.stderr!r}",
+            )
+            self.assertIn(
+                _WINDOWS_AER_UNSUPPORTED_MSG, result.stderr,
+                f"Failed without naming the platform limitation, so the "
+                f"reason is indistinguishable from a drive or I/O error: "
+                f"{result.stderr!r}",
+            )
 
     def test_command_exits_zero_on_success(self):
         """clear-pcie-correctable-errors exits 0 when the drive is reachable.
