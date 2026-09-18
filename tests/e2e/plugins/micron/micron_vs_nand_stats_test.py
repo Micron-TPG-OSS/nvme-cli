@@ -15,14 +15,16 @@ one-element array of field objects.
 The 0xFB variant reports the vendor health log fields followed by the seven
 0xD0 derived counters, so its field set is a superset of the 0xD0 one.
 
+The option surface and log page selection per model and customer ID are covered
+without hardware in micron_vs_smart_logs_mock_test.py.  The tests here decode
+a real drive's log.
+
 Tests in this module verify:
   * The text field table and the JSON field object are both well formed.
   * The JSON top-level key names one of the three supported log pages.
   * The text and JSON field sets and values are identical.
   * The field labels defined for the reported log page are present.
-  * --output-format=binary and an unrecognised format are both rejected.
   * The controller and namespace paths report the same fields.
-  * Error detection for a non-existent device.
 """
 
 from .micron_test import TestMicron
@@ -85,18 +87,7 @@ class TestMicronVsNandStats(TestMicron):
         """Every field label defined for the reported log page is present."""
         self.check_required_hex_fields_present(_COMMAND, _JSON_KEYS, _REQUIRED_LABELS)
 
-    def test_binary_output_format_rejected(self):
-        """--output-format=binary is rejected; the command emits text or JSON."""
-        self.check_output_format_rejected(_COMMAND, "binary")
-
-    def test_invalid_output_format_returns_error(self):
-        """An unrecognised --output-format is rejected."""
-        self.check_output_format_rejected(_COMMAND, "notaformat")
-
     def test_namespace_path_matches_controller(self):
         """The namespace path reports the same fields as the controller path."""
         self.check_ns_hex_fields_match_ctrl(_COMMAND, _JSON_KEYS)
 
-    def test_bad_device_returns_error(self):
-        """A non-existent device fails with the device path in the message."""
-        self.check_bad_device_name(_COMMAND)

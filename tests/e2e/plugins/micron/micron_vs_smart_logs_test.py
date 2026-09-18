@@ -15,6 +15,10 @@ model, so the top-level JSON key varies between drives.
 vs-smart-ext-log prints a header line naming the log page in text mode;
 vs-smart-add-log prints none.
 
+The log page selection per model, the field layouts, and the option surface
+are covered without hardware in micron_vs_smart_logs_mock_test.py.  The tests
+here decode a real drive's logs.
+
 Tests in this module verify:
   * The text field table and the JSON field object are both well formed.
   * The JSON top-level key is one the plugin can emit for that command.
@@ -22,9 +26,7 @@ Tests in this module verify:
   * The log-page specific field labels are present.
   * vs-smart-ext-log's text header equals its JSON top-level key, and
     vs-smart-add-log emits no header.
-  * --output-format=binary and an unrecognised format are both rejected.
   * The controller and namespace paths report the same fields.
-  * Error detection for a non-existent device.
 """
 
 from .micron_test import TestMicron
@@ -144,22 +146,6 @@ class TestMicronVsSmartLogs(TestMicron):
             f"got: {first!r}",
         )
 
-    def test_ext_log_binary_output_format_rejected(self):
-        """vs-smart-ext-log rejects --output-format=binary."""
-        self.check_output_format_rejected(_EXT_LOG, "binary")
-
-    def test_add_log_binary_output_format_rejected(self):
-        """vs-smart-add-log rejects --output-format=binary."""
-        self.check_output_format_rejected(_ADD_LOG, "binary")
-
-    def test_ext_log_invalid_output_format_returns_error(self):
-        """vs-smart-ext-log rejects an unrecognised --output-format."""
-        self.check_output_format_rejected(_EXT_LOG, "notaformat")
-
-    def test_add_log_invalid_output_format_returns_error(self):
-        """vs-smart-add-log rejects an unrecognised --output-format."""
-        self.check_output_format_rejected(_ADD_LOG, "notaformat")
-
     def test_ext_log_namespace_path_matches_controller(self):
         """vs-smart-ext-log reports the same fields for both device paths."""
         self.check_ns_hex_fields_match_ctrl(_EXT_LOG, _JSON_KEYS[_EXT_LOG])
@@ -168,10 +154,3 @@ class TestMicronVsSmartLogs(TestMicron):
         """vs-smart-add-log reports the same fields for both device paths."""
         self.check_ns_hex_fields_match_ctrl(_ADD_LOG, _JSON_KEYS[_ADD_LOG])
 
-    def test_ext_log_bad_device_returns_error(self):
-        """vs-smart-ext-log fails and names a non-existent device."""
-        self.check_bad_device_name(_EXT_LOG)
-
-    def test_add_log_bad_device_returns_error(self):
-        """vs-smart-add-log fails and names a non-existent device."""
-        self.check_bad_device_name(_ADD_LOG)

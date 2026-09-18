@@ -26,6 +26,9 @@ Which path runs depends on the drive model present in the test
 environment, so the tests probe for support and assert only the
 behaviour common to whichever path is exercised.
 
+The route each drive model takes, the AER failure paths and the argument
+surface are covered without hardware in micron_pcie_errors_mock_test.py.
+
 Tests in this module verify:
   * Successful exit for controller and namespace device paths.
   * The verbose success message across every path (on stdout or stderr;
@@ -33,7 +36,6 @@ Tests in this module verify:
     AER/sysfs read-back value on stdout.
   * A read-back correctable error count of zero after an AER clear.
   * Idempotency: clearing an already-cleared register still succeeds.
-  * Error detection for a non-existent device (parse_and_open failure).
   * Graceful skipping when the platform does not support the command.
 """
 
@@ -88,10 +90,6 @@ class TestMicronClearPcieCorrectableErrors(TestMicron):
             self.skipTest(
                 "clear-pcie-correctable-errors is not supported on this drive/platform"
             )
-
-    def test_bad_device_returns_error(self):
-        """clear-pcie-correctable-errors fails when the device does not exist."""
-        self.check_bad_device_name(_COMMAND)
 
     def test_command_exits_zero_on_success(self):
         """clear-pcie-correctable-errors exits 0 when the drive is reachable.

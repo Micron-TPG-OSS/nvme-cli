@@ -8,6 +8,7 @@
 
 import re
 
+from ....micron_checks import MicronChecksMixin
 from ..plugin_test import TestPlugin
 
 # The micron plugin gates most commands on the drive model, and sometimes on
@@ -22,11 +23,6 @@ _UNSUPPORTED_DRIVE_PATTERNS = (
 )
 
 _INVALID_LOG_PAGE = "Invalid Log Page"
-
-_INVALID_FORMAT_MSG = "Invalid output format"
-
-# A device path no drive can have, used to exercise the open failure path.
-_BAD_DEVICE = "/dev/nvme-nonexistent-test-device"
 
 # Log pages per command that generate Invalid Log Page message if not supported.
 _COMMAND_LOG_PAGES = {
@@ -48,14 +44,8 @@ _LID_KEY_RE = re.compile(r'"lid_0x([0-9a-fA-F]+) *"')
 # log, since the latter caches as None.
 _NOT_PROBED = object()
 
-# generic_structure_parser() renders every field as "0x<hex>", except version
-# fields such as "DSSD Spec Version", which are dotted hex ("2.5.0.0").
-_FIELD_VALUE_RE = re.compile(
-    r"^(?:0x[0-9a-fA-F]+|[0-9a-fA-F]+(?:\.[0-9a-fA-F]+)+)$"
-)
 
-
-class TestMicron(TestPlugin):
+class TestMicron(MicronChecksMixin, TestPlugin):
     """Base class for Micron plugin tests.
 
     Provides the plugin_name and any Micron-specific helpers.
@@ -188,139 +178,6 @@ class TestMicron(TestPlugin):
         """
         result = self.run_supported_cmd(command, device=device, args=args)
         return self.parse_json_output(result.stdout, f"micron {command} {args}")
-
-    def check_bad_device_name(self, command, args=""):
-        """A non-existent device must fail and name the device.
-
-        Only the device path is asserted; the OS strerror text appended to it
-        differs between Windows and Linux.
-        """
-        result = self.run_plugin_cmd(command, device=_BAD_DEVICE, args=args)
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            f"Expected non-zero exit from micron {command} for a "
-            f"non-existent device",
-        )
-        self.assertIn(
-            _BAD_DEVICE, result.stderr,
-            f"Expected {_BAD_DEVICE!r} in stderr of micron {command}, "
-            f"got: {result.stderr!r}",
-        )
-        return result
-
-    def check_output_format_rejected(self, command, value):
-        """An --output-format the command does not implement must be rejected."""
-        result = self.run_plugin_cmd(command, args=f"--output-format={value}")
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            f"Expected micron {command} to reject --output-format={value}",
-        )
-        self.assertIn(
-            _INVALID_FORMAT_MSG, result.stderr,
-            f"Expected {_INVALID_FORMAT_MSG!r} in stderr of micron {command}, "
-            f"got: {result.stderr!r}",
-        )
-        return result
-
-    def check_unsupported_drive_fails(self, command, message):
-        """A command run on an unsupported drive must report message and fail.
-
-        If unsupported drive is reported, asserts that the return code is non-zero.
-        Skips if no unsupported-drive message is found.
-        """
-        result = self.run_plugin_cmd(command)
-        if message not in result.stderr:
-            self.skipTest(
-                f"micron {command} supports the current drive; "
-                f"cannot test unsupported-drive path"
-            )
-
-        self.assertNotEqual(
-            result.returncode, 0,
-            f"Expected non-zero exit for unsupported drive on micron {command}"
-            f"got rc=0 with stderr={result.stderr!r}"
-        )
-        return result
-
-    def hex_fields_from_table(self, stdout, context=""):
-        """Evaluate table of named hex fields. Return dictionary of {label: value}.
-
-        Expects print_log() style text output. The shared field-table path emits
-        one "%-40s : %-4s" line per field, optionally preceded by a header line
-        with no " : " separator (for example "SMART Extended Log:0xE1").
-        """
-        where = f" ({context})" if context else ""
-        fields = {}
-        for line in stdout.splitlines():
-            if " : " not in line:
-                continue
-            label, _, value = line.partition(" : ")
-            label, value = label.strip(), value.strip()
-            self.assertRegex(
-                value, _FIELD_VALUE_RE,
-                f"Field {label!r} value is not hex or dotted hex{where}: "
-                f"{value!r}",
-            )
-            self.assertNotIn(
-                label, fields,
-                f"Duplicate field label {label!r} in output{where}",
-            )
-            fields[label] = value
-        self.assertGreater(
-            len(fields), 0,
-            f"Expected at least one 'label : value' field line{where}, "
-            f"got: {stdout!r}",
-        )
-        return fields
-
-    def hex_fields_from_json(self, data, allowed_keys, context=""):
-        """Evaluate JSON data with named hex fields. Return dictionary of {label: value}.
-
-        Expects print_log() style JSON output. The JSON format is a single
-        top-level key mapping to a one-element array of field objects.
-        """
-        where = f" ({context})" if context else ""
-        self.assertEqual(
-            len(data), 1,
-            f"Expected exactly one top-level JSON key{where}, "
-            f"got: {list(data.keys())}",
-        )
-        key = next(iter(data))
-        self.assertIn(
-            key, allowed_keys,
-            f"Unexpected top-level JSON key {key!r}{where}, "
-            f"expected one of: {list(allowed_keys)}",
-        )
-
-        log_pages = data[key]
-        self.assertIsInstance(
-            log_pages, list,
-            f"Expected {key!r} to hold an array{where}, got: {type(log_pages)}",
-        )
-        self.assertEqual(
-            len(log_pages), 1,
-            f"Expected exactly one entry under {key!r}{where}, "
-            f"got {len(log_pages)}",
-        )
-
-        fields = log_pages[0]
-        self.assertIsInstance(
-            fields, dict,
-            f"Expected an object under {key!r}{where}, got: {type(fields)}",
-        )
-        self.assertGreater(
-            len(fields), 0,
-            f"Expected at least one field under {key!r}{where}",
-        )
-        for label, value in fields.items():
-            self.assertRegex(
-                value, _FIELD_VALUE_RE,
-                f"Field {label!r} value is not hex or dotted hex{where}: "
-                f"{value!r}",
-            )
-        return fields
 
     def check_hex_fields_json(self, command, allowed_keys):
         """Run the command in JSON mode and assert that the output is a well-formed hex fields object."""

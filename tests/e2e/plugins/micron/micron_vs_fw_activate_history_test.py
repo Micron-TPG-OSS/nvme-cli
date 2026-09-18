@@ -14,25 +14,25 @@ flag is supplied.  The structure is nested: a single "vs-fw-activation-history"
 object holding an entry count and an array of entry objects.
 
 The log is available only on certain drive models and is empty on a drive
-that has never had its firmware activated.  Tests skip rather than fail when
-no history table can be produced.
+that has never had its firmware activated.
+
+The per-entry decoding, the log validation and the option surface are
+covered without hardware in micron_vs_fw_activate_history_mock_test.py.  The
+tests here check a real drive's recorded activations, if it has any.
 
 Tests in this module verify:
-  * Error handling for a non-existent device, an invalid --output-format
-    value, and --output-format=binary (this command accepts only
-    normal|json).
-  * Text output by default and with --output-format=normal, and that a JSON
-    format flag switches the output to JSON.
   * Valid JSON shape: a "vs-fw-activation-history" object with an integer
-    "Total Entry Num" and an "Entry" array of that length.
-  * The full per-entry key set, the value types, and the formats of the
-    power-on hour, commit action type, and result fields.
-  * The text table header, one table row per entry, and agreement between
-    the text rows and the JSON entries.
+    "Total Entry Num", which may be zero, and an "Entry" array of that
+    length.
+  * Entry numbers running sequentially from the first entry.
+  * One table row per entry, and agreement between the text rows and the
+    JSON entries.
   * Equivalent results for the controller and namespace device paths.
+
+The two tests that compare values entry by entry have nothing to work with
+on a drive that reported no entries, and skip in that case.
 """
 
-import json
 import re
 
 from .micron_test import TestMicron
@@ -55,29 +55,11 @@ _SLOT_NUMBER = "Slot number"
 _COMMIT_ACTION_TYPE = "Commit Action Type"
 _RESULT = "Result"
 
-# Every field is emitted unconditionally, so the key set is exact.
-_INT_ENTRY_KEYS = (_ENTRY_NUMBER, _POWER_CYCLE_COUNT, _SLOT_NUMBER)
-_STR_ENTRY_KEYS = (
-    _POWER_ON_HOUR,
-    _PREVIOUS_FIRMWARE,
-    _NEW_FW_ACTIVATED,
-    _COMMIT_ACTION_TYPE,
-    _RESULT,
-)
-_ENTRY_KEYS = set(_INT_ENTRY_KEYS) | set(_STR_ENTRY_KEYS)
-
-# Reasons a healthy drive may still have nothing to report.  Both exit 0,
-# so detection is by message; the model and log-page failures are handled
-# by the shared TestMicron helpers.
-_EMPTY_LOG_MSG = "No entries were found in fw activation history log"
+# A drive can carry a log page whose ID or version this build does not decode,
+# which leaves no table to check and is a limitation of the pairing rather than
+# a fault.  It is detected by message; the model and missing-log-page cases are
+# handled by the shared TestMicron helpers.
 _BAD_PAGE_MSG = "Unsupported fw activation history page"
-_UNUSABLE_LOG_MESSAGES = (_EMPTY_LOG_MSG, _BAD_PAGE_MSG)
-
-_TEXT_HEADER_LINES = (
-    "Firmware  | Power On  | Power   | Previous | New FW    | Slot   | Commit | Result",
-    "Activation|   Hour    | cycle   | firmware | activated | number | Action |",
-    "Counter   |           | count   |          |           |        | Type   |",
-)
 
 # A table row is the only line that starts with a digit; every other line
 # of the table starts with a space, an underscore, or a header word.  The
@@ -94,12 +76,6 @@ _ROW_RE = re.compile(
     r"\|\s*(?P<result>pass|Fail #\d+)\s*$"
 )
 
-_POWER_ON_HOUR_RE = re.compile(r"^\d+:\d+:\d+$")
-_RESULT_RE = re.compile(r"^(?:pass|Fail #\d+)$")
-
-# Commit action types 000b..011b are named; anything else prints "xxxb".
-_COMMIT_ACTION_VALUES = {"000b", "001b", "010b", "011b", "xxxb"}
-
 
 class TestMicronVsFwActivateHistory(TestMicron):
     """Test suite for the micron vs-fw-activate-history plugin command."""
@@ -109,14 +85,17 @@ class TestMicronVsFwActivateHistory(TestMicron):
         return self.run_plugin_cmd(_COMMAND, device=device, args=args)
 
     def _skip_if_log_unusable(self, result):
-        """Skip when result shows no history table could be produced."""
+        """Skip when result shows no history table could be produced.
+
+        Both streams are searched: the message goes to stderr in normal mode
+        and is reported as a JSON object on stdout in JSON mode.
+        """
         self.skip_if_result_unsupported(_COMMAND, result)
-        for message in _UNUSABLE_LOG_MESSAGES:
-            if message in result.stderr:
-                self.skipTest(
-                    f"micron {_COMMAND} has no usable history log on this "
-                    f"drive: {message!r}"
-                )
+        if _BAD_PAGE_MSG in result.stdout + result.stderr:
+            self.skipTest(
+                f"micron {_COMMAND} log page is not one this build can "
+                f"decode on this drive: {_BAD_PAGE_MSG!r}"
+            )
 
     def _history_text(self, device=None, args=""):
         """Run in normal mode and return the result, or skip if unusable."""
@@ -169,6 +148,19 @@ class TestMicronVsFwActivateHistory(TestMicron):
         )
         return entries
 
+    def _entries_or_skip(self, device=None, args="--output-format=json"):
+        """Return the "Entry" array, or skip when the drive reported none.
+
+        A drive with no activation history, or one whose entries were all
+        dropped as unparseable, leaves nothing to compare entry by entry.
+        """
+        entries = self._history_entries(device=device, args=args)
+        if not entries:
+            self.skipTest(
+                f"micron {_COMMAND} reported no history entries on this drive"
+            )
+        return entries
+
     def _text_rows(self, stdout):
         """Return the parsed table rows from text output.
 
@@ -188,70 +180,11 @@ class TestMicronVsFwActivateHistory(TestMicron):
             rows.append(match)
         return rows
 
-    def test_bad_device_returns_error(self):
-        """vs-fw-activate-history fails when the device does not exist."""
-        self.check_bad_device_name(_COMMAND)
-
-    def test_invalid_output_format_returns_error(self):
-        """An unrecognised --output-format value is rejected.
-
-        The format is validated before the drive model and log page are
-        checked, so this holds on any drive.
-        """
-        self.check_output_format_rejected(_COMMAND, "notaformat")
-
-    def test_binary_output_format_rejected(self):
-        """--output-format=binary is rejected; the command emits text or JSON."""
-        self.check_output_format_rejected(_COMMAND, "binary")
-
-    def test_default_output_is_text(self):
-        """vs-fw-activate-history produces the text table by default."""
-        result = self._history_text()
-
-        self.assertIn(
-            _TEXT_HEADER_LINES[0], result.stdout,
-            f"Expected the table header line in stdout, got: {result.stdout!r}",
-        )
-        with self.assertRaises((json.JSONDecodeError, ValueError),
-                               msg="Default output must not be JSON"):
-            json.loads(result.stdout)
-
-    def test_output_format_normal_flag(self):
-        """vs-fw-activate-history produces text with --output-format=normal."""
-        result = self._history_text(args="--output-format=normal")
-
-        self.assertIn(
-            _TEXT_HEADER_LINES[0], result.stdout,
-            f"Expected the table header line with --output-format=normal, "
-            f"got: {result.stdout!r}",
-        )
-
-    def test_text_table_header(self):
-        """vs-fw-activate-history text output prints the full column header."""
-        result = self._history_text()
-
-        for line in _TEXT_HEADER_LINES:
-            self.assertIn(
-                line, result.stdout,
-                f"Expected header line {line!r} in stdout, "
-                f"got: {result.stdout!r}",
-            )
-
-    def test_output_format_json_produces_valid_json(self):
-        """vs-fw-activate-history produces valid JSON with --output-format=json."""
-        history = self._history_object(args="--output-format=json")
-        self.assertIsInstance(history, dict)
-
-    def test_short_o_json_produces_valid_json(self):
-        """vs-fw-activate-history produces valid JSON with the short -o json flag."""
-        history = self._history_object(args="-o json")
-        self.assertIsInstance(history, dict)
-
     def test_json_total_entry_num_is_int(self):
         """'Total Entry Num' is an integer within the table's capacity.
 
-        The command reports an error instead of a table when the count is
-        zero, so a printed table always has at least one entry.
+        A drive that has never had its firmware activated reports zero, which
+        is a valid count; the upper bound is the fixed entry array.
         """
         history = self._history_object()
 
@@ -266,7 +199,7 @@ class TestMicronVsFwActivateHistory(TestMicron):
             f"'{_TOTAL_ENTRY_NUM}' must be a JSON number, got: {total!r}",
         )
         self.assertGreaterEqual(
-            total, 1, f"Expected at least one entry, got {total}",
+            total, 0, f"Expected a non-negative entry count, got {total}",
         )
         self.assertLessEqual(
             total, _MAX_ENTRIES,
@@ -290,82 +223,15 @@ class TestMicronVsFwActivateHistory(TestMicron):
             f"'{_TOTAL_ENTRY_NUM}' is {total}",
         )
 
-    def test_json_entries_have_expected_keys(self):
-        """Every JSON entry exposes exactly the documented field set."""
-        entries = self._history_entries()
-
-        for entry in entries:
-            self.assertIsInstance(
-                entry, dict, f"Expected an entry object, got: {entry!r}"
-            )
-            self.assertEqual(
-                set(entry.keys()), _ENTRY_KEYS,
-                f"Unexpected entry field set:\n"
-                f"  got:      {sorted(entry.keys())}\n"
-                f"  expected: {sorted(_ENTRY_KEYS)}",
-            )
-
-    def test_json_entry_value_types(self):
-        """Counters are JSON numbers and the remaining fields are strings."""
-        entries = self._history_entries()
-
-        for entry in entries:
-            for key in _INT_ENTRY_KEYS:
-                self.assertIsInstance(
-                    entry[key], int,
-                    f"Expected {key!r} to be a JSON number, "
-                    f"got: {entry[key]!r}",
-                )
-            for key in _STR_ENTRY_KEYS:
-                self.assertIsInstance(
-                    entry[key], str,
-                    f"Expected {key!r} to be a JSON string, "
-                    f"got: {entry[key]!r}",
-                )
-
     def test_json_entry_numbers_are_sequential(self):
         """'Entry Number' counts the entries from zero, in order."""
-        entries = self._history_entries()
+        entries = self._entries_or_skip()
 
         numbers = [entry[_ENTRY_NUMBER] for entry in entries]
         self.assertEqual(
             numbers, list(range(len(entries))),
             f"Expected entry numbers 0..{len(entries) - 1}, got: {numbers}",
         )
-
-    def test_json_power_on_hour_format(self):
-        """'Power On Hour' is formatted as '<hours>:<minutes>:<seconds>'."""
-        entries = self._history_entries()
-
-        for entry in entries:
-            self.assertRegex(
-                entry[_POWER_ON_HOUR], _POWER_ON_HOUR_RE,
-                f"Expected '{_POWER_ON_HOUR}' as 'H:M:S', "
-                f"got: {entry[_POWER_ON_HOUR]!r}",
-            )
-
-    def test_json_commit_action_type_value(self):
-        """'Commit Action Type' is one of the four named actions, or 'xxxb'."""
-        entries = self._history_entries()
-
-        for entry in entries:
-            self.assertIn(
-                entry[_COMMIT_ACTION_TYPE], _COMMIT_ACTION_VALUES,
-                f"Expected '{_COMMIT_ACTION_TYPE}' in "
-                f"{sorted(_COMMIT_ACTION_VALUES)}, "
-                f"got: {entry[_COMMIT_ACTION_TYPE]!r}",
-            )
-
-    def test_json_result_value(self):
-        """'Result' is 'pass' or 'Fail #<code>'."""
-        entries = self._history_entries()
-
-        for entry in entries:
-            self.assertRegex(
-                entry[_RESULT], _RESULT_RE,
-                f"Expected '{_RESULT}' as 'pass' or 'Fail #<N>', "
-                f"got: {entry[_RESULT]!r}",
-            )
 
     def test_text_row_count_matches_total_entry_num(self):
         """The text table prints one row per reported entry."""
@@ -386,7 +252,7 @@ class TestMicronVsFwActivateHistory(TestMicron):
         Both formats are rendered from the same entry buffer, so they must
         agree field by field.
         """
-        entries = self._history_entries()
+        entries = self._entries_or_skip()
         rows = self._text_rows(self._history_text().stdout)
 
         self.assertEqual(
