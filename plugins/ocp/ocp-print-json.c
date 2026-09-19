@@ -201,7 +201,7 @@ static void json_fw_activation_history(const struct fw_activation_history *fw_hi
 
 	char guid[2 * sizeof(fw_history->log_page_guid) + 3] = { 0 };
 
-	sprintf(guid, "0x%"PRIx64"%"PRIx64"",
+	sprintf(guid, "0x%016"PRIx64"%016"PRIx64"",
 		le64_to_cpu(fw_history->log_page_guid[1]),
 		le64_to_cpu(fw_history->log_page_guid[0]));
 	json_object_add_value_string(root, "log page guid", guid);
@@ -219,10 +219,8 @@ static void json_smart_extended_log_v1(struct ocp_smart_extended_log *log)
 	struct json_object *pmur;
 	uint16_t smart_log_ver = 0;
 	uint16_t dssd_version = 0;
-	int i = 0;
 	char guid[40];
 	char ascii_arr[65];
-	char *ascii = ascii_arr;
 
 	root = json_create_object();
 	pmuw = json_create_object();
@@ -291,7 +289,7 @@ static void json_smart_extended_log_v1(struct ocp_smart_extended_log *log)
 	json_object_add_value_uint(root, "Log page version", smart_log_ver);
 
 	memset((void *)guid, 0, 40);
-	sprintf((char *)guid, "0x%"PRIx64"%"PRIx64"",
+	sprintf((char *)guid, "0x%016"PRIx64"%016"PRIx64"",
 		le64_to_cpu(*(uint64_t *)&log->log_page_guid[8]),
 		le64_to_cpu(*(uint64_t *)&log->log_page_guid));
 	json_object_add_value_string(root, "Log page GUID", guid);
@@ -343,16 +341,15 @@ static void json_smart_extended_log_v1(struct ocp_smart_extended_log *log)
 						le16_to_cpu(log->current_max_avg_power));
 		json_object_add_value_uint64(root, "Lifetime power consumed",
 						int48_to_long(log->lifetime_power_consumed));
-		memset((void *)ascii, 0, 65);
-		for (i = 0; i < 8; i++)
-			ascii += sprintf(ascii, "%c", log->dssd_firmware_revision[i]);
+		snprintf(ascii_arr, sizeof(ascii_arr), "%.*s",
+			 (int)sizeof(log->dssd_firmware_revision),
+			 (char *)log->dssd_firmware_revision);
 		json_object_add_value_string(root, "Dssd firmware revision", ascii_arr);
 		json_object_add_value_string(root, "Dssd firmware build UUID",
 						shr_uuid_to_string(log->dssd_firmware_build_uuid));
-		ascii = ascii_arr;
-		memset((void *)ascii, 0, 65);
-		for (i = 0; i < 64; i++)
-			ascii += sprintf(ascii, "%c", log->dssd_firmware_build_label[i]);
+		snprintf(ascii_arr, sizeof(ascii_arr), "%.*s",
+			 (int)sizeof(log->dssd_firmware_build_label),
+			 (char *)log->dssd_firmware_build_label);
 		json_object_add_value_string(root, "Dssd firmware build label", ascii_arr);
 		fallthrough;
 	case 4:
@@ -389,12 +386,10 @@ static void json_smart_extended_log_v2(struct ocp_smart_extended_log *log)
 	struct json_object *root;
 	struct json_object *pmuw;
 	struct json_object *pmur;
-	int i = 0;
 	uint16_t smart_log_ver = 0;
 	uint16_t dssd_version = 0;
 	char guid[40];
 	char ascii_arr[65];
-	char *ascii = ascii_arr;
 
 	root = json_create_object();
 	pmuw = json_create_object();
@@ -463,7 +458,7 @@ static void json_smart_extended_log_v2(struct ocp_smart_extended_log *log)
 	json_object_add_value_uint(root, "log_page_version", smart_log_ver);
 
 	memset((void *)guid, 0, 40);
-	sprintf((char *)guid, "0x%"PRIx64"%"PRIx64"",
+	sprintf((char *)guid, "0x%016"PRIx64"%016"PRIx64"",
 		le64_to_cpu(*(uint64_t *)&log->log_page_guid[8]),
 		le64_to_cpu(*(uint64_t *)&log->log_page_guid));
 	json_object_add_value_string(root, "log_page_guid", guid);
@@ -515,16 +510,15 @@ static void json_smart_extended_log_v2(struct ocp_smart_extended_log *log)
 						le16_to_cpu(log->current_max_avg_power));
 		json_object_add_value_uint64(root, "lifetime_power_consumed",
 						int48_to_long(log->lifetime_power_consumed));
-		memset((void *)ascii, 0, 65);
-		for (i = 0; i < 8; i++)
-			ascii += sprintf(ascii, "%c", log->dssd_firmware_revision[i]);
+		snprintf(ascii_arr, sizeof(ascii_arr), "%.*s",
+			 (int)sizeof(log->dssd_firmware_revision),
+			 (char *)log->dssd_firmware_revision);
 		json_object_add_value_string(root, "dssd_firmware_revision", ascii_arr);
 		json_object_add_value_string(root, "dssd_firmware_build_uuid",
 						shr_uuid_to_string(log->dssd_firmware_build_uuid));
-		ascii = ascii_arr;
-		memset((void *)ascii, 0, 65);
-		for (i = 0; i < 64; i++)
-			ascii += sprintf(ascii, "%c", log->dssd_firmware_build_label[i]);
+		snprintf(ascii_arr, sizeof(ascii_arr), "%.*s",
+			 (int)sizeof(log->dssd_firmware_build_label),
+			 (char *)log->dssd_firmware_build_label);
 		json_object_add_value_string(root, "dssd_firmware_build_label", ascii_arr);
 		fallthrough;
 	case 4:
@@ -808,7 +802,7 @@ static void json_c1_log(struct ocp_error_recovery_log_page *log_data)
 				  le16_to_cpu(log_data->log_page_version));
 
 	memset((void *)guid, 0, 64);
-	sprintf((char *)guid, "0x%"PRIx64"%"PRIx64"",
+	sprintf((char *)guid, "0x%016"PRIx64"%016"PRIx64"",
 		(uint64_t)le64_to_cpu(*(uint64_t *)&log_data->log_page_guid[8]),
 		(uint64_t)le64_to_cpu(*(uint64_t *)&log_data->log_page_guid[0]));
 	json_object_add_value_string(root, "Log page GUID", guid);
@@ -846,7 +840,7 @@ static void json_c4_log(struct ocp_device_capabilities_log_page *log_data)
 				  le16_to_cpu(log_data->log_page_version));
 
 	memset((void *)guid, 0, 64);
-	sprintf((char *)guid, "0x%"PRIx64"%"PRIx64"",
+	sprintf((char *)guid, "0x%016"PRIx64"%016"PRIx64"",
 		(uint64_t)le64_to_cpu(*(uint64_t *)&log_data->log_page_guid[8]),
 		(uint64_t)le64_to_cpu(*(uint64_t *)&log_data->log_page_guid[0]));
 	json_object_add_value_string(root, "Log page GUID", guid);
