@@ -55,11 +55,6 @@ from tests.e2e.plugins.ocp import ocp_c0_layout as layout
 _NVME_BIN = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith('-') else 'nvme'
 _MOCK_LIB = resolve_mock_lib_path("./libmock_nvme.so")
 
-if os.path.exists(_NVME_BIN):
-    _NVME_BIN = os.path.abspath(_NVME_BIN)
-if os.path.exists(_MOCK_LIB):
-    _MOCK_LIB = os.path.abspath(_MOCK_LIB)
-
 _OPC_GET_LOG_PAGE = 0x02
 _OPC_IDENTIFY = 0x06
 
