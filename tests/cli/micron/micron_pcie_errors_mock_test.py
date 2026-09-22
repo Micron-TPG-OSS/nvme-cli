@@ -62,10 +62,10 @@ _JSON_KEY = "PCIE Stats"
 _REG_CORRECTABLE = "ECAP_AER+0x10.L"
 _REG_UNCORRECTABLE = "ECAP_AER+0x4.L"
 
-# Correctable fields, in the order the command emits them, with the bit each
+# Uncorrectable fields, in the order the command emits them, with the bit each
 # occupies in the register it is decoded from and its offset in the counter
 # struct.
-_CORRECTABLE_FIELDS = (
+_UNCORRECTABLE_FIELDS = (
     ("Unsupported Request Error Status (URES)", 20, 15),
     ("ECRC Error Status (ECRCES)", 19, 14),
     ("Malformed TLP Status (MTS)", 18, 13),
@@ -78,7 +78,7 @@ _CORRECTABLE_FIELDS = (
     ("Data Link Protocol Error Status (DLPES)", 4, 6),
 )
 
-_UNCORRECTABLE_FIELDS = (
+_CORRECTABLE_FIELDS = (
     ("Advisory Non-Fatal Error Status (ANFES)", 13, 5),
     ("Replay Timer Timeout Status (RTS)", 12, 4),
     ("REPLAY_NUM Rollover Status (RRS)", 8, 3),
@@ -87,7 +87,7 @@ _UNCORRECTABLE_FIELDS = (
     ("Receiver Error Status (RES)", 0, 0),
 )
 
-_ALL_FIELDS = _CORRECTABLE_FIELDS + _UNCORRECTABLE_FIELDS
+_ALL_FIELDS = _UNCORRECTABLE_FIELDS + _CORRECTABLE_FIELDS
 _ALL_NAMES = tuple(name for name, _, _ in _ALL_FIELDS)
 
 # struct pcie_error_counters: 16 u16 counters.
@@ -200,10 +200,10 @@ class PcieTestBase(TestMicronMock):
     def expected_bits(correctable, uncorrectable):
         """Return the per-field values the AER bit decode should produce."""
         expected = {}
-        for name, bit, _ in _CORRECTABLE_FIELDS:
-            expected[name] = (correctable >> bit) & 1
         for name, bit, _ in _UNCORRECTABLE_FIELDS:
             expected[name] = (uncorrectable >> bit) & 1
+        for name, bit, _ in _CORRECTABLE_FIELDS:
+            expected[name] = (correctable >> bit) & 1
         return expected
 
 
@@ -263,7 +263,7 @@ class TestMicronVsPcieStats(PcieTestBase):
 
         self.assertIn(OPC_VENDOR_D6, self.server.opcodes())
         self.assertEqual(self.text_fields(result.stdout)
-                         ["Poisoned TLP Status (PTS)"], 1)
+                         ["Replay Timer Timeout Status (RTS)"], 1)
 
     # ---------------------------------------------------------------- #
     # Counter route decoding                                           #
@@ -306,8 +306,8 @@ class TestMicronVsPcieStats(PcieTestBase):
 
     def test_aer_bits_are_decoded_to_their_fields(self):
         """On a bit-decoding model each field reports one register bit."""
-        correctable = (1 << 20) | (1 << 12) | (1 << 4)
-        uncorrectable = (1 << 13) | (1 << 0)
+        correctable = (1 << 0) | (1 << 6) | (1 << 12)     # RES, BTS, RTS
+        uncorrectable = (1 << 4) | (1 << 12) | (1 << 20)  # DLPES, PTS, URES
         expected = self.expected_bits(correctable, uncorrectable)
 
         for model in _BIT_DECODE_MODELS:
