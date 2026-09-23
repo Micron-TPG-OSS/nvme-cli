@@ -1427,9 +1427,10 @@ static void stdout_prop_field(const char *name, const char *symbol,
 
 	if (strlen(name))
 		printf("\t%-*s (%s)%*s: %s\n", name_width, name, symbol,
-		       pad_len, pad ? " " : "", value);
+		       pad_len, pad ? " " : "", value ? value : alloc_error);
 	else
-		printf("\t%*s %s\n", col_width + 1, " ", value);
+		printf("\t%*s %s\n", col_width + 1, " ",
+		       value ? value : alloc_error);
 }
 
 static void stdout_registers_cap(uint64_t cap)
@@ -2650,6 +2651,18 @@ static void stdout_id_ctrl_tmpthha(__u8 tmpthha)
 	printf("\n");
 }
 
+static void stdout_id_ctrl_mupa(__u8 mupa, bool human)
+{
+	__u8 mups = NVME_CTRL_MUPA_MUPS(mupa);
+
+	printf("%-*s: %#x\n", 10, "mupa", mupa);
+
+	if (human)
+		printf("  [1:0] : %#x\t%s (%s)\n\n", mups,
+		       nvme_feature_power_limit_scale_to_string(mups),
+		       "Maximum Unlimited Power Scale");
+}
+
 static void stdout_id_ctrl_cdpa(__le16 ctrl_cdpa)
 {
 	__u16 cdpa = le16_to_cpu(ctrl_cdpa);
@@ -2675,6 +2688,55 @@ static void stdout_id_ctrl_ipmsr(__le16 ctrl_ipmsr)
 	printf("  [7:0]  : %#x\tSample Rate Value\n", srv);
 
 	printf("\n");
+}
+
+static void stdout_id_ctrl_mnens(__u16 mnens)
+{
+	printf("%-*s: %u\n", 10, "mnens", mnens);
+}
+
+static void stdout_id_ctrl_mnecpens(__u16 mnecpens)
+{
+	printf("%-*s: %u\n", 10, "mnecpens", mnecpens);
+}
+
+static void stdout_id_ctrl_mensnn(__u32 mensnn)
+{
+	printf("%-*s: %u\n", 10, "mensnn", mensnn);
+}
+
+static void stdout_id_ctrl_ensa(__u8 ensa, bool human)
+{
+	bool ensts = !!NVME_CTRL_ENSA_ENSTS(ensa);
+	bool ensms = !!NVME_CTRL_ENSA_ENSMS(ensa);
+
+	printf("%-*s: %#x\n", 10, "ensa", ensa);
+
+	if (human) {
+		printf("  [1:1] : %#x\t%s %s\n", ensms,
+		       "Exported NVM Subsystem Support Migration",
+		       nvme_support_str(ensms));
+		printf("  [0:0] : %#x\t%s %s\n\n", ensts,
+		       "Exported NVM Subsystem Template",
+		       nvme_support_str(ensts));
+	}
+}
+
+static void stdout_id_ctrl_endsfs(__u8 endsfs, bool human)
+{
+	bool enf0 = !!NVME_CTRL_ENDSFS_ENF0(endsfs);
+	bool enf1 = !!NVME_CTRL_ENDSFS_ENF1(endsfs);
+
+	printf("%-*s: %#x\n", 10, "endsfs", endsfs);
+
+	if (human) {
+		printf("  [1:1] : %#x\t%s %s\n", enf1,
+		       "Exported Namespace Format 1",
+		       nvme_support_str(enf1));
+		printf("  [0:0] : %#x\t%s %s\n\n", enf0,
+		       "Exported Namespace Format 0",
+		       nvme_support_str(enf0));
+	}
 }
 
 static void stdout_id_ctrl_vsen(__le32 ctrl_vsen)
@@ -3650,6 +3712,8 @@ static void stdout_id_ctrl(struct nvme_id_ctrl *ctrl, const char *product_name,
 	printf("crcap     : %u\n", ctrl->crcap);
 	if (human)
 		stdout_id_ctrl_crcap(ctrl->crcap);
+	printf("ciu       : %u\n", ctrl->ciu);
+	printf("cirn      : %"PRIu64"\n", le64_to_cpu(*(__le64 *)ctrl->cirn));
 	printf("nvmsr     : %u\n", ctrl->nvmsr);
 	if (human)
 		stdout_id_ctrl_nvmsr(ctrl->nvmsr);
@@ -3745,6 +3809,7 @@ static void stdout_id_ctrl(struct nvme_id_ctrl *ctrl, const char *product_name,
 	printf("tmpthha   : %#x\n", ctrl->tmpthha);
 	if (human)
 		stdout_id_ctrl_tmpthha(ctrl->tmpthha);
+	stdout_id_ctrl_mupa(ctrl->mupa, human);
 	printf("cqt       : %d\n", le16_to_cpu(ctrl->cqt));
 	printf("cdpa      : %d\n", le16_to_cpu(ctrl->cdpa));
 	if (human)
@@ -3754,6 +3819,11 @@ static void stdout_id_ctrl(struct nvme_id_ctrl *ctrl, const char *product_name,
 	if (human)
 		stdout_id_ctrl_ipmsr(ctrl->ipmsr);
 	printf("msmt      : %#x\n", le16_to_cpu(ctrl->msmt));
+	stdout_id_ctrl_mnens(le16_to_cpu(ctrl->mnens));
+	stdout_id_ctrl_mnecpens(le16_to_cpu(ctrl->mnecpens));
+	stdout_id_ctrl_mensnn(le32_to_cpu(ctrl->mensnn));
+	stdout_id_ctrl_ensa(ctrl->ensa, human);
+	stdout_id_ctrl_endsfs(ctrl->endsfs, human);
 	if (NVME_CTRL_CTRATT_VMS(le32_to_cpu(ctrl->ctratt))) {
 		printf("vsen1     : %#x\n", le32_to_cpu(ctrl->vsen1));
 		if (human)

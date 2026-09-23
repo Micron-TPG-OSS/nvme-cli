@@ -1437,7 +1437,7 @@ struct nvme_id_psd {
  * @megcap:    Max Endurance Group Capacity indicates the maximum capacity
  *	       of a single Endurance Group.
  * @tmpthha:   Temperature Threshold Hysteresis Attributes
- * @rsvd385:   Reserved
+ * @mupa:      Maximum Unlimited Power Attributes
  * @cqt:       Command Quiesce Time (CQT). This field indicates the expected
  *	       worst-case time in 1 millisecond units for the controller to
  *	       quiesce all outstanding commands after a Keep Alive Timeout or
@@ -1455,7 +1455,12 @@ struct nvme_id_psd {
  *         maximum stop measurement time allowed to be specified in the
  *         SMT field for a Set Features command specifying the Power
  *         Measurement feature.
- * @rsvd396:   Reserved
+ * @mnens:     Maximum Number of Exported NVM Subsystems
+ * @mnecpens:  Maximum Number of Exported Controllers per Exported NVM
+ *             Subsystem
+ * @mensnn:    Maximum Exported NVM Subsystem Number of Namespaces
+ * @ensa:      Exported NVM Subsystem Attributes
+ * @endsfs:    Exported Namespace Data Structure Formats Supported
  * @vsen1:     Voltage Sensor 1: indicates the characteristics of Voltage
  *         Sensor 1, see &struct nvme_id_ctrl_vsds. A value of 0h indicates
  *         Voltage Sensor 1 is not supported.
@@ -1663,13 +1668,17 @@ struct nvme_id_ctrl {
 	__u8			rsvd363[5];
 	__u8			megcap[16];
 	__u8			tmpthha;
-	__u8			rsvd385;
+	__u8			mupa;
 	__le16			cqt;
 	__le16			cdpa;
 	__le16			mup;
 	__le16			ipmsr;
 	__le16			msmt;
-	__u8			rsvd396[10];
+	__le16			mnens;
+	__le16			mnecpens;
+	__le32			mensnn;
+	__u8			ensa;
+	__u8			endsfs;
 	__le32			vsen1 __attribute__((packed));
 	__le32			vsen2 __attribute__((packed));
 	__le32			vsen3 __attribute__((packed));
@@ -2658,7 +2667,6 @@ enum nvme_id_ctrl_anacap {
 	NVME_CTRL_ANACAP_GRPID_MGMT		= 1 << 7,
 };
 
-
 /**
  * enum nvme_id_ctrl_kpioc - Key Per I/O Capabilities
  * @NVME_CTRL_KPIOC_KPIOS_SHIFT:	Shift amount to get the Key Per I/O Supported from the
@@ -2679,6 +2687,19 @@ enum nvme_id_ctrl_kpioc {
 
 #define NVME_CTRL_KPIOC_KPIOS(kpioc)	NVME_GET(kpioc, CTRL_KPIOC_KPIOS)
 #define NVME_CTRL_KPIOC_KPIOSC(kpioc)	NVME_GET(kpioc, CTRL_KPIOC_KPIOSC)
+
+/**
+ * enum nvme_id_ctrl_mupa - Maximum Unlimited Power Attributes
+ * @NVME_CTRL_MUPA_MUPS_SHIFT: Shift amount to get the Maximum Unlimited Power
+ *			       Scale
+ * @NVME_CTRL_MUPA_MUPS_MASK:  Mask to get the Maximum Unlimited Power Scale
+ */
+enum nvme_id_ctrl_mupa {
+	NVME_CTRL_MUPA_MUPS_SHIFT	= 0,
+	NVME_CTRL_MUPA_MUPS_MASK	= 0x3,
+};
+
+#define NVME_CTRL_MUPA_MUPS(MUPA)	NVME_GET(MUPA, CTRL_MUPA_MUPS)
 
 /**
  * enum nvme_id_ctrl_cdpa - Configurable Device Personality Attributes
@@ -2709,6 +2730,48 @@ enum nvme_id_ctrl_ipmsr {
 
 #define NVME_CTRL_IPMSR_SRS(ipmsr)	NVME_GET(ipmsr, CTRL_IPMSR_SRS)
 #define NVME_CTRL_IPMSR_SRV(ipmsr)	NVME_GET(ipmsr, CTRL_IPMSR_SRV)
+
+/**
+ * enum nvme_id_ctrl_ensa - Exported NVM Subsystem Attributes
+ * @NVME_CTRL_ENSA_ENSMS_SHIFT:	Shift amount to get the Exported NVM Subsystem
+ *				Support Migration Support
+ * @NVME_CTRL_ENSA_ENSTS_SHIFT:	Shift amount to get the Exported NVM Subsystem
+ *				Template Support
+ * @NVME_CTRL_ENSA_ENSMS_MASK:	Mask to get the Exported NVM Subsystem Support
+ *				Migration Support
+ * @NVME_CTRL_ENSA_ENSTS_MASK:	Mask to get the Exported NVM Subsystem Template
+ *				Support
+ */
+enum nvme_id_ctrl_ensa {
+	NVME_CTRL_ENSA_ENSMS_SHIFT	= 1,
+	NVME_CTRL_ENSA_ENSTS_SHIFT	= 0,
+	NVME_CTRL_ENSA_ENSMS_MASK	= 0x1,
+	NVME_CTRL_ENSA_ENSTS_MASK	= 0x1,
+};
+
+#define NVME_CTRL_ENSA_ENSMS(ensa)	NVME_GET(ensa, CTRL_ENSA_ENSMS)
+#define NVME_CTRL_ENSA_ENSTS(ensa)	NVME_GET(ensa, CTRL_ENSA_ENSTS)
+
+/**
+ * enum nvme_id_ctrl_endsfs - Exported Namespace Data Structure Formats
+ *			      Supported
+ * @NVME_CTRL_ENDSFS_ENF1_SHIFT:Shift amount to get the Exported Namespace
+ *				Format 1
+ * @NVME_CTRL_ENDSFS_ENF0_SHIFT:Shift amount to get the Exported Namespace
+ *				Format 0
+ *				Template Support
+ * @NVME_CTRL_ENDSFS_ENF1_MASK:	Mask to get the Exported Namespace Format 1
+ * @NVME_CTRL_ENDSFS_ENF0_MASK:	Mask to get the Exported Namespace Format 0
+ */
+enum nvme_id_ctrl_endsfs {
+	NVME_CTRL_ENDSFS_ENF1_SHIFT	= 1,
+	NVME_CTRL_ENDSFS_ENF0_SHIFT	= 0,
+	NVME_CTRL_ENDSFS_ENF1_MASK	= 0x1,
+	NVME_CTRL_ENDSFS_ENF0_MASK	= 0x1,
+};
+
+#define NVME_CTRL_ENDSFS_ENF1(endsfs)	NVME_GET(endsfs, CTRL_ENDSFS_ENF1)
+#define NVME_CTRL_ENDSFS_ENF0(endsfs)	NVME_GET(endsfs, CTRL_ENDSFS_ENF0)
 
 /**
  * enum nvme_id_ctrl_sqes - Defines the required and maximum Submission Queue
