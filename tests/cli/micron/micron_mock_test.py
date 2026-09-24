@@ -376,11 +376,10 @@ class TestMicronMock(MicronChecksMixin, TestNVMeBase):
         self.ctrl = f"/dev/nvme{self.INSTANCE}"
         self.ns1 = f"/dev/nvme{self.INSTANCE}n1"
 
-        self.sysfs_dir = tempfile.mkdtemp(prefix='nvme-micron-sysfs-')
-        self.base_dir = tempfile.mkdtemp(prefix='nvme-micron-base-')
-        self.ipc_dir = tempfile.mkdtemp(prefix='nvme-micron-ipc-')
-        self.out_dir = tempfile.mkdtemp(prefix='nvme-micron-out-')
-        self.addCleanup(self._cleanup_dirs)
+        self.sysfs_dir = self._temp_dir('nvme-micron-sysfs-')
+        self.base_dir = self._temp_dir('nvme-micron-base-')
+        self.ipc_dir = self._temp_dir('nvme-micron-ipc-')
+        self.out_dir = self._temp_dir('nvme-micron-out-')
 
         self.server = MicronMockServer(os.path.join(self.ipc_dir, "ipc.sock"))
         self.server.start()
@@ -404,9 +403,10 @@ class TestMicronMock(MicronChecksMixin, TestNVMeBase):
         self.server.shutdown()
         self.server.join()
 
-    def _cleanup_dirs(self):
-        for d in (self.sysfs_dir, self.base_dir, self.ipc_dir, self.out_dir):
-            shutil.rmtree(d, ignore_errors=True)
+    def _temp_dir(self, prefix):
+        tmp = tempfile.TemporaryDirectory(prefix=prefix)
+        self.addCleanup(tmp.cleanup)
+        return tmp.name
 
     # -- drive identity ---------------------------------------------- #
 

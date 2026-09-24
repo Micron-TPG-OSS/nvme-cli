@@ -49,7 +49,8 @@ _COMMAND = "smart-log"
 
 _HEADER_PREFIX = "SMART/Health Information Log for "
 
-_KELVIN = 273
+# Kelvin offset the plugin subtracts from every reading.
+_KELVIN_OFFSET = 273
 
 # micron smart-log JSON keys that core "log smart" does not emit.
 _EXTRA_KEYS = ("device", "temperature_kelvin", "temperature_celsius", "olec",
@@ -185,11 +186,11 @@ class TestMicronSmartLog(TestMicronMock):
         """The Kelvin reading and its Celsius conversion are both reported."""
         for celsius in (0, 27, 85):
             with self.subTest(celsius=celsius):
-                self.set_smart(temperature_kelvin=_KELVIN + celsius)
+                self.set_smart(temperature_kelvin=_KELVIN_OFFSET + celsius)
                 micron = self.micron_json()
 
                 self.assertEqual(to_decimal(micron["temperature_kelvin"]),
-                                 _KELVIN + celsius)
+                                 _KELVIN_OFFSET + celsius)
                 self.assertEqual(to_decimal(micron["temperature_celsius"]),
                                  celsius)
 
@@ -203,7 +204,7 @@ class TestMicronSmartLog(TestMicronMock):
 
     def test_temperature_kelvin_matches_core(self):
         """Core reports the raw reading, which is the Kelvin field here."""
-        self.set_smart(temperature_kelvin=_KELVIN + 40)
+        self.set_smart(temperature_kelvin=_KELVIN_OFFSET + 40)
         micron = self.micron_json()
         core = self.core_json()
 
@@ -217,8 +218,8 @@ class TestMicronSmartLog(TestMicronMock):
     def test_only_active_sensors_are_reported(self):
         """A sensor reading of zero means the sensor is not present."""
         cases = {
-            'all eight': {n: _KELVIN + 20 + n for n in range(1, 9)},
-            'sparse with gaps': {2: _KELVIN + 30, 6: _KELVIN + 35},
+            'all eight': {n: _KELVIN_OFFSET + 20 + n for n in range(1, 9)},
+            'sparse with gaps': {2: _KELVIN_OFFSET + 30, 6: _KELVIN_OFFSET + 35},
             'none': {},
         }
         for name, sensors in cases.items():
@@ -232,7 +233,7 @@ class TestMicronSmartLog(TestMicronMock):
 
     def test_sensor_readings_are_converted_to_celsius(self):
         """Each sensor is reported in Celsius, unlike core's Kelvin."""
-        sensors = {1: _KELVIN + 31, 8: _KELVIN + 44}
+        sensors = {1: _KELVIN_OFFSET + 31, 8: _KELVIN_OFFSET + 44}
         self.set_smart(sensors=sensors)
         micron = self.micron_json()
         core = self.core_json()
@@ -240,13 +241,13 @@ class TestMicronSmartLog(TestMicronMock):
         for number, kelvin in sensors.items():
             with self.subTest(sensor=number):
                 self.assertEqual(to_decimal(micron[f"temp_sensor_{number}"]),
-                                 kelvin - _KELVIN)
+                                 kelvin - _KELVIN_OFFSET)
                 self.assertEqual(
                     to_decimal(core[f"temperature_sensor_{number}"]), kelvin)
 
     def test_sensor_presence_matches_core(self):
         """Both renderings report the same sparse set."""
-        self.set_smart(sensors={3: _KELVIN + 30, 5: _KELVIN + 32})
+        self.set_smart(sensors={3: _KELVIN_OFFSET + 30, 5: _KELVIN_OFFSET + 32})
         micron = self.micron_json()
         core = self.core_json()
 
@@ -277,8 +278,8 @@ class TestMicronSmartLog(TestMicronMock):
 
     def test_namespace_path_reports_the_same_log(self):
         """Only the echoed device differs between the two paths."""
-        self.set_smart(temperature_kelvin=_KELVIN + 30,
-                       sensors={1: _KELVIN + 31})
+        self.set_smart(temperature_kelvin=_KELVIN_OFFSET + 30,
+                       sensors={1: _KELVIN_OFFSET + 31})
         from_ctrl = self.micron_json(device=self.ctrl)
         from_ns = self.micron_json(device=self.ns1)
 

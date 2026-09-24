@@ -44,7 +44,7 @@ _TEXT_HEADER = "Micron temperature information:"
 _COMPOSITE = "Current Composite Temperature"
 
 # Kelvin offset the plugin subtracts from every reading.
-_KELVIN = 273
+_KELVIN_OFFSET = 273
 
 SENSOR_COUNT = 8
 
@@ -92,7 +92,7 @@ class TestMicronTemperatureStats(TestMicronMock):
 
     def test_text_output_has_the_header_and_composite_temperature(self):
         """Text output leads with the header, then the composite reading."""
-        self.set_temperatures(composite_kelvin=_KELVIN + 42)
+        self.set_temperatures(composite_kelvin=_KELVIN_OFFSET + 42)
         result = self.run_plugin_cmd_check(_COMMAND)
 
         self.assertIn(_TEXT_HEADER, result.stdout)
@@ -100,13 +100,13 @@ class TestMicronTemperatureStats(TestMicronMock):
 
     def test_json_output_has_the_composite_temperature(self):
         """JSON output wraps one stats object in the named array."""
-        self.set_temperatures(composite_kelvin=_KELVIN + 42)
+        self.set_temperatures(composite_kelvin=_KELVIN_OFFSET + 42)
 
         self.assertEqual(self.json_values()[_COMPOSITE], 42)
 
     def test_default_output_is_text(self):
         """With no format flag the output is text, not JSON."""
-        self.set_temperatures(composite_kelvin=_KELVIN + 30)
+        self.set_temperatures(composite_kelvin=_KELVIN_OFFSET + 30)
         result = self.run_plugin_cmd_check(_COMMAND)
 
         self.assertIn(_TEXT_HEADER, result.stdout)
@@ -116,7 +116,7 @@ class TestMicronTemperatureStats(TestMicronMock):
 
     def test_explicit_normal_format_matches_the_default(self):
         """--output-format=normal is the default format, spelled out."""
-        self.set_temperatures(composite_kelvin=_KELVIN + 30)
+        self.set_temperatures(composite_kelvin=_KELVIN_OFFSET + 30)
         default = self.run_plugin_cmd_check(_COMMAND)
         normal = self.run_plugin_cmd_check(_COMMAND,
                                            args="--output-format=normal")
@@ -131,7 +131,7 @@ class TestMicronTemperatureStats(TestMicronMock):
         """The reported value is the raw reading less the Kelvin offset."""
         for celsius in (0, 1, 27, 85, 125):
             with self.subTest(celsius=celsius):
-                self.set_temperatures(composite_kelvin=_KELVIN + celsius)
+                self.set_temperatures(composite_kelvin=_KELVIN_OFFSET + celsius)
                 result = self.run_plugin_cmd_check(_COMMAND)
 
                 self.assertEqual(
@@ -152,13 +152,13 @@ class TestMicronTemperatureStats(TestMicronMock):
 
     def test_sensor_readings_are_converted_from_kelvin(self):
         """Each sensor reading is converted the same way as the composite."""
-        sensors = {1: _KELVIN + 30, 4: _KELVIN + 45, 8: _KELVIN + 60}
-        self.set_temperatures(composite_kelvin=_KELVIN + 40, sensors=sensors)
+        sensors = {1: _KELVIN_OFFSET + 30, 4: _KELVIN_OFFSET + 45, 8: _KELVIN_OFFSET + 60}
+        self.set_temperatures(composite_kelvin=_KELVIN_OFFSET + 40, sensors=sensors)
         text = self.text_values(self.run_plugin_cmd_check(_COMMAND).stdout)
 
         for number, kelvin in sensors.items():
             self.assertEqual(text[self.sensor_label(number)],
-                             kelvin - _KELVIN)
+                             kelvin - _KELVIN_OFFSET)
 
     # ---------------------------------------------------------------- #
     # Which sensors are reported                                       #
@@ -167,16 +167,16 @@ class TestMicronTemperatureStats(TestMicronMock):
     def test_only_active_sensors_are_reported(self):
         """A sensor reading of zero means the sensor is not present."""
         cases = {
-            'all eight': {n: _KELVIN + 20 + n for n in range(1, 9)},
-            'sparse with gaps': {2: _KELVIN + 21, 5: _KELVIN + 22,
-                                 7: _KELVIN + 23},
-            'first only': {1: _KELVIN + 25},
-            'last only': {8: _KELVIN + 25},
+            'all eight': {n: _KELVIN_OFFSET + 20 + n for n in range(1, 9)},
+            'sparse with gaps': {2: _KELVIN_OFFSET + 21, 5: _KELVIN_OFFSET + 22,
+                                 7: _KELVIN_OFFSET + 23},
+            'first only': {1: _KELVIN_OFFSET + 25},
+            'last only': {8: _KELVIN_OFFSET + 25},
             'none': {},
         }
         for name, sensors in cases.items():
             with self.subTest(sensors=name):
-                self.set_temperatures(composite_kelvin=_KELVIN + 40,
+                self.set_temperatures(composite_kelvin=_KELVIN_OFFSET + 40,
                                       sensors=sensors)
                 text = self.text_values(
                     self.run_plugin_cmd_check(_COMMAND).stdout)
@@ -191,7 +191,7 @@ class TestMicronTemperatureStats(TestMicronMock):
 
     def test_no_sensor_lines_when_none_are_active(self):
         """A drive with no sensors reports only the composite temperature."""
-        self.set_temperatures(composite_kelvin=_KELVIN + 40)
+        self.set_temperatures(composite_kelvin=_KELVIN_OFFSET + 40)
         result = self.run_plugin_cmd_check(_COMMAND)
 
         self.assertNotIn("Temperature Sensor", result.stdout)
@@ -199,7 +199,7 @@ class TestMicronTemperatureStats(TestMicronMock):
 
     def test_sensor_numbering_is_one_based(self):
         """The first sensor slot is reported as sensor 1, not 0."""
-        self.set_temperatures(sensors={1: _KELVIN + 25})
+        self.set_temperatures(sensors={1: _KELVIN_OFFSET + 25})
         result = self.run_plugin_cmd_check(_COMMAND)
 
         self.assertIn("Temperature Sensor #1 :", result.stdout)
@@ -207,17 +207,17 @@ class TestMicronTemperatureStats(TestMicronMock):
 
     def test_text_and_json_report_the_same_values(self):
         """Both formats read the same log, so they must agree exactly."""
-        self.set_temperatures(composite_kelvin=_KELVIN + 33,
-                              sensors={1: _KELVIN + 30, 3: _KELVIN + 35,
-                                       8: _KELVIN + 40})
+        self.set_temperatures(composite_kelvin=_KELVIN_OFFSET + 33,
+                              sensors={1: _KELVIN_OFFSET + 30, 3: _KELVIN_OFFSET + 35,
+                                       8: _KELVIN_OFFSET + 40})
         text = self.text_values(self.run_plugin_cmd_check(_COMMAND).stdout)
 
         self.assertEqual(text, self.json_values())
 
     def test_namespace_path_matches_the_controller_path(self):
         """A namespace path resolves to its parent controller."""
-        self.set_temperatures(composite_kelvin=_KELVIN + 33,
-                              sensors={2: _KELVIN + 31})
+        self.set_temperatures(composite_kelvin=_KELVIN_OFFSET + 33,
+                              sensors={2: _KELVIN_OFFSET + 31})
 
         self.assertEqual(self.json_values(device=self.ctrl),
                          self.json_values(device=self.ns1))
@@ -237,7 +237,7 @@ class TestMicronTemperatureStats(TestMicronMock):
     def test_unknown_drive_model_is_not_consulted(self):
         """The command reads no model, so an unrecognised drive still works."""
         self.select_model(None)
-        self.set_temperatures(composite_kelvin=_KELVIN + 40)
+        self.set_temperatures(composite_kelvin=_KELVIN_OFFSET + 40)
         result = self.run_plugin_cmd_check(_COMMAND)
 
         self.assertEqual(self.text_values(result.stdout)[_COMPOSITE], 40)
