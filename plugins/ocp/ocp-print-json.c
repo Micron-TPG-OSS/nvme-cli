@@ -748,7 +748,7 @@ static void json_c5_log(struct libnvme_transport_handle *hdl, struct unsupported
 	int j;
 	struct json_object *root;
 	char unsup_req_list_str[40];
-	char guid_buf[GUID_LEN];
+	char guid_buf[(GUID_LEN * 2) + 1];
 	char *guid = guid_buf;
 
 	root = json_create_object();
@@ -766,7 +766,7 @@ static void json_c5_log(struct libnvme_transport_handle *hdl, struct unsupported
 	json_object_add_value_int(root, "Log Page Version",
 				  le16_to_cpu(log_data->log_page_version));
 
-	memset((void *)guid, 0, GUID_LEN);
+	memset((void *)guid, 0, sizeof(guid_buf));
 	for (j = GUID_LEN - 1; j >= 0; j--)
 		guid += sprintf(guid, "%02x", log_data->log_page_guid[j]);
 	json_object_add_value_string(root, "Log page GUID", guid_buf);
@@ -1034,7 +1034,7 @@ static void json_c9_log(struct telemetry_str_log_format *log_data, __u8 *log_dat
 
 		memcpy(stat_id_str_table_arr,
 		(__u8 *)log_data_buf + stat_id_str_table_ofst,
-		(log_data->sitsz * 4));
+		stat_id_index * sizeof(struct statistics_id_str_table_entry));
 		struct json_object *stat_table = json_create_object();
 
 		for (j = 0; j < stat_id_index; j++) {
@@ -1063,7 +1063,7 @@ static void json_c9_log(struct telemetry_str_log_format *log_data, __u8 *log_dat
 
 		memcpy(event_id_str_table_arr,
 		(__u8 *)log_data_buf + event_str_table_ofst,
-		(log_data->estsz * 4));
+		eve_id_index * sizeof(struct event_id_str_table_entry));
 		for (j = 0; j < eve_id_index; j++) {
 			struct json_object *entry = json_create_object();
 
@@ -1090,7 +1090,7 @@ static void json_c9_log(struct telemetry_str_log_format *log_data, __u8 *log_dat
 
 		memcpy(vu_event_id_str_table_arr,
 		(__u8 *)log_data_buf + vu_event_str_table_ofst,
-		(log_data->vu_eve_st_sz * 4));
+		vu_eve_index * sizeof(struct vu_event_id_str_table_entry));
 		for (j = 0; j < vu_eve_index; j++) {
 			struct json_object *entry = json_create_object();
 
@@ -1131,16 +1131,21 @@ static void json_c7_log(struct libnvme_transport_handle *hdl, struct tcg_configu
 {
 	int j;
 	struct json_object *root;
-	char guid_buf[GUID_LEN];
+	char guid_buf[(GUID_LEN * 2) + 1];
 	char *guid = guid_buf;
-	char res_arr[458];
+	/*
+	 * rsvd38 holds 456 __u8 values printed as decimal (up to 3 digits
+	 * each), preceded on log_page_version == 1 by two more __u8 values
+	 * (up to 3 digits each) from no_of_ns_prov_locking_obj_ext, plus NUL.
+	 */
+	char res_arr[456 * 3 + 2 * 3 + 1];
 	char *res = res_arr;
 	__u16 log_page_version = le16_to_cpu(log_data->log_page_version);
 
 	root = json_create_object();
 
 	json_object_add_value_int(root, "State", log_data->state);
-	memset((__u8 *)res, 0, 3);
+	memset((__u8 *)res, 0, sizeof(res_arr));
 	for (j = 0; j < 3; j++)
 		res += sprintf(res, "%d", log_data->rsvd1[j]);
 	json_object_add_value_string(root, "Reserved1", res_arr);
@@ -1177,7 +1182,7 @@ static void json_c7_log(struct libnvme_transport_handle *hdl, struct tcg_configu
 	json_object_add_value_int(root, "TCG Error Count", le32_to_cpu(log_data->tcg_ec));
 
 	res = res_arr;
-	memset((__u8 *)res, 0, 458);
+	memset((__u8 *)res, 0, sizeof(res_arr));
 	if (log_page_version == 1) {
 		res += sprintf(res, "%d%d", *(__u8 *)&log_data->no_of_ns_prov_locking_obj_ext,
 			*((__u8 *)&log_data->no_of_ns_prov_locking_obj_ext + 1));
@@ -1193,7 +1198,7 @@ static void json_c7_log(struct libnvme_transport_handle *hdl, struct tcg_configu
 
 	json_object_add_value_int(root, "Log Page Version", log_page_version);
 
-	memset((void *)guid, 0, GUID_LEN);
+	memset((void *)guid, 0, sizeof(guid_buf));
 	for (j = GUID_LEN - 1; j >= 0; j--)
 		guid += sprintf(guid, "%02x", log_data->log_page_guid[j]);
 	json_object_add_value_string(root, "Log page GUID", guid_buf);
