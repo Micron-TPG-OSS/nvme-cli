@@ -56,6 +56,14 @@ These commands are fully implemented and verified working on Windows.
 | `security-send` | Submit a Security Send command, return results | |
 | `security-recv` | Submit a Security Receive command, return results | |
 | `rpmb` | Replay Protection Memory Block commands | |
+| `dsm` | Submit a Data Set Management command, return results | Only the deallocate option is supported on Windows |
+| `compare` | Submit a Compare command, return results | Only supported in WinPE |
+| `create-ns` | Creates a namespace with the provided parameters | Only supported in WinPE |
+| `delete-ns` | Deletes a namespace from the controller | Only supported in WinPE |
+| `attach-ns` | Attaches a namespace to requested controller(s) | Only supported in WinPE |
+| `detach-ns` | Detaches a namespace from requested controller(s) | Only supported in WinPE |
+| `nvme-mi-recv` | Submit a NVMe-MI Receive command, return results | Only supported in WinPE |
+| `nvme-mi-send` | Submit a NVMe-MI Send command, return results | Only supported in WinPE |
 
 ### Supported on Windows but Not Supported by Current Test Device (Log Pages)
 
@@ -81,29 +89,6 @@ corresponding log page identifiers.
 | `ave-discovery-log` | Retrieve AVE Discovery Log, show it | LID 0x72 |
 | `pull-model-ddc-req-log` | Retrieve Pull Model DDC Request Log, show it | LID 0x73 |
 | `power-measurement-log` | Retrieve Power Measurement Log, show it | LID 0x25 |
-
-## Supported but with Known Issues or Needs Testing
-
-These commands are implemented on Windows but have known issues or have not yet
-been fully tested.
-
-### Needs Testing
-
-| Command | Description | Notes |
-|---------|-------------|-------|
-| `compare` | Submit a Compare command, return results | Only supported in WinPE |
-| `create-ns` | Creates a namespace with the provided parameters | Only supported in WinPE |
-| `delete-ns` | Deletes a namespace from the controller | Only supported in WinPE |
-| `attach-ns` | Attaches a namespace to requested controller(s) | Only supported in WinPE |
-| `detach-ns` | Detaches a namespace from requested controller(s) | Only supported in WinPE |
-| `nvme-mi-recv` | Submit a NVMe-MI Receive command, return results | Only supported in WinPE |
-| `nvme-mi-send` | Submit a NVMe-MI Send command, return results | Only supported in WinPE |
-
-## Supported by Windows but Not Implemented
-
-| Command | Description | Notes |
-|---------|-------------|-------|
-| `dsm` | Submit a Data Set Management command, return results | Deallocate option is supported by Windows but not implemented |
 
 ## Not Supported on Windows
 
