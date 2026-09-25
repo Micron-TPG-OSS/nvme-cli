@@ -47,10 +47,6 @@ enum simple_list_col {
 	SIMPLE_LIST_COL_FW_REV,
 };
 
-#define stdout_prop_cap(fld, val, ...) \
-	stdout_prop_field(prop_cap[fld][0], prop_cap[fld][1], 41, 59, \
-	val, ##__VA_ARGS__)
-
 static const uint8_t zero_uuid[16] = { 0 };
 static const uint8_t invalid_uuid[16] = {[0 ... 15] = 0xff };
 static const char dash[100] = {[0 ... 99] = '-'};
@@ -291,34 +287,52 @@ static void stdout_feature_show_fields(enum nvme_features_id fid,
 				       unsigned int result,
 				       unsigned char *buf);
 static void stdout_smart_log(struct nvme_smart_log *smart, unsigned int nsid, const char *devname);
+static struct shr_table *stdout_kv_table_create(void);
+static int stdout_kv_add(struct shr_table *t, const char *name,
+		const char *fmt, ...);
+static void stdout_kv_render(FILE *stream, struct shr_table *t);
+static void stdout_kv_table_finish(struct shr_table *t, const char *what);
+static struct shr_table *stdout_bits_table_create(void);
+static void stdout_bits_add(struct shr_table *t, const char *bits,
+		unsigned int val, const char *desc_fmt, ...);
 
 static void stdout_predictable_latency_per_nvmset(
 		struct nvme_nvmset_predictable_lat_log *plpns_log,
 		__u16 nvmset_id, const char *devname)
 {
+	struct shr_table *t;
+
 	printf("Predictable Latency Per NVM Set Log for device: %s\n",
 		devname);
 	printf("Predictable Latency Per NVM Set Log for NVM Set ID: %u\n",
 		le16_to_cpu(nvmset_id));
-	printf("Status: %u\n", plpns_log->status);
-	printf("Event Type: %u\n",
-		le16_to_cpu(plpns_log->event_type));
-	printf("DTWIN Reads Typical: %"PRIu64"\n",
-		le64_to_cpu(plpns_log->dtwin_rt));
-	printf("DTWIN Writes Typical: %"PRIu64"\n",
-		le64_to_cpu(plpns_log->dtwin_wt));
-	printf("DTWIN Time Maximum: %"PRIu64"\n",
-		le64_to_cpu(plpns_log->dtwin_tmax));
-	printf("NDWIN Time Minimum High: %"PRIu64"\n",
-		le64_to_cpu(plpns_log->ndwin_tmin_hi));
-	printf("NDWIN Time Minimum Low: %"PRIu64"\n",
-		le64_to_cpu(plpns_log->ndwin_tmin_lo));
-	printf("DTWIN Reads Estimate: %"PRIu64"\n",
-		le64_to_cpu(plpns_log->dtwin_re));
-	printf("DTWIN Writes Estimate: %"PRIu64"\n",
-		le64_to_cpu(plpns_log->dtwin_we));
-	printf("DTWIN Time Estimate: %"PRIu64"\n\n\n",
-		le64_to_cpu(plpns_log->dtwin_te));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Status", "%u", plpns_log->status);
+	stdout_kv_add(t, "Event Type", "%u",
+		      le16_to_cpu(plpns_log->event_type));
+	stdout_kv_add(t, "DTWIN Reads Typical", "%"PRIu64,
+		      le64_to_cpu(plpns_log->dtwin_rt));
+	stdout_kv_add(t, "DTWIN Writes Typical", "%"PRIu64,
+		      le64_to_cpu(plpns_log->dtwin_wt));
+	stdout_kv_add(t, "DTWIN Time Maximum", "%"PRIu64,
+		      le64_to_cpu(plpns_log->dtwin_tmax));
+	stdout_kv_add(t, "NDWIN Time Minimum High", "%"PRIu64,
+		      le64_to_cpu(plpns_log->ndwin_tmin_hi));
+	stdout_kv_add(t, "NDWIN Time Minimum Low", "%"PRIu64,
+		      le64_to_cpu(plpns_log->ndwin_tmin_lo));
+	stdout_kv_add(t, "DTWIN Reads Estimate", "%"PRIu64,
+		      le64_to_cpu(plpns_log->dtwin_re));
+	stdout_kv_add(t, "DTWIN Writes Estimate", "%"PRIu64,
+		      le64_to_cpu(plpns_log->dtwin_we));
+	stdout_kv_add(t, "DTWIN Time Estimate", "%"PRIu64,
+		      le64_to_cpu(plpns_log->dtwin_te));
+
+	stdout_kv_table_finish(t, "predictable-latency-nvmset");
+	printf("\n\n");
 }
 
 static void stdout_predictable_latency_event_agg_log(
@@ -327,40 +341,71 @@ static void stdout_predictable_latency_event_agg_log(
 {
 	__u64 num_iter;
 	__u64 num_entries;
+	struct shr_table *t;
 
 	num_entries = le64_to_cpu(pea_log->num_entries);
 	printf("Predictable Latency Event Aggregate Log for device: %s\n", devname);
 
-	printf("Number of Entries Available: %"PRIu64"\n", (uint64_t)num_entries);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Number of Entries Available", "%"PRIu64,
+		      (uint64_t)num_entries);
 
 	num_iter = min(num_entries, log_entries);
-	for (int i = 0; i < num_iter; i++)
-		printf("Entry[%d]: %u\n", i + 1, le16_to_cpu(pea_log->entries[i]));
+	for (int i = 0; i < num_iter; i++) {
+		char name[24];
+
+		snprintf(name, sizeof(name), "Entry[%d]", i + 1);
+		stdout_kv_add(t, name, "%u", le16_to_cpu(pea_log->entries[i]));
+	}
+
+	stdout_kv_table_finish(t, "predictable-latency-event-agg");
 }
 
-static void stdout_persistent_event_log_rci(__le32 pel_header_rci)
+static struct shr_table *
+stdout_persistent_event_log_rci_table(__le32 pel_header_rci)
 {
+	struct shr_table *t;
 	__u32 rci = le32_to_cpu(pel_header_rci);
 	__u32 rsvd19 = NVME_PEL_RCI_RSVD(rci);
 	__u8 rce = NVME_PEL_RCI_RCE(rci);
 	__u8 rcpit = NVME_PEL_RCI_RCPIT(rci);
 	__u16 rcpid = NVME_PEL_RCI_RCPID(rci);
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd19)
-		printf("  [31:19] : %#x\tReserved\n", rsvd19);
-	printf("\tReporting Context Exists (RCE): %s(%u)\n", rce ? "true" : "false", rce);
-	printf("\tReporting Context Port Identifier Type (RCPIT): %u(%s)\n", rcpit,
-	       nvme_pel_rci_rcpit_to_string(rcpit));
-	printf("\tReporting Context Port Identifier (RCPID): %#x\n\n", rcpid);
+		stdout_bits_add(t, "[31:19]", rsvd19, "Reserved");
+	stdout_bits_add(t, "[18:18]", rce, "Reporting Context %sExists",
+			rce ? "" : "Not ");
+	stdout_bits_add(t, "[17:16]", rcpit,
+			"Reporting Context Port Identifier Type: %s",
+			nvme_pel_rci_rcpit_to_string(rcpit));
+	stdout_bits_add(t, "[15:0]", rcpid,
+			"Reporting Context Port Identifier");
+
+	return t;
 }
 
-static void stdout_persistent_event_entry_ehai(__u8 ehai)
+static struct shr_table *stdout_persistent_event_entry_ehai_table(__u8 ehai)
 {
+	struct shr_table *t;
 	__u8 rsvd1 = NVME_PEL_EHAI_RSVD(ehai);
 	__u8 pit = NVME_PEL_EHAI_PIT(ehai);
 
-	printf("  [7:2] : %#x\tReserved\n", rsvd1);
-	printf("\tPort Identifier Type (PIT): %u(%s)\n", pit, nvme_pel_ehai_pit_to_string(pit));
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[7:2]", rsvd1, "Reserved");
+	stdout_bits_add(t, "[1:0]", pit, "%s",
+			 nvme_pel_ehai_pit_to_string(pit));
+
+	return t;
 }
 
 static void stdout_add_bitmap(int i, __u8 seb)
@@ -378,68 +423,107 @@ static void stdout_persistent_event_log_fdp_events(unsigned int cdw11, unsigned 
 						   unsigned char *buf)
 {
 	unsigned int num = NVME_GET(cdw11, FEAT_FDPE_NOET);
+	struct shr_table *t;
 
-	for (unsigned int i = 0; i < num; i++) {
-		printf("\t%-53s: %sEnabled\n", nvme_fdp_event_to_string(buf[i]),
-		       NVME_GET(cdw12, FDP_SUPP_EVENT_ENABLED) ? "" : "Not ");
-	}
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	for (unsigned int i = 0; i < num; i++)
+		stdout_kv_add(t, nvme_fdp_event_to_string(buf[i]), "%sEnabled",
+			      NVME_GET(cdw12, FDP_SUPP_EVENT_ENABLED) ?
+			      "" : "Not ");
+
+	stdout_kv_table_finish(t, "pel-fdp-events");
 }
 
-void nvme_show_pel_header(struct nvme_persistent_event_log *pevent_log_head, int human)
+void nvme_show_pel_header(struct nvme_persistent_event_log *pevent_log_head,
+			   int verbose)
 {
-	printf("Log Identifier: %u\n", pevent_log_head->lid);
-	printf("Total Number of Events: %u\n", le32_to_cpu(pevent_log_head->tnev));
-	printf("Total Log Length : %"PRIu64"\n", le64_to_cpu(pevent_log_head->tll));
-	printf("Log Revision: %u\n", pevent_log_head->rv);
-	printf("Log Header Length: %u\n", pevent_log_head->lhl);
-	printf("Timestamp: %"PRIu64"\n", le64_to_cpu(pevent_log_head->ts));
-	printf("Power On Hours (POH): %s",
-	       uint128_t_to_l10n_string(le128_to_cpu(pevent_log_head->poh)));
-	printf("Power Cycle Count: %"PRIu64"\n", le64_to_cpu(pevent_log_head->pcc));
-	printf("PCI Vendor ID (VID): %u\n", le16_to_cpu(pevent_log_head->vid));
-	printf("PCI Subsystem Vendor ID (SSVID): %u\n", le16_to_cpu(pevent_log_head->ssvid));
-	printf("Serial Number (SN): %-.*s\n", (int)sizeof(pevent_log_head->sn),
-	       pevent_log_head->sn);
-	printf("Model Number (MN): %-.*s\n", (int)sizeof(pevent_log_head->mn), pevent_log_head->mn);
-	printf("NVM Subsystem NVMe Qualified Name (SUBNQN): %-.*s\n",
-	       (int)sizeof(pevent_log_head->subnqn), pevent_log_head->subnqn);
-	printf("Generation Number: %u\n", le16_to_cpu(pevent_log_head->gen_number));
-	printf("Reporting Context Information (RCI): %u\n", le32_to_cpu(pevent_log_head->rci));
+	struct nvme_persistent_event_log *hdr = pevent_log_head;
+	struct shr_table *t;
+	int row;
 
-	if (human)
-		stdout_persistent_event_log_rci(pevent_log_head->rci);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Log Identifier", "%u", hdr->lid);
+	stdout_kv_add(t, "Total Number of Events", "%u",
+		      le32_to_cpu(hdr->tnev));
+	stdout_kv_add(t, "Total Log Length", "%"PRIu64,
+		      le64_to_cpu(hdr->tll));
+	stdout_kv_add(t, "Log Revision", "%u", hdr->rv);
+	stdout_kv_add(t, "Log Header Length", "%u", hdr->lhl);
+	stdout_kv_add(t, "Timestamp", "%"PRIu64, le64_to_cpu(hdr->ts));
+	stdout_kv_add(t, "Power On Hours (POH)", "%s",
+		      uint128_t_to_l10n_string(le128_to_cpu(hdr->poh)));
+	stdout_kv_add(t, "Power Cycle Count", "%"PRIu64,
+		      le64_to_cpu(hdr->pcc));
+	stdout_kv_add(t, "PCI Vendor ID (VID)", "%u",
+		      le16_to_cpu(hdr->vid));
+	stdout_kv_add(t, "PCI Subsystem Vendor ID (SSVID)", "%u",
+		      le16_to_cpu(hdr->ssvid));
+	stdout_kv_add(t, "Serial Number (SN)", "%-.*s",
+		      (int)sizeof(hdr->sn), hdr->sn);
+	stdout_kv_add(t, "Model Number (MN)", "%-.*s",
+		      (int)sizeof(hdr->mn), hdr->mn);
+	stdout_kv_add(t, "NVM Subsystem NVMe Qualified Name (SUBNQN)", "%-.*s",
+		      (int)sizeof(hdr->subnqn), hdr->subnqn);
+	stdout_kv_add(t, "Generation Number", "%u",
+		      le16_to_cpu(hdr->gen_number));
+	row = stdout_kv_add(t, "Reporting Context Information (RCI)", "%u",
+			     le32_to_cpu(hdr->rci));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+			stdout_persistent_event_log_rci_table(hdr->rci));
+
+	stdout_kv_table_finish(t, "persistent-event-log header");
 
 	printf("Supported Events Bitmap:\n");
 	for (int i = 0; i < 32; i++) {
-		if (!pevent_log_head->seb[i])
+		if (!hdr->seb[i])
 			continue;
-		stdout_add_bitmap(i, pevent_log_head->seb[i]);
+		stdout_add_bitmap(i, hdr->seb[i]);
 	}
 }
 
-void nvme_show_pel_event_header(int i, struct nvme_persistent_event_entry *pevent_entry_head,
-				int human)
+void nvme_show_pel_event_header(int i,
+				 struct nvme_persistent_event_entry *hdr,
+				 int verbose)
 {
-	__u16 vsil = le16_to_cpu(pevent_entry_head->vsil);
+	struct shr_table *t;
+	__u16 vsil = le16_to_cpu(hdr->vsil);
+	int row;
 
-	printf("Event Number: %u\n", i);
-	printf("Event Type: %s\n", nvme_pel_event_to_string(pevent_entry_head->etype));
-	printf("Event Type Revision: %u\n", pevent_entry_head->etype_rev);
-	printf("Event Header Length: %u\n", pevent_entry_head->ehl);
-	printf("Event Header Additional Info: %u\n", pevent_entry_head->ehai);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
 
-	if (human)
-		stdout_persistent_event_entry_ehai(pevent_entry_head->ehai);
+	stdout_kv_add(t, "Event Number", "%u", i);
+	stdout_kv_add(t, "Event Type", "%s",
+		      nvme_pel_event_to_string(hdr->etype));
+	stdout_kv_add(t, "Event Type Revision", "%u", hdr->etype_rev);
+	stdout_kv_add(t, "Event Header Length", "%u", hdr->ehl);
+	row = stdout_kv_add(t, "Event Header Additional Info", "%u",
+			     hdr->ehai);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+			stdout_persistent_event_entry_ehai_table(hdr->ehai));
+	stdout_kv_add(t, "Controller Identifier", "%u",
+		      le16_to_cpu(hdr->cntlid));
+	stdout_kv_add(t, "Event Timestamp", "%"PRIu64,
+		      le64_to_cpu(hdr->ets));
+	stdout_kv_add(t, "Port Identifier", "%u",
+		      le16_to_cpu(hdr->pelpid));
+	stdout_kv_add(t, "Vendor Specific Information Length", "%u", vsil);
+	stdout_kv_add(t, "Event Length", "%u", le16_to_cpu(hdr->el));
 
-	printf("Controller Identifier: %u\n", le16_to_cpu(pevent_entry_head->cntlid));
-	printf("Event Timestamp: %"PRIu64"\n", le64_to_cpu(pevent_entry_head->ets));
-	printf("Port Identifier: %u\n", le16_to_cpu(pevent_entry_head->pelpid));
-	printf("Vendor Specific Information Length: %u\n", vsil);
-	printf("Event Length: %u\n", le16_to_cpu(pevent_entry_head->el));
+	stdout_kv_table_finish(t, "persistent-event-entry-header");
 
 	if (vsil) {
 		printf("Vendor Specific Information:\n");
-		d((void *)pevent_entry_head + 1, vsil, 16, 1);
+		d((void *)hdr + 1, vsil, 16, 1);
 	}
 }
 
@@ -455,28 +539,50 @@ void nvme_show_pel_smart_health_event(void *pevent_log_info, __u32 offset,
 void nvme_show_pel_fw_commit_event(void *pevent_log_info, __u32 offset)
 {
 	struct nvme_fw_commit_event *fw_commit_event = pevent_log_info + offset;
+	struct shr_table *t;
 
 	printf("FW Commit Event Entry:\n");
-	printf("Old Firmware Revision: %"PRIu64" (%s)\n", le64_to_cpu(fw_commit_event->old_fw_rev),
-	       shr_fw_to_string((char *)&fw_commit_event->old_fw_rev));
-	printf("New Firmware Revision: %"PRIu64" (%s)\n", le64_to_cpu(fw_commit_event->new_fw_rev),
-	       shr_fw_to_string((char *)&fw_commit_event->new_fw_rev));
-	printf("FW Commit Action: %u\n", fw_commit_event->fw_commit_action);
-	printf("FW Slot: %u\n", fw_commit_event->fw_slot);
-	printf("Status Code Type for Firmware Commit Command: %u\n", fw_commit_event->sct_fw);
-	printf("Status Returned for Firmware Commit Command: %u\n", fw_commit_event->sc_fw);
-	printf("Vendor Assigned Firmware Commit Result Code: %u\n",
-	       le16_to_cpu(fw_commit_event->vndr_assign_fw_commit_rc));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Old Firmware Revision", "%"PRIu64" (%s)",
+		      le64_to_cpu(fw_commit_event->old_fw_rev),
+		      shr_fw_to_string((char *)&fw_commit_event->old_fw_rev));
+	stdout_kv_add(t, "New Firmware Revision", "%"PRIu64" (%s)",
+		      le64_to_cpu(fw_commit_event->new_fw_rev),
+		      shr_fw_to_string((char *)&fw_commit_event->new_fw_rev));
+	stdout_kv_add(t, "FW Commit Action", "%u",
+		      fw_commit_event->fw_commit_action);
+	stdout_kv_add(t, "FW Slot", "%u", fw_commit_event->fw_slot);
+	stdout_kv_add(t, "Status Code Type for Firmware Commit Command", "%u",
+		      fw_commit_event->sct_fw);
+	stdout_kv_add(t, "Status Returned for Firmware Commit Command", "%u",
+		      fw_commit_event->sc_fw);
+	stdout_kv_add(t, "Vendor Assigned Firmware Commit Result Code", "%u",
+		      le16_to_cpu(fw_commit_event->vndr_assign_fw_commit_rc));
+
+	stdout_kv_table_finish(t, "pel-fw-commit-event");
 }
 
 void nvme_show_pel_timestamp_event(void *pevent_log_info, __u32 offset)
 {
 	struct nvme_time_stamp_change_event *ts_change_event = pevent_log_info + offset;
+	struct shr_table *t;
 
 	printf("Time Stamp Change Event Entry:\n");
-	printf("Previous Timestamp: %"PRIu64"\n", le64_to_cpu(ts_change_event->previous_timestamp));
-	printf("Milliseconds Since Reset: %"PRIu64"\n",
-	       le64_to_cpu(ts_change_event->ml_secs_since_reset));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Previous Timestamp", "%"PRIu64,
+		      le64_to_cpu(ts_change_event->previous_timestamp));
+	stdout_kv_add(t, "Milliseconds Since Reset", "%"PRIu64,
+		      le64_to_cpu(ts_change_event->ml_secs_since_reset));
+
+	stdout_kv_table_finish(t, "pel-timestamp-event");
 }
 
 void nvme_show_pel_power_on_reset_event(void *pevent_log_info, __u32 offset,
@@ -487,91 +593,179 @@ void nvme_show_pel_power_on_reset_event(void *pevent_log_info, __u32 offset,
 			     le16_to_cpu(pevent_entry_head->vsil) - sizeof(*fw_rev);
 	struct nvme_power_on_reset_info_list *por_event;
 	__u32 por_info_list = por_info_len / sizeof(*por_event);
+	struct shr_table *t;
 
 	printf("Power On Reset Event Entry:\n");
 	fw_rev = pevent_log_info + offset;
-	printf("Firmware Revision: %"PRIu64" (%s)\n", le64_to_cpu(*fw_rev),
-	       shr_fw_to_string((char *)fw_rev));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Firmware Revision", "%"PRIu64" (%s)",
+		      le64_to_cpu(*fw_rev), shr_fw_to_string((char *)fw_rev));
+
+	stdout_kv_table_finish(t, "pel-power-on-reset-event");
+
 	printf("Reset Information List:\n");
 
 	for (int i = 0; i < por_info_list; i++) {
 		por_event = pevent_log_info + offset + sizeof(*fw_rev) + i * sizeof(*por_event);
-		printf("Controller ID: %u\n", le16_to_cpu(por_event->cid));
-		printf("Firmware Activation: %u\n", por_event->fw_act);
-		printf("Operation in Progress: %u\n", por_event->op_in_prog);
-		printf("Controller Power Cycle: %u\n", le32_to_cpu(por_event->ctrl_power_cycle));
-		printf("Power on milliseconds: %"PRIu64"\n",
-		       le64_to_cpu(por_event->power_on_ml_seconds));
-		printf("Controller Timestamp: %"PRIu64"\n",
-		       le64_to_cpu(por_event->ctrl_time_stamp));
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Controller ID", "%u",
+			      le16_to_cpu(por_event->cid));
+		stdout_kv_add(t, "Firmware Activation", "%u",
+			      por_event->fw_act);
+		stdout_kv_add(t, "Operation in Progress", "%u",
+			      por_event->op_in_prog);
+		stdout_kv_add(t, "Controller Power Cycle", "%u",
+			      le32_to_cpu(por_event->ctrl_power_cycle));
+		stdout_kv_add(t, "Power on milliseconds", "%"PRIu64,
+			      le64_to_cpu(por_event->power_on_ml_seconds));
+		stdout_kv_add(t, "Controller Timestamp", "%"PRIu64,
+			      le64_to_cpu(por_event->ctrl_time_stamp));
+
+		stdout_kv_table_finish(t, "pel-power-on-reset-event");
 	}
 }
 
 void nvme_show_pel_nss_hw_error_event(void *pevent_log_info, __u32 offset)
 {
 	struct nvme_nss_hw_err_event *nss_hw_err_event = pevent_log_info + offset;
+	__u16 code = le16_to_cpu(nss_hw_err_event->nss_hw_err_event_code);
+	struct shr_table *t;
 
-	printf("NVM Subsystem Hardware Error Event Code Entry: %u, %s\n",
-	       le16_to_cpu(nss_hw_err_event->nss_hw_err_event_code),
-	       nvme_nss_hw_error_to_string(nss_hw_err_event->nss_hw_err_event_code));
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "NVM Subsystem Hardware Error Event Code Entry",
+		      "%u, %s", code, nvme_nss_hw_error_to_string(code));
+
+	stdout_kv_table_finish(t, "pel-nss-hw-error-event");
 }
 
 void nvme_show_pel_change_ns_event(void *pevent_log_info, __u32 offset)
 {
 	struct nvme_change_ns_event *ns_event = pevent_log_info + offset;
+	struct shr_table *t;
 
 	printf("Change Namespace Event Entry:\n");
-	printf("Namespace Management CDW10: %u\n", le32_to_cpu(ns_event->nsmgt_cdw10));
-	printf("Namespace Size: %"PRIu64"\n", le64_to_cpu(ns_event->nsze));
-	printf("Namespace Capacity: %"PRIu64"\n", le64_to_cpu(ns_event->nscap));
-	printf("Formatted LBA Size: %u\n", ns_event->flbas);
-	printf("End-to-end Data Protection Type Settings: %u\n", ns_event->dps);
-	printf("Namespace Multi-path I/O and Namespace Sharing Capabilities: %u\n", ns_event->nmic);
-	printf("ANA Group Identifier: %u\n", le32_to_cpu(ns_event->ana_grp_id));
-	printf("NVM Set Identifier: %u\n", le16_to_cpu(ns_event->nvmset_id));
-	printf("Namespace ID: %u\n", le32_to_cpu(ns_event->nsid));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Namespace Management CDW10", "%u",
+		      le32_to_cpu(ns_event->nsmgt_cdw10));
+	stdout_kv_add(t, "Namespace Size", "%"PRIu64,
+		      le64_to_cpu(ns_event->nsze));
+	stdout_kv_add(t, "Namespace Capacity", "%"PRIu64,
+		      le64_to_cpu(ns_event->nscap));
+	stdout_kv_add(t, "Formatted LBA Size", "%u", ns_event->flbas);
+	stdout_kv_add(t, "End-to-end Data Protection Type Settings", "%u",
+		      ns_event->dps);
+	stdout_kv_add(t,
+		      "Namespace Multi-path I/O and Namespace Sharing Capabilities",
+		      "%u", ns_event->nmic);
+	stdout_kv_add(t, "ANA Group Identifier", "%u",
+		      le32_to_cpu(ns_event->ana_grp_id));
+	stdout_kv_add(t, "NVM Set Identifier", "%u",
+		      le16_to_cpu(ns_event->nvmset_id));
+	stdout_kv_add(t, "Namespace ID", "%u", le32_to_cpu(ns_event->nsid));
+
+	stdout_kv_table_finish(t, "pel-change-ns-event");
 }
 
 void nvme_show_pel_format_start_event(void *pevent_log_info, __u32 offset)
 {
 	struct nvme_format_nvm_start_event *format_start_event = pevent_log_info + offset;
+	struct shr_table *t;
 
 	printf("Format NVM Start Event Entry:\n");
-	printf("Namespace Identifier: %u\n", le32_to_cpu(format_start_event->nsid));
-	printf("Format NVM Attributes: %u\n", format_start_event->fna);
-	printf("Format NVM CDW10: %u\n", le32_to_cpu(format_start_event->format_nvm_cdw10));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Namespace Identifier", "%u",
+		      le32_to_cpu(format_start_event->nsid));
+	stdout_kv_add(t, "Format NVM Attributes", "%u",
+		      format_start_event->fna);
+	stdout_kv_add(t, "Format NVM CDW10", "%u",
+		      le32_to_cpu(format_start_event->format_nvm_cdw10));
+
+	stdout_kv_table_finish(t, "pel-format-start-event");
 }
 
 void nvme_show_pel_format_completion_event(void *pevent_log_info, __u32 offset)
 {
 	struct nvme_format_nvm_compln_event *format_cmpln_event = pevent_log_info + offset;
+	struct shr_table *t;
 
 	printf("Format NVM Completion Event Entry:\n");
-	printf("Namespace Identifier: %u\n", le32_to_cpu(format_cmpln_event->nsid));
-	printf("Smallest Format Progress Indicator: %u\n", format_cmpln_event->smallest_fpi);
-	printf("Format NVM Status: %u\n", format_cmpln_event->format_nvm_status);
-	printf("Completion Information: %u\n", le16_to_cpu(format_cmpln_event->compln_info));
-	printf("Status Field: %u\n", le32_to_cpu(format_cmpln_event->status_field));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Namespace Identifier", "%u",
+		      le32_to_cpu(format_cmpln_event->nsid));
+	stdout_kv_add(t, "Smallest Format Progress Indicator", "%u",
+		      format_cmpln_event->smallest_fpi);
+	stdout_kv_add(t, "Format NVM Status", "%u",
+		      format_cmpln_event->format_nvm_status);
+	stdout_kv_add(t, "Completion Information", "%u",
+		      le16_to_cpu(format_cmpln_event->compln_info));
+	stdout_kv_add(t, "Status Field", "%u",
+		      le32_to_cpu(format_cmpln_event->status_field));
+
+	stdout_kv_table_finish(t, "pel-format-completion-event");
 }
 
 void nvme_show_pel_sanitize_start_event(void *pevent_log_info, __u32 offset)
 {
 	struct nvme_sanitize_start_event *sanitize_start_event = pevent_log_info + offset;
+	struct shr_table *t;
 
 	printf("Sanitize Start Event Entry:\n");
-	printf("SANICAP: %u\n", sanitize_start_event->sani_cap);
-	printf("Sanitize CDW10: %u\n", le32_to_cpu(sanitize_start_event->sani_cdw10));
-	printf("Sanitize CDW11: %u\n", le32_to_cpu(sanitize_start_event->sani_cdw11));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "SANICAP", "%u", sanitize_start_event->sani_cap);
+	stdout_kv_add(t, "Sanitize CDW10", "%u",
+		      le32_to_cpu(sanitize_start_event->sani_cdw10));
+	stdout_kv_add(t, "Sanitize CDW11", "%u",
+		      le32_to_cpu(sanitize_start_event->sani_cdw11));
+
+	stdout_kv_table_finish(t, "pel-sanitize-start-event");
 }
 
 void nvme_show_pel_sanitize_completion_event(void *pevent_log_info, __u32 offset)
 {
 	struct nvme_sanitize_compln_event *sanitize_cmpln_event = pevent_log_info + offset;
+	struct shr_table *t;
 
 	printf("Sanitize Completion Event Entry:\n");
-	printf("Sanitize Progress: %u\n", le16_to_cpu(sanitize_cmpln_event->sani_prog));
-	printf("Sanitize Status: %u\n", le16_to_cpu(sanitize_cmpln_event->sani_status));
-	printf("Completion Information: %u\n", le16_to_cpu(sanitize_cmpln_event->cmpln_info));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Sanitize Progress", "%u",
+		      le16_to_cpu(sanitize_cmpln_event->sani_prog));
+	stdout_kv_add(t, "Sanitize Status", "%u",
+		      le16_to_cpu(sanitize_cmpln_event->sani_status));
+	stdout_kv_add(t, "Completion Information", "%u",
+		      le16_to_cpu(sanitize_cmpln_event->cmpln_info));
+
+	stdout_kv_table_finish(t, "pel-sanitize-completion-event");
 }
 
 void nvme_show_pel_set_feature_event(void *pevent_log_info, __u32 offset)
@@ -579,14 +773,21 @@ void nvme_show_pel_set_feature_event(void *pevent_log_info, __u32 offset)
 	int fid, cdw11, cdw12, dword_cnt;
 	unsigned char *mem_buf;
 	struct nvme_set_feature_event *set_feat_event = pevent_log_info + offset;
+	struct shr_table *t;
 
 	printf("Set Feature Event Entry:\n");
 	dword_cnt = NVME_SET_FEAT_EVENT_DW_COUNT(set_feat_event->layout);
 	fid = NVME_GET(le32_to_cpu(set_feat_event->cdw_mem[0]), SET_FEATURES_CDW10_FID);
 	cdw11 = le32_to_cpu(set_feat_event->cdw_mem[1]);
 
-	printf("Set Feature ID: 0x%02x (%s), value: 0x%08x\n", fid, nvme_feature_to_string(fid),
-	       cdw11);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Set Feature ID", "0x%02x (%s), value: 0x%08x", fid,
+		      nvme_feature_to_string(fid), cdw11);
+
+	stdout_kv_table_finish(t, "pel-set-feature-event");
 
 	if (!NVME_SET_FEAT_EVENT_MB_COUNT(set_feat_event->layout))
 		return;
@@ -603,30 +804,60 @@ void nvme_show_pel_set_feature_event(void *pevent_log_info, __u32 offset)
 void nvme_show_pel_thermal_excursion_event(void *pevent_log_info, __u32 offset)
 {
 	struct nvme_thermal_exc_event *thermal_exc_event = pevent_log_info + offset;
+	struct shr_table *t;
 
 	printf("Thermal Excursion Event Entry:\n");
-	printf("Over Temperature: %u\n", thermal_exc_event->over_temp);
-	printf("Threshold: %u\n", thermal_exc_event->threshold);
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Over Temperature", "%u",
+		      thermal_exc_event->over_temp);
+	stdout_kv_add(t, "Threshold", "%u", thermal_exc_event->threshold);
+
+	stdout_kv_table_finish(t, "pel-thermal-excursion-event");
 }
 
 static void pel_vs_event_data(void *vsed, __u8 vsedt, __u16 vsedl)
 {
+	struct shr_table *t;
+
 	printf("Vendor Specific Event Data:\n");
 	switch (vsedt) {
 	case NVME_PEL_VSEDT_EVENT_NAME:
-		printf("Event Name for Vendor Specific Event Code:\n");
-		printf("%.*s\n", vsedl, (char *)vsed);
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Event Name for Vendor Specific Event Code",
+			      "%.*s", vsedl, (char *)vsed);
+
+		stdout_kv_table_finish(t, "pel-vs-event-data");
 		break;
 	case NVME_PEL_VSEDT_ASCII_STRING:
-		printf("ASCII String Data:\n");
-		printf("%.*s\n", vsedl, (char *)vsed);
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "ASCII String Data", "%.*s", vsedl,
+			      (char *)vsed);
+
+		stdout_kv_table_finish(t, "pel-vs-event-data");
 		break;
 	case NVME_PEL_VSEDT_BINARY:
 		printf("Binary Data:\n");
 		d(vsed, vsedl, 16, 1);
 		break;
 	case NVME_PEL_VSEDT_SIGNED_INT:
-		printf("Signed Integer Data: %" PRId64 "\n", (int64_t)vsedt);
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Signed Integer Data", "%"PRId64,
+			      (int64_t)le64_to_cpu(*(__le64 *)vsed));
+
+		stdout_kv_table_finish(t, "pel-vs-event-data");
 		break;
 	default:
 		printf("Reserved data type. As Binary:\n");
@@ -641,6 +872,7 @@ void nvme_show_pel_vendor_specific_event(void *pevent_log_info, __u32 offset,
 	__u16 vsedl;
 	int i;
 	struct nvme_vs_event_desc *vs_desc;
+	struct shr_table *t;
 
 	printf("Vendor Specific Event Entry:\n");
 	for (i = 0; progress < event_data_len; i++) {
@@ -648,10 +880,22 @@ void nvme_show_pel_vendor_specific_event(void *pevent_log_info, __u32 offset,
 		vsedl = le16_to_cpu(vs_desc->vsedl);
 
 		printf("Vendor Specific Event Descriptor %u:\n", i);
-		printf("Vendor Specific Event Code: %u\n", le16_to_cpu(vs_desc->vsec));
-		printf("Vendor Specific Event Data Type: %u\n", vs_desc->vsedt);
-		printf("Vendor Specific Event UIndex: %u\n", vs_desc->uidx);
-		printf("Vendor Specific Event Data Length: %u\n", vsedl);
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Vendor Specific Event Code", "%u",
+			      le16_to_cpu(vs_desc->vsec));
+		stdout_kv_add(t, "Vendor Specific Event Data Type", "%u",
+			      vs_desc->vsedt);
+		stdout_kv_add(t, "Vendor Specific Event UIndex", "%u",
+			      vs_desc->uidx);
+		stdout_kv_add(t, "Vendor Specific Event Data Length", "%u",
+			      vsedl);
+
+		stdout_kv_table_finish(t, "pel-vendor-specific-event");
+
 		if (vsedl)
 			pel_vs_event_data(vs_desc + 1, vs_desc->vsedt,
 					  vsedl);
@@ -666,10 +910,17 @@ static void stdout_persistent_event_log(void *pevent_log_info, __u8 action, __u3
 	__u32 offset = sizeof(*pevent_log_head);
 	__u16 vsil, el;
 	struct nvme_persistent_event_entry *pevent_entry_head;
-	int human = stdout_print_ops.flags & VERBOSE;
+	int verbose = stdout_print_ops.flags & VERBOSE;
+	struct shr_table *t;
 
-	printf("Persistent Event Log for device: %s\n", devname);
-	printf("Action for Persistent Event Log: %u\n", action);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Persistent Event Log for device", "%s", devname);
+	stdout_kv_add(t, "Action for Persistent Event Log", "%u", action);
+
+	stdout_kv_table_finish(t, "persistent-event-log");
 
 	if (size < offset) {
 		printf("No log data can be shown with this log len at least " \
@@ -680,7 +931,7 @@ static void stdout_persistent_event_log(void *pevent_log_info, __u8 action, __u3
 
 	pevent_log_head = pevent_log_info;
 
-	nvme_show_pel_header(pevent_log_head, human);
+	nvme_show_pel_header(pevent_log_head, verbose);
 
 	printf("\n");
 	printf("\nPersistent Event Entries:\n");
@@ -695,7 +946,7 @@ static void stdout_persistent_event_log(void *pevent_log_info, __u8 action, __u3
 		if ((offset + pevent_entry_head->ehl + 3 + el) >= size)
 			break;
 
-		nvme_show_pel_event_header(i, pevent_entry_head, human);
+		nvme_show_pel_event_header(i, pevent_entry_head, verbose);
 
 		offset += pevent_entry_head->ehl + vsil + 3;
 
@@ -769,15 +1020,26 @@ static void stdout_endurance_group_event_agg_log(
 		struct nvme_aggregate_endurance_group_event *endurance_log,
 		__u64 log_entries, __u32 size, const char *devname)
 {
+	struct shr_table *t;
+
 	printf("Endurance Group Event Aggregate Log for device: %s\n", devname);
 
-	printf("Number of Entries Available: %"PRIu64"\n",
-		le64_to_cpu(endurance_log->num_entries));
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Number of Entries Available", "%"PRIu64,
+		      le64_to_cpu(endurance_log->num_entries));
 
 	for (int i = 0; i < log_entries; i++) {
-		printf("Entry[%d]: %u\n", i + 1,
-			le16_to_cpu(endurance_log->entries[i]));
+		char name[24];
+
+		snprintf(name, sizeof(name), "Entry[%d]", i + 1);
+		stdout_kv_add(t, name, "%u",
+			      le16_to_cpu(endurance_log->entries[i]));
 	}
+
+	stdout_kv_table_finish(t, "endurance-group-event-agg");
 }
 
 static void stdout_lba_status_log(void *lba_status, __u32 size,
@@ -788,35 +1050,63 @@ static void stdout_lba_status_log(void *lba_status, __u32 size,
 	struct nvme_lba_rd *range_desc;
 	int offset = sizeof(*hdr);
 	__u32 num_lba_desc, num_elements;
+	struct shr_table *t;
 
 	hdr = lba_status;
 	printf("LBA Status Log for device: %s\n", devname);
-	printf("LBA Status Log Page Length: %"PRIu32"\n",
-		le32_to_cpu(hdr->lslplen));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "LBA Status Log Page Length", "%"PRIu32,
+		      le32_to_cpu(hdr->lslplen));
 	num_elements = le32_to_cpu(hdr->nlslne);
-	printf("Number of LBA Status Log Namespace Elements: %"PRIu32"\n",
-		num_elements);
-	printf("Estimate of Unrecoverable Logical Blocks: %"PRIu32"\n",
-		le32_to_cpu(hdr->estulb));
-	printf("LBA Status Generation Counter: %"PRIu16"\n", le16_to_cpu(hdr->lsgc));
+	stdout_kv_add(t, "Number of LBA Status Log Namespace Elements",
+		      "%"PRIu32, num_elements);
+	stdout_kv_add(t, "Estimate of Unrecoverable Logical Blocks", "%"PRIu32,
+		      le32_to_cpu(hdr->estulb));
+	stdout_kv_add(t, "LBA Status Generation Counter", "%"PRIu16,
+		      le16_to_cpu(hdr->lsgc));
+	stdout_kv_table_finish(t, "lba-status-log");
+
 	for (int ele = 0; ele < num_elements; ele++) {
 		ns_element = lba_status + offset;
-		printf("Namespace Element Identifier: %"PRIu32"\n",
-			le32_to_cpu(ns_element->neid));
 		num_lba_desc = le32_to_cpu(ns_element->nlrd);
-		printf("Number of LBA Range Descriptors: %"PRIu32"\n", num_lba_desc);
-		printf("Recommended Action Type: %u\n", ns_element->ratype);
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Namespace Element Identifier", "%"PRIu32,
+			      le32_to_cpu(ns_element->neid));
+		stdout_kv_add(t, "Number of LBA Range Descriptors", "%"PRIu32,
+			      num_lba_desc);
+		stdout_kv_add(t, "Recommended Action Type", "%u",
+			      ns_element->ratype);
+
+		stdout_kv_table_finish(t, "lba-status-log");
 
 		offset += sizeof(*ns_element);
 		if (num_lba_desc != 0xffffffff) {
+			t = stdout_kv_table_create();
+			if (!t)
+				return;
+
 			for (int i = 0; i < num_lba_desc; i++) {
+				char name[24];
+
 				range_desc = lba_status + offset;
-				printf("RSLBA[%d]: %"PRIu64"\n", i,
-					le64_to_cpu(range_desc->rslba));
-				printf("RNLB[%d]: %"PRIu32"\n", i,
-					le32_to_cpu(range_desc->rnlb));
+				snprintf(name, sizeof(name), "RSLBA[%d]", i);
+				stdout_kv_add(t, name, "%"PRIu64,
+					      le64_to_cpu(range_desc->rslba));
+				snprintf(name, sizeof(name), "RNLB[%d]", i);
+				stdout_kv_add(t, name, "%"PRIu32,
+					      le32_to_cpu(range_desc->rnlb));
 				offset += sizeof(*range_desc);
 			}
+
+			stdout_kv_table_finish(t, "lba-status-log");
 		} else {
 			printf("Number of LBA Range Descriptors (NLRD) set to %#x for "\
 				"NS element %d\n", num_lba_desc, ele);
@@ -827,112 +1117,214 @@ static void stdout_lba_status_log(void *lba_status, __u32 size,
 static void stdout_resv_notif_log(struct nvme_resv_notification_log *resv,
 				  const char *devname)
 {
+	struct shr_table *t;
+
 	printf("Reservation Notif Log for device: %s\n", devname);
-	printf("Log Page Count				: %"PRIx64"\n",
-		le64_to_cpu(resv->lpc));
-	printf("Resv Notif Log Page Type	: %u (%s)\n",
-		resv->rnlpt,
-		nvme_resv_notif_to_string(resv->rnlpt));
-	printf("Num of Available Log Pages	: %u\n", resv->nalp);
-	printf("Namespace ID:				: %"PRIx32"\n",
-		le32_to_cpu(resv->nsid));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Log Page Count", "%"PRIx64, le64_to_cpu(resv->lpc));
+	stdout_kv_add(t, "Resv Notif Log Page Type", "%u (%s)", resv->rnlpt,
+		      nvme_resv_notif_to_string(resv->rnlpt));
+	stdout_kv_add(t, "Num of Available Log Pages", "%u", resv->nalp);
+	stdout_kv_add(t, "Namespace ID", "%"PRIx32, le32_to_cpu(resv->nsid));
+
+	stdout_kv_table_finish(t, "resv-notif-log");
 }
 
-static void stdout_fid_support_effects_log_human(__u32 fid_support)
+static struct shr_table *
+stdout_fid_support_effects_log_verbose_table(__u32 fid_support)
 {
-	const char *set = "+";
-	const char *clr = "-";
-	__u16 fsp;
+	struct shr_table *t;
+	__u8 fsupp = !!(fid_support & NVME_FID_SUPPORTED_EFFECTS_FSUPP);
+	__u8 udcc = !!(fid_support & NVME_FID_SUPPORTED_EFFECTS_UDCC);
+	__u8 ncc = !!(fid_support & NVME_FID_SUPPORTED_EFFECTS_NCC);
+	__u8 nic = !!(fid_support & NVME_FID_SUPPORTED_EFFECTS_NIC);
+	__u8 ccc = !!(fid_support & NVME_FID_SUPPORTED_EFFECTS_CCC);
+	__u8 uss = !!(fid_support & NVME_FID_SUPPORTED_EFFECTS_UUID_SEL);
+	__u16 fsp = NVME_GET(fid_support, FID_SUPPORTED_EFFECTS_SCOPE);
+	__u8 ns_scope = !!(fsp & NVME_FID_SUPPORTED_EFFECTS_SCOPE_NS);
+	__u8 ctrl_scope = !!(fsp & NVME_FID_SUPPORTED_EFFECTS_SCOPE_CTRL);
+	__u8 nvmset_scope = !!(fsp & NVME_FID_SUPPORTED_EFFECTS_SCOPE_NVM_SET);
+	__u8 endgrp_scope = !!(fsp & NVME_FID_SUPPORTED_EFFECTS_SCOPE_ENDGRP);
+	__u8 domain_scope = !!(fsp & NVME_FID_SUPPORTED_EFFECTS_SCOPE_DOMAIN);
+	__u8 nss_scope = !!(fsp & NVME_FID_SUPPORTED_EFFECTS_SCOPE_NSS);
 
-	printf("  FSUPP+");
-	printf("  UDCC%s", (fid_support & NVME_FID_SUPPORTED_EFFECTS_UDCC) ? set : clr);
-	printf("  NCC%s", (fid_support & NVME_FID_SUPPORTED_EFFECTS_NCC) ? set : clr);
-	printf("  NIC%s", (fid_support & NVME_FID_SUPPORTED_EFFECTS_NIC) ? set : clr);
-	printf("  CCC%s", (fid_support & NVME_FID_SUPPORTED_EFFECTS_CCC) ? set : clr);
-	printf("  USS%s", (fid_support & NVME_FID_SUPPORTED_EFFECTS_UUID_SEL) ? set : clr);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	fsp = NVME_GET(fid_support, FID_SUPPORTED_EFFECTS_SCOPE);
+	stdout_bits_add(t, "[0:0]", fsupp, "Command %sSupported",
+			fsupp ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", udcc, "Logical Block Content %sChanged",
+			udcc ? "" : "Not ");
+	stdout_bits_add(t, "[2:2]", ncc, "Namespace Capabilities %sChanged",
+			ncc ? "" : "Not ");
+	stdout_bits_add(t, "[3:3]", nic, "Namespace Inventory %sChanged",
+			nic ? "" : "Not ");
+	stdout_bits_add(t, "[4:4]", ccc, "Controller Capabilities %sChanged",
+			ccc ? "" : "Not ");
+	stdout_bits_add(t, "[19:19]", uss, "UUID Selection %sSupported",
+			uss ? "" : "Not ");
+	stdout_bits_add(t, "[20:20]", ns_scope, "Namespace Scope %sIndicated",
+			ns_scope ? "" : "Not ");
+	stdout_bits_add(t, "[21:21]", ctrl_scope,
+			"Controller Scope %sIndicated",
+			ctrl_scope ? "" : "Not ");
+	stdout_bits_add(t, "[22:22]", nvmset_scope, "NVM Set Scope %sIndicated",
+			nvmset_scope ? "" : "Not ");
+	stdout_bits_add(t, "[23:23]", endgrp_scope,
+			"Endurance Group Scope %sIndicated",
+			endgrp_scope ? "" : "Not ");
+	stdout_bits_add(t, "[24:24]", domain_scope, "Domain Scope %sIndicated",
+			domain_scope ? "" : "Not ");
+	stdout_bits_add(t, "[25:25]", nss_scope,
+			"NVM Subsystem Scope %sIndicated",
+			nss_scope ? "" : "Not ");
 
-	printf("  NAMESPACE SCOPE%s", (fsp & NVME_FID_SUPPORTED_EFFECTS_SCOPE_NS) ? set : clr);
-	printf("  CONTROLLER SCOPE%s", (fsp & NVME_FID_SUPPORTED_EFFECTS_SCOPE_CTRL) ? set : clr);
-	printf("  NVM SET SCOPE%s", (fsp & NVME_FID_SUPPORTED_EFFECTS_SCOPE_NVM_SET) ? set : clr);
-	printf("  ENDURANCE GROUP SCOPE%s", (fsp & NVME_FID_SUPPORTED_EFFECTS_SCOPE_ENDGRP) ? set : clr);
-	printf("  DOMAIN SCOPE%s", (fsp & NVME_FID_SUPPORTED_EFFECTS_SCOPE_DOMAIN) ? set : clr);
-	printf("  NVM Subsystem SCOPE%s", (fsp & NVME_FID_SUPPORTED_EFFECTS_SCOPE_NSS) ? set : clr);
+	return t;
 }
 
 static void stdout_fid_support_effects_log(struct nvme_fid_supported_effects_log *fid_log,
 					   const char *devname)
 {
+	struct shr_table *t;
 	__u32 fid_effect;
-	int i, human = stdout_print_ops.flags & VERBOSE;
+	int i, row, verbose = stdout_print_ops.flags & VERBOSE;
 
 	printf("FID Supports Effects Log for device: %s\n", devname);
 	printf("Admin Command Set\n");
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
 	for (i = 0; i < 256; i++) {
+		char name[48];
+
 		fid_effect = le32_to_cpu(fid_log->fid_support[i]);
-		if (fid_effect & NVME_FID_SUPPORTED_EFFECTS_FSUPP) {
-			printf("FID %02x -> Support Effects Log: %08x", i,
-				fid_effect);
-			if (human)
-				stdout_fid_support_effects_log_human(fid_effect);
-			printf("\n");
-		}
+		if (!(fid_effect & NVME_FID_SUPPORTED_EFFECTS_FSUPP))
+			continue;
+
+		snprintf(name, sizeof(name), "FID %02x -> Support Effects Log",
+			 i);
+		row = stdout_kv_add(t, name, "%08x", fid_effect);
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+				stdout_fid_support_effects_log_verbose_table(
+					fid_effect));
 	}
+
+	stdout_kv_table_finish(t, "fid-support-effects-log");
 }
 
-static void stdout_mi_cmd_support_effects_log_human(__u32 mi_cmd_support)
+static struct shr_table *
+stdout_mi_cmd_support_effects_log_verbose_table(__u32 mi_cmd_support)
 {
-	const char *set = "+";
-	const char *clr = "-";
-	__u16 csp;
+	struct shr_table *t;
+	__u8 csupp = !!(mi_cmd_support & NVME_MI_CMD_SUPPORTED_EFFECTS_CSUPP);
+	__u8 udcc = !!(mi_cmd_support & NVME_MI_CMD_SUPPORTED_EFFECTS_UDCC);
+	__u8 ncc = !!(mi_cmd_support & NVME_MI_CMD_SUPPORTED_EFFECTS_NCC);
+	__u8 nic = !!(mi_cmd_support & NVME_MI_CMD_SUPPORTED_EFFECTS_NIC);
+	__u8 ccc = !!(mi_cmd_support & NVME_MI_CMD_SUPPORTED_EFFECTS_CCC);
+	__u16 csp = NVME_GET(mi_cmd_support, MI_CMD_SUPPORTED_EFFECTS_SCOPE);
+	__u8 ns_scope = !!(csp & NVME_MI_CMD_SUPPORTED_EFFECTS_SCOPE_NS);
+	__u8 ctrl_scope = !!(csp & NVME_MI_CMD_SUPPORTED_EFFECTS_SCOPE_CTRL);
+	__u8 nvmset_scope =
+		!!(csp & NVME_MI_CMD_SUPPORTED_EFFECTS_SCOPE_NVM_SET);
+	__u8 endgrp_scope =
+		!!(csp & NVME_MI_CMD_SUPPORTED_EFFECTS_SCOPE_ENDGRP);
+	__u8 domain_scope =
+		!!(csp & NVME_MI_CMD_SUPPORTED_EFFECTS_SCOPE_DOMAIN);
+	__u8 nss_scope = !!(csp & NVME_MI_CMD_SUPPORTED_EFFECTS_SCOPE_NSS);
 
-	printf("  CSUPP+");
-	printf("  UDCC%s", (mi_cmd_support & NVME_MI_CMD_SUPPORTED_EFFECTS_UDCC) ? set : clr);
-	printf("  NCC%s", (mi_cmd_support & NVME_MI_CMD_SUPPORTED_EFFECTS_NCC) ? set : clr);
-	printf("  NIC%s", (mi_cmd_support & NVME_MI_CMD_SUPPORTED_EFFECTS_NIC) ? set : clr);
-	printf("  CCC%s", (mi_cmd_support & NVME_MI_CMD_SUPPORTED_EFFECTS_CCC) ? set : clr);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	csp = NVME_GET(mi_cmd_support, MI_CMD_SUPPORTED_EFFECTS_SCOPE);
+	stdout_bits_add(t, "[0:0]", csupp, "Command %sSupported",
+			csupp ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", udcc, "Logical Block Content %sChanged",
+			udcc ? "" : "Not ");
+	stdout_bits_add(t, "[2:2]", ncc, "Namespace Capabilities %sChanged",
+			ncc ? "" : "Not ");
+	stdout_bits_add(t, "[3:3]", nic, "Namespace Inventory %sChanged",
+			nic ? "" : "Not ");
+	stdout_bits_add(t, "[4:4]", ccc, "Controller Capabilities %sChanged",
+			ccc ? "" : "Not ");
+	stdout_bits_add(t, "[20:20]", ns_scope, "Namespace Scope %sIndicated",
+			ns_scope ? "" : "Not ");
+	stdout_bits_add(t, "[21:21]", ctrl_scope,
+			"Controller Scope %sIndicated",
+			ctrl_scope ? "" : "Not ");
+	stdout_bits_add(t, "[22:22]", nvmset_scope, "NVM Set Scope %sIndicated",
+			nvmset_scope ? "" : "Not ");
+	stdout_bits_add(t, "[23:23]", endgrp_scope,
+			"Endurance Group Scope %sIndicated",
+			endgrp_scope ? "" : "Not ");
+	stdout_bits_add(t, "[24:24]", domain_scope, "Domain Scope %sIndicated",
+			domain_scope ? "" : "Not ");
+	stdout_bits_add(t, "[25:25]", nss_scope,
+			"NVM Subsystem Scope %sIndicated",
+			nss_scope ? "" : "Not ");
 
-	printf("  NAMESPACE SCOPE%s", (csp & NVME_MI_CMD_SUPPORTED_EFFECTS_SCOPE_NS) ? set : clr);
-	printf("  CONTROLLER SCOPE%s", (csp & NVME_MI_CMD_SUPPORTED_EFFECTS_SCOPE_CTRL) ? set : clr);
-	printf("  NVM SET SCOPE%s", (csp & NVME_MI_CMD_SUPPORTED_EFFECTS_SCOPE_NVM_SET) ? set : clr);
-	printf("  ENDURANCE GROUP SCOPE%s", (csp & NVME_MI_CMD_SUPPORTED_EFFECTS_SCOPE_ENDGRP) ? set : clr);
-	printf("  DOMAIN SCOPE%s", (csp & NVME_MI_CMD_SUPPORTED_EFFECTS_SCOPE_DOMAIN) ? set : clr);
-	printf("  NVM Subsystem SCOPE%s", (csp & NVME_MI_CMD_SUPPORTED_EFFECTS_SCOPE_NSS) ? set : clr);
+	return t;
 }
 
 static void stdout_mi_cmd_support_effects_log(struct nvme_mi_cmd_supported_effects_log *mi_cmd_log,
 					      const char *devname)
 {
+	struct shr_table *t;
 	__u32 mi_cmd_effect;
-	int i, human = stdout_print_ops.flags & VERBOSE;
+	int i, row, verbose = stdout_print_ops.flags & VERBOSE;
 
 	printf("MI Commands Support Effects Log for device: %s\n", devname);
 	printf("Admin Command Set\n");
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
 	for (i = 0; i < NVME_LOG_MI_CMD_SUPPORTED_EFFECTS_MAX; i++) {
+		char name[48];
+
 		mi_cmd_effect = le32_to_cpu(mi_cmd_log->mi_cmd_support[i]);
-		if (mi_cmd_effect & NVME_MI_CMD_SUPPORTED_EFFECTS_CSUPP) {
-			printf("MI CMD %02x -> Support Effects Log: %08x", i,
-					mi_cmd_effect);
-			if (human)
-				stdout_mi_cmd_support_effects_log_human(mi_cmd_effect);
-			printf("\n");
-		}
+		if (!(mi_cmd_effect & NVME_MI_CMD_SUPPORTED_EFFECTS_CSUPP))
+			continue;
+
+		snprintf(name, sizeof(name),
+			 "MI CMD %02x -> Support Effects Log", i);
+		row = stdout_kv_add(t, name, "%08x", mi_cmd_effect);
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+				stdout_mi_cmd_support_effects_log_verbose_table(
+					mi_cmd_effect));
 	}
+
+	stdout_kv_table_finish(t, "mi-cmd-support-effects-log");
 }
 
 static void stdout_boot_part_log(void *bp_log, const char *devname,
 				 __u32 size)
 {
 	struct nvme_boot_partition *hdr = bp_log;
+	struct shr_table *t;
 
 	printf("Boot Partition Log for device: %s\n", devname);
-	printf("Log ID: %u\n", hdr->lid);
-	printf("Boot Partition Size: %u KiB\n",
-	       NVME_BOOT_PARTITION_INFO_BPSZ(le32_to_cpu(hdr->bpinfo)));
-	printf("Active BPID: %u\n", NVME_BOOT_PARTITION_INFO_ABPID(le32_to_cpu(hdr->bpinfo)));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Log ID", "%u", hdr->lid);
+	stdout_kv_add(t, "Boot Partition Size", "%u KiB",
+		      NVME_BOOT_PARTITION_INFO_BPSZ(le32_to_cpu(hdr->bpinfo)));
+	stdout_kv_add(t, "Active BPID", "%u",
+		      NVME_BOOT_PARTITION_INFO_ABPID(le32_to_cpu(hdr->bpinfo)));
+
+	stdout_kv_table_finish(t, "boot-part-log");
 }
 
 static const char *eomip_to_string(__u8 eomip)
@@ -956,18 +1348,25 @@ static const char *eomip_to_string(__u8 eomip)
 	return string;
 }
 
-static void stdout_phy_rx_eom_odp(uint8_t odp)
+static struct shr_table *stdout_phy_rx_eom_odp_table(uint8_t odp)
 {
+	struct shr_table *t;
 	__u8 rsvd = NVME_EOM_ODP_RSVD(odp);
 	__u8 edfp = NVME_EOM_ODP_EDFP(odp);
 	__u8 pefp = NVME_EOM_ODP_PEFP(odp);
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:2] : %#x\tReserved\n", rsvd);
-	printf("  [1:1] : %#x\tEye Data Field %sPresent\n",
-		edfp, edfp ? "" : "Not ");
-	printf("  [0:0] : %#x\tPrintable Eye Field %sPresent\n",
-		pefp, pefp ? "" : "Not ");
+		stdout_bits_add(t, "[7:2]", rsvd, "Reserved");
+	stdout_bits_add(t, "[1:1]", edfp, "Eye Data Field %sPresent",
+			edfp ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", pefp, "Printable Eye Field %sPresent",
+			pefp ? "" : "Not ");
+
+	return t;
 }
 
 static void stdout_eom_printable_eye(struct nvme_eom_lane_desc *lane)
@@ -995,18 +1394,27 @@ static void stdout_phy_rx_eom_descs(struct nvme_phy_rx_eom_log *log, size_t len)
 	while ((desc = eom_desc_iter_next(&it))) {
 		unsigned char *vsdata;
 		uint16_t vsdatalen;
+		struct shr_table *t;
 
-		printf("Measurement Status: %s\n",
-			desc->mstatus ? "Successful" : "Not Successful");
-		printf("Lane: %u\n", desc->lane);
-		printf("Eye: %u\n", desc->eye);
-		printf("Top: %u\n", le16_to_cpu(desc->top));
-		printf("Bottom: %u\n", le16_to_cpu(desc->bottom));
-		printf("Left: %u\n", le16_to_cpu(desc->left));
-		printf("Right: %u\n", le16_to_cpu(desc->right));
-		printf("Number of Rows: %u\n", le16_to_cpu(desc->nrows));
-		printf("Number of Columns: %u\n", le16_to_cpu(desc->ncols));
-		printf("Eye Data Length: %u\n", desc->edlen);
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Measurement Status", "%s",
+			      desc->mstatus ? "Successful" : "Not Successful");
+		stdout_kv_add(t, "Lane", "%u", desc->lane);
+		stdout_kv_add(t, "Eye", "%u", desc->eye);
+		stdout_kv_add(t, "Top", "%u", le16_to_cpu(desc->top));
+		stdout_kv_add(t, "Bottom", "%u", le16_to_cpu(desc->bottom));
+		stdout_kv_add(t, "Left", "%u", le16_to_cpu(desc->left));
+		stdout_kv_add(t, "Right", "%u", le16_to_cpu(desc->right));
+		stdout_kv_add(t, "Number of Rows", "%u",
+			      le16_to_cpu(desc->nrows));
+		stdout_kv_add(t, "Number of Columns", "%u",
+			      le16_to_cpu(desc->ncols));
+		stdout_kv_add(t, "Eye Data Length", "%u", desc->edlen);
+
+		stdout_kv_table_finish(t, "phy-rx-eom-descs");
 
 		vsdata = eom_desc_iter_vsdata(&it, desc, &vsdatalen);
 		if (!vsdata)
@@ -1027,33 +1435,47 @@ static void stdout_phy_rx_eom_descs(struct nvme_phy_rx_eom_log *log, size_t len)
 
 static void stdout_phy_rx_eom_log(struct nvme_phy_rx_eom_log *log, __u16 controller, size_t len)
 {
-	int human = stdout_print_ops.flags & VERBOSE;
+	int verbose = stdout_print_ops.flags & VERBOSE;
+	struct shr_table *t;
+	int row;
 
 	if (len < sizeof(*log))
 		return;
 
 	printf("Physical Interface Receiver Eye Opening Measurement Log for controller ID: %u\n", controller);
-	printf("Log ID: %u\n", log->lid);
-	printf("EOM In Progress: %s\n", eomip_to_string(log->eomip));
-	printf("Header Size: %u\n", le16_to_cpu(log->hsize));
-	printf("Result Size: %u\n", le32_to_cpu(log->rsize));
-	printf("EOM Data Generation Number: %u\n", log->eomdgn);
-	printf("Log Revision: %u\n", log->lr);
-	printf("Optional Data Present: %u\n", log->odp);
-	if (human)
-		stdout_phy_rx_eom_odp(log->odp);
-	printf("Lanes: %u\n", log->lanes);
-	printf("Eyes Per Lane: %u\n", log->epl);
-	printf("Log Specific Parameter Field Copy: %u\n", log->lspfc);
-	printf("Link Information: %u\n", log->li);
-	printf("Log Specific Identifier Copy: %u\n", le16_to_cpu(log->lsic));
-	printf("Descriptor Size: %u\n", le32_to_cpu(log->dsize));
-	printf("Number of Descriptors: %u\n", le16_to_cpu(log->nd));
-	printf("Maximum Top Bottom: %u\n", le16_to_cpu(log->maxtb));
-	printf("Maximum Left Right: %u\n", le16_to_cpu(log->maxlr));
-	printf("Estimated Time for Good Quality: %u\n", le16_to_cpu(log->etgood));
-	printf("Estimated Time for Better Quality: %u\n", le16_to_cpu(log->etbetter));
-	printf("Estimated Time for Best Quality: %u\n", le16_to_cpu(log->etbest));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Log ID", "%u", log->lid);
+	stdout_kv_add(t, "EOM In Progress", "%s", eomip_to_string(log->eomip));
+	stdout_kv_add(t, "Header Size", "%u", le16_to_cpu(log->hsize));
+	stdout_kv_add(t, "Result Size", "%u", le32_to_cpu(log->rsize));
+	stdout_kv_add(t, "EOM Data Generation Number", "%u", log->eomdgn);
+	stdout_kv_add(t, "Log Revision", "%u", log->lr);
+	row = stdout_kv_add(t, "Optional Data Present", "%u", log->odp);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+			stdout_phy_rx_eom_odp_table(log->odp));
+	stdout_kv_add(t, "Lanes", "%u", log->lanes);
+	stdout_kv_add(t, "Eyes Per Lane", "%u", log->epl);
+	stdout_kv_add(t, "Log Specific Parameter Field Copy", "%u", log->lspfc);
+	stdout_kv_add(t, "Link Information", "%u", log->li);
+	stdout_kv_add(t, "Log Specific Identifier Copy", "%u",
+		      le16_to_cpu(log->lsic));
+	stdout_kv_add(t, "Descriptor Size", "%u", le32_to_cpu(log->dsize));
+	stdout_kv_add(t, "Number of Descriptors", "%u", le16_to_cpu(log->nd));
+	stdout_kv_add(t, "Maximum Top Bottom", "%u", le16_to_cpu(log->maxtb));
+	stdout_kv_add(t, "Maximum Left Right", "%u", le16_to_cpu(log->maxlr));
+	stdout_kv_add(t, "Estimated Time for Good Quality", "%u",
+		      le16_to_cpu(log->etgood));
+	stdout_kv_add(t, "Estimated Time for Better Quality", "%u",
+		      le16_to_cpu(log->etbetter));
+	stdout_kv_add(t, "Estimated Time for Best Quality", "%u",
+		      le16_to_cpu(log->etbest));
+
+	stdout_kv_table_finish(t, "phy-rx-eom-log");
 
 	if (log->eomip == NVME_PHY_RX_EOM_COMPLETED)
 		stdout_phy_rx_eom_descs(log, len);
@@ -1063,50 +1485,109 @@ static void stdout_media_unit_stat_log(struct nvme_media_unit_stat_log *mus_log)
 {
 	int i;
 	int nmu = le16_to_cpu(mus_log->nmu);
+	struct shr_table *t;
 
-	printf("Number of Media Unit Status Descriptors: %u\n", nmu);
-	printf("Number of Channels: %u\n", le16_to_cpu(mus_log->cchans));
-	printf("Selected Configuration: %u\n", le16_to_cpu(mus_log->sel_config));
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Number of Media Unit Status Descriptors", "%u", nmu);
+	stdout_kv_add(t, "Number of Channels", "%u",
+		      le16_to_cpu(mus_log->cchans));
+	stdout_kv_add(t, "Selected Configuration", "%u",
+		      le16_to_cpu(mus_log->sel_config));
+
+	stdout_kv_table_finish(t, "media-unit-stat-log");
+
 	for (i = 0; i < nmu; i++) {
 		printf("Media Unit Status Descriptor: %u\n", i);
-		printf("Media Unit Identifier: %u\n",
-			le16_to_cpu(mus_log->mus_desc[i].muid));
-		printf("Domain Identifier: %u\n",
-			le16_to_cpu(mus_log->mus_desc[i].domainid));
-		printf("Endurance Group Identifier: %u\n",
-			le16_to_cpu(mus_log->mus_desc[i].endgid));
-		printf("NVM Set Identifier: %u\n",
-			le16_to_cpu(mus_log->mus_desc[i].nvmsetid));
-		printf("Capacity Adjustment Factor: %u\n",
-			le16_to_cpu(mus_log->mus_desc[i].cap_adj_fctr));
-		printf("Available Spare: %u\n", mus_log->mus_desc[i].avl_spare);
-		printf("Percentage Used: %u\n", mus_log->mus_desc[i].percent_used);
-		printf("Number of Channels: %u\n", mus_log->mus_desc[i].mucs);
-		printf("Channel Identifiers Offset: %u\n", mus_log->mus_desc[i].cio);
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Media Unit Identifier", "%u",
+			      le16_to_cpu(mus_log->mus_desc[i].muid));
+		stdout_kv_add(t, "Domain Identifier", "%u",
+			      le16_to_cpu(mus_log->mus_desc[i].domainid));
+		stdout_kv_add(t, "Endurance Group Identifier", "%u",
+			      le16_to_cpu(mus_log->mus_desc[i].endgid));
+		stdout_kv_add(t, "NVM Set Identifier", "%u",
+			      le16_to_cpu(mus_log->mus_desc[i].nvmsetid));
+		stdout_kv_add(t, "Capacity Adjustment Factor", "%u",
+			      le16_to_cpu(mus_log->mus_desc[i].cap_adj_fctr));
+		stdout_kv_add(t, "Available Spare", "%u",
+			      mus_log->mus_desc[i].avl_spare);
+		stdout_kv_add(t, "Percentage Used", "%u",
+			      mus_log->mus_desc[i].percent_used);
+		stdout_kv_add(t, "Number of Channels", "%u",
+			      mus_log->mus_desc[i].mucs);
+		stdout_kv_add(t, "Channel Identifiers Offset", "%u",
+			      mus_log->mus_desc[i].cio);
+
+		stdout_kv_table_finish(t, "media-unit-stat-log");
 	}
 }
 
-static void stdout_fdp_config_fdpa(uint8_t fdpa)
+static struct shr_table *stdout_fdp_config_fdpa_table(uint8_t fdpa)
 {
+	struct shr_table *t;
 	__u8 valid = NVME_GET(fdpa, FDP_CONFIG_FDPA_VALID);
 	__u8 rsvd = (fdpa >> 5) & 0x3;
 	__u8 fdpvwc = NVME_GET(fdpa, FDP_CONFIG_FDPA_FDPVWC);
 	__u8 rgif = NVME_GET(fdpa, FDP_CONFIG_FDPA_RGIF);
 
-	printf("  [7:7] : %#x\tFDP Configuration %sValid\n",
-		valid, valid ? "" : "Not ");
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[7:7]", valid, "FDP Configuration %sValid",
+			valid ? "" : "Not ");
 	if (rsvd)
-		printf("  [6:5] : %#x\tReserved\n", rsvd);
-	printf("  [4:4] : %#x\tFDP Volatile Write Cache %sPresent\n",
-		fdpvwc, fdpvwc ? "" : "Not ");
-	printf("  [3:0] : %#x\tReclaim Group Identifier Format\n", rgif);
+		stdout_bits_add(t, "[6:5]", rsvd, "Reserved");
+	stdout_bits_add(t, "[4:4]", fdpvwc,
+			"FDP Volatile Write Cache %sPresent",
+			fdpvwc ? "" : "Not ");
+	stdout_bits_add(t, "[3:0]", rgif, "Reclaim Group Identifier Format");
+
+	return t;
+}
+
+static struct shr_table *stdout_fdp_config_ruh_list_table(
+		struct nvme_fdp_config_desc *config, uint16_t nruh)
+{
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	shr_table_set_indent(t, 2);
+
+	for (int j = 0; j < nruh; j++) {
+		struct nvme_fdp_ruh_desc *ruh = &config->ruhs[j];
+		const char *ruht_str;
+		char name[16];
+
+		if (ruh->ruht == NVME_FDP_RUHT_INITIALLY_ISOLATED)
+			ruht_str = "Initially Isolated";
+		else
+			ruht_str = "Persistently Isolated";
+
+		snprintf(name, sizeof(name), "[%d]", j);
+		stdout_kv_add(t, name, "%s", ruht_str);
+	}
+
+	return t;
 }
 
 static void stdout_fdp_configs(struct nvme_fdp_config_log *log, size_t len)
 {
 	unsigned char *p, *end;
-	int human = stdout_print_ops.flags & VERBOSE;
+	int verbose = stdout_print_ops.flags & VERBOSE;
 	uint16_t n;
+	struct shr_table *t;
+	int row;
 
 	if (len < sizeof(*log))
 		return;
@@ -1122,32 +1603,45 @@ static void stdout_fdp_configs(struct nvme_fdp_config_log *log, size_t len)
 		if (!shr_buf_has_room(p, end, sizeof(*config)))
 			break;
 
-		printf("FDP Attributes: %#x\n", config->fdpa);
-		if (human)
-			stdout_fdp_config_fdpa(config->fdpa);
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
 
-		printf("Vendor Specific Size: %u\n", config->vss);
-		printf("Number of Reclaim Groups: %"PRIu32"\n", le32_to_cpu(config->nrg));
-		printf("Number of Reclaim Unit Handles: %"PRIu16"\n", le16_to_cpu(config->nruh));
-		printf("Number of Namespaces Supported: %"PRIu32"\n", le32_to_cpu(config->nnss));
-		printf("Reclaim Unit Nominal Size: %"PRIu64"\n", le64_to_cpu(config->runs));
-		printf("Estimated Reclaim Unit Time Limit: %"PRIu32"\n", le32_to_cpu(config->erutl));
+		row = stdout_kv_add(t, "FDP Attributes", "%#x", config->fdpa);
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+				stdout_fdp_config_fdpa_table(config->fdpa));
+
+		stdout_kv_add(t, "Vendor Specific Size", "%u", config->vss);
+		stdout_kv_add(t, "Number of Reclaim Groups", "%"PRIu32,
+			      le32_to_cpu(config->nrg));
+		stdout_kv_add(t, "Number of Reclaim Unit Handles", "%"PRIu16,
+			      le16_to_cpu(config->nruh));
+		stdout_kv_add(t, "Number of Namespaces Supported", "%"PRIu32,
+			      le32_to_cpu(config->nnss));
+		stdout_kv_add(t, "Reclaim Unit Nominal Size", "%"PRIu64,
+			      le64_to_cpu(config->runs));
+		stdout_kv_add(t, "Estimated Reclaim Unit Time Limit", "%"PRIu32,
+			      le32_to_cpu(config->erutl));
 
 		size = le16_to_cpu(config->size);
-		if (size < sizeof(*config) || !shr_buf_has_room(p, end, size))
+		if (size < sizeof(*config) || !shr_buf_has_room(p, end, size)) {
+			stdout_kv_table_finish(t, "fdp-configs");
 			break;
+		}
 
 		nruh = le16_to_cpu(config->nruh);
 		max_nruh = (size - sizeof(*config)) / sizeof(struct nvme_fdp_ruh_desc);
 		if (nruh > max_nruh)
 			nruh = max_nruh;
 
-		printf("Reclaim Unit Handle List:\n");
-		for (int j = 0; j < nruh; j++) {
-			struct nvme_fdp_ruh_desc *ruh = &config->ruhs[j];
-
-			printf("  [%d]: %s\n", j, ruh->ruht == NVME_FDP_RUHT_INITIALLY_ISOLATED ? "Initially Isolated" : "Persistently Isolated");
+		if (nruh) {
+			row = stdout_kv_add(t, "Reclaim Unit Handle List", "");
+			shr_table_set_row_subtable(t, row,
+				stdout_fdp_config_ruh_list_table(config, nruh));
 		}
+
+		stdout_kv_table_finish(t, "fdp-configs");
 
 		p += size;
 	}
@@ -1156,25 +1650,56 @@ static void stdout_fdp_configs(struct nvme_fdp_config_log *log, size_t len)
 static void stdout_fdp_usage(struct nvme_fdp_ruhu_log *log, size_t len)
 {
 	uint16_t nruh = le16_to_cpu(log->nruh);
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
 
 	for (int i = 0; i < nruh; i++) {
 		struct nvme_fdp_ruhu_desc *ruhu = &log->ruhus[i];
+		const char *ruha_str;
+		char name[40];
 
-		printf("Reclaim Unit Handle %d Attributes: %#"PRIx8" (%s)\n", i, ruhu->ruha,
-				ruhu->ruha == 0x0 ? "Unused" : (
-				ruhu->ruha == 0x1 ? "Host Specified" : (
-				ruhu->ruha == 0x2 ? "Controller Specified" : "Unknown")));
+		switch (ruhu->ruha) {
+		case 0x0:
+			ruha_str = "Unused";
+			break;
+		case 0x1:
+			ruha_str = "Host Specified";
+			break;
+		case 0x2:
+			ruha_str = "Controller Specified";
+			break;
+		default:
+			ruha_str = "Unknown";
+			break;
+		}
+
+		snprintf(name, sizeof(name),
+			 "Reclaim Unit Handle %d Attributes", i);
+		stdout_kv_add(t, name, "%#"PRIx8" (%s)", ruhu->ruha, ruha_str);
 	}
+
+	stdout_kv_table_finish(t, "fdp-usage");
 }
 
 static void stdout_fdp_stats(struct nvme_fdp_stats_log *log)
 {
-	printf("Host Bytes with Metadata Written (HBMW): %s\n",
-		uint128_t_to_l10n_string(le128_to_cpu(log->hbmw)));
-	printf("Media Bytes with Metadata Written (MBMW): %s\n",
-		uint128_t_to_l10n_string(le128_to_cpu(log->mbmw)));
-	printf("Media Bytes Erased (MBE): %s\n",
-		uint128_t_to_l10n_string(le128_to_cpu(log->mbe)));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Host Bytes with Metadata Written (HBMW)", "%s",
+		      uint128_t_to_l10n_string(le128_to_cpu(log->hbmw)));
+	stdout_kv_add(t, "Media Bytes with Metadata Written (MBMW)", "%s",
+		      uint128_t_to_l10n_string(le128_to_cpu(log->mbmw)));
+	stdout_kv_add(t, "Media Bytes Erased (MBE)", "%s",
+		      uint128_t_to_l10n_string(le128_to_cpu(log->mbe)));
+
+	stdout_kv_table_finish(t, "fdp-stats");
 }
 
 static void stdout_fdp_events(struct nvme_fdp_events_log *log)
@@ -1183,6 +1708,7 @@ static void stdout_fdp_events(struct nvme_fdp_events_log *log)
 	char buffer[320];
 	time_t ts;
 	uint32_t n = le32_to_cpu(log->n);
+	struct shr_table *t;
 
 	for (unsigned int i = 0; i < n; i++) {
 		struct nvme_fdp_event *event = &log->events[i];
@@ -1191,34 +1717,50 @@ static void stdout_fdp_events(struct nvme_fdp_events_log *log)
 		tm = localtime(&ts);
 
 		printf("Event[%u]\n", i);
-		printf("  Event Type: %#"PRIx8" (%s)\n", event->type,
-		       nvme_fdp_event_to_string(event->type));
-		printf("  Event Timestamp: %"PRIu64" (%s)\n", int48_to_long(event->ts.timestamp),
-			strftime(buffer, sizeof(buffer), "%c %Z", tm) ? buffer : "-");
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		shr_table_set_indent(t, 2);
+
+		stdout_kv_add(t, "Event Type", "%#"PRIx8" (%s)", event->type,
+			      nvme_fdp_event_to_string(event->type));
+		stdout_kv_add(t, "Event Timestamp", "%"PRIu64" (%s)",
+			      int48_to_long(event->ts.timestamp),
+			      strftime(buffer, sizeof(buffer), "%c %Z", tm) ?
+			      buffer : "-");
 
 		if (event->flags & NVME_FDP_EVENT_F_PIV)
-			printf("  Placement Identifier (PID): %#"PRIx16"\n",
-			       le16_to_cpu(event->pid));
+			stdout_kv_add(t, "Placement Identifier (PID)",
+				      "%#"PRIx16, le16_to_cpu(event->pid));
 
 		if (event->flags & NVME_FDP_EVENT_F_NSIDV)
-			printf("  Namespace Identifier (NSID): %"PRIu32"\n", le32_to_cpu(event->nsid));
+			stdout_kv_add(t, "Namespace Identifier (NSID)",
+				      "%"PRIu32, le32_to_cpu(event->nsid));
 
 		if (event->type == NVME_FDP_EVENT_REALLOC) {
 			struct nvme_fdp_event_realloc *mr;
 
 			mr = (struct nvme_fdp_event_realloc *)&event->type_specific;
 
-			printf("  Number of LBAs Moved (NLBAM): %"PRIu16"\n", le16_to_cpu(mr->nlbam));
+			stdout_kv_add(t, "Number of LBAs Moved (NLBAM)",
+				      "%"PRIu16, le16_to_cpu(mr->nlbam));
 
 			if (mr->flags & NVME_FDP_EVENT_REALLOC_F_LBAV)
-				printf("  Logical Block Address (LBA): %#"PRIx64"\n",
-				       le64_to_cpu(mr->lba));
+				stdout_kv_add(t, "Logical Block Address (LBA)",
+					      "%#"PRIx64,
+					      le64_to_cpu(mr->lba));
 		}
 
 		if (event->flags & NVME_FDP_EVENT_F_LV) {
-			printf("  Reclaim Group Identifier: %"PRIu16"\n", le16_to_cpu(event->rgid));
-			printf("  Reclaim Unit Handle Identifier %"PRIu8"\n", event->ruhid);
+			stdout_kv_add(t, "Reclaim Group Identifier", "%"PRIu16,
+				      le16_to_cpu(event->rgid));
+			stdout_kv_add(t, "Reclaim Unit Handle Identifier",
+				      "%"PRIu8, event->ruhid);
 		}
+
+		stdout_kv_table_finish(t, "fdp-events");
 
 		printf("\n");
 	}
@@ -1227,73 +1769,136 @@ static void stdout_fdp_events(struct nvme_fdp_events_log *log)
 static void stdout_fdp_ruh_status(struct nvme_fdp_ruh_status *status, size_t len)
 {
 	uint16_t nruhsd = le16_to_cpu(status->nruhsd);
+	struct shr_table *t;
 
 	for (unsigned int i = 0; i < nruhsd; i++) {
 		struct nvme_fdp_ruh_status_desc *ruhs = &status->ruhss[i];
 
-		printf("Placement Identifier %"PRIu16"; Reclaim Unit Handle Identifier %"PRIu16"\n",
-				le16_to_cpu(ruhs->pid), le16_to_cpu(ruhs->ruhid));
-		printf("  Estimated Active Reclaim Unit Time Remaining (EARUTR): %"PRIu32"\n",
-				le32_to_cpu(ruhs->earutr));
-		printf("  Reclaim Unit Available Media Writes (RUAMW): %"PRIu64"\n",
-				le64_to_cpu(ruhs->ruamw));
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		shr_table_set_indent(t, 2);
+
+		stdout_kv_add(t, "Placement Identifier (PID)", "%"PRIu16,
+			      le16_to_cpu(ruhs->pid));
+		stdout_kv_add(t, "Reclaim Unit Handle Identifier", "%"PRIu16,
+			      le16_to_cpu(ruhs->ruhid));
+		stdout_kv_add(t,
+			      "Estimated Active Reclaim Unit Time Remaining (EARUTR)",
+			      "%"PRIu32, le32_to_cpu(ruhs->earutr));
+		stdout_kv_add(t, "Reclaim Unit Available Media Writes (RUAMW)",
+			      "%"PRIu64, le64_to_cpu(ruhs->ruamw));
+
+		stdout_kv_table_finish(t, "fdp-ruh-status");
 
 		printf("\n");
 	}
 }
 
-static void stdout_supported_cap_config_log(struct nvme_supported_cap_config_list_log *cap)
+static void stdout_supported_cap_config_add_channels(struct shr_table *t,
+		struct nvme_end_grp_chan_desc *chan_desc)
+{
+	int egchans = le16_to_cpu(chan_desc->egchans);
+
+	stdout_kv_add(t, "Number of Channels", "%u", egchans);
+
+	for (int l = 0; l < egchans; l++) {
+		struct nvme_channel_config_desc *chd =
+			&chan_desc->chan_config_desc[l];
+		int chmus = le16_to_cpu(chd->chmus);
+
+		stdout_kv_add(t, "Channel Identifier", "%u",
+			      le16_to_cpu(chd->chanid));
+		stdout_kv_add(t, "Number of Channel Media Units", "%u", chmus);
+
+		for (int m = 0; m < chmus; m++) {
+			struct nvme_media_unit_config_desc *mu =
+				&chd->mu_config_desc[m];
+
+			stdout_kv_add(t, "Media Unit Identifier", "%u",
+				      le16_to_cpu(mu->muid));
+			stdout_kv_add(t, "Media Unit Descriptor Length", "%u",
+				      le16_to_cpu(mu->mudl));
+		}
+	}
+}
+
+static void stdout_supported_cap_config_add_egcd(struct shr_table *t,
+		struct nvme_supported_cap_config_list_log *cap, int i)
 {
 	struct nvme_end_grp_chan_desc *chan_desc;
-	int i, j, k, l, m, sccn, egcn, egsets, egchans, chmus;
+	int egcn = le16_to_cpu(cap->cap_config_desc[i].egcn);
 
-	sccn = cap->sccn;
-	printf("Number of Supported Capacity Configurations: %u\n", sccn);
-	for (i = 0; i < sccn; i++) {
-		printf("Capacity Configuration Descriptor: %u\n", i);
-		printf("Capacity Configuration Identifier: %u\n",
-			le16_to_cpu(cap->cap_config_desc[i].cap_config_id));
-		printf("Domain Identifier: %u\n",
-			le16_to_cpu(cap->cap_config_desc[i].domainid));
-		egcn = le16_to_cpu(cap->cap_config_desc[i].egcn);
-		printf("Number of Endurance Group Configuration Descriptors: %u\n", egcn);
-		for (j = 0; j < egcn; j++) {
-			printf("Endurance Group Identifier: %u\n",
-				le16_to_cpu(cap->cap_config_desc[i].egcd[j].endgid));
-			printf("Capacity Adjustment Factor: %u\n",
-				le16_to_cpu(cap->cap_config_desc[i].egcd[j].cap_adj_factor));
-			printf("Total Endurance Group Capacity: %s\n",
-				uint128_t_to_l10n_string(le128_to_cpu(
-					cap->cap_config_desc[i].egcd[j].tegcap)));
-			printf("Spare Endurance Group Capacity: %s\n",
-				uint128_t_to_l10n_string(le128_to_cpu(
-					cap->cap_config_desc[i].egcd[j].segcap)));
-			printf("Endurance Estimate: %s\n",
-				uint128_t_to_l10n_string(le128_to_cpu(
-					cap->cap_config_desc[i].egcd[j].end_est)));
-			egsets = le16_to_cpu(cap->cap_config_desc[i].egcd[j].egsets);
-			printf("Number of NVM Sets: %u\n", egsets);
-			for (k = 0; k < egsets; k++)
-				printf("NVM Set %d Identifier: %u\n", i,
-				       le16_to_cpu(cap->cap_config_desc[i].egcd[j].nvmsetid[k]));
+	stdout_kv_add(t, "Number of Endurance Group Configuration Descriptors",
+		      "%u", egcn);
 
-			chan_desc = (struct nvme_end_grp_chan_desc *)
-			    &cap->cap_config_desc[i].egcd[j].nvmsetid[egsets];
-			egchans = le16_to_cpu(chan_desc->egchans);
-			printf("Number of Channels: %u\n", egchans);
-			for (l = 0; l < egchans; l++) {
-				printf("Channel Identifier: %u\n",
-					le16_to_cpu(chan_desc->chan_config_desc[l].chanid));
-				chmus = le16_to_cpu(chan_desc->chan_config_desc[l].chmus);
-				printf("Number of Channel Media Units: %u\n", chmus);
-				for (m = 0; m < chmus; m++) {
-					printf("Media Unit Identifier: %u\n",
-						le16_to_cpu(chan_desc->chan_config_desc[l].mu_config_desc[m].muid));
-					printf("Media Unit Descriptor Length: %u\n",
-						le16_to_cpu(chan_desc->chan_config_desc[l].mu_config_desc[m].mudl));
-				}
-			}
+	for (int j = 0; j < egcn; j++) {
+		struct nvme_end_grp_config_desc *egcd =
+			&cap->cap_config_desc[i].egcd[j];
+		int egsets = le16_to_cpu(egcd->egsets);
+
+		stdout_kv_add(t, "Endurance Group Identifier", "%u",
+			      le16_to_cpu(egcd->endgid));
+		stdout_kv_add(t, "Capacity Adjustment Factor", "%u",
+			      le16_to_cpu(egcd->cap_adj_factor));
+		stdout_kv_add(t, "Total Endurance Group Capacity", "%s",
+			      uint128_t_to_l10n_string(
+				      le128_to_cpu(egcd->tegcap)));
+		stdout_kv_add(t, "Spare Endurance Group Capacity", "%s",
+			      uint128_t_to_l10n_string(
+				      le128_to_cpu(egcd->segcap)));
+		stdout_kv_add(t, "Endurance Estimate", "%s",
+			      uint128_t_to_l10n_string(
+				      le128_to_cpu(egcd->end_est)));
+		stdout_kv_add(t, "Number of NVM Sets", "%u", egsets);
+
+		for (int k = 0; k < egsets; k++) {
+			char name[32];
+
+			snprintf(name, sizeof(name),
+				 "NVM Set %d Identifier", i);
+			stdout_kv_add(t, name, "%u",
+				      le16_to_cpu(egcd->nvmsetid[k]));
 		}
+
+		chan_desc = (struct nvme_end_grp_chan_desc *)
+			&egcd->nvmsetid[egsets];
+		stdout_supported_cap_config_add_channels(t, chan_desc);
+	}
+}
+
+static void stdout_supported_cap_config_log(
+		struct nvme_supported_cap_config_list_log *cap)
+{
+	int sccn = cap->sccn;
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Number of Supported Capacity Configurations", "%u",
+		      sccn);
+
+	stdout_kv_table_finish(t, "supported-cap-config");
+
+	for (int i = 0; i < sccn; i++) {
+		printf("Capacity Configuration Descriptor: %u\n", i);
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Capacity Configuration Identifier", "%u",
+			      le16_to_cpu(
+				      cap->cap_config_desc[i].cap_config_id));
+		stdout_kv_add(t, "Domain Identifier", "%u",
+			      le16_to_cpu(cap->cap_config_desc[i].domainid));
+
+		stdout_supported_cap_config_add_egcd(t, cap, i);
+
+		stdout_kv_table_finish(t, "supported-cap-config");
 	}
 }
 
@@ -1406,501 +2011,909 @@ static void stdout_subsystem_list(struct libnvme_global_ctx *ctx, bool show_ana)
 	stdout_subsystem(ctx, show_ana);
 }
 
-static void stdout_prop_field(const char *name, const char *symbol,
-			      unsigned int prop_width, unsigned int col_width,
-			      const char *val, ...)
+/*
+ * Shared by stdout_kv_add() and stdout_prop_cap_add(): adds one row (name,
+ * ':', the vasprintf()'d value) to @t and returns its row id. The ':' is its
+ * own column so it lines up across a table and its subtables even where two
+ * other columns need a plain space instead.
+ */
+static int stdout_kv_addv(struct shr_table *t, const char *name,
+		const char *fmt, va_list ap)
 {
-	int prop_len = strlen(name) + strlen(symbol) + 3;
-	int name_width = prop_width - strlen(symbol) - 3;
-	bool pad = col_width > prop_len;
-	int pad_len = prop_len < prop_width ? col_width - prop_width : pad ?
-	    col_width - prop_len : 0;
+	__cleanup_free char *value = NULL;
+	int row;
+
+	if (vasprintf(&value, fmt, ap) < 0)
+		value = NULL;
+
+	row = shr_table_get_row_id(t);
+
+	shr_table_set_value_str(t, 0, row, name, LEFT);
+	shr_table_set_value_str(t, 1, row, ":", LEFT);
+	shr_table_set_value_str(t, 2, row, value ?: "", LEFT);
+	shr_table_add_row(t, row);
+
+	return row;
+}
+
+static int stdout_kv_add(struct shr_table *t, const char *name,
+		const char *fmt, ...)
+{
+	va_list ap;
+	int row;
+
+	va_start(ap, fmt);
+	row = stdout_kv_addv(t, name, fmt, ap);
+	va_end(ap);
+
+	return row;
+}
+
+/*
+ * Adds one row to a "name : value" table the same way stdout_kv_add() does,
+ * but builds the name from the shared prop_cap[][2] name/symbol table (see
+ * nvme-print.c) instead of taking it as a plain string -- for a property
+ * this file shares with the other print backends (JSON, binary).
+ */
+static int stdout_prop_cap_add(struct shr_table *t, enum prop_cap fld,
+		const char *fmt, ...)
+{
+	__cleanup_free char *name = NULL;
+	va_list ap;
+	int row;
+
+	if (prop_cap[fld][0][0]) {
+		if (asprintf(&name, "%s (%s)", prop_cap[fld][0],
+			     prop_cap[fld][1]) < 0)
+			name = NULL;
+	}
+
+	va_start(ap, fmt);
+	row = stdout_kv_addv(t, name ?: "", fmt, ap);
+	va_end(ap);
+
+	return row;
+}
+
+/* Creates the 3-column "name : value" table stdout_kv_add() populates. */
+static struct shr_table *stdout_kv_table_create(void)
+{
+	struct shr_table_column columns[] = {
+		{ "", LEFT, AUTO_WIDTH },
+		{ "", LEFT, AUTO_WIDTH },
+		{ "", LEFT, AUTO_WIDTH },
+	};
+	struct shr_table *t = shr_table_init_with_columns(columns, 3);
+
+	if (!t)
+		return NULL;
+
+	shr_table_set_no_header(t, true);
+
+	return t;
+}
+
+/*
+ * Shared by stdout_bits_add() and stdout_bits_add_str(): adds one row to a
+ * 4-column "bits : value description" table, with a constant gutter before
+ * the description, independent of the value column's own width.
+ */
+static void stdout_bits_add_strv(struct shr_table *t, const char *bits,
+		const char *value, const char *desc_fmt, va_list ap)
+{
+	__cleanup_free char *desc_raw = NULL;
+	__cleanup_free char *desc = NULL;
+	int row;
+
+	if (vasprintf(&desc_raw, desc_fmt, ap) < 0)
+		desc_raw = NULL;
+
+	if (asprintf(&desc, "  %s", desc_raw ?: "") < 0)
+		desc = NULL;
+
+	row = shr_table_get_row_id(t);
+
+	shr_table_set_value_str(t, 0, row, bits, RIGHT);
+	shr_table_set_value_str(t, 1, row, ":", LEFT);
+	shr_table_set_value_str(t, 2, row, value ?: "", LEFT);
+	shr_table_set_value_str(t, 3, row, desc ?: "", LEFT);
+	shr_table_add_row(t, row);
+}
+
+/*
+ * Adds one row to a 4-column "bits : value description" table, using a
+ * caller-formatted value string instead of an unsigned int -- for a value
+ * that isn't a small bitfield (e.g. a 128-bit capacity).
+ */
+static void stdout_bits_add_str(struct shr_table *t, const char *bits,
+		const char *value, const char *desc_fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, desc_fmt);
+	stdout_bits_add_strv(t, bits, value, desc_fmt, ap);
+	va_end(ap);
+}
+
+/*
+ * Adds one row to a 4-column "bits : value description" table, one row per
+ * bit-field. @desc_fmt works like printf(), matching the "%sSupported"
+ * pattern the decode descriptions use.
+ */
+static void stdout_bits_add(struct shr_table *t, const char *bits,
+		unsigned int val, const char *desc_fmt, ...)
+{
 	__cleanup_free char *value = NULL;
 	va_list ap;
 
-	va_start(ap, val);
-
-	if (vasprintf(&value, val, ap) < 0)
+	if (asprintf(&value, "%#x", val) < 0)
 		value = NULL;
 
+	va_start(ap, desc_fmt);
+	stdout_bits_add_strv(t, bits, value ?: "", desc_fmt, ap);
 	va_end(ap);
+}
 
-	if (strlen(name))
-		printf("\t%-*s (%s)%*s: %s\n", name_width, name, symbol,
-		       pad_len, pad ? " " : "", value ? value : alloc_error);
+/*
+ * Creates the 4-column table a bit-decode builder (e.g.
+ * stdout_id_ctrl_cmic_table()) returns.
+ */
+static struct shr_table *stdout_bits_table_create(void)
+{
+	struct shr_table_column columns[] = {
+		{ "", RIGHT, AUTO_WIDTH },
+		{ "", LEFT, AUTO_WIDTH },
+		{ "", RIGHT, AUTO_WIDTH },
+		{ "", LEFT, AUTO_WIDTH },
+	};
+	struct shr_table *t = shr_table_init_with_columns(columns, 4);
+
+	if (!t)
+		return NULL;
+
+	shr_table_set_no_header(t, true);
+	shr_table_set_indent(t, 2);
+
+	return t;
+}
+
+/*
+ * Prints every row of @t, and, for a row with a nested bit-decode table
+ * attached, that table right after it. Aligns column 0 (name/bits) across
+ * @t and every subtable, and column 2 (value) across the subtables
+ * themselves, so both the ':' and the description start at the same
+ * column everywhere.
+ */
+static void stdout_kv_render(FILE *stream, struct shr_table *t)
+{
+	int row;
+	struct shr_table *sub;
+
+	shr_table_align_column(t, 0, 0);
+	shr_table_align_subtable_column(t, 2);
+
+	for (row = 0; row < t->num_rows; row++) {
+		shr_table_print_row(stream, t, row);
+		sub = shr_table_get_row_subtable(t, row);
+		if (sub) {
+			shr_table_print_stream(stream, sub);
+			fprintf(stream, "\n");
+		}
+	}
+}
+
+/*
+ * Renders @t to stdout, or reports the build error to stderr naming
+ * @what, then frees @t either way. Common tail for every kv table
+ * built via stdout_kv_table_create()/stdout_kv_add().
+ */
+static void stdout_kv_table_finish(struct shr_table *t, const char *what)
+{
+	if (shr_table_has_error(t))
+		fprintf(stderr, "Failed to build %s table\n", what);
 	else
-		printf("\t%*s %s\n", col_width + 1, " ",
-		       value ? value : alloc_error);
+		stdout_kv_render(stdout, t);
+	shr_table_free(t);
 }
 
-static void stdout_registers_cap(uint64_t cap)
+static struct shr_table *stdout_registers_cap_table(uint64_t cap)
 {
-	stdout_prop_cap(PROP_CAP_NSSES, nvme_support_str(NVME_CAP_NSSES(cap)));
-	stdout_prop_cap(PROP_CAP_CRWMS,
-			nvme_support_str(NVME_CAP_CRMS(cap) & NVME_CAP_CRWMS));
-	stdout_prop_cap(PROP_CAP_CRIMS,
-			nvme_support_str(NVME_CAP_CRMS(cap) & NVME_CAP_CRIMS));
-	stdout_prop_cap(PROP_CAP_NSSS, nvme_support_str(NVME_CAP_NSSS(cap)));
-	stdout_prop_cap(PROP_CAP_PMRS, "The Persistent Memory Region is %s",
-			nvme_support_str(NVME_CAP_PMRS(cap)));
-	stdout_prop_cap(PROP_CAP_MPSMAX, "%u bytes",
-			1 << (12 + NVME_CAP_MPSMAX(cap)));
-	stdout_prop_cap(PROP_CAP_MPSMIN, "%u bytes",
-			1 << (12 + NVME_CAP_MPSMIN(cap)));
-	stdout_prop_cap(PROP_CAP_CPS, prop_cap_cps_str(NVME_CAP_CPS(cap)));
-	stdout_prop_cap(PROP_CAP_BPS, nvme_yes_str(NVME_CAP_BPS(cap)));
-	stdout_prop_cap(PROP_CAP_CSS, "NVM command set is %s",
-			nvme_support_str(NVME_CAP_CSS(cap) & NVME_CAP_CSS_NVM));
-	stdout_prop_cap(PROP_CAP_NONE, "One or more I/O Command Sets are %s",
-			nvme_support_str(NVME_CAP_CSS(cap) & NVME_CAP_CSS_CSI));
-	stdout_prop_cap(PROP_CAP_NONE, NVME_CAP_CSS(cap) & NVME_CAP_CSS_ADMIN ?
-			"Only Admin Command Set Supported" :
-			"I/O Command Set is Supported");
-	stdout_prop_cap(PROP_CAP_NSSRS, nvme_yes_str(NVME_CAP_NSSRS(cap)));
-	stdout_prop_cap(PROP_CAP_DSTRD, "%u bytes",
-			1 << (2 + NVME_CAP_DSTRD(cap)));
-	stdout_prop_cap(PROP_CAP_TO, "%"PRIu64" ms",
-			MS500_TO_MS(NVME_CAP_TO(cap)));
-	stdout_prop_cap(PROP_CAP_AMS,
-			"Weighted Round Robin with Urgent Priority Class is %s",
-			nvme_support_str(NVME_CAP_AMS(cap) & NVME_CAP_AMS_WRR));
-	stdout_prop_cap(PROP_CAP_NONE, "Vendor Specific is %s",
-			nvme_support_str(NVME_CAP_AMS(cap) & NVME_CAP_AMS_VS));
-	stdout_prop_cap(PROP_CAP_CQR, nvme_yes_str(NVME_CAP_CQR(cap)));
-	stdout_prop_cap(PROP_CAP_MQES, "%"PRIu64"\n", NVME_CAP_MQES(cap) + 1);
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_prop_cap_add(t, PROP_CAP_NSSES, "%s",
+			     nvme_support_str(NVME_CAP_NSSES(cap)));
+	stdout_prop_cap_add(t, PROP_CAP_CRWMS, "%s",
+			     nvme_support_str(NVME_CAP_CRMS(cap) &
+					       NVME_CAP_CRWMS));
+	stdout_prop_cap_add(t, PROP_CAP_CRIMS, "%s",
+			     nvme_support_str(NVME_CAP_CRMS(cap) &
+					       NVME_CAP_CRIMS));
+	stdout_prop_cap_add(t, PROP_CAP_NSSS, "%s",
+			     nvme_support_str(NVME_CAP_NSSS(cap)));
+	stdout_prop_cap_add(t, PROP_CAP_PMRS,
+			     "The Persistent Memory Region is %s",
+			     nvme_support_str(NVME_CAP_PMRS(cap)));
+	stdout_prop_cap_add(t, PROP_CAP_MPSMAX, "%u bytes",
+			     1 << (12 + NVME_CAP_MPSMAX(cap)));
+	stdout_prop_cap_add(t, PROP_CAP_MPSMIN, "%u bytes",
+			     1 << (12 + NVME_CAP_MPSMIN(cap)));
+	stdout_prop_cap_add(t, PROP_CAP_CPS, "%s",
+			     prop_cap_cps_str(NVME_CAP_CPS(cap)));
+	stdout_prop_cap_add(t, PROP_CAP_BPS, "%s",
+			     nvme_yes_str(NVME_CAP_BPS(cap)));
+	stdout_prop_cap_add(t, PROP_CAP_CSS, "NVM command set is %s",
+			     nvme_support_str(NVME_CAP_CSS(cap) &
+					       NVME_CAP_CSS_NVM));
+	stdout_prop_cap_add(t, PROP_CAP_NONE,
+			     "One or more I/O Command Sets are %s",
+			     nvme_support_str(NVME_CAP_CSS(cap) &
+					       NVME_CAP_CSS_CSI));
+	stdout_prop_cap_add(t, PROP_CAP_NONE, "%s",
+			     NVME_CAP_CSS(cap) & NVME_CAP_CSS_ADMIN ?
+			     "Only Admin Command Set Supported" :
+			     "I/O Command Set is Supported");
+	stdout_prop_cap_add(t, PROP_CAP_NSSRS, "%s",
+			     nvme_yes_str(NVME_CAP_NSSRS(cap)));
+	stdout_prop_cap_add(t, PROP_CAP_DSTRD, "%u bytes",
+			     1 << (2 + NVME_CAP_DSTRD(cap)));
+	stdout_prop_cap_add(t, PROP_CAP_TO, "%"PRIu64" ms",
+			     MS500_TO_MS(NVME_CAP_TO(cap)));
+	stdout_prop_cap_add(t, PROP_CAP_AMS,
+			     "Weighted Round Robin with Urgent Priority Class is %s",
+			     nvme_support_str(NVME_CAP_AMS(cap) &
+					       NVME_CAP_AMS_WRR));
+	stdout_prop_cap_add(t, PROP_CAP_NONE, "Vendor Specific is %s",
+			     nvme_support_str(NVME_CAP_AMS(cap) &
+					       NVME_CAP_AMS_VS));
+	stdout_prop_cap_add(t, PROP_CAP_CQR, "%s",
+			     nvme_yes_str(NVME_CAP_CQR(cap)));
+	stdout_prop_cap_add(t, PROP_CAP_MQES, "%"PRIu64,
+			     NVME_CAP_MQES(cap) + 1);
+
+	return t;
 }
 
-static void stdout_registers_version(__u32 vs)
+static struct shr_table *stdout_registers_version_table(__u32 vs)
 {
-	printf("\tNVMe specification %d.%d.%d\n\n", NVME_MAJOR(vs), NVME_MINOR(vs),
-	       NVME_TERTIARY(vs));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "", "NVMe specification %d.%d.%d", NVME_MAJOR(vs),
+		      NVME_MINOR(vs), NVME_TERTIARY(vs));
+
+	return t;
 }
 
-static void stdout_registers_cc_ams(__u8 ams)
+static const char *stdout_registers_cc_ams_str(__u8 ams)
 {
-	printf("\tArbitration Mechanism Selected     (AMS)                   : ");
 	switch (ams) {
 	case NVME_CC_AMS_RR:
-		printf("Round Robin\n");
-		break;
+		return "Round Robin";
 	case NVME_CC_AMS_WRRU:
-		printf("Weighted Round Robin with Urgent Priority Class\n");
-		break;
+		return "Weighted Round Robin with Urgent Priority Class";
 	case NVME_CC_AMS_VS:
-		printf("Vendor Specific\n");
-		break;
+		return "Vendor Specific";
 	default:
-		printf("Reserved\n");
-		break;
+		return "Reserved";
 	}
 }
 
-static void stdout_registers_cc_shn(__u8 shn)
+static const char *stdout_registers_cc_shn_str(__u8 shn)
 {
-	printf("\tShutdown Notification              (SHN)                   : ");
 	switch (shn) {
 	case NVME_CC_SHN_NONE:
-		printf("No notification; no effect\n");
-		break;
+		return "No notification; no effect";
 	case NVME_CC_SHN_NORMAL:
-		printf("Normal shutdown notification\n");
-		break;
+		return "Normal shutdown notification";
 	case NVME_CC_SHN_ABRUPT:
-		printf("Abrupt shutdown notification\n");
-		break;
+		return "Abrupt shutdown notification";
 	default:
-		printf("Reserved\n");
-		break;
+		return "Reserved";
 	}
 }
 
-static void stdout_registers_cc(__u32 cc)
+static struct shr_table *stdout_registers_cc_table(__u32 cc)
 {
-	printf("\tController Ready Independent of Media Enable (CRIME)       : %s\n",
-		NVME_CC_CRIME(cc) ? "Enabled" : "Disabled");
+	struct shr_table *t;
 
-	printf("\tI/O Completion Queue Entry Size (IOCQES)                   : %u bytes\n",
-	       POWER_OF_TWO(NVME_CC_IOCQES(cc)));
-	printf("\tI/O Submission Queue Entry Size (IOSQES)                   : %u bytes\n",
-	       POWER_OF_TWO(NVME_CC_IOSQES(cc)));
-	stdout_registers_cc_shn(NVME_CC_SHN(cc));
-	stdout_registers_cc_ams(NVME_CC_AMS(cc));
-	printf("\tMemory Page Size                   (MPS)                   : %u bytes\n",
-	       POWER_OF_TWO(12 + NVME_CC_MPS(cc)));
-	printf("\tI/O Command Set Selected           (CSS)                   : %s\n",
-	       NVME_CC_CSS(cc) == NVME_CC_CSS_NVM ? "NVM Command Set" :
-	       NVME_CC_CSS(cc) == NVME_CC_CSS_CSI ? "All supported I/O Command Sets" :
-	       NVME_CC_CSS(cc) == NVME_CC_CSS_ADMIN ? "Admin Command Set only" : "Reserved");
-	printf("\tEnable                              (EN)                   : %s\n\n", NVME_CC_EN(cc) ? "Yes" : "No");
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Controller Ready Independent of Media Enable (CRIME)",
+		      "%s", NVME_CC_CRIME(cc) ? "Enabled" : "Disabled");
+	stdout_kv_add(t, "I/O Completion Queue Entry Size (IOCQES)", "%u bytes",
+		      POWER_OF_TWO(NVME_CC_IOCQES(cc)));
+	stdout_kv_add(t, "I/O Submission Queue Entry Size (IOSQES)", "%u bytes",
+		      POWER_OF_TWO(NVME_CC_IOSQES(cc)));
+	stdout_kv_add(t, "Shutdown Notification (SHN)", "%s",
+		      stdout_registers_cc_shn_str(NVME_CC_SHN(cc)));
+	stdout_kv_add(t, "Arbitration Mechanism Selected (AMS)", "%s",
+		      stdout_registers_cc_ams_str(NVME_CC_AMS(cc)));
+	stdout_kv_add(t, "Memory Page Size (MPS)", "%u bytes",
+		      POWER_OF_TWO(12 + NVME_CC_MPS(cc)));
+	stdout_kv_add(t, "I/O Command Set Selected (CSS)", "%s",
+		      NVME_CC_CSS(cc) == NVME_CC_CSS_NVM ? "NVM Command Set" :
+		      NVME_CC_CSS(cc) == NVME_CC_CSS_CSI ?
+		      "All supported I/O Command Sets" :
+		      NVME_CC_CSS(cc) == NVME_CC_CSS_ADMIN ?
+		      "Admin Command Set only" : "Reserved");
+	stdout_kv_add(t, "Enable (EN)", "%s", NVME_CC_EN(cc) ? "Yes" : "No");
+
+	return t;
 }
 
-static void stdout_registers_csts_shst(__u8 shst)
+static const char *stdout_registers_csts_shst_str(__u8 shst)
 {
-	printf("\tShutdown Status               (SHST): ");
 	switch (shst) {
 	case NVME_CSTS_SHST_NORMAL:
-		printf("Normal operation (no shutdown has been requested)\n");
-		break;
+		return "Normal operation (no shutdown has been requested)";
 	case NVME_CSTS_SHST_OCCUR:
-		printf("Shutdown processing occurring\n");
-		break;
+		return "Shutdown processing occurring";
 	case NVME_CSTS_SHST_CMPLT:
-		printf("Shutdown processing complete\n");
-		break;
+		return "Shutdown processing complete";
 	default:
-		printf("Reserved\n");
-		break;
+		return "Reserved";
 	}
 }
 
-static void stdout_registers_csts(__u32 csts)
+static struct shr_table *stdout_registers_csts_table(__u32 csts)
 {
-	printf("\tShutdown Type                   (ST): %s\n",
-	       NVME_CSTS_ST(csts) ? "Subsystem" : "Controller");
-	printf("\tProcessing Paused               (PP): %s\n", NVME_CSTS_PP(csts) ? "Yes" : "No");
-	printf("\tNVM Subsystem Reset Occurred (NSSRO): %s\n",
-	       NVME_CSTS_NSSRO(csts) ? "Yes" : "No");
-	stdout_registers_csts_shst(NVME_CSTS_SHST(csts));
-	printf("\tController Fatal Status        (CFS): %s\n",
-	       NVME_CSTS_CFS(csts) ? "True" : "False");
-	printf("\tReady                          (RDY): %s\n\n",
-	       NVME_CSTS_RDY(csts) ? "Yes" : "No");
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Shutdown Type (ST)", "%s",
+		      NVME_CSTS_ST(csts) ? "Subsystem" : "Controller");
+	stdout_kv_add(t, "Processing Paused (PP)", "%s",
+		      NVME_CSTS_PP(csts) ? "Yes" : "No");
+	stdout_kv_add(t, "NVM Subsystem Reset Occurred (NSSRO)", "%s",
+		      NVME_CSTS_NSSRO(csts) ? "Yes" : "No");
+	stdout_kv_add(t, "Shutdown Status (SHST)", "%s",
+		      stdout_registers_csts_shst_str(NVME_CSTS_SHST(csts)));
+	stdout_kv_add(t, "Controller Fatal Status (CFS)", "%s",
+		      NVME_CSTS_CFS(csts) ? "True" : "False");
+	stdout_kv_add(t, "Ready (RDY)", "%s",
+		      NVME_CSTS_RDY(csts) ? "Yes" : "No");
+
+	return t;
 }
 
-static void stdout_registers_nssd(__u32 nssd)
+static struct shr_table *stdout_registers_nssd_table(__u32 nssd)
 {
-	printf("\tNVM Subsystem Shutdown Control (NSSC): %#x\n\n", nssd);
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "NVM Subsystem Shutdown Control (NSSC)", "%#x", nssd);
+
+	return t;
 }
 
-static void stdout_registers_crto(__u32 crto)
+static struct shr_table *stdout_registers_crto_table(__u32 crto)
 {
-	printf("\tCRIMT                               : %d secs\n", NVME_CRTO_CRIMT(crto) / 2);
-	printf("\tCRWMT                               : %d secs\n", NVME_CRTO_CRWMT(crto) / 2);
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "CRIMT", "%d secs", NVME_CRTO_CRIMT(crto) / 2);
+	stdout_kv_add(t, "CRWMT", "%d secs", NVME_CRTO_CRWMT(crto) / 2);
+
+	return t;
 }
 
-static void stdout_registers_aqa(__u32 aqa)
+static struct shr_table *stdout_registers_aqa_table(__u32 aqa)
 {
-	printf("\tAdmin Completion Queue Size (ACQS): %u\n", NVME_AQA_ACQS(aqa) + 1);
-	printf("\tAdmin Submission Queue Size (ASQS): %u\n\n", NVME_AQA_ASQS(aqa) + 1);
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Admin Completion Queue Size (ACQS)", "%u",
+		      NVME_AQA_ACQS(aqa) + 1);
+	stdout_kv_add(t, "Admin Submission Queue Size (ASQS)", "%u",
+		      NVME_AQA_ASQS(aqa) + 1);
+
+	return t;
 }
 
-static void stdout_registers_asq(uint64_t asq)
+static struct shr_table *stdout_registers_asq_table(uint64_t asq)
 {
-	printf("\tAdmin Submission Queue Base (ASQB): %"PRIx64"\n", (uint64_t)NVME_ASQ_ASQB(asq));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Admin Submission Queue Base (ASQB)", "%"PRIx64,
+		      (uint64_t)NVME_ASQ_ASQB(asq));
+
+	return t;
 }
 
-static void stdout_registers_acq(uint64_t acq)
+static struct shr_table *stdout_registers_acq_table(uint64_t acq)
 {
-	printf("\tAdmin Completion Queue Base (ACQB): %"PRIx64"\n", (uint64_t)NVME_ACQ_ACQB(acq));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Admin Completion Queue Base (ACQB)", "%"PRIx64,
+		      (uint64_t)NVME_ACQ_ACQB(acq));
+
+	return t;
 }
 
-static void stdout_registers_cmbloc(__u32 cmbloc, bool support)
+static struct shr_table *
+stdout_registers_cmbloc_table(__u32 cmbloc, bool support)
 {
 	static const char * const enforced[] = { "Enforced", "Not Enforced" };
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
 
 	if (!support) {
-		printf("\tController Memory Buffer feature is not supported\n\n");
-		return;
+		stdout_kv_add(t, "", "%s",
+			      "Controller Memory Buffer feature is not supported");
+		return t;
 	}
 
-	printf("\tOffset                                                        (OFST): ");
-	printf("%#x (See cmbsz.szu for granularity)\n", NVME_CMBLOC_OFST(cmbloc));
+	stdout_kv_add(t, "Offset (OFST)", "%#x (See cmbsz.szu for granularity)",
+		      NVME_CMBLOC_OFST(cmbloc));
+	stdout_kv_add(t, "CMB Queue Dword Alignment (CQDA)", "%d",
+		      NVME_CMBLOC_CQDA(cmbloc));
+	stdout_kv_add(t, "CMB Data Metadata Mixed Memory Support (CDMMMS)",
+		      "%s", enforced[NVME_CMBLOC_CDMMMS(cmbloc)]);
+	stdout_kv_add(t,
+		      "CMB Data Pointer and Command Independent Locations Support (CDPCILS)",
+		      "%s", enforced[NVME_CMBLOC_CDPCILS(cmbloc)]);
+	stdout_kv_add(t, "CMB Data Pointer Mixed Locations Support (CDPMLS)",
+		      "%s", enforced[NVME_CMBLOC_CDPLMS(cmbloc)]);
+	stdout_kv_add(t, "CMB Queue Physically Discontiguous Support (CQPDS)",
+		      "%s", enforced[NVME_CMBLOC_CQPDS(cmbloc)]);
+	stdout_kv_add(t, "CMB Queue Mixed Memory Support (CQMMS)", "%s",
+		      enforced[NVME_CMBLOC_CQMMS(cmbloc)]);
+	stdout_kv_add(t, "Base Indicator Register (BIR)", "%#x",
+		      NVME_CMBLOC_BIR(cmbloc));
 
-	printf("\tCMB Queue Dword Alignment                                     (CQDA): %d\n",
-	       NVME_CMBLOC_CQDA(cmbloc));
-
-	printf("\tCMB Data Metadata Mixed Memory Support                      (CDMMMS): %s\n",
-	       enforced[NVME_CMBLOC_CDMMMS(cmbloc)]);
-
-	printf("\tCMB Data Pointer and Command Independent Locations Support (CDPCILS): %s\n",
-	       enforced[NVME_CMBLOC_CDPCILS(cmbloc)]);
-
-	printf("\tCMB Data Pointer Mixed Locations Support                    (CDPMLS): %s\n",
-	       enforced[NVME_CMBLOC_CDPLMS(cmbloc)]);
-
-	printf("\tCMB Queue Physically Discontiguous Support                   (CQPDS): %s\n",
-	       enforced[NVME_CMBLOC_CQPDS(cmbloc)]);
-
-	printf("\tCMB Queue Mixed Memory Support                               (CQMMS): %s\n",
-	       enforced[NVME_CMBLOC_CQMMS(cmbloc)]);
-
-	printf("\tBase Indicator Register                                        (BIR): %#x\n\n",
-	       NVME_CMBLOC_BIR(cmbloc));
+	return t;
 }
 
-static void stdout_registers_cmbsz(__u32 cmbsz)
+static struct shr_table *stdout_registers_cmbsz_table(__u32 cmbsz)
 {
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
 	if (!cmbsz) {
-		printf("\tController Memory Buffer feature is not supported\n\n");
-		return;
+		stdout_kv_add(t, "", "%s",
+			      "Controller Memory Buffer feature is not supported");
+		return t;
 	}
 
-	printf("\tSize                      (SZ): %u\n", NVME_CMBSZ_SZ(cmbsz));
-	printf("\tSize Units               (SZU): %s\n",
-	       nvme_register_szu_to_string(NVME_CMBSZ_SZU(cmbsz)));
-	printf("\tWrite Data Support       (WDS): Write Data and metadata transfer in Controller Memory Buffer is %s\n",
-	       NVME_CMBSZ_WDS(cmbsz) ? "Supported" : "Not supported");
-	printf("\tRead Data Support        (RDS): Read Data and metadata transfer in Controller Memory Buffer is %s\n",
-	       NVME_CMBSZ_RDS(cmbsz) ? "Supported" : "Not supported");
-	printf("\tPRP SGL List Support   (LISTS): PRP/SG Lists in Controller Memory Buffer is %s\n",
-	       NVME_CMBSZ_LISTS(cmbsz) ? "Supported" : "Not supported");
-	printf("\tCompletion Queue Support (CQS): Admin and I/O Completion Queues in Controller Memory Buffer is %s\n",
-	       NVME_CMBSZ_CQS(cmbsz) ? "Supported" : "Not supported");
-	printf("\tSubmission Queue Support (SQS): Admin and I/O Submission Queues in Controller Memory Buffer is %s\n\n",
-	       NVME_CMBSZ_SQS(cmbsz) ? "Supported" : "Not supported");
+	stdout_kv_add(t, "Size (SZ)", "%u", NVME_CMBSZ_SZ(cmbsz));
+	stdout_kv_add(t, "Size Units (SZU)", "%s",
+		      nvme_register_szu_to_string(NVME_CMBSZ_SZU(cmbsz)));
+	stdout_kv_add(t, "Write Data Support (WDS)",
+		      "Write Data and metadata transfer in Controller Memory Buffer is %s",
+		      NVME_CMBSZ_WDS(cmbsz) ? "Supported" : "Not supported");
+	stdout_kv_add(t, "Read Data Support (RDS)",
+		      "Read Data and metadata transfer in Controller Memory Buffer is %s",
+		      NVME_CMBSZ_RDS(cmbsz) ? "Supported" : "Not supported");
+	stdout_kv_add(t, "PRP SGL List Support (LISTS)",
+		      "PRP/SG Lists in Controller Memory Buffer is %s",
+		      NVME_CMBSZ_LISTS(cmbsz) ? "Supported" : "Not supported");
+	stdout_kv_add(t, "Completion Queue Support (CQS)",
+		      "Admin and I/O Completion Queues in Controller Memory Buffer is %s",
+		      NVME_CMBSZ_CQS(cmbsz) ? "Supported" : "Not supported");
+	stdout_kv_add(t, "Submission Queue Support (SQS)",
+		      "Admin and I/O Submission Queues in Controller Memory Buffer is %s",
+		      NVME_CMBSZ_SQS(cmbsz) ? "Supported" : "Not supported");
+
+	return t;
 }
 
-static void stdout_registers_bpinfo_brs(__u8 brs)
+static const char *stdout_registers_bpinfo_brs_str(__u8 brs)
 {
-	printf("\tBoot Read Status                (BRS): ");
 	switch (brs) {
 	case 0:
-		printf("No Boot Partition read operation requested\n");
-		break;
+		return "No Boot Partition read operation requested";
 	case 1:
-		printf("Boot Partition read in progress\n");
-		break;
+		return "Boot Partition read in progress";
 	case 2:
-		printf("Boot Partition read completed successfully\n");
-		break;
+		return "Boot Partition read completed successfully";
 	case 3:
-		printf("Error completing Boot Partition read\n");
-		break;
+		return "Error completing Boot Partition read";
 	default:
-		printf("Invalid\n");
-		break;
+		return "Invalid";
 	}
 }
 
-static void stdout_registers_bpinfo(__u32 bpinfo)
+static struct shr_table *stdout_registers_bpinfo_table(__u32 bpinfo)
 {
-	printf("\tActive Boot Partition ID      (ABPID): %u\n", NVME_BPINFO_ABPID(bpinfo));
-	stdout_registers_bpinfo_brs(NVME_BPINFO_BRS(bpinfo));
-	printf("\tBoot Partition Size            (BPSZ): %u\n", NVME_BPINFO_BPSZ(bpinfo));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Active Boot Partition ID (ABPID)", "%u",
+		      NVME_BPINFO_ABPID(bpinfo));
+	stdout_kv_add(t, "Boot Read Status (BRS)", "%s",
+		      stdout_registers_bpinfo_brs_str(NVME_BPINFO_BRS(bpinfo)));
+	stdout_kv_add(t, "Boot Partition Size (BPSZ)", "%u",
+		      NVME_BPINFO_BPSZ(bpinfo));
+
+	return t;
 }
 
-static void stdout_registers_bprsel(__u32 bprsel)
+static struct shr_table *stdout_registers_bprsel_table(__u32 bprsel)
 {
-	printf("\tBoot Partition Identifier      (BPID): %u\n", NVME_BPRSEL_BPID(bprsel));
-	printf("\tBoot Partition Read Offset    (BPROF): %x\n", NVME_BPRSEL_BPROF(bprsel));
-	printf("\tBoot Partition Read Size      (BPRSZ): %x\n", NVME_BPRSEL_BPRSZ(bprsel));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Boot Partition Identifier (BPID)", "%u",
+		      NVME_BPRSEL_BPID(bprsel));
+	stdout_kv_add(t, "Boot Partition Read Offset (BPROF)", "%x",
+		      NVME_BPRSEL_BPROF(bprsel));
+	stdout_kv_add(t, "Boot Partition Read Size (BPRSZ)", "%x",
+		      NVME_BPRSEL_BPRSZ(bprsel));
+
+	return t;
 }
 
-static void stdout_registers_bpmbl(uint64_t bpmbl)
+static struct shr_table *stdout_registers_bpmbl_table(uint64_t bpmbl)
 {
-	printf("\tBoot Partition Memory Buffer Base Address (BMBBA): %"PRIx64"\n",
-	       (uint64_t)NVME_BPMBL_BMBBA(bpmbl));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Boot Partition Memory Buffer Base Address (BMBBA)",
+		      "%"PRIx64, (uint64_t)NVME_BPMBL_BMBBA(bpmbl));
+
+	return t;
 }
 
-static void stdout_registers_cmbmsc(uint64_t cmbmsc)
+static struct shr_table *stdout_registers_cmbmsc_table(uint64_t cmbmsc)
 {
-	printf("\tController Base Address         (CBA): %" PRIx64 "\n",
-	       (uint64_t)NVME_CMBMSC_CBA(cmbmsc));
-	printf("\tController Memory Space Enable (CMSE): %" PRIx64 "\n", NVME_CMBMSC_CMSE(cmbmsc));
-	printf("\tCapabilities Registers Enabled  (CRE): ");
-	printf("CMBLOC and CMBSZ registers are %senabled\n\n",
-	       NVME_CMBMSC_CRE(cmbmsc) ? "" : "NOT ");
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Controller Base Address (CBA)", "%"PRIx64,
+		      (uint64_t)NVME_CMBMSC_CBA(cmbmsc));
+	stdout_kv_add(t, "Controller Memory Space Enable (CMSE)", "%"PRIx64,
+		      NVME_CMBMSC_CMSE(cmbmsc));
+	stdout_kv_add(t, "Capabilities Registers Enabled (CRE)",
+		      "CMBLOC and CMBSZ registers are %senabled",
+		      NVME_CMBMSC_CRE(cmbmsc) ? "" : "NOT ");
+
+	return t;
 }
 
-static void stdout_registers_cmbsts(__u32 cmbsts)
+static struct shr_table *stdout_registers_cmbsts_table(__u32 cmbsts)
 {
-	printf("\tController Base Address Invalid (CBAI): %x\n\n", NVME_CMBSTS_CBAI(cmbsts));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Controller Base Address Invalid (CBAI)", "%x",
+		      NVME_CMBSTS_CBAI(cmbsts));
+
+	return t;
 }
 
-static void stdout_registers_cmbebs(__u32 cmbebs)
+static struct shr_table *stdout_registers_cmbebs_table(__u32 cmbebs)
 {
-	printf("\tCMB Elasticity Buffer Size Base  (CMBWBZ): %#x\n", NVME_CMBEBS_CMBWBZ(cmbebs));
-	printf("\tRead Bypass Behavior                     : ");
-	printf("memory reads not conflicting with memory writes in the CMB Elasticity Buffer ");
-	printf("%s bypass those memory writes\n", NVME_CMBEBS_RBB(cmbebs) ? "SHALL" : "MAY");
-	printf("\tCMB Elasticity Buffer Size Units (CMBSZU): %s\n\n",
-	       nvme_register_unit_to_string(NVME_CMBEBS_CMBSZU(cmbebs)));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "CMB Elasticity Buffer Size Base (CMBWBZ)", "%#x",
+		      NVME_CMBEBS_CMBWBZ(cmbebs));
+	stdout_kv_add(t, "Read Bypass Behavior",
+		      "memory reads not conflicting with memory writes in the CMB Elasticity Buffer %s bypass those memory writes",
+		      NVME_CMBEBS_RBB(cmbebs) ? "SHALL" : "MAY");
+	stdout_kv_add(t, "CMB Elasticity Buffer Size Units (CMBSZU)", "%s",
+		      nvme_register_unit_to_string(NVME_CMBEBS_CMBSZU(cmbebs)));
+
+	return t;
 }
 
-static void stdout_registers_cmbswtp(__u32 cmbswtp)
+static struct shr_table *stdout_registers_cmbswtp_table(__u32 cmbswtp)
 {
-	printf("\tCMB Sustained Write Throughput       (CMBSWTV): %#x\n",
-	       NVME_CMBSWTP_CMBSWTV(cmbswtp));
-	printf("\tCMB Sustained Write Throughput Units (CMBSWTU): %s/second\n\n",
-	       nvme_register_unit_to_string(NVME_CMBSWTP_CMBSWTU(cmbswtp)));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "CMB Sustained Write Throughput (CMBSWTV)", "%#x",
+		      NVME_CMBSWTP_CMBSWTV(cmbswtp));
+	stdout_kv_add(t, "CMB Sustained Write Throughput Units (CMBSWTU)",
+		      "%s/second",
+		      nvme_register_unit_to_string(
+				      NVME_CMBSWTP_CMBSWTU(cmbswtp)));
+
+	return t;
 }
 
-static void stdout_registers_pmrcap(__u32 pmrcap)
+static struct shr_table *stdout_registers_pmrcap_table(__u32 pmrcap)
 {
-	printf("\tController Memory Space Supported                   (CMSS): ");
-	printf("Referencing PMR with host supplied addresses is %sSupported\n",
-	       NVME_PMRCAP_CMSS(pmrcap) ? "" : "Not ");
-	printf("\tPersistent Memory Region Timeout                   (PMRTO): %x\n",
-	       NVME_PMRCAP_PMRTO(pmrcap));
-	printf("\tPersistent Memory Region Write Barrier Mechanisms (PMRWBM): %x\n",
-	       NVME_PMRCAP_PMRWBM(pmrcap));
-	printf("\tPersistent Memory Region Time Units                (PMRTU): ");
-	printf("PMR time unit is %s\n", NVME_PMRCAP_PMRTU(pmrcap) ? "minutes" : "500 milliseconds");
-	printf("\tBase Indicator Register                              (BIR): %x\n",
-	       NVME_PMRCAP_BIR(pmrcap));
-	printf("\tWrite Data Support                                   (WDS): ");
-	printf("Write data to the PMR is %ssupported\n", NVME_PMRCAP_WDS(pmrcap) ? "" : "not ");
-	printf("\tRead Data Support                                    (RDS): ");
-	printf("Read data from the PMR is %ssupported\n", NVME_PMRCAP_RDS(pmrcap) ? "" : "not ");
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Controller Memory Space Supported (CMSS)",
+		      "Referencing PMR with host supplied addresses is %sSupported",
+		      NVME_PMRCAP_CMSS(pmrcap) ? "" : "Not ");
+	stdout_kv_add(t, "Persistent Memory Region Timeout (PMRTO)", "%x",
+		      NVME_PMRCAP_PMRTO(pmrcap));
+	stdout_kv_add(t,
+		      "Persistent Memory Region Write Barrier Mechanisms (PMRWBM)",
+		      "%x", NVME_PMRCAP_PMRWBM(pmrcap));
+	stdout_kv_add(t, "Persistent Memory Region Time Units (PMRTU)",
+		      "PMR time unit is %s",
+		      NVME_PMRCAP_PMRTU(pmrcap) ? "minutes" :
+		      "500 milliseconds");
+	stdout_kv_add(t, "Base Indicator Register (BIR)", "%x",
+		      NVME_PMRCAP_BIR(pmrcap));
+	stdout_kv_add(t, "Write Data Support (WDS)",
+		      "Write data to the PMR is %ssupported",
+		      NVME_PMRCAP_WDS(pmrcap) ? "" : "not ");
+	stdout_kv_add(t, "Read Data Support (RDS)",
+		      "Read data from the PMR is %ssupported",
+		      NVME_PMRCAP_RDS(pmrcap) ? "" : "not ");
+
+	return t;
 }
 
-static void stdout_registers_pmrctl(__u32 pmrctl)
+static struct shr_table *stdout_registers_pmrctl_table(__u32 pmrctl)
 {
-	printf("\tEnable (EN): PMR is %s\n", NVME_PMRCTL_EN(pmrctl) ? "READY" : "Disabled");
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Enable (EN)", "PMR is %s",
+		      NVME_PMRCTL_EN(pmrctl) ? "READY" : "Disabled");
+
+	return t;
 }
 
-static void stdout_registers_pmrsts(__u32 pmrsts, bool ready)
+static struct shr_table *stdout_registers_pmrsts_table(__u32 pmrsts, bool ready)
 {
-	printf("\tController Base Address Invalid (CBAI): %x\n", NVME_PMRSTS_CBAI(pmrsts));
-	printf("\tHealth Status                   (HSTS): %s\n",
-	       nvme_register_pmr_hsts_to_string(NVME_PMRSTS_HSTS(pmrsts)));
-	printf("\tNot Ready                       (NRDY): ");
-	printf("The Persistent Memory Region is %s to process ",
-	       !NVME_PMRSTS_NRDY(pmrsts) && ready ? "READY" : "Not Ready");
-	printf("PCI Express memory read and write requests\n");
-	printf("\tError                            (ERR): %x\n", NVME_PMRSTS_ERR(pmrsts));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Controller Base Address Invalid (CBAI)", "%x",
+		      NVME_PMRSTS_CBAI(pmrsts));
+	stdout_kv_add(t, "Health Status (HSTS)", "%s",
+		      nvme_register_pmr_hsts_to_string(
+				      NVME_PMRSTS_HSTS(pmrsts)));
+	stdout_kv_add(t, "Not Ready (NRDY)",
+		      "The Persistent Memory Region is %s to process PCI Express memory read and write requests",
+		      !NVME_PMRSTS_NRDY(pmrsts) && ready ?
+		      "READY" : "Not Ready");
+	stdout_kv_add(t, "Error (ERR)", "%x", NVME_PMRSTS_ERR(pmrsts));
+
+	return t;
 }
 
-static void stdout_registers_pmrebs(__u32 pmrebs)
+static struct shr_table *stdout_registers_pmrebs_table(__u32 pmrebs)
 {
-	printf("\tPMR Elasticity Buffer Size Base  (PMRWBZ): %x\n", NVME_PMREBS_PMRWBZ(pmrebs));
-	printf("\tRead Bypass Behavior                     : ");
-	printf("memory reads not conflicting with memory writes ");
-	printf("in the PMR Elasticity Buffer %s bypass those memory writes\n",
-	       NVME_PMREBS_RBB(pmrebs) ? "SHALL" : "MAY");
-	printf("\tPMR Elasticity Buffer Size Units (PMRSZU): %s\n",
-	       nvme_register_unit_to_string(NVME_PMREBS_PMRSZU(pmrebs)));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "PMR Elasticity Buffer Size Base (PMRWBZ)", "%x",
+		      NVME_PMREBS_PMRWBZ(pmrebs));
+	stdout_kv_add(t, "Read Bypass Behavior",
+		      "memory reads not conflicting with memory writes in the PMR Elasticity Buffer %s bypass those memory writes",
+		      NVME_PMREBS_RBB(pmrebs) ? "SHALL" : "MAY");
+	stdout_kv_add(t, "PMR Elasticity Buffer Size Units (PMRSZU)", "%s",
+		      nvme_register_unit_to_string(NVME_PMREBS_PMRSZU(pmrebs)));
+
+	return t;
 }
 
-static void stdout_registers_pmrswtp(__u32 pmrswtp)
+static struct shr_table *stdout_registers_pmrswtp_table(__u32 pmrswtp)
 {
-	printf("\tPMR Sustained Write Throughput       (PMRSWTV): %x\n",
-	       NVME_PMRSWTP_PMRSWTV(pmrswtp));
-	printf("\tPMR Sustained Write Throughput Units (PMRSWTU): %s/second\n",
-	       nvme_register_unit_to_string(NVME_PMRSWTP_PMRSWTU(pmrswtp)));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "PMR Sustained Write Throughput (PMRSWTV)", "%x",
+		      NVME_PMRSWTP_PMRSWTV(pmrswtp));
+	stdout_kv_add(t, "PMR Sustained Write Throughput Units (PMRSWTU)",
+		      "%s/second",
+		      nvme_register_unit_to_string(
+				      NVME_PMRSWTP_PMRSWTU(pmrswtp)));
+
+	return t;
 }
 
-static void stdout_registers_pmrmscl(uint32_t pmrmscl)
+static struct shr_table *stdout_registers_pmrmscl_table(uint32_t pmrmscl)
 {
-	printf("\tController Base Address         (CBA): %#x\n",
-	       (uint32_t)NVME_PMRMSC_CBA(pmrmscl));
-	printf("\tController Memory Space Enable (CMSE): %#x\n\n", NVME_PMRMSC_CMSE(pmrmscl));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Controller Base Address (CBA)", "%#x",
+		      (uint32_t)NVME_PMRMSC_CBA(pmrmscl));
+	stdout_kv_add(t, "Controller Memory Space Enable (CMSE)", "%#x",
+		      NVME_PMRMSC_CMSE(pmrmscl));
+
+	return t;
 }
 
-static void stdout_registers_pmrmscu(uint32_t pmrmscu)
+static struct shr_table *stdout_registers_pmrmscu_table(uint32_t pmrmscu)
 {
-	printf("\tController Base Address         (CBA): %#x\n",
-		pmrmscu);
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_kv_add(t, "Controller Base Address (CBA)", "%#x", pmrmscu);
+
+	return t;
 }
 
-static void stdout_ctrl_register_human(int offset, uint64_t value, bool support)
+static struct shr_table *stdout_ctrl_register_verbose_table(int offset,
+		uint64_t value, bool support)
 {
+	struct shr_table *t;
+
 	switch (offset) {
 	case NVME_REG_CAP:
-		stdout_registers_cap(value);
-		break;
+		return stdout_registers_cap_table(value);
 	case NVME_REG_VS:
-		stdout_registers_version(value);
-		break;
+		return stdout_registers_version_table(value);
 	case NVME_REG_INTMS:
-		printf("\tInterrupt Vector Mask Set (IVMS): %#"PRIx64"\n\n", value);
-		break;
+		t = stdout_kv_table_create();
+		if (!t)
+			return NULL;
+		stdout_kv_add(t, "Interrupt Vector Mask Set (IVMS)", "%#"PRIx64,
+			      value);
+		return t;
 	case NVME_REG_INTMC:
-		printf("\tInterrupt Vector Mask Clear (IVMC): %#"PRIx64"\n\n", value);
-		break;
+		t = stdout_kv_table_create();
+		if (!t)
+			return NULL;
+		stdout_kv_add(t, "Interrupt Vector Mask Clear (IVMC)",
+			      "%#"PRIx64, value);
+		return t;
 	case NVME_REG_CC:
-		stdout_registers_cc(value);
-		break;
+		return stdout_registers_cc_table(value);
 	case NVME_REG_CSTS:
-		stdout_registers_csts(value);
-		break;
+		return stdout_registers_csts_table(value);
 	case NVME_REG_NSSR:
-		printf("\tNVM Subsystem Reset Control (NSSRC): %"PRIu64"\n\n", value);
-		break;
+		t = stdout_kv_table_create();
+		if (!t)
+			return NULL;
+		stdout_kv_add(t, "NVM Subsystem Reset Control (NSSRC)",
+			      "%"PRIu64, value);
+		return t;
 	case NVME_REG_AQA:
-		stdout_registers_aqa(value);
-		break;
+		return stdout_registers_aqa_table(value);
 	case NVME_REG_ASQ:
-		stdout_registers_asq(value);
-		break;
+		return stdout_registers_asq_table(value);
 	case NVME_REG_ACQ:
-		stdout_registers_acq(value);
-		break;
+		return stdout_registers_acq_table(value);
 	case NVME_REG_CMBLOC:
-		stdout_registers_cmbloc(value, support);
-		break;
+		return stdout_registers_cmbloc_table(value, support);
 	case NVME_REG_CMBSZ:
-		stdout_registers_cmbsz(value);
-		break;
+		return stdout_registers_cmbsz_table(value);
 	case NVME_REG_BPINFO:
-		stdout_registers_bpinfo(value);
-		break;
+		return stdout_registers_bpinfo_table(value);
 	case NVME_REG_BPRSEL:
-		stdout_registers_bprsel(value);
-		break;
+		return stdout_registers_bprsel_table(value);
 	case NVME_REG_BPMBL:
-		stdout_registers_bpmbl(value);
-		break;
+		return stdout_registers_bpmbl_table(value);
 	case NVME_REG_CMBMSC:
-		stdout_registers_cmbmsc(value);
-		break;
+		return stdout_registers_cmbmsc_table(value);
 	case NVME_REG_CMBSTS:
-		stdout_registers_cmbsts(value);
-		break;
+		return stdout_registers_cmbsts_table(value);
 	case NVME_REG_CMBEBS:
-		stdout_registers_cmbebs(value);
-		break;
+		return stdout_registers_cmbebs_table(value);
 	case NVME_REG_CMBSWTP:
-		stdout_registers_cmbswtp(value);
-		break;
+		return stdout_registers_cmbswtp_table(value);
 	case NVME_REG_NSSD:
-		stdout_registers_nssd(value);
-		break;
+		return stdout_registers_nssd_table(value);
 	case NVME_REG_CRTO:
-		stdout_registers_crto(value);
-		break;
+		return stdout_registers_crto_table(value);
 	case NVME_REG_PMRCAP:
-		stdout_registers_pmrcap(value);
-		break;
+		return stdout_registers_pmrcap_table(value);
 	case NVME_REG_PMRCTL:
-		stdout_registers_pmrctl(value);
-		break;
+		return stdout_registers_pmrctl_table(value);
 	case NVME_REG_PMRSTS:
-		stdout_registers_pmrsts(value, support);
-		break;
+		return stdout_registers_pmrsts_table(value, support);
 	case NVME_REG_PMREBS:
-		stdout_registers_pmrebs(value);
-		break;
+		return stdout_registers_pmrebs_table(value);
 	case NVME_REG_PMRSWTP:
-		stdout_registers_pmrswtp(value);
-		break;
+		return stdout_registers_pmrswtp_table(value);
 	case NVME_REG_PMRMSCL:
-		stdout_registers_pmrmscl(value);
-		break;
+		return stdout_registers_pmrmscl_table(value);
 	case NVME_REG_PMRMSCU:
-		stdout_registers_pmrmscu(value);
-		break;
+		return stdout_registers_pmrmscu_table(value);
 	default:
-		printf("unknown register: %#04x (%s), value: %#"PRIx64"\n",
-		       offset, nvme_register_to_string(offset), value);
-		break;
+		t = stdout_kv_table_create();
+		if (!t)
+			return NULL;
+		stdout_kv_add(t, "",
+			      "unknown register: %#04x (%s), value: %#"PRIx64,
+			      offset, nvme_register_to_string(offset), value);
+		return t;
 	}
 }
 
 static void stdout_ctrl_register_common(int offset, uint64_t value, bool fabrics)
 {
-	bool human = !!(stdout_print_ops.flags & VERBOSE);
+	bool verbose = !!(stdout_print_ops.flags & VERBOSE);
 	const char *name = nvme_register_to_string(offset);
 	const char *type = fabrics ? "property" : "register";
+	struct shr_table *t;
+	int row;
 
-	if (human) {
-		printf("%s: %#"PRIx64"\n", name, value);
-		stdout_ctrl_register_human(offset, value, true);
+	t = stdout_kv_table_create();
+	if (!t)
 		return;
+
+	if (verbose) {
+		row = stdout_kv_add(t, name, "%#"PRIx64, value);
+		shr_table_set_row_subtable(t, row,
+				stdout_ctrl_register_verbose_table(offset,
+								    value,
+								    true));
+	} else {
+		stdout_kv_add(t, type, "%#04x (%s), value: %#"PRIx64, offset,
+			      name, value);
 	}
 
-	printf("%s: %#04x (%s), value: %#"PRIx64"\n", type, offset,
-	       name, value);
+	stdout_kv_table_finish(t, "register");
 }
 
 static void stdout_ctrl_register(int offset, uint64_t value)
@@ -1908,29 +2921,36 @@ static void stdout_ctrl_register(int offset, uint64_t value)
 	stdout_ctrl_register_common(offset, value, false);
 }
 
-static void stdout_ctrl_register_support(void *bar, bool fabrics, int offset, bool human,
-					 bool support)
+static void stdout_ctrl_register_support(struct shr_table *t, void *bar,
+		bool fabrics, int offset, bool verbose, bool support)
 {
 	uint64_t value = nvme_is_64bit_reg(offset) ? shr_mmio_read64(bar + offset) :
 	    shr_mmio_read32(bar + offset);
+	int row;
 
 	if (fabrics && value == -1)
 		return;
 
-	printf("%-8s: ", nvme_register_symbol_to_string(offset));
-
-	printf("%#"PRIx64"\n", value);
-
-	if (human)
-		stdout_ctrl_register_human(offset, value, support);
+	row = stdout_kv_add(t, nvme_register_symbol_to_string(offset),
+			     "%#"PRIx64, value);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_ctrl_register_verbose_table(offset,
+								    value,
+								    support));
 }
 
 void stdout_ctrl_registers(void *bar, bool fabrics)
 {
 	uint32_t value;
-	bool human = !!(stdout_print_ops.flags & VERBOSE);
+	bool verbose = !!(stdout_print_ops.flags & VERBOSE);
+	struct shr_table *t;
 	int offset;
 	bool support;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
 
 	for (offset = NVME_REG_CAP; offset <= NVME_REG_PMRMSCU; offset += get_reg_size(offset)) {
 		if (!nvme_is_ctrl_reg(offset) || (fabrics && !nvme_is_fabrics_reg(offset)))
@@ -1948,8 +2968,11 @@ void stdout_ctrl_registers(void *bar, bool fabrics)
 			support = true;
 			break;
 		}
-		stdout_ctrl_register_support(bar, fabrics, offset, human, support);
+		stdout_ctrl_register_support(t, bar, fabrics, offset, verbose,
+					      support);
 	}
+
+	stdout_kv_table_finish(t, "registers");
 }
 
 static void stdout_single_property(int offset, uint64_t value)
@@ -2013,25 +3036,34 @@ static void stdout_error_status(int status, const char *msg, va_list ap)
 	stdout_status(status);
 }
 
-static void stdout_id_ctrl_cmic(__u8 cmic)
+static struct shr_table *stdout_id_ctrl_cmic_table(__u8 cmic)
 {
+	struct shr_table *t;
 	__u8 rsvd = NVME_CMIC_MULTI_RSVD(cmic);
 	__u8 ana = NVME_CMIC_MULTI_ANA(cmic);
 	__u8 sriov = NVME_CMIC_MULTI_SRIOV(cmic);
 	__u8 mctl = NVME_CMIC_MULTI_CTRL(cmic);
 	__u8 mp = NVME_CMIC_MULTI_PORT(cmic);
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:4] : %#x\tReserved\n", rsvd);
-	printf("  [3:3] : %#x\tANA %ssupported\n", ana, ana ? "" : "not ");
-	printf("  [2:2] : %#x\t%s\n", sriov, sriov ? "SR-IOV" : "PCI");
-	printf("  [1:1] : %#x\t%s Controller\n", mctl, mctl ? "Multi" : "Single");
-	printf("  [0:0] : %#x\t%s Port\n", mp, mp ? "Multi" : "Single");
-	printf("\n");
+		stdout_bits_add(t, "[7:4]", rsvd, "Reserved");
+	stdout_bits_add(t, "[3:3]", ana,
+			 ana ? "ANA supported" : "ANA not supported");
+	stdout_bits_add(t, "[2:2]", sriov, sriov ? "SR-IOV" : "PCI");
+	stdout_bits_add(t, "[1:1]", mctl,
+			 mctl ? "Multi Controller" : "Single Controller");
+	stdout_bits_add(t, "[0:0]", mp, mp ? "Multi Port" : "Single Port");
+
+	return t;
 }
 
-static void stdout_id_ctrl_oaes(__le32 ctrl_oaes)
+static struct shr_table *stdout_id_ctrl_oaes_table(__le32 ctrl_oaes)
 {
+	struct shr_table *t;
 	__u32 oaes = le32_to_cpu(ctrl_oaes);
 	__u32 dlpcn = NVME_CTRL_OAES_DLPCN(oaes);
 	__u32 rsvd28 = (oaes & 0x70000000) >> 28;
@@ -2053,51 +3085,68 @@ static void stdout_id_ctrl_oaes(__le32 ctrl_oaes)
 	__u32 nace = NVME_CTRL_OAES_NSAN(oaes);
 	__u32 rsvd0 = oaes & 0xFF;
 
-	printf("  [31:31] : %#x\tDiscovery Log Change Notice %sSupported\n",
-			dlpcn, dlpcn ? "" : "Not ");
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[31:31]", dlpcn,
+			"Discovery Log Change Notice %sSupported",
+			dlpcn ? "" : "Not ");
 	if (rsvd28)
-		printf("  [30:28] : %#x\tReserved\n", rsvd28);
-	printf("  [27:27] : %#x\tZone Descriptor Changed Notices %sSupported\n",
-			zdcn, zdcn ? "" : "Not ");
+		stdout_bits_add(t, "[30:28]", rsvd28, "Reserved");
+	stdout_bits_add(t, "[27:27]", zdcn,
+			"Zone Descriptor Changed Notices %sSupported",
+			zdcn ? "" : "Not ");
 	if (rsvd23)
-		printf("  [26:23] : %#x\tReserved\n", rsvd23);
-	printf("  [22:22] : %#x\tRate Limiting Configuration Change Notices %sSupported\n",
-			rlcc, rlcc ? "" : "Not ");
+		stdout_bits_add(t, "[26:23]", rsvd23, "Reserved");
+	stdout_bits_add(t, "[22:22]", rlcc,
+			"Rate Limiting Configuration Change Notices %sSupported",
+			rlcc ? "" : "Not ");
 	if (rsvd20)
-		printf("  [21:20] : %#x\tReserved\n", rsvd20);
-	printf("  [19:19] : %#x\tAllocated Namespace Attribute Notices %sSupported\n",
-			ansan, ansan ? "" : "Not ");
+		stdout_bits_add(t, "[21:20]", rsvd20, "Reserved");
+	stdout_bits_add(t, "[19:19]", ansan,
+			"Allocated Namespace Attribute Notices %sSupported",
+			ansan ? "" : "Not ");
 	if (rsvd18)
-		printf("  [18:18] : %#x\tReserved\n", rsvd18);
-	printf("  [17:17] : %#x\tReachability Groups Change Notices %sSupported\n",
-			rgcns, rgcns ? "" : "Not ");
-	printf("  [16:16] : %#x\tTemperature Threshold Hysteresis Recovery %sSupported\n",
-		tthr, tthr ? "" : "Not ");
-	printf("  [15:15] : %#x\tNormal NSS Shutdown Event %sSupported\n",
-			normal_shn, normal_shn ? "" : "Not ");
-	printf("  [14:14] : %#x\tEndurance Group Event Aggregate Log Page"\
-			" Change Notice %sSupported\n",
-			egealpcn, egealpcn ? "" : "Not ");
-	printf("  [13:13] : %#x\tLBA Status Information Notices %sSupported\n",
-			lbasin, lbasin ? "" : "Not ");
-	printf("  [12:12] : %#x\tPredictable Latency Event Aggregate Log Change"\
-			" Notices %sSupported\n",
-			plealcn, plealcn ? "" : "Not ");
-	printf("  [11:11] : %#x\tAsymmetric Namespace Access Change Notices"\
-			" %sSupported\n", anacn, anacn ? "" : "Not ");
+		stdout_bits_add(t, "[18:18]", rsvd18, "Reserved");
+	stdout_bits_add(t, "[17:17]", rgcns,
+			"Reachability Groups Change Notices %sSupported",
+			rgcns ? "" : "Not ");
+	stdout_bits_add(t, "[16:16]", tthr,
+			"Temperature Threshold Hysteresis Recovery %sSupported",
+			tthr ? "" : "Not ");
+	stdout_bits_add(t, "[15:15]", normal_shn,
+			"Normal NSS Shutdown Event %sSupported",
+			normal_shn ? "" : "Not ");
+	stdout_bits_add(t, "[14:14]", egealpcn,
+			"Endurance Group Event Aggregate Log Page Change Notice %sSupported",
+			egealpcn ? "" : "Not ");
+	stdout_bits_add(t, "[13:13]", lbasin,
+			"LBA Status Information Notices %sSupported",
+			lbasin ? "" : "Not ");
+	stdout_bits_add(t, "[12:12]", plealcn,
+			"Predictable Latency Event Aggregate Log Change Notices %sSupported",
+			plealcn ? "" : "Not ");
+	stdout_bits_add(t, "[11:11]", anacn,
+			"Asymmetric Namespace Access Change Notices %sSupported",
+			anacn ? "" : "Not ");
 	if (rsvd10)
-		printf("  [10:10] : %#x\tReserved\n", rsvd10);
-	printf("  [9:9] : %#x\tFirmware Activation Notices %sSupported\n",
-		fan, fan ? "" : "Not ");
-	printf("  [8:8] : %#x\tAttached Namespace Attribute Changed Event %sSupported\n",
-		nace, nace ? "" : "Not ");
+		stdout_bits_add(t, "[10:10]", rsvd10, "Reserved");
+	stdout_bits_add(t, "[9:9]", fan,
+			"Firmware Activation Notices %sSupported",
+			fan ? "" : "Not ");
+	stdout_bits_add(t, "[8:8]", nace,
+			"Attached Namespace Attribute Changed Event %sSupported",
+			nace ? "" : "Not ");
 	if (rsvd0)
-		printf("  [7:0] : %#x\tReserved\n", rsvd0);
-	printf("\n");
+		stdout_bits_add(t, "[7:0]", rsvd0, "Reserved");
+
+	return t;
 }
 
-static void stdout_id_ctrl_ctratt(__le32 ctrl_ctratt)
+static struct shr_table *stdout_id_ctrl_ctratt_table(__le32 ctrl_ctratt)
 {
+	struct shr_table *t;
 	__u32 ctratt = le32_to_cpu(ctrl_ctratt);
 	__u32 rsvd25 = (ctratt >> 25);
 	__u32 iiellss = NVME_CTRL_CTRATT_IIELLSS(ctratt);
@@ -2125,65 +3174,79 @@ static void stdout_id_ctrl_ctratt(__le32 ctrl_ctratt)
 	__u32 nopspm = NVME_CTRL_CTRATT_NOPSPM(ctratt);
 	__u32 hids = NVME_CTRL_CTRATT_HIDS(ctratt);
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd25)
-		printf("  [31:25] : %#x\tReserved\n", rsvd25);
-	printf("  [24:23] : %#x\tIdle I/O Exit Latency Limit %s\n", iiellss,
-	       !iiellss ? "Not Supported" :
-	       iiellss == NVME_CTRL_CTRATT_IIELLSS_POWER_STATE ?
-	       "Supported (Power state)" :
-	       iiellss == NVME_CTRL_CTRATT_IIELLSS_GLOBAL ?
-	       "Supported (Global)" : "Reserved");
-	printf("  [22:22] : %#x\tVoltage Measurement %sSupported\n", vms,
-	       vms ? "" : "Not ");
-	printf("  [21:21] : %#x\tPower Measurement %sSupported\n",
-		pms, pms ? "" : "Not ");
-	printf("  [20:20] : %#x\tPower Limit %sSupported\n",
-		pls, pls ? "" : "Not ");
-	printf("  [19:19] : %#x\tFlexible Data Placement %sSupported\n",
-		fdps, fdps ? "" : "Not ");
-	printf("  [18:18] : %#x\tReservations and Host Identifier Interaction %sSupported\n",
-		rhii, rhii ? "" : "Not ");
-	printf("  [17:17] : %#x\tHMB Restrict Non-Operational Power State Access %sSupported\n",
-		hmbr, hmbr ? "" : "Not ");
-	printf("  [16:16] : %#x\tMDTS and Size Limits Exclude Metadata %sSupported\n",
-		mem, mem ? "" : "Not ");
-	printf("  [15:15] : %#x\tExtended LBA Formats %sSupported\n",
-		elbas, elbas ? "" : "Not ");
-	printf("  [14:14] : %#x\tDelete NVM Set %sSupported\n",
-		dnvms, dnvms ? "" : "Not ");
-	printf("  [13:13] : %#x\tDelete Endurance Group %sSupported\n",
-		deg, deg ? "" : "Not ");
-	printf("  [12:12] : %#x\tVariable Capacity Management %sSupported\n",
-		vcm, vcm ? "" : "Not ");
-	printf("  [11:11] : %#x\tFixed Capacity Management %sSupported\n",
-		fcm, fcm ? "" : "Not ");
-	printf("  [10:10] : %#x\tMulti Domain Subsystem %sSupported\n",
-		mds, mds ? "" : "Not ");
-	printf("  [9:9] : %#x\tUUID List %sSupported\n",
-		ulist, ulist ? "" : "Not ");
-	printf("  [8:8] : %#x\tSQ Associations %sSupported\n",
-		sqa, sqa ? "" : "Not ");
-	printf("  [7:7] : %#x\tNamespace Granularity %sSupported\n",
-		ng, ng ? "" : "Not ");
-	printf("  [6:6] : %#x\tTraffic Based Keep Alive %sSupported\n",
-		tbkas, tbkas ? "" : "Not ");
-	printf("  [5:5] : %#x\tPredictable Latency Mode %sSupported\n",
-		plm, plm ? "" : "Not ");
-	printf("  [4:4] : %#x\tEndurance Groups %sSupported\n",
-		egs, egs ? "" : "Not ");
-	printf("  [3:3] : %#x\tRead Recovery Levels %sSupported\n",
-		rrlvls, rrlvls ? "" : "Not ");
-	printf("  [2:2] : %#x\tNVM Sets %sSupported\n",
-		nsets, nsets ? "" : "Not ");
-	printf("  [1:1] : %#x\tNon-Operational Power State Permissive %sSupported\n",
-		nopspm, nopspm ? "" : "Not ");
-	printf("  [0:0] : %#x\t128-bit Host Identifier %sSupported\n",
-		hids, hids ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[31:25]", rsvd25, "Reserved");
+	stdout_bits_add(t, "[24:23]", iiellss, "Idle I/O Exit Latency Limit %s",
+			 !iiellss ? "Not Supported" :
+			 iiellss == NVME_CTRL_CTRATT_IIELLSS_POWER_STATE ?
+			 "Supported (Power state)" :
+			 iiellss == NVME_CTRL_CTRATT_IIELLSS_GLOBAL ?
+			 "Supported (Global)" : "Reserved");
+	stdout_bits_add(t, "[22:22]", vms, "Voltage Measurement %sSupported",
+			 vms ? "" : "Not ");
+	stdout_bits_add(t, "[21:21]", pms, "Power Measurement %sSupported",
+			 pms ? "" : "Not ");
+	stdout_bits_add(t, "[20:20]", pls, "Power Limit %sSupported",
+			 pls ? "" : "Not ");
+	stdout_bits_add(t, "[19:19]", fdps,
+			 "Flexible Data Placement %sSupported",
+			 fdps ? "" : "Not ");
+	stdout_bits_add(t, "[18:18]", rhii,
+			 "Reservations and Host Identifier Interaction %sSupported",
+			 rhii ? "" : "Not ");
+	stdout_bits_add(t, "[17:17]", hmbr,
+			 "HMB Restrict Non-Operational Power State Access %sSupported",
+			 hmbr ? "" : "Not ");
+	stdout_bits_add(t, "[16:16]", mem,
+			 "MDTS and Size Limits Exclude Metadata %sSupported",
+			 mem ? "" : "Not ");
+	stdout_bits_add(t, "[15:15]", elbas, "Extended LBA Formats %sSupported",
+			 elbas ? "" : "Not ");
+	stdout_bits_add(t, "[14:14]", dnvms, "Delete NVM Set %sSupported",
+			 dnvms ? "" : "Not ");
+	stdout_bits_add(t, "[13:13]", deg, "Delete Endurance Group %sSupported",
+			 deg ? "" : "Not ");
+	stdout_bits_add(t, "[12:12]", vcm,
+			 "Variable Capacity Management %sSupported",
+			 vcm ? "" : "Not ");
+	stdout_bits_add(t, "[11:11]", fcm,
+			 "Fixed Capacity Management %sSupported",
+			 fcm ? "" : "Not ");
+	stdout_bits_add(t, "[10:10]", mds, "Multi Domain Subsystem %sSupported",
+			 mds ? "" : "Not ");
+	stdout_bits_add(t, "[9:9]", ulist, "UUID List %sSupported",
+			 ulist ? "" : "Not ");
+	stdout_bits_add(t, "[8:8]", sqa, "SQ Associations %sSupported",
+			 sqa ? "" : "Not ");
+	stdout_bits_add(t, "[7:7]", ng, "Namespace Granularity %sSupported",
+			 ng ? "" : "Not ");
+	stdout_bits_add(t, "[6:6]", tbkas,
+			 "Traffic Based Keep Alive %sSupported",
+			 tbkas ? "" : "Not ");
+	stdout_bits_add(t, "[5:5]", plm, "Predictable Latency Mode %sSupported",
+			 plm ? "" : "Not ");
+	stdout_bits_add(t, "[4:4]", egs, "Endurance Groups %sSupported",
+			 egs ? "" : "Not ");
+	stdout_bits_add(t, "[3:3]", rrlvls, "Read Recovery Levels %sSupported",
+			 rrlvls ? "" : "Not ");
+	stdout_bits_add(t, "[2:2]", nsets, "NVM Sets %sSupported",
+			 nsets ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", nopspm,
+			 "Non-Operational Power State Permissive %sSupported",
+			 nopspm ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", hids, "128-bit Host Identifier %sSupported",
+			 hids ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_bpcap(__u8 ctrl_bpcap)
+static struct shr_table *stdout_id_ctrl_bpcap_table(__u8 ctrl_bpcap)
 {
+	struct shr_table *t;
 	__u8 rsvd3 = (ctrl_bpcap >> 3);
 	__u8 sfbpwps = NVME_GET(ctrl_bpcap, CTRL_BACAP_SFBPWPS);
 	__u8 rpmbbpwps = NVME_GET(ctrl_bpcap, CTRL_BACAP_RPMBBPWPS);
@@ -2193,81 +3256,115 @@ static void stdout_id_ctrl_bpcap(__u8 ctrl_bpcap)
 		"Supported"
 	};
 
-	if (rsvd3)
-		printf(" [7:3] : %#x\tReserved\n", rsvd3);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	printf("  [2:2] : %#x\tSet Features Boot Partition Write Protection %sSupported\n",
-		sfbpwps, sfbpwps ? "" : "Not ");
-	printf("  [1:0] : %#x\tRPMB Boot Partition Write Protection %s\n",
-		rpmbbpwps, rpmbbpwps_def[rpmbbpwps]);
-	printf("\n");
+	if (rsvd3)
+		stdout_bits_add(t, "[7:3]", rsvd3, "Reserved");
+	stdout_bits_add(t, "[2:2]", sfbpwps,
+			 "Set Features Boot Partition Write Protection %sSupported",
+			 sfbpwps ? "" : "Not ");
+	stdout_bits_add(t, "[1:0]", rpmbbpwps,
+			 "RPMB Boot Partition Write Protection %s",
+			 rpmbbpwps_def[rpmbbpwps]);
+
+	return t;
 }
 
-static void stdout_id_ctrl_chsi(__u8 ctrl_chsi)
+static struct shr_table *stdout_id_ctrl_chsi_table(__u8 ctrl_chsi)
 {
+	struct shr_table *t;
 	__u8 rsvd1 = (ctrl_chsi >> 1);
 	__u8 chs = NVME_CTRL_CHSI_CHS(ctrl_chsi);
 
-	if (rsvd1)
-		printf(" [7:1] : %#x\tReserved\n", rsvd1);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	printf("  [0:0] : %#x\tCXL HDM %sSupported\n", chs, chs ? "" : "Not ");
-	printf("\n");
+	if (rsvd1)
+		stdout_bits_add(t, "[7:1]", rsvd1, "Reserved");
+	stdout_bits_add(t, "[0:0]", chs,
+			 "CXL HDM %sSupported", chs ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_rmdca(__u8 ctrl_rmdca)
+static struct shr_table *stdout_id_ctrl_rmdca_table(__u8 ctrl_rmdca)
 {
+	struct shr_table *t;
 	__u8 rsvd3 = (ctrl_rmdca >> 3);
 	__u8 rdccs = NVME_CTRL_RMDCA_RDCCS(ctrl_rmdca);
 	__u8 rdncs = NVME_CTRL_RMDCA_RDNCS(ctrl_rmdca);
 	__u8 rdscs = NVME_CTRL_RMDCA_RDSCS(ctrl_rmdca);
 
-	if (rsvd3)
-		printf(" [7:3] : %#x\tReserved\n", rsvd3);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	printf("  [2:2] : %#x\tRestore Default Capacity Management Configuration %sSupported\n",
-	       rdccs, rdccs ? "" : "Not ");
-	printf("  [1:1] : %#x\tRestore Default Namespace Configuration %sSupported\n",
-	       rdncs, rdncs ? "" : "Not ");
-	printf("  [0:0] : %#x\tRestore Default NVM Subsystem Configuration %sSupported\n",
-	       rdscs, rdscs ? "" : "Not ");
-	printf("\n");
+	if (rsvd3)
+		stdout_bits_add(t, "[7:3]", rsvd3, "Reserved");
+	stdout_bits_add(t, "[2:2]", rdccs,
+			 "Restore Default Capacity Management Configuration %sSupported",
+			 rdccs ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", rdncs,
+			 "Restore Default Namespace Configuration %sSupported",
+			 rdncs ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", rdscs,
+			 "Restore Default NVM Subsystem Configuration %sSupported",
+			 rdscs ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_plsi(__u8 ctrl_plsi)
+static struct shr_table *stdout_id_ctrl_plsi_table(__u8 ctrl_plsi)
 {
+	struct shr_table *t;
 	__u8 rsvd2 = (ctrl_plsi >> 2);
 	__u8 plsfq = NVME_GET(ctrl_plsi, CTRL_PLSI_PLSFQ);
 	__u8 plsepf = NVME_GET(ctrl_plsi, CTRL_PLSI_PLSEPF);
 
-	if (rsvd2)
-		printf(" [7:2] : %#x\tReserved\n", rsvd2);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	printf("  [1:1] : %#x\tPower Loss Signaling with Forced Quiescence %sSupported\n",
-		plsfq, plsfq ? "" : "Not ");
-	printf("  [0:0] : %#x\tPower Loss Signaling with Emergency Power Fail %sSupported\n",
-		plsepf, plsepf ? "" : "Not ");
-	printf("\n");
+	if (rsvd2)
+		stdout_bits_add(t, "[7:2]", rsvd2, "Reserved");
+	stdout_bits_add(t, "[1:1]", plsfq,
+			 "Power Loss Signaling with Forced Quiescence %sSupported",
+			 plsfq ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", plsepf,
+			 "Power Loss Signaling with Emergency Power Fail %sSupported",
+			 plsepf ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_crcap(__u8 ctrl_crcap)
+static struct shr_table *stdout_id_ctrl_crcap_table(__u8 ctrl_crcap)
 {
+	struct shr_table *t;
 	__u8 rsvd2 = (ctrl_crcap >> 2);
 	__u8 rgidc = NVME_GET(ctrl_crcap, CTRL_CRCAP_RGIDC);
 	__u8 rrsup = NVME_GET(ctrl_crcap, CTRL_CRCAP_RRSUP);
 
-	if (rsvd2)
-		printf(" [7:2] : %#x\tReserved\n", rsvd2);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	printf("  [1:1] : %#x\tRGRPID %s while the namespace is attached to any controller.\n",
-		rgidc, rgidc ? "does not change" : "may change");
-	printf("  [0:0] : %#x\tReachability Reporting %sSupported\n",
-		rrsup, rrsup ? "" : "Not ");
-	printf("\n");
+	if (rsvd2)
+		stdout_bits_add(t, "[7:2]", rsvd2, "Reserved");
+	stdout_bits_add(t, "[1:1]", rgidc,
+			 "RGRPID %s while the namespace is attached to any controller.",
+			 rgidc ? "does not change" : "may change");
+	stdout_bits_add(t, "[0:0]", rrsup, "Reachability Reporting %sSupported",
+			 rrsup ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_cntrltype(__u8 cntrltype)
+static struct shr_table *stdout_id_ctrl_cntrltype_table(__u8 cntrltype)
 {
+	struct shr_table *t;
 	__u8 rsvd = (cntrltype & 0xFC) >> 2;
 	__u8 cntrl = cntrltype & 0x3;
 
@@ -2278,55 +3375,83 @@ static void stdout_id_ctrl_cntrltype(__u8 cntrltype)
 		"Administrative Controller"
 	};
 
-	printf("  [7:2] : %#x\tReserved\n", rsvd);
-	printf("  [1:0] : %#x\t%s\n", cntrltype, type[cntrl]);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[7:2]", rsvd, "Reserved");
+	stdout_bits_add(t, "[1:0]", cntrltype, "%s", type[cntrl]);
+
+	return t;
 }
 
-static void stdout_id_ctrl_nvmsr(__u8 nvmsr)
+static struct shr_table *stdout_id_ctrl_nvmsr_table(__u8 nvmsr)
 {
+	struct shr_table *t;
 	__u8 rsvd = (nvmsr >> 2) & 0xfc;
 	__u8 nvmee = NVME_CTRL_NVMSR_NVMEE(nvmsr);
 	__u8 nvmesd = NVME_CTRL_NVMSR_NVMESD(nvmsr);
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf(" [7:2] : %#x\tReserved\n", rsvd);
-	printf("  [1:1] : %#x\tNVM subsystem %spart of an Enclosure\n",
-		nvmee, nvmee ? "" : "Not ");
-	printf("  [0:0] : %#x\tNVM subsystem %spart of a Storage Device\n",
-		nvmesd, nvmesd ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[7:2]", rsvd, "Reserved");
+	stdout_bits_add(t, "[1:1]", nvmee,
+			 "NVM subsystem %spart of an Enclosure",
+			 nvmee ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", nvmesd,
+			 "NVM subsystem %spart of a Storage Device",
+			 nvmesd ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_vwci(__u8 vwci)
+static struct shr_table *stdout_id_ctrl_vwci_table(__u8 vwci)
 {
+	struct shr_table *t;
 	__u8 vwcrv = NVME_CTRL_VWCI_VWCRV(vwci);
 	__u8 vwcr = NVME_CTRL_VWCI_VWCR(vwci);
 
-	printf("  [7:7] : %#x\tVPD Write Cycles Remaining field is %svalid.\n",
-		vwcrv, vwcrv ? "" : "Not ");
-	printf("  [6:0] : %#x\tVPD Write Cycles Remaining\n", vwcr);
-	printf("\n");
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
+	stdout_bits_add(t, "[7:7]", vwcrv,
+			 "VPD Write Cycles Remaining field is %svalid.",
+			 vwcrv ? "" : "Not ");
+	stdout_bits_add(t, "[6:0]", vwcr, "VPD Write Cycles Remaining");
+
+	return t;
 }
 
-static void stdout_id_ctrl_mec(__u8 mec)
+static struct shr_table *stdout_id_ctrl_mec_table(__u8 mec)
 {
+	struct shr_table *t;
 	__u8 rsvd = (mec >> 2) & 0xfc;
 	__u8 pcieme = (mec >> 1) & 0x1;
 	__u8 smbusme = mec & 0x1;
 
-	if (rsvd)
-		printf(" [7:2] : %#x\tReserved\n", rsvd);
-	printf("  [1:1] : %#x\tNVM subsystem %scontains a Management Endpoint"\
-		" on a PCIe port\n", pcieme, pcieme ? "" : "Not ");
-	printf("  [0:0] : %#x\tNVM subsystem %scontains a Management Endpoint"\
-		" on an SMBus/I2C port\n", smbusme, smbusme ? "" : "Not ");
-	printf("\n");
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
+	if (rsvd)
+		stdout_bits_add(t, "[7:2]", rsvd, "Reserved");
+	stdout_bits_add(t, "[1:1]", pcieme,
+			 "NVM subsystem %scontains a Management Endpoint on a PCIe port",
+			 pcieme ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", smbusme,
+			 "NVM subsystem %scontains a Management Endpoint on an SMBus/I2C port",
+			 smbusme ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_oacs(__le16 ctrl_oacs)
+static struct shr_table *stdout_id_ctrl_oacs_table(__le16 ctrl_oacs)
 {
+	struct shr_table *t;
 	__u16 oacs = le16_to_cpu(ctrl_oacs);
 	__u16 rsvd = (oacs & 0xC000) >> 14;
 	__u16 rsvd12 = (oacs & 0x1000) >> 12;
@@ -2344,61 +3469,82 @@ static void stdout_id_ctrl_oacs(__le16 ctrl_oacs)
 	__u16 fmt = NVME_CTRL_OACS_FNVMS(oacs);
 	__u16 sec = NVME_CTRL_OACS_SSRS(oacs);
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf(" [15:14] : %#x\tReserved\n", rsvd);
-	printf("  [13:13] : %#x\tCtrl-scoped Command/Feature Lockdown %sSupported\n",
-	       ccfls, ccfls ? "" : "Not ");
+		stdout_bits_add(t, "[15:14]", rsvd, "Reserved");
+	stdout_bits_add(t, "[13:13]", ccfls,
+			 "Ctrl-scoped Command/Feature Lockdown %sSupported",
+			 ccfls ? "" : "Not ");
 	if (rsvd12)
-		printf(" [12:12] : %#x\tReserved\n", rsvd12);
-	printf("  [11:11] : %#x\tHost Managed Live Migration %sSupported\n",
-		hmlms, hmlms ? "" : "Not ");
-	printf("  [10:10] : %#x\tLockdown Command and Feature %sSupported\n",
-		lock, lock ? "" : "Not ");
-	printf("  [9:9] : %#x\tGet LBA Status Capability %sSupported\n",
-		glbas, glbas ? "" : "Not ");
-	printf("  [8:8] : %#x\tDoorbell Buffer Config %sSupported\n",
-		dbc, dbc ? "" : "Not ");
-	printf("  [7:7] : %#x\tVirtualization Management %sSupported\n",
-		vir, vir ? "" : "Not ");
-	printf("  [6:6] : %#x\tNVMe-MI Send and Receive %sSupported\n",
-		nmi, nmi ? "" : "Not ");
-	printf("  [5:5] : %#x\tDirectives %sSupported\n",
-		dir, dir ? "" : "Not ");
-	printf("  [4:4] : %#x\tDevice Self-test %sSupported\n",
-		sft, sft ? "" : "Not ");
-	printf("  [3:3] : %#x\tNS Management and Attachment %sSupported\n",
-		nsm, nsm ? "" : "Not ");
-	printf("  [2:2] : %#x\tFW Commit and Download %sSupported\n",
-		fwc, fwc ? "" : "Not ");
-	printf("  [1:1] : %#x\tFormat NVM %sSupported\n",
-		fmt, fmt ? "" : "Not ");
-	printf("  [0:0] : %#x\tSecurity Send and Receive %sSupported\n",
-		sec, sec ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[12:12]", rsvd12, "Reserved");
+	stdout_bits_add(t, "[11:11]", hmlms,
+			 "Host Managed Live Migration %sSupported",
+			 hmlms ? "" : "Not ");
+	stdout_bits_add(t, "[10:10]", lock,
+			 "Lockdown Command and Feature %sSupported",
+			 lock ? "" : "Not ");
+	stdout_bits_add(t, "[9:9]", glbas,
+			 "Get LBA Status Capability %sSupported",
+			 glbas ? "" : "Not ");
+	stdout_bits_add(t, "[8:8]", dbc, "Doorbell Buffer Config %sSupported",
+			 dbc ? "" : "Not ");
+	stdout_bits_add(t, "[7:7]", vir,
+			 "Virtualization Management %sSupported",
+			 vir ? "" : "Not ");
+	stdout_bits_add(t, "[6:6]", nmi, "NVMe-MI Send and Receive %sSupported",
+			 nmi ? "" : "Not ");
+	stdout_bits_add(t, "[5:5]", dir, "Directives %sSupported",
+			 dir ? "" : "Not ");
+	stdout_bits_add(t, "[4:4]", sft, "Device Self-test %sSupported",
+			 sft ? "" : "Not ");
+	stdout_bits_add(t, "[3:3]", nsm,
+			 "NS Management and Attachment %sSupported",
+			 nsm ? "" : "Not ");
+	stdout_bits_add(t, "[2:2]", fwc, "FW Commit and Download %sSupported",
+			 fwc ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", fmt, "Format NVM %sSupported",
+			 fmt ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", sec,
+			 "Security Send and Receive %sSupported",
+			 sec ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_frmw(__u8 frmw)
+static struct shr_table *stdout_id_ctrl_frmw_table(__u8 frmw)
 {
+	struct shr_table *t;
 	__u8 rsvd = (frmw & 0xC0) >> 6;
 	__u8 smud = (frmw >> 5) & 0x1;
 	__u8 fawr = (frmw & 0x10) >> 4;
 	__u8 nfws = (frmw & 0xE) >> 1;
 	__u8 s1ro = frmw & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:6] : %#x\tReserved\n", rsvd);
-	printf("  [5:5] : %#x\tMultiple FW or Boot Update Detection %sSupported\n",
-		smud, smud ? "" : "Not ");
-	printf("  [4:4] : %#x\tFirmware Activate Without Reset %sSupported\n",
-		fawr, fawr ? "" : "Not ");
-	printf("  [3:1] : %#x\tNumber of Firmware Slots\n", nfws);
-	printf("  [0:0] : %#x\tFirmware Slot 1 Read%s\n",
-		s1ro, s1ro ? "-Only" : "/Write");
-	printf("\n");
+		stdout_bits_add(t, "[7:6]", rsvd, "Reserved");
+	stdout_bits_add(t, "[5:5]", smud,
+			 "Multiple FW or Boot Update Detection %sSupported",
+			 smud ? "" : "Not ");
+	stdout_bits_add(t, "[4:4]", fawr,
+			 "Firmware Activate Without Reset %sSupported",
+			 fawr ? "" : "Not ");
+	stdout_bits_add(t, "[3:1]", nfws, "Number of Firmware Slots");
+	stdout_bits_add(t, "[0:0]", s1ro, "Firmware Slot 1 Read%s",
+			 s1ro ? "-Only" : "/Write");
+
+	return t;
 }
 
-static void stdout_id_ctrl_lpa(__u8 lpa)
+static struct shr_table *stdout_id_ctrl_lpa_table(__u8 lpa)
 {
+	struct shr_table *t;
 	__u8 rsvd = (lpa & 0x80) >> 7;
 	__u8 tel = (lpa >> 6) & 0x1;
 	__u8 lid_sup = (lpa >> 5) & 0x1;
@@ -2408,93 +3554,170 @@ static void stdout_id_ctrl_lpa(__u8 lpa)
 	__u8 celp = (lpa & 0x2) >> 1;
 	__u8 smlp = lpa & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:7] : %#x\tReserved\n", rsvd);
-	printf("  [6:6] : %#x\tTelemetry Log Data Area 4 %sSupported\n",
-			tel, tel ? "" : "Not ");
-	printf("  [5:5] : %#x\tLID 0x0, Scope of each command in LID 0x5, "\
-			"0x12, 0x13 %sSupported\n", lid_sup, lid_sup ? "" : "Not ");
-	printf("  [4:4] : %#x\tPersistent Event log %sSupported\n",
-			persevnt, persevnt ? "" : "Not ");
-	printf("  [3:3] : %#x\tTelemetry host/controller initiated log page %sSupported\n",
-	       telem, telem ? "" : "Not ");
-	printf("  [2:2] : %#x\tExtended data for Get Log Page %sSupported\n",
-		ed, ed ? "" : "Not ");
-	printf("  [1:1] : %#x\tCommand Effects Log Page %sSupported\n",
-		celp, celp ? "" : "Not ");
-	printf("  [0:0] : %#x\tSMART/Health Log Page per NS %sSupported\n",
-		smlp, smlp ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[7:7]", rsvd, "Reserved");
+	stdout_bits_add(t, "[6:6]", tel,
+			 "Telemetry Log Data Area 4 %sSupported",
+			 tel ? "" : "Not ");
+	stdout_bits_add(t, "[5:5]", lid_sup,
+			 "LID 0x0, Scope of each command in LID 0x5, 0x12, 0x13 %sSupported",
+			 lid_sup ? "" : "Not ");
+	stdout_bits_add(t, "[4:4]", persevnt,
+			 "Persistent Event log %sSupported",
+			 persevnt ? "" : "Not ");
+	stdout_bits_add(t, "[3:3]", telem,
+			 "Telemetry host/controller initiated log page %sSupported",
+			 telem ? "" : "Not ");
+	stdout_bits_add(t, "[2:2]", ed,
+			 "Extended data for Get Log Page %sSupported",
+			 ed ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", celp,
+			 "Command Effects Log Page %sSupported",
+			 celp ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", smlp,
+			 "SMART/Health Log Page per NS %sSupported",
+			 smlp ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_elpe(__u8 elpe)
+static struct shr_table *stdout_id_ctrl_elpe_table(__u8 elpe)
 {
-	printf("  [7:0] : %d (0's based)\tError Log Page Entries (ELPE)\n",
-	       elpe);
-	printf("\n");
+	struct shr_table *t;
+
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[7:0]", elpe,
+			 "Error Log Page Entries (ELPE), 0's based");
+
+	return t;
 }
 
-static void stdout_id_ctrl_npss(__u8 npss)
+static struct shr_table *stdout_id_ctrl_npss_table(__u8 npss)
 {
-	printf("  [7:0] : %d (0's based)\tNumber of Power States Support (NPSS)\n",
-	       npss);
-	printf("\n");
+	struct shr_table *t;
+
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[7:0]", npss,
+			 "Number of Power States Support (NPSS), 0's based");
+
+	return t;
 }
 
-static void stdout_id_ctrl_avscc(__u8 avscc)
+static struct shr_table *stdout_id_ctrl_avscc_table(__u8 avscc)
 {
+	struct shr_table *t;
 	__u8 rsvd = (avscc & 0xFE) >> 1;
 	__u8 fmt = avscc & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:1] : %#x\tReserved\n", rsvd);
-	printf("  [0:0] : %#x\tAdmin Vendor Specific Commands uses %s Format\n",
-		fmt, fmt ? "NVMe" : "Vendor Specific");
-	printf("\n");
+		stdout_bits_add(t, "[7:1]", rsvd, "Reserved");
+	stdout_bits_add(t, "[0:0]", fmt,
+			 "Admin Vendor Specific Commands uses %s Format",
+			 fmt ? "NVMe" : "Vendor Specific");
+
+	return t;
 }
 
-static void stdout_id_ctrl_apsta(__u8 apsta)
+static struct shr_table *stdout_id_ctrl_apsta_table(__u8 apsta)
 {
+	struct shr_table *t;
 	__u8 rsvd = (apsta & 0xFE) >> 1;
 	__u8 apst = apsta & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:1] : %#x\tReserved\n", rsvd);
-	printf("  [0:0] : %#x\tAutonomous Power State Transitions %sSupported\n",
-		apst, apst ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[7:1]", rsvd, "Reserved");
+	stdout_bits_add(t, "[0:0]", apst,
+			 "Autonomous Power State Transitions %sSupported",
+			 apst ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_wctemp(__le16 wctemp)
+static struct shr_table *stdout_id_ctrl_wctemp_table(__le16 wctemp)
 {
-	printf(" [15:0] : %s (%u K, %s)\tWarning Composite Temperature Threshold (WCTEMP)\n",
-	       nvme_degrees_string(le16_to_cpu(wctemp)), le16_to_cpu(wctemp),
-	       nvme_degrees_fahrenheit_string(le16_to_cpu(wctemp)));
-	printf("\n");
+	struct shr_table *t;
+	__u16 val = le16_to_cpu(wctemp);
+
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[15:0]", val,
+			 "%s (%u K, %s) Warning Composite Temperature Threshold (WCTEMP)",
+			 nvme_degrees_string(val), val,
+			 nvme_degrees_fahrenheit_string(val));
+
+	return t;
 }
 
-static void stdout_id_ctrl_cctemp(__le16 cctemp)
+static struct shr_table *stdout_id_ctrl_cctemp_table(__le16 cctemp)
 {
-	printf(" [15:0] : %s (%u K, %s)\tCritical Composite Temperature Threshold (CCTEMP)\n",
-	       nvme_degrees_string(le16_to_cpu(cctemp)), le16_to_cpu(cctemp),
-	       nvme_degrees_fahrenheit_string(le16_to_cpu(cctemp)));
-	printf("\n");
+	struct shr_table *t;
+	__u16 val = le16_to_cpu(cctemp);
+
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[15:0]", val,
+			 "%s (%u K, %s) Critical Composite Temperature Threshold (CCTEMP)",
+			 nvme_degrees_string(val), val,
+			 nvme_degrees_fahrenheit_string(val));
+
+	return t;
 }
 
-static void stdout_id_ctrl_tnvmcap(__u8 *tnvmcap)
+static struct shr_table *stdout_id_ctrl_tnvmcap_table(__u8 *tnvmcap)
 {
-	printf("[127:0] : %s\n", uint128_t_to_l10n_string(le128_to_cpu(tnvmcap)));
-	printf("\tTotal NVM Capacity (TNVMCAP)\n\n");
+	struct shr_table *t;
+
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add_str(t, "[127:0]",
+			     uint128_t_to_l10n_string(le128_to_cpu(tnvmcap)),
+			     "Total NVM Capacity (TNVMCAP)");
+
+	return t;
 }
 
-static void stdout_id_ctrl_unvmcap(__u8 *unvmcap)
+static struct shr_table *stdout_id_ctrl_unvmcap_table(__u8 *unvmcap)
 {
-	printf("[127:0] : %s\n", uint128_t_to_l10n_string(le128_to_cpu(unvmcap)));
-	printf("\tUnallocated NVM Capacity (UNVMCAP)\n\n");
+	struct shr_table *t;
+
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add_str(t, "[127:0]",
+			     uint128_t_to_l10n_string(le128_to_cpu(unvmcap)),
+			     "Unallocated NVM Capacity (UNVMCAP)");
+
+	return t;
 }
 
-void stdout_id_ctrl_rpmbs(__le32 ctrl_rpmbs)
+static struct shr_table *stdout_id_ctrl_rpmbs_table(__le32 ctrl_rpmbs)
 {
+	struct shr_table *t;
 	__u32 rpmbs = le32_to_cpu(ctrl_rpmbs);
 	__u32 asz = (rpmbs & 0xFF000000) >> 24;
 	__u32 tsz = (rpmbs & 0xFF0000) >> 16;
@@ -2502,62 +3725,108 @@ void stdout_id_ctrl_rpmbs(__le32 ctrl_rpmbs)
 	__u32 auth = (rpmbs & 0x38) >> 3;
 	__u32 rpmb = rpmbs & 0x7;
 
-	printf(" [31:24]: %#x\tAccess Size\n", asz);
-	printf(" [23:16]: %#x\tTotal Size\n", tsz);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[31:24]", asz, "Access Size");
+	stdout_bits_add(t, "[23:16]", tsz, "Total Size");
 	if (rsvd)
-		printf(" [15:6] : %#x\tReserved\n", rsvd);
-	printf("  [5:3] : %#x\tAuthentication Method\n", auth);
-	printf("  [2:0] : %#x\tNumber of RPMB Units\n", rpmb);
+		stdout_bits_add(t, "[15:6]", rsvd, "Reserved");
+	stdout_bits_add(t, "[5:3]", auth, "Authentication Method");
+	stdout_bits_add(t, "[2:0]", rpmb, "Number of RPMB Units");
+
+	return t;
+}
+
+static void stdout_id_ctrl_rpmbs(__le32 ctrl_rpmbs)
+{
+	stdout_kv_table_finish(stdout_id_ctrl_rpmbs_table(ctrl_rpmbs),
+				"id-ctrl-rpmbs");
 	printf("\n");
 }
 
-static void stdout_id_ctrl_dsto(__u8 dsto)
+static struct shr_table *stdout_id_ctrl_dsto_table(__u8 dsto)
 {
+	struct shr_table *t;
 	__u8 rsvd2 = (dsto & 0xfc) >> 2;
 	__u8 hirs = NVME_CTRL_DSTO_HIRS(dsto);
 	__u8 sdso = NVME_CTRL_DSTO_SDSO(dsto);
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd2)
-		printf("  [7:2] : %#x\tReserved\n", rsvd2);
-	printf("  [1:1] : %#x\tHost-Initiated Refresh capability %sSupported\n",
-		hirs, hirs ? "" : "Not ");
-	printf("  [0:0] : %#x\tNVM subsystem supports %s at a time\n", sdso,
-		sdso ? "only one device self-test operation in progress" :
-		"one device self-test operation per controller");
-	printf("\n");
+		stdout_bits_add(t, "[7:2]", rsvd2, "Reserved");
+	stdout_bits_add(t, "[1:1]", hirs,
+			 "Host-Initiated Refresh capability %sSupported",
+			 hirs ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", sdso, "NVM subsystem supports %s at a time",
+			 sdso ?
+			 "only one device self-test operation in progress" :
+			 "one device self-test operation per controller");
+
+	return t;
 }
 
-static void stdout_id_ctrl_hctma(__le16 ctrl_hctma)
+static struct shr_table *stdout_id_ctrl_hctma_table(__le16 ctrl_hctma)
 {
+	struct shr_table *t;
 	__u16 hctma = le16_to_cpu(ctrl_hctma);
 	__u16 rsvd = (hctma & 0xFFFE) >> 1;
 	__u16 hctm = hctma & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf(" [15:1] : %#x\tReserved\n", rsvd);
-	printf("  [0:0] : %#x\tHost Controlled Thermal Management %sSupported\n",
-		hctm, hctm ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[15:1]", rsvd, "Reserved");
+	stdout_bits_add(t, "[0:0]", hctm,
+			 "Host Controlled Thermal Management %sSupported",
+			 hctm ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_mntmt(__le16 mntmt)
+static struct shr_table *stdout_id_ctrl_mntmt_table(__le16 mntmt_le)
 {
-	printf(" [15:0] : %s (%u K, %s)\tMinimum Thermal Management Temperature (MNTMT)\n",
-	       nvme_degrees_string(le16_to_cpu(mntmt)), le16_to_cpu(mntmt),
-	       nvme_degrees_fahrenheit_string(le16_to_cpu(mntmt)));
-	printf("\n");
+	struct shr_table *t;
+	__u16 mntmt = le16_to_cpu(mntmt_le);
+
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[15:0]", mntmt,
+			 "%s (%u K, %s) Minimum Thermal Management Temperature (MNTMT)",
+			 nvme_degrees_string(mntmt), mntmt,
+			 nvme_degrees_fahrenheit_string(mntmt));
+
+	return t;
 }
 
-static void stdout_id_ctrl_mxtmt(__le16 mxtmt)
+static struct shr_table *stdout_id_ctrl_mxtmt_table(__le16 mxtmt_le)
 {
-	printf(" [15:0] : %s (%u K, %s)\tMaximum Thermal Management Temperature (MXTMT)\n",
-	       nvme_degrees_string(le16_to_cpu(mxtmt)), le16_to_cpu(mxtmt),
-	       nvme_degrees_fahrenheit_string(le16_to_cpu(mxtmt)));
-	printf("\n");
+	struct shr_table *t;
+	__u16 mxtmt = le16_to_cpu(mxtmt_le);
+
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[15:0]", mxtmt,
+			 "%s (%u K, %s) Maximum Thermal Management Temperature (MXTMT)",
+			 nvme_degrees_string(mxtmt), mxtmt,
+			 nvme_degrees_fahrenheit_string(mxtmt));
+
+	return t;
 }
 
-static void stdout_id_ctrl_sanicap(__le32 ctrl_sanicap)
+static struct shr_table *stdout_id_ctrl_sanicap_table(__le32 ctrl_sanicap)
 {
+	struct shr_table *t;
 	__u32 sanicap = le32_to_cpu(ctrl_sanicap);
 	__u32 rsvd6 = (sanicap & 0x1FFFFFC0) >> 6;
 	__u32 sprrs = NVME_CTRL_SANICAP_SPRRS(sanicap);
@@ -2575,26 +3844,38 @@ static void stdout_id_ctrl_sanicap(__le32 ctrl_sanicap)
 		"Reserved"
 	};
 
-	printf("  [31:30] : %#x\t%s\n", nodmmas, modifies_media[nodmmas]);
-	printf("  [29:29] : %#x\tNo-Deallocate After Sanitize bit in Sanitize command %sSupported\n",
-		ndi, ndi ? "Not " : "");
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[31:30]", nodmmas, "%s", modifies_media[nodmmas]);
+	stdout_bits_add(t, "[29:29]", ndi,
+			 "No-Deallocate After Sanitize bit in Sanitize command %sSupported",
+			 ndi ? "Not " : "");
 	if (rsvd6)
-		printf("  [28:6] : %#x\tReserved\n", rsvd6);
-	printf("  [5:5] : %#x\tSanitize Purge Request and Reporting %sSupported\n",
-		sprrs, sprrs ? "" : "Not ");
-	printf("  [3:3] : %#x\tMedia Verification and Post-Verification Deallocation state %sSupported\n",
-		vers, vers ? "" : "Not ");
-	printf("  [2:2] : %#x\tOverwrite Sanitize Operation %sSupported\n",
-		ows, ows ? "" : "Not ");
-	printf("  [1:1] : %#x\tBlock Erase Sanitize Operation %sSupported\n",
-		bes, bes ? "" : "Not ");
-	printf("  [0:0] : %#x\tCrypto Erase Sanitize Operation %sSupported\n",
-		ces, ces ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[28:6]", rsvd6, "Reserved");
+	stdout_bits_add(t, "[5:5]", sprrs,
+			 "Sanitize Purge Request and Reporting %sSupported",
+			 sprrs ? "" : "Not ");
+	stdout_bits_add(t, "[3:3]", vers,
+			 "Media Verification and Post-Verification Deallocation state %sSupported",
+			 vers ? "" : "Not ");
+	stdout_bits_add(t, "[2:2]", ows,
+			 "Overwrite Sanitize Operation %sSupported",
+			 ows ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", bes,
+			 "Block Erase Sanitize Operation %sSupported",
+			 bes ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", ces,
+			 "Crypto Erase Sanitize Operation %sSupported",
+			 ces ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_anacap(__u8 anacap)
+static struct shr_table *stdout_id_ctrl_anacap_table(__u8 anacap)
 {
+	struct shr_table *t;
 	__u8 nz = (anacap & 0x80) >> 7;
 	__u8 grpid_static = (anacap & 0x40) >> 6;
 	__u8 rsvd = (anacap & 0x20) >> 5;
@@ -2604,184 +3885,239 @@ static void stdout_id_ctrl_anacap(__u8 anacap)
 	__u8 ana_nonopt = (anacap & 0x02) >> 1;
 	__u8 ana_opt = (anacap & 0x01);
 
-	printf("  [7:7] : %#x\tNon-zero group ID %sSupported\n",
-			nz, nz ? "" : "Not ");
-	printf("  [6:6] : %#x\tGroup ID does %schange\n",
-			grpid_static, grpid_static ? "not " : "");
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[7:7]", nz, "Non-zero group ID %sSupported",
+			 nz ? "" : "Not ");
+	stdout_bits_add(t, "[6:6]", grpid_static, "Group ID does %schange",
+			 grpid_static ? "not " : "");
 	if (rsvd)
-		printf(" [5:5] : %#x\tReserved\n", rsvd);
-	printf("  [4:4] : %#x\tANA Change state %sSupported\n",
-			ana_change, ana_change ? "" : "Not ");
-	printf("  [3:3] : %#x\tANA Persistent Loss state %sSupported\n",
-			ana_persist_loss, ana_persist_loss ? "" : "Not ");
-	printf("  [2:2] : %#x\tANA Inaccessible state %sSupported\n",
-			ana_inaccessible, ana_inaccessible ? "" : "Not ");
-	printf("  [1:1] : %#x\tANA Non-optimized state %sSupported\n",
-			ana_nonopt, ana_nonopt ? "" : "Not ");
-	printf("  [0:0] : %#x\tANA Optimized state %sSupported\n",
-			ana_opt, ana_opt ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[5:5]", rsvd, "Reserved");
+	stdout_bits_add(t, "[4:4]", ana_change, "ANA Change state %sSupported",
+			 ana_change ? "" : "Not ");
+	stdout_bits_add(t, "[3:3]", ana_persist_loss,
+			 "ANA Persistent Loss state %sSupported",
+			 ana_persist_loss ? "" : "Not ");
+	stdout_bits_add(t, "[2:2]", ana_inaccessible,
+			 "ANA Inaccessible state %sSupported",
+			 ana_inaccessible ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", ana_nonopt,
+			 "ANA Non-optimized state %sSupported",
+			 ana_nonopt ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", ana_opt, "ANA Optimized state %sSupported",
+			 ana_opt ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_kpioc(__u8 ctrl_kpioc)
+static struct shr_table *stdout_id_ctrl_kpioc_table(__u8 ctrl_kpioc)
 {
+	struct shr_table *t;
 	__u8 rsvd2 = (ctrl_kpioc >> 2);
 	__u8 kpiosc = NVME_CTRL_KPIOC_KPIOSC(ctrl_kpioc);
 	__u8 kpios = NVME_CTRL_KPIOC_KPIOS(ctrl_kpioc);
 
-	if (rsvd2)
-		printf(" [7:2] : %#x\tReserved\n", rsvd2);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	printf("  [1:1] : %#x\tKey Per I/O capability %s to all namespaces\n",
-		kpiosc, kpiosc ? "applies" : "Not apply");
-	printf("  [0:0] : %#x\tKey Per I/O capability %sSupported\n",
-		kpios, kpios ? "" : "Not ");
-	printf("\n");
+	if (rsvd2)
+		stdout_bits_add(t, "[7:2]", rsvd2, "Reserved");
+	stdout_bits_add(t, "[1:1]", kpiosc,
+			 "Key Per I/O capability %s to all namespaces",
+			 kpiosc ? "applies" : "Not apply");
+	stdout_bits_add(t, "[0:0]", kpios, "Key Per I/O capability %sSupported",
+			 kpios ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_tmpthha(__u8 tmpthha)
+static struct shr_table *stdout_id_ctrl_tmpthha_table(__u8 tmpthha)
 {
+	struct shr_table *t;
 	__u8 rsvd3 = (tmpthha & 0xf8) >> 3;
 	__u8 tmpthmh = tmpthha & 0x7;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd3)
-		printf("  [7:3] : %#x\tReserved\n", rsvd3);
-	printf("  [2:0] : %#x\tTemperature Threshold Maximum Hysteresis\n",
-		tmpthmh);
-	printf("\n");
+		stdout_bits_add(t, "[7:3]", rsvd3, "Reserved");
+	stdout_bits_add(t, "[2:0]", tmpthmh,
+			 "Temperature Threshold Maximum Hysteresis");
+
+	return t;
 }
 
-static void stdout_id_ctrl_mupa(__u8 mupa, bool human)
+static struct shr_table *stdout_id_ctrl_mupa_table(__u8 mupa)
 {
+	struct shr_table *t;
 	__u8 mups = NVME_CTRL_MUPA_MUPS(mupa);
 
-	printf("%-*s: %#x\n", 10, "mupa", mupa);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	if (human)
-		printf("  [1:0] : %#x\t%s (%s)\n\n", mups,
-		       nvme_feature_power_limit_scale_to_string(mups),
-		       "Maximum Unlimited Power Scale");
+	stdout_bits_add(t, "[1:0]", mups, "Maximum Unlimited Power Scale (%s)",
+			 nvme_feature_power_limit_scale_to_string(mups));
+
+	return t;
 }
 
-static void stdout_id_ctrl_cdpa(__le16 ctrl_cdpa)
+static struct shr_table *stdout_id_ctrl_cdpa_table(__le16 ctrl_cdpa)
 {
+	struct shr_table *t;
 	__u16 cdpa = le16_to_cpu(ctrl_cdpa);
 	__u16 rsvd1 = (cdpa >> 1);
 	bool hmac_sha_384 = !!(cdpa & NVME_CTRL_CDPA_HMAC_SHA_384);
 
-	if (rsvd1)
-		printf("  [15:1] : %#x\tReserved\n", rsvd1);
-	printf("  [0:0] : %#x\tHMAC-SHA-384 %sSupported\n",
-			hmac_sha_384, hmac_sha_384 ? "" : "Not ");
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	printf("\n");
+	if (rsvd1)
+		stdout_bits_add(t, "[15:1]", rsvd1, "Reserved");
+	stdout_bits_add(t, "[0:0]", hmac_sha_384, "HMAC-SHA-384 %sSupported",
+			 hmac_sha_384 ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_ipmsr(__le16 ctrl_ipmsr)
+static struct shr_table *stdout_id_ctrl_ipmsr_table(__le16 ctrl_ipmsr)
 {
+	struct shr_table *t;
 	__u16 ipmsr = le16_to_cpu(ctrl_ipmsr);
 	__u16 srs = NVME_CTRL_IPMSR_SRS(ipmsr);
 	__u16 srv = NVME_CTRL_IPMSR_SRV(ipmsr);
 
-	printf("  [15:8] : %#x\tSample Rate Scale (%s)\n", srs,
-		nvme_ipmsr_srs_to_string(srs));
-	printf("  [7:0]  : %#x\tSample Rate Value\n", srv);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	printf("\n");
+	stdout_bits_add(t, "[15:8]", srs, "Sample Rate Scale (%s)",
+			 nvme_ipmsr_srs_to_string(srs));
+	stdout_bits_add(t, "[7:0]", srv, "Sample Rate Value");
+
+	return t;
 }
 
-static void stdout_id_ctrl_mnens(__u16 mnens)
+static struct shr_table *stdout_id_ctrl_ensa_table(__u8 ensa)
 {
-	printf("%-*s: %u\n", 10, "mnens", mnens);
-}
-
-static void stdout_id_ctrl_mnecpens(__u16 mnecpens)
-{
-	printf("%-*s: %u\n", 10, "mnecpens", mnecpens);
-}
-
-static void stdout_id_ctrl_mensnn(__u32 mensnn)
-{
-	printf("%-*s: %u\n", 10, "mensnn", mensnn);
-}
-
-static void stdout_id_ctrl_ensa(__u8 ensa, bool human)
-{
-	bool ensts = !!NVME_CTRL_ENSA_ENSTS(ensa);
+	struct shr_table *t;
 	bool ensms = !!NVME_CTRL_ENSA_ENSMS(ensa);
+	bool ensts = !!NVME_CTRL_ENSA_ENSTS(ensa);
 
-	printf("%-*s: %#x\n", 10, "ensa", ensa);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	if (human) {
-		printf("  [1:1] : %#x\t%s %s\n", ensms,
-		       "Exported NVM Subsystem Support Migration",
-		       nvme_support_str(ensms));
-		printf("  [0:0] : %#x\t%s %s\n\n", ensts,
-		       "Exported NVM Subsystem Template",
-		       nvme_support_str(ensts));
-	}
+	stdout_bits_add(t, "[1:1]", ensms,
+			 "Exported NVM Subsystem Support Migration %s",
+			 nvme_support_str(ensms));
+	stdout_bits_add(t, "[0:0]", ensts,
+			 "Exported NVM Subsystem Template %s",
+			 nvme_support_str(ensts));
+
+	return t;
 }
 
-static void stdout_id_ctrl_endsfs(__u8 endsfs, bool human)
+static struct shr_table *stdout_id_ctrl_endsfs_table(__u8 endsfs)
 {
-	bool enf0 = !!NVME_CTRL_ENDSFS_ENF0(endsfs);
+	struct shr_table *t;
 	bool enf1 = !!NVME_CTRL_ENDSFS_ENF1(endsfs);
+	bool enf0 = !!NVME_CTRL_ENDSFS_ENF0(endsfs);
 
-	printf("%-*s: %#x\n", 10, "endsfs", endsfs);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	if (human) {
-		printf("  [1:1] : %#x\t%s %s\n", enf1,
-		       "Exported Namespace Format 1",
-		       nvme_support_str(enf1));
-		printf("  [0:0] : %#x\t%s %s\n\n", enf0,
-		       "Exported Namespace Format 0",
-		       nvme_support_str(enf0));
-	}
+	stdout_bits_add(t, "[1:1]", enf1, "Exported Namespace Format 1 %s",
+			 nvme_support_str(enf1));
+	stdout_bits_add(t, "[0:0]", enf0, "Exported Namespace Format 0 %s",
+			 nvme_support_str(enf0));
+
+	return t;
 }
 
-static void stdout_id_ctrl_vsen(__le32 ctrl_vsen)
+static struct shr_table *stdout_id_ctrl_vsen_table(__le32 ctrl_vsen)
 {
+	struct shr_table *t;
 	__u32 vsen = le32_to_cpu(ctrl_vsen);
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (!vsen) {
-		printf("  Voltage sensor not supported\n\n");
-		return;
+		int row = shr_table_get_row_id(t);
+
+		shr_table_set_value_str(t, 0, row, "", RIGHT);
+		shr_table_set_value_str(t, 1, row, "", LEFT);
+		shr_table_set_value_str(t, 2, row, "", RIGHT);
+		shr_table_set_value_str(t, 3, row,
+					 "Voltage sensor not supported", LEFT);
+		shr_table_add_row(t, row);
+
+		return t;
 	}
 
-	printf("  [31:24] : %#x\tVoltage Sample Rate Scale\n",
-	       NVME_CTRL_VSEN_VSRS(vsen));
-	printf("  [23:16] : %#x\tVoltage Sample Rate Value\n",
-	       NVME_CTRL_VSEN_VSRV(vsen));
-	printf("  [15:14] : %#x\tVoltage Sample Scale\n", NVME_CTRL_VSEN_VOLSS(vsen));
-	printf("  [13:12] : %#x\tPower Input Supply Label\n",
-	       NVME_CTRL_VSEN_PISL(vsen));
-	printf("  [11:0]  : %#x\tPower Input Supply Value (%g V)\n",
-	       NVME_CTRL_VSEN_PISV(vsen), NVME_CTRL_VSEN_PISV(vsen) * 0.05);
-	printf("\n");
+	stdout_bits_add(t, "[31:24]", NVME_CTRL_VSEN_VSRS(vsen),
+			 "Voltage Sample Rate Scale");
+	stdout_bits_add(t, "[23:16]", NVME_CTRL_VSEN_VSRV(vsen),
+			 "Voltage Sample Rate Value");
+	stdout_bits_add(t, "[15:14]", NVME_CTRL_VSEN_VOLSS(vsen),
+			 "Voltage Sample Scale");
+	stdout_bits_add(t, "[13:12]", NVME_CTRL_VSEN_PISL(vsen),
+			 "Power Input Supply Label");
+	stdout_bits_add(t, "[11:0]", NVME_CTRL_VSEN_PISV(vsen),
+			 "Power Input Supply Value (%g V)",
+			 NVME_CTRL_VSEN_PISV(vsen) * 0.05);
+
+	return t;
 }
 
-static void stdout_id_ctrl_sqes(__u8 sqes)
+static struct shr_table *stdout_id_ctrl_sqes_table(__u8 sqes)
 {
+	struct shr_table *t;
 	__u8 msqes = (sqes & 0xF0) >> 4;
 	__u8 rsqes = sqes & 0xF;
 
-	printf("  [7:4] : %#x\tMax SQ Entry Size (%d)\n", msqes, 1 << msqes);
-	printf("  [3:0] : %#x\tMin SQ Entry Size (%d)\n", rsqes, 1 << rsqes);
-	printf("\n");
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[7:4]", msqes,
+			 "Max SQ Entry Size (%d)", 1 << msqes);
+	stdout_bits_add(t, "[3:0]", rsqes,
+			 "Min SQ Entry Size (%d)", 1 << rsqes);
+
+	return t;
 }
 
-static void stdout_id_ctrl_cqes(__u8 cqes)
+static struct shr_table *stdout_id_ctrl_cqes_table(__u8 cqes)
 {
+	struct shr_table *t;
 	__u8 mcqes = (cqes & 0xF0) >> 4;
 	__u8 rcqes = cqes & 0xF;
 
-	printf("  [7:4] : %#x\tMax CQ Entry Size (%d)\n", mcqes, 1 << mcqes);
-	printf("  [3:0] : %#x\tMin CQ Entry Size (%d)\n", rcqes, 1 << rcqes);
-	printf("\n");
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[7:4]", mcqes,
+			 "Max CQ Entry Size (%d)", 1 << mcqes);
+	stdout_bits_add(t, "[3:0]", rcqes,
+			 "Min CQ Entry Size (%d)", 1 << rcqes);
+
+	return t;
 }
 
-static void stdout_id_ctrl_oncs(__le16 ctrl_oncs)
+static struct shr_table *stdout_id_ctrl_oncs_table(__le16 ctrl_oncs)
 {
+	struct shr_table *t;
 	__u16 oncs = le16_to_cpu(ctrl_oncs);
 	__u16 rsvd13 = oncs >> 13;
 	bool nszs = !!(oncs & NVME_CTRL_ONCS_NAMESPACE_ZEROES);
@@ -2798,73 +4134,94 @@ static void stdout_id_ctrl_oncs(__le16 ctrl_oncs)
 	bool nvmwusv = !!(oncs & NVME_CTRL_ONCS_WRITE_UNCORRECTABLE);
 	bool nvmcmps  = !!(oncs & NVME_CTRL_ONCS_COMPARE);
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd13)
-		printf("  [15:13] : %#x\tReserved\n", rsvd13);
-	printf("  [12:12] : %#x\tNamespace Zeroes %sSupported\n",
-		nszs, nszs ? "" : "Not ");
-	printf("  [11:11] : %#x\tMaximum Write Zeroes with Deallocate %sSupported\n",
-		maxwzd, maxwzd ? "" : "Not ");
-	printf("  [10:10] : %#x\tAll Fast Copy %sSupported\n",
-		nvmafc, nvmafc ? "" : "Not ");
-	printf("  [9:9] : %#x\tCopy Single Atomicity %sSupported\n",
-		nvmcsa, nvmcsa ? "" : "Not ");
-	printf("  [8:8] : %#x\tCopy %sSupported\n",
-		nvmcpys, nvmcpys ? "" : "Not ");
-	printf("  [7:7] : %#x\tVerify %sSupported\n",
-		nvmvfys, nvmvfys ? "" : "Not ");
-	printf("  [6:6] : %#x\tTimestamp %sSupported\n",
-		tss, tss ? "" : "Not ");
-	printf("  [5:5] : %#x\tReservations %sSupported\n",
-		reservs, reservs ? "" : "Not ");
-	printf("  [4:4] : %#x\tSave and Select %sSupported\n",
-		ssfs, ssfs ? "" : "Not ");
-	printf("  [3:3] : %#x\tWrite Zeroes Support Variants\n",
-		nvmwzsv);
-	printf("  [2:2] : %#x\tDataset Management Support Variants\n",
-		nvmdsmsv);
-	printf("  [1:1] : %#x\tWrite Uncorrectable Support Variants\n",
-		nvmwusv);
-	printf("  [0:0] : %#x\tCompare Command %sSupported\n",
-		nvmcmps, nvmcmps ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[15:13]", rsvd13, "Reserved");
+	stdout_bits_add(t, "[12:12]", nszs, "Namespace Zeroes %sSupported",
+			 nszs ? "" : "Not ");
+	stdout_bits_add(t, "[11:11]", maxwzd,
+			 "Maximum Write Zeroes with Deallocate %sSupported",
+			 maxwzd ? "" : "Not ");
+	stdout_bits_add(t, "[10:10]", nvmafc, "All Fast Copy %sSupported",
+			 nvmafc ? "" : "Not ");
+	stdout_bits_add(t, "[9:9]", nvmcsa, "Copy Single Atomicity %sSupported",
+			 nvmcsa ? "" : "Not ");
+	stdout_bits_add(t, "[8:8]", nvmcpys, "Copy %sSupported",
+			 nvmcpys ? "" : "Not ");
+	stdout_bits_add(t, "[7:7]", nvmvfys, "Verify %sSupported",
+			 nvmvfys ? "" : "Not ");
+	stdout_bits_add(t, "[6:6]", tss, "Timestamp %sSupported",
+			 tss ? "" : "Not ");
+	stdout_bits_add(t, "[5:5]", reservs, "Reservations %sSupported",
+			 reservs ? "" : "Not ");
+	stdout_bits_add(t, "[4:4]", ssfs, "Save and Select %sSupported",
+			 ssfs ? "" : "Not ");
+	stdout_bits_add(t, "[3:3]", nvmwzsv, "Write Zeroes Support Variants");
+	stdout_bits_add(t, "[2:2]", nvmdsmsv,
+			 "Dataset Management Support Variants");
+	stdout_bits_add(t, "[1:1]", nvmwusv,
+			 "Write Uncorrectable Support Variants");
+	stdout_bits_add(t, "[0:0]", nvmcmps, "Compare Command %sSupported",
+			 nvmcmps ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_fuses(__le16 ctrl_fuses)
+static struct shr_table *stdout_id_ctrl_fuses_table(__le16 ctrl_fuses)
 {
+	struct shr_table *t;
 	__u16 fuses = le16_to_cpu(ctrl_fuses);
 	__u16 rsvd = (fuses & 0xFE) >> 1;
 	__u16 cmpw = fuses & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf(" [15:1] : %#x\tReserved\n", rsvd);
-	printf("  [0:0] : %#x\tFused Compare and Write %sSupported\n",
-		cmpw, cmpw ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[15:1]", rsvd, "Reserved");
+	stdout_bits_add(t, "[0:0]", cmpw, "Fused Compare and Write %sSupported",
+			 cmpw ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_fna(__u8 fna)
+static struct shr_table *stdout_id_ctrl_fna_table(__u8 fna)
 {
+	struct shr_table *t;
 	__u8 rsvd = (fna & 0xF0) >> 4;
 	__u8 bcnsid = NVME_CTRL_FNA_NSID_ALL_F(fna);
 	__u8 cese = NVME_CTRL_FNA_CES(fna);
 	__u8 cens = NVME_CTRL_FNA_SEC_ALL_NS(fna);
 	__u8 fmns = NVME_CTRL_FNA_FMT_ALL_NS(fna);
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:4] : %#x\tReserved\n", rsvd);
-	printf("  [3:3] : %#x\tFormat NVM Broadcast NSID (FFFFFFFFh) %sSupported\n",
-		bcnsid, bcnsid ? "Not " : "");
-	printf("  [2:2] : %#x\tCrypto Erase %sSupported as part of Secure Erase\n",
-		cese, cese ? "" : "Not ");
-	printf("  [1:1] : %#x\tCrypto Erase Applies to %s Namespace(s)\n",
-		cens, cens ? "All" : "Single");
-	printf("  [0:0] : %#x\tFormat Applies to %s Namespace(s)\n",
-		fmns, fmns ? "All" : "Single");
-	printf("\n");
+		stdout_bits_add(t, "[7:4]", rsvd, "Reserved");
+	stdout_bits_add(t, "[3:3]", bcnsid,
+			 "Format NVM Broadcast NSID (FFFFFFFFh) %sSupported",
+			 bcnsid ? "Not " : "");
+	stdout_bits_add(t, "[2:2]", cese,
+			 "Crypto Erase %sSupported as part of Secure Erase",
+			 cese ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", cens,
+			 "Crypto Erase Applies to %s Namespace(s)",
+			 cens ? "All" : "Single");
+	stdout_bits_add(t, "[0:0]", fmns, "Format Applies to %s Namespace(s)",
+			 fmns ? "All" : "Single");
+
+	return t;
 }
 
-static void stdout_id_ctrl_vwc(__u8 vwc)
+static struct shr_table *stdout_id_ctrl_vwc_table(__u8 vwc)
 {
+	struct shr_table *t;
 	__u8 rsvd = (vwc & 0xF8) >> 3;
 	__u8 flush = (vwc & 0x6) >> 1;
 	__u8 vwcp = vwc & 0x1;
@@ -2876,63 +4233,99 @@ static void stdout_id_ctrl_vwc(__u8 vwc)
 		"The Flush command supports NSID set to FFFFFFFFh"
 	};
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:3] : %#x\tReserved\n", rsvd);
-	printf("  [2:1] : %#x\t%s\n", flush, flush_behavior[flush]);
-	printf("  [0:0] : %#x\tVolatile Write Cache %sPresent\n", vwcp, vwcp ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[7:3]", rsvd, "Reserved");
+	stdout_bits_add(t, "[2:1]", flush, "%s", flush_behavior[flush]);
+	stdout_bits_add(t, "[0:0]", vwcp, "Volatile Write Cache %sPresent",
+			 vwcp ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_icsvscc(__u8 icsvscc)
+static struct shr_table *stdout_id_ctrl_icsvscc_table(__u8 icsvscc)
 {
+	struct shr_table *t;
 	__u8 rsvd = (icsvscc & 0xFE) >> 1;
 	__u8 fmt = icsvscc & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:1] : %#x\tReserved\n", rsvd);
-	printf("  [0:0] : %#x\tNVM Vendor Specific Commands uses %s Format\n",
-		fmt, fmt ? "NVMe" : "Vendor Specific");
-	printf("\n");
+		stdout_bits_add(t, "[7:1]", rsvd, "Reserved");
+	stdout_bits_add(t, "[0:0]", fmt,
+			 "NVM Vendor Specific Commands uses %s Format",
+			 fmt ? "NVMe" : "Vendor Specific");
+
+	return t;
 }
 
-static void stdout_id_ctrl_nwpc(__u8 nwpc)
+static struct shr_table *stdout_id_ctrl_nwpc_table(__u8 nwpc)
 {
+	struct shr_table *t;
 	__u8 no_wp_wp = (nwpc & 0x01);
 	__u8 wp_power_cycle = (nwpc & 0x02) >> 1;
 	__u8 wp_permanent = (nwpc & 0x04) >> 2;
 	__u8 rsvd = (nwpc & 0xF8) >> 3;
 
-	if (rsvd)
-		printf("  [7:3] : %#x\tReserved\n", rsvd);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	printf("  [2:2] : %#x\tPermanent Write Protect %sSupported\n",
-		wp_permanent, wp_permanent ? "" : "Not ");
-	printf("  [1:1] : %#x\tWrite Protect Until Power Supply %sSupported\n",
-		wp_power_cycle, wp_power_cycle ? "" : "Not ");
-	printf("  [0:0] : %#x\tNo Write Protect and Write Protect Namespace %sSupported\n",
-		no_wp_wp, no_wp_wp ? "" : "Not ");
-	printf("\n");
+	if (rsvd)
+		stdout_bits_add(t, "[7:3]", rsvd, "Reserved");
+	stdout_bits_add(t, "[2:2]", wp_permanent,
+			 "Permanent Write Protect %sSupported",
+			 wp_permanent ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", wp_power_cycle,
+			 "Write Protect Until Power Supply %sSupported",
+			 wp_power_cycle ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", no_wp_wp,
+			 "No Write Protect and Write Protect Namespace %sSupported",
+			 no_wp_wp ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_ocfs(__le16 ctrl_ocfs)
+static struct shr_table *stdout_id_ctrl_ocfs_table(__le16 ctrl_ocfs)
 {
+	struct shr_table *t;
 	__u16 ocfs = le16_to_cpu(ctrl_ocfs);
 	__u16 rsvd = ocfs >> 4;
-	__u8 copy_fmt_supported;
 	int copy_fmt;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [15:4] : %#x\tReserved\n", rsvd);
+		stdout_bits_add(t, "[15:4]", rsvd, "Reserved");
+
 	for (copy_fmt = 3; copy_fmt >= 0; copy_fmt--) {
-		copy_fmt_supported = ocfs >> copy_fmt & 1;
-		printf("  [%d:%d] : %#x\tController Copy Format %xh %sSupported\n", copy_fmt,
-		       copy_fmt, copy_fmt_supported, copy_fmt, copy_fmt_supported ? "" : "Not ");
+		__u8 supported = ocfs >> copy_fmt & 1;
+		__cleanup_free char *bits = NULL;
+		__cleanup_free char *desc = NULL;
+
+		if (asprintf(&bits, "[%d:%d]", copy_fmt, copy_fmt) < 0)
+			bits = NULL;
+		if (asprintf(&desc, "Controller Copy Format %xh %sSupported",
+			     copy_fmt, supported ? "" : "Not ") < 0)
+			desc = NULL;
+
+		stdout_bits_add(t, bits ?: "", supported, desc ?: "");
 	}
-	printf("\n");
+
+	return t;
 }
 
-static void stdout_id_ctrl_sgls(__le32 ctrl_sgls)
+static struct shr_table *stdout_id_ctrl_sgls_table(__le32 ctrl_sgls)
 {
+	struct shr_table *t;
 	__u32 sgls = le32_to_cpu(ctrl_sgls);
 	__u32 rsvd0 = (sgls & 0xFFC00000) >> 22;
 	__u32 trsdbd = (sgls & 0x200000) >> 21;
@@ -2946,97 +4339,133 @@ static void stdout_id_ctrl_sgls(__le32 ctrl_sgls)
 	__u32 key = (sgls & 0x4) >> 2;
 	__u32 sglsp = sgls & 0x3;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd0)
-		printf(" [31:22]: %#x\tReserved\n", rsvd0);
+		stdout_bits_add(t, "[31:22]", rsvd0, "Reserved");
 	if (sglsp || (!sglsp && trsdbd))
-		printf(" [21:21]: %#x\tTransport SGL Data Block Descriptor %sSupported\n",
-			trsdbd, trsdbd ? "" : "Not ");
+		stdout_bits_add(t, "[21:21]", trsdbd,
+				 "Transport SGL Data Block Descriptor %sSupported",
+				 trsdbd ? "" : "Not ");
 	if (sglsp || (!sglsp && aofdsl))
-		printf(" [20:20]: %#x\tAddress Offsets %sSupported\n",
-			aofdsl, aofdsl ? "" : "Not ");
+		stdout_bits_add(t, "[20:20]", aofdsl,
+				 "Address Offsets %sSupported",
+				 aofdsl ? "" : "Not ");
 	if (sglsp || (!sglsp && mpcsd))
-		printf(" [19:19]: %#x\tMetadata Pointer Containing "
-			"SGL Descriptor is %sSupported\n",
-			mpcsd, mpcsd ? "" : "Not ");
+		stdout_bits_add(t, "[19:19]", mpcsd,
+				 "Metadata Pointer Containing SGL Descriptor is %sSupported",
+				 mpcsd ? "" : "Not ");
 	if (sglsp || (!sglsp && sglltb))
-		printf(" [18:18]: %#x\tSGL Length Larger than Buffer %sSupported\n",
-			sglltb, sglltb ? "" : "Not ");
+		stdout_bits_add(t, "[18:18]", sglltb,
+				 "SGL Length Larger than Buffer %sSupported",
+				 sglltb ? "" : "Not ");
 	if (sglsp || (!sglsp && bacmdb))
-		printf(" [17:17]: %#x\tByte-Aligned Contig. MD Buffer %sSupported\n",
-			bacmdb, bacmdb ? "" : "Not ");
+		stdout_bits_add(t, "[17:17]", bacmdb,
+				 "Byte-Aligned Contig. MD Buffer %sSupported",
+				 bacmdb ? "" : "Not ");
 	if (sglsp || (!sglsp && bbs))
-		printf(" [16:16]: %#x\tSGL Bit-Bucket %sSupported\n",
-			bbs, bbs ? "" : "Not ");
-	printf(" [15:8] : %#x\tSGL Descriptor Threshold\n", sdt);
+		stdout_bits_add(t, "[16:16]", bbs, "SGL Bit-Bucket %sSupported",
+				 bbs ? "" : "Not ");
+	stdout_bits_add(t, "[15:8]", sdt, "SGL Descriptor Threshold");
 	if (rsvd1)
-		printf(" [7:3] : %#x\tReserved\n", rsvd1);
+		stdout_bits_add(t, "[7:3]", rsvd1, "Reserved");
 	if (sglsp || (!sglsp && key))
-		printf("  [2:2] : %#x\tKeyed SGL Data Block descriptor %sSupported\n",
-			key, key ? "" : "Not ");
+		stdout_bits_add(t, "[2:2]", key,
+				 "Keyed SGL Data Block descriptor %sSupported",
+				 key ? "" : "Not ");
 	if (sglsp == 0x3)
-		printf("  [1:0] : %#x\tReserved\n", sglsp);
+		stdout_bits_add(t, "[1:0]", sglsp, "Reserved");
 	else if (sglsp == 0x2)
-		printf("  [1:0] : %#x\tScatter-Gather Lists Supported."
-			" Dword alignment required.\n", sglsp);
+		stdout_bits_add(t, "[1:0]", sglsp,
+				 "Scatter-Gather Lists Supported. Dword alignment required.");
 	else if (sglsp == 0x1)
-		printf("  [1:0] : %#x\tScatter-Gather Lists Supported."
-			" No Dword alignment required.\n", sglsp);
+		stdout_bits_add(t, "[1:0]", sglsp,
+				 "Scatter-Gather Lists Supported. No Dword alignment required.");
 	else
-		printf(" [1:0]  : %#x\tScatter-Gather Lists Not Supported\n", sglsp);
-	printf("\n");
+		stdout_bits_add(t, "[1:0]", sglsp,
+				 "Scatter-Gather Lists Not Supported");
+
+	return t;
 }
 
-static void stdout_id_ctrl_trattr(__u8 ctrl_trattr)
+static struct shr_table *stdout_id_ctrl_trattr_table(__u8 ctrl_trattr)
 {
+	struct shr_table *t;
 	__u8 rsvd3 = (ctrl_trattr >> 3);
 	__u8 mrtll = NVME_CTRL_TRATTR_MRTLL(ctrl_trattr);
 	__u8 tudcs = NVME_CTRL_TRATTR_TUDCS(ctrl_trattr);
 	__u8 thmcs = NVME_CTRL_TRATTR_THMCS(ctrl_trattr);
 
-	if (rsvd3)
-		printf(" [7:3] : %#x\tReserved\n", rsvd3);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
-	printf("  [2:2] : %#x\tMemory Range Tracking Length Limit\n", mrtll);
-	printf("  [1:1] : %#x\tTracking User Data Changes %sSupported\n",
-		tudcs, tudcs ? "" : "Not ");
-	printf("  [0:0] : %#x\tTrack Host Memory Changes %sSupported\n",
-		thmcs, thmcs ? "" : "Not ");
-	printf("\n");
+	if (rsvd3)
+		stdout_bits_add(t, "[7:3]", rsvd3, "Reserved");
+	stdout_bits_add(t, "[2:2]", mrtll,
+			 "Memory Range Tracking Length Limit");
+	stdout_bits_add(t, "[1:1]", tudcs,
+			 "Tracking User Data Changes %sSupported",
+			 tudcs ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", thmcs,
+			 "Track Host Memory Changes %sSupported",
+			 thmcs ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_fcatt(__u8 fcatt)
+static struct shr_table *stdout_id_ctrl_fcatt_table(__u8 fcatt)
 {
+	struct shr_table *t;
 	__u8 rsvd = (fcatt & 0xFE) >> 1;
 	__u8 scm = fcatt & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:1] : %#x\tReserved\n", rsvd);
-	printf("  [0:0] : %#x\t%s Controller Model\n",
-		scm, scm ? "Static" : "Dynamic");
-	printf("\n");
+		stdout_bits_add(t, "[7:1]", rsvd, "Reserved");
+	stdout_bits_add(t, "[0:0]", scm, "%s Controller Model",
+			 scm ? "Static" : "Dynamic");
+
+	return t;
 }
 
-static void stdout_id_ctrl_ofcs(__le16 ofcs)
+static struct shr_table *stdout_id_ctrl_ofcs_table(__le16 ofcs_le)
 {
+	struct shr_table *t;
+	__u16 ofcs = le16_to_cpu(ofcs_le);
 	__u16 rsvd = (ofcs & 0xfffe) >> 1;
 	__u8 disconn = ofcs & 0x1;
 
-	if (rsvd)
-		printf("  [15:1] : %#x\tReserved\n", rsvd);
-	printf("  [0:0] : %#x\tDisconnect command %s Supported\n",
-		disconn, disconn ? "" : "Not");
-	printf("\n");
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
+	if (rsvd)
+		stdout_bits_add(t, "[15:1]", rsvd, "Reserved");
+	stdout_bits_add(t, "[0:0]", disconn, "Disconnect command %s Supported",
+			 disconn ? "" : "Not");
+
+	return t;
 }
 
-static void stdout_id_ctrl_dctype(__u8 dctype)
+static struct shr_table *stdout_id_ctrl_dctype_table(__u8 dctype)
 {
+	struct shr_table *t;
 	__u8 rsvd = (dctype & 0xFC) >> 2;
 	__u8 dctype_val = dctype & 0x3;
 	char *dctype_str;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:3] : %#x\tReserved\n", rsvd);
+		stdout_bits_add(t, "[7:3]", rsvd, "Reserved");
 	if (dctype_val == NVME_CTRL_DCTYPE_CDC)
 		dctype_str = "CDC";
 	else if (dctype_val == NVME_CTRL_DCTYPE_DDC)
@@ -3044,23 +4473,15 @@ static void stdout_id_ctrl_dctype(__u8 dctype)
 	else
 		dctype_str = "not reported";
 
-	printf("  [0:2] : %#x\tDiscovery Controller Type: %s\n",
-				dctype_val, dctype_str);
-	printf("\n");
+	stdout_bits_add(t, "[0:2]", dctype_val, "Discovery Controller Type: %s",
+			 dctype_str);
+
+	return t;
 }
 
-static void stdout_id_ns_size(uint64_t nsze, uint64_t ncap, uint64_t nuse)
+static struct shr_table *stdout_id_ns_nsfeat_table(__u8 nsfeat)
 {
-	printf("nsze    : %#"PRIx64"\tTotal size in logical blocks\n",
-			le64_to_cpu(nsze));
-	printf("ncap    : %#"PRIx64"\tMaximum size in logical blocks\n",
-			le64_to_cpu(ncap));
-	printf("nuse    : %#"PRIx64"\tCurrent size in logical blocks\n",
-			le64_to_cpu(nuse));
-}
-
-static void stdout_id_ns_nsfeat(__u8 nsfeat)
-{
+	struct shr_table *t;
 	__u8 optrperf = (nsfeat & 0x80) >> 7;
 	__u8 mam = (nsfeat & 0x40) >> 6;
 	__u8 optperf = (nsfeat & 0x30) >> 4;
@@ -3069,59 +4490,86 @@ static void stdout_id_ns_nsfeat(__u8 nsfeat)
 	__u8 na = (nsfeat & 0x2) >> 1;
 	__u8 thin = nsfeat & 0x1;
 
-	printf("  [7:7] : %#x\tNPRG, NPRA and NORS are %sSupported\n",
-		optrperf, optrperf ? "" : "Not ");
-	printf("  [6:6] : %#x\t%s Atomicity Mode applies to write operations\n",
-		mam, mam ? "Multiple" : "Single");
-	printf("  [5:4] : %#x\tNPWG, NPWA, %s%sNPDA, and NOWS are %sSupported\n",
-		optperf, ((optperf & 0x1) || (!optperf)) ? "NPDG, " : "",
-		((optperf & 0x2) || (!optperf)) ? "NPDGL, " : "", optperf ? "" : "Not ");
-	printf("  [3:3] : %#x\tNGUID and EUI64 fields if non-zero, %sReused\n",
-		uidreuse, uidreuse ? "Never " : "");
-	printf("  [2:2] : %#x\tDeallocated or Unwritten Logical Block error %sSupported\n",
-		dulbe, dulbe ? "" : "Not ");
-	printf("  [1:1] : %#x\tNamespace uses %s\n",
-		na, na ? "NAWUN, NAWUPF, and NACWU" : "AWUN, AWUPF, and ACWU");
-	printf("  [0:0] : %#x\tThin Provisioning %sSupported\n",
-		thin, thin ? "" : "Not ");
-	printf("\n");
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[7:7]", optrperf,
+			 "NPRG, NPRA and NORS are %sSupported",
+			 optrperf ? "" : "Not ");
+	stdout_bits_add(t, "[6:6]", mam,
+			 "%s Atomicity Mode applies to write operations",
+			 mam ? "Multiple" : "Single");
+	stdout_bits_add(t, "[5:4]", optperf,
+			 "NPWG, NPWA, %s%sNPDA, and NOWS are %sSupported",
+			 ((optperf & 0x1) || (!optperf)) ? "NPDG, " : "",
+			 ((optperf & 0x2) || (!optperf)) ? "NPDGL, " : "",
+			 optperf ? "" : "Not ");
+	stdout_bits_add(t, "[3:3]", uidreuse,
+			 "NGUID and EUI64 fields if non-zero, %sReused",
+			 uidreuse ? "Never " : "");
+	stdout_bits_add(t, "[2:2]", dulbe,
+			 "Deallocated or Unwritten Logical Block error %sSupported",
+			 dulbe ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", na, "Namespace uses %s",
+			 na ? "NAWUN, NAWUPF, and NACWU" :
+			 "AWUN, AWUPF, and ACWU");
+	stdout_bits_add(t, "[0:0]", thin, "Thin Provisioning %sSupported",
+			 thin ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ns_flbas(__u8 flbas)
+static struct shr_table *stdout_id_ns_flbas_table(__u8 flbas)
 {
+	struct shr_table *t;
 	__u8 rsvd = (flbas & 0x80) >> 7;
 	__u8 msb2_lbaf = NVME_FLBAS_HIGHER(flbas);
 	__u8 mdedata = NVME_FLBAS_META_EXT(flbas);
 	__u8 lsb4_lbaf = NVME_FLBAS_LOWER(flbas);
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:7] : %#x\tReserved\n", rsvd);
-	printf("  [6:5] : %#x\tMost significant 2 bits of Current LBA Format Selected\n",
-		msb2_lbaf);
-	printf("  [4:4] : %#x\tMetadata Transferred %s\n",
-		mdedata, mdedata ? "at End of Data LBA" : "in Separate Contiguous Buffer");
-	printf("  [3:0] : %#x\tLeast significant 4 bits of Current LBA Format Selected\n",
-		lsb4_lbaf);
-	printf("\n");
+		stdout_bits_add(t, "[7:7]", rsvd, "Reserved");
+	stdout_bits_add(t, "[6:5]", msb2_lbaf,
+			 "Most significant 2 bits of Current LBA Format Selected");
+	stdout_bits_add(t, "[4:4]", mdedata, "Metadata Transferred %s",
+			 mdedata ? "at End of Data LBA" :
+			 "in Separate Contiguous Buffer");
+	stdout_bits_add(t, "[3:0]", lsb4_lbaf,
+			 "Least significant 4 bits of Current LBA Format Selected");
+
+	return t;
 }
 
-static void stdout_id_ns_mc(__u8 mc)
+static struct shr_table *stdout_id_ns_mc_table(__u8 mc)
 {
+	struct shr_table *t;
 	__u8 rsvd = (mc & 0xFC) >> 2;
 	__u8 mdp = (mc & 0x2) >> 1;
 	__u8 extdlba = mc & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:2] : %#x\tReserved\n", rsvd);
-	printf("  [1:1] : %#x\tMetadata Pointer %sSupported\n",
-		mdp, mdp ? "" : "Not ");
-	printf("  [0:0] : %#x\tMetadata as Part of Extended Data LBA %sSupported\n",
-		extdlba, extdlba ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[7:2]", rsvd, "Reserved");
+	stdout_bits_add(t, "[1:1]", mdp, "Metadata Pointer %sSupported",
+			 mdp ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", extdlba,
+			 "Metadata as Part of Extended Data LBA %sSupported",
+			 extdlba ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ns_dpc(__u8 dpc)
+static struct shr_table *stdout_id_ns_dpc_table(__u8 dpc)
 {
+	struct shr_table *t;
 	__u8 rsvd = (dpc & 0xE0) >> 5;
 	__u8 pil8 = (dpc & 0x10) >> 4;
 	__u8 pif8 = (dpc & 0x8) >> 3;
@@ -3129,56 +4577,81 @@ static void stdout_id_ns_dpc(__u8 dpc)
 	__u8 pit2 = (dpc & 0x2) >> 1;
 	__u8 pit1 = dpc & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:5] : %#x\tReserved\n", rsvd);
-	printf("  [4:4] : %#x\tProtection Information Transferred as Last Bytes of Metadata %sSupported\n",
-		pil8, pil8 ? "" : "Not ");
-	printf("  [3:3] : %#x\tProtection Information Transferred as First Bytes of Metadata %sSupported\n",
-		pif8, pif8 ? "" : "Not ");
-	printf("  [2:2] : %#x\tProtection Information Type 3 %sSupported\n",
-		pit3, pit3 ? "" : "Not ");
-	printf("  [1:1] : %#x\tProtection Information Type 2 %sSupported\n",
-		pit2, pit2 ? "" : "Not ");
-	printf("  [0:0] : %#x\tProtection Information Type 1 %sSupported\n",
-		pit1, pit1 ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[7:5]", rsvd, "Reserved");
+	stdout_bits_add(t, "[4:4]", pil8,
+			 "Protection Information Transferred as Last Bytes of Metadata %sSupported",
+			 pil8 ? "" : "Not ");
+	stdout_bits_add(t, "[3:3]", pif8,
+			 "Protection Information Transferred as First Bytes of Metadata %sSupported",
+			 pif8 ? "" : "Not ");
+	stdout_bits_add(t, "[2:2]", pit3,
+			 "Protection Information Type 3 %sSupported",
+			 pit3 ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", pit2,
+			 "Protection Information Type 2 %sSupported",
+			 pit2 ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", pit1,
+			 "Protection Information Type 1 %sSupported",
+			 pit1 ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ns_dps(__u8 dps)
+static struct shr_table *stdout_id_ns_dps_table(__u8 dps)
 {
+	struct shr_table *t;
 	__u8 rsvd = (dps & 0xF0) >> 4;
 	__u8 pif8 = NVME_NS_DPS_PI_FIRST(dps);
 	__u8 pit = NVME_NS_DPS_PI(dps);
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:4] : %#x\tReserved\n", rsvd);
-	printf("  [3:3] : %#x\tProtection Information is Transferred as %s Bytes of Metadata\n",
-		pif8, pif8 ? "First" : "Last");
-	printf("  [2:0] : %#x\tProtection Information %s\n", pit,
-		pit == 3 ? "Type 3 Enabled" :
-		pit == 2 ? "Type 2 Enabled" :
-		pit == 1 ? "Type 1 Enabled" :
-		pit == 0 ? "Disabled" : "Reserved Enabled");
-	printf("\n");
+		stdout_bits_add(t, "[7:4]", rsvd, "Reserved");
+	stdout_bits_add(t, "[3:3]", pif8,
+			 "Protection Information is Transferred as %s Bytes of Metadata",
+			 pif8 ? "First" : "Last");
+	stdout_bits_add(t, "[2:0]", pit, "Protection Information %s",
+			 pit == 3 ? "Type 3 Enabled" :
+			 pit == 2 ? "Type 2 Enabled" :
+			 pit == 1 ? "Type 1 Enabled" :
+			 pit == 0 ? "Disabled" : "Reserved Enabled");
+
+	return t;
 }
 
-static void stdout_id_ns_nmic(__u8 nmic)
+static struct shr_table *stdout_id_ns_nmic_table(__u8 nmic)
 {
+	struct shr_table *t;
 	__u8 rsvd = (nmic & 0xfc) >> 2;
 	__u8 disns = (nmic & 0x2) >> 1;
 	__u8 shrns = nmic & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:2] : %#x\tReserved\n", rsvd);
-	printf("  [1:1] : %#x\tNamespace is %sa Dispersed Namespace\n",
-		disns, disns ? "" : "Not ");
-	printf("  [0:0] : %#x\tNamespace Multipath %sCapable\n",
-		shrns, shrns ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[7:2]", rsvd, "Reserved");
+	stdout_bits_add(t, "[1:1]", disns,
+			 "Namespace is %sa Dispersed Namespace",
+			 disns ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", shrns, "Namespace Multipath %sCapable",
+			 shrns ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ns_rescap(__u8 rescap)
+static struct shr_table *stdout_id_ns_rescap_table(__u8 rescap)
 {
+	struct shr_table *t;
 	__u8 iekr = (rescap & 0x80) >> 7;
 	__u8 eaar = (rescap & 0x40) >> 6;
 	__u8 wear = (rescap & 0x20) >> 5;
@@ -3188,202 +4661,362 @@ static void stdout_id_ns_rescap(__u8 rescap)
 	__u8 we = (rescap & 0x2) >> 1;
 	__u8 ptpl = rescap & 0x1;
 
-	printf("  [7:7] : %#x\tIgnore Existing Key - Used as defined in revision %s\n",
-		iekr, iekr ? "1.3 or later" : "1.2.1 or earlier");
-	printf("  [6:6] : %#x\tExclusive Access - All Registrants %sSupported\n",
-		eaar, eaar ? "" : "Not ");
-	printf("  [5:5] : %#x\tWrite Exclusive - All Registrants %sSupported\n",
-		wear, wear ? "" : "Not ");
-	printf("  [4:4] : %#x\tExclusive Access - Registrants Only %sSupported\n",
-		earo, earo ? "" : "Not ");
-	printf("  [3:3] : %#x\tWrite Exclusive - Registrants Only %sSupported\n",
-		wero, wero ? "" : "Not ");
-	printf("  [2:2] : %#x\tExclusive Access %sSupported\n",
-		ea, ea ? "" : "Not ");
-	printf("  [1:1] : %#x\tWrite Exclusive %sSupported\n",
-		we, we ? "" : "Not ");
-	printf("  [0:0] : %#x\tPersist Through Power Loss %sSupported\n",
-		ptpl, ptpl ? "" : "Not ");
-	printf("\n");
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[7:7]", iekr,
+			 "Ignore Existing Key - Used as defined in revision %s",
+			 iekr ? "1.3 or later" : "1.2.1 or earlier");
+	stdout_bits_add(t, "[6:6]", eaar,
+			 "Exclusive Access - All Registrants %sSupported",
+			 eaar ? "" : "Not ");
+	stdout_bits_add(t, "[5:5]", wear,
+			 "Write Exclusive - All Registrants %sSupported",
+			 wear ? "" : "Not ");
+	stdout_bits_add(t, "[4:4]", earo,
+			 "Exclusive Access - Registrants Only %sSupported",
+			 earo ? "" : "Not ");
+	stdout_bits_add(t, "[3:3]", wero,
+			 "Write Exclusive - Registrants Only %sSupported",
+			 wero ? "" : "Not ");
+	stdout_bits_add(t, "[2:2]", ea, "Exclusive Access %sSupported",
+			 ea ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", we, "Write Exclusive %sSupported",
+			 we ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", ptpl,
+			 "Persist Through Power Loss %sSupported",
+			 ptpl ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ns_fpi(__u8 fpi)
+static struct shr_table *stdout_id_ns_fpi_table(__u8 fpi)
 {
+	struct shr_table *t;
 	__u8 fpis = (fpi & 0x80) >> 7;
 	__u8 fpii = fpi & 0x7F;
 
-	printf("  [7:7] : %#x\tFormat Progress Indicator %sSupported\n",
-		fpis, fpis ? "" : "Not ");
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[7:7]", fpis,
+			 "Format Progress Indicator %sSupported",
+			 fpis ? "" : "Not ");
 	if (fpis || (!fpis && fpii))
-		printf("  [6:0] : %#x\tFormat Progress Indicator (Remaining %d%%)\n",
-		fpii, fpii);
-	printf("\n");
+		stdout_bits_add(t, "[6:0]", fpii,
+				 "Format Progress Indicator (Remaining %d%%)",
+				 fpii);
+
+	return t;
 }
 
-static void stdout_id_ns_nsattr(__u8 nsattr)
+static struct shr_table *stdout_id_ns_nsattr_table(__u8 nsattr)
 {
+	struct shr_table *t;
 	__u8 rsvd = (nsattr & 0xFE) >> 1;
 	__u8 write_protected = nsattr & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:1] : %#x\tReserved\n", rsvd);
-	printf("  [0:0] : %#x\tNamespace %sWrite Protected\n",
-			write_protected, write_protected ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[7:1]", rsvd, "Reserved");
+	stdout_bits_add(t, "[0:0]", write_protected,
+			 "Namespace %sWrite Protected",
+			 write_protected ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ns_dlfeat(__u8 dlfeat)
+static struct shr_table *stdout_id_ns_dlfeat_table(__u8 dlfeat)
 {
+	struct shr_table *t;
 	__u8 rsvd = (dlfeat & 0xE0) >> 5;
 	__u8 guard = (dlfeat & 0x10) >> 4;
 	__u8 dwz = (dlfeat & 0x8) >> 3;
 	__u8 val = dlfeat & 0x7;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:5] : %#x\tReserved\n", rsvd);
-	printf("  [4:4] : %#x\tGuard Field of Deallocated Logical Blocks is set to %s\n",
-		guard, guard ? "CRC of The Value Read" : "0xFFFF");
-	printf("  [3:3] : %#x\tDeallocate Bit in the Write Zeroes Command is %sSupported\n",
-		dwz, dwz ? "" : "Not ");
-	printf("  [2:0] : %#x\tBytes Read From a Deallocated Logical Block and its Metadata are %s\n",
-		val, val == 2 ? "0xFF" :
-			val == 1 ? "0x00" :
-			val == 0 ? "Not Reported" : "Reserved Value");
-	printf("\n");
+		stdout_bits_add(t, "[7:5]", rsvd, "Reserved");
+	stdout_bits_add(t, "[4:4]", guard,
+			 "Guard Field of Deallocated Logical Blocks is set to %s",
+			 guard ? "CRC of The Value Read" : "0xFFFF");
+	stdout_bits_add(t, "[3:3]", dwz,
+			 "Deallocate Bit in the Write Zeroes Command is %sSupported",
+			 dwz ? "" : "Not ");
+	stdout_bits_add(t, "[2:0]", val,
+			 "Bytes Read From a Deallocated Logical Block and its Metadata are %s",
+			 val == 2 ? "0xFF" :
+			 val == 1 ? "0x00" :
+			 val == 0 ? "Not Reported" : "Reserved Value");
+
+	return t;
 }
 
-static void stdout_id_ns_kpios(__u8 kpios)
+static struct shr_table *stdout_id_ns_kpios_table(__u8 kpios)
 {
+	struct shr_table *t;
 	__u8 rsvd = (kpios & 0xfc) >> 2;
 	__u8 kpiosns = (kpios & 0x2) >> 1;
 	__u8 kpioens = kpios & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:2] : %#x\tReserved\n", rsvd);
-	printf("  [1:1] : %#x\tKey Per I/O Capability %sSupported\n",
-		kpiosns, kpiosns ? "" : "Not ");
-	printf("  [0:0] : %#x\tKey Per I/O Capability %s\n", kpioens,
-		kpioens ? "Enabled" : "Disabled");
-	printf("\n");
+		stdout_bits_add(t, "[7:2]", rsvd, "Reserved");
+	stdout_bits_add(t, "[1:1]", kpiosns,
+			 "Key Per I/O Capability %sSupported",
+			 kpiosns ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", kpioens, "Key Per I/O Capability %s",
+			 kpioens ? "Enabled" : "Disabled");
+
+	return t;
+}
+
+struct stdout_id_ns_lbaf_table_support {
+	bool verbose;
+	bool cap_only;
+};
+
+static bool stdout_id_ns_lbaf_table_filter(const char *name, void *arg)
+{
+	const struct stdout_id_ns_lbaf_table_support *sup = arg;
+
+	if (!sup->verbose &&
+	    (!strcmp(name, "data_size") || !strcmp(name, "performance")))
+		return false;
+	if (sup->cap_only && !strcmp(name, "in_use"))
+		return false;
+
+	return true;
+}
+
+static const char *stdout_id_ns_lbaf_rp_str(__u8 rp)
+{
+	switch (rp) {
+	case 3:
+		return "Degraded";
+	case 2:
+		return "Good";
+	case 1:
+		return "Better";
+	default:
+		return "Best";
+	}
+}
+
+static struct shr_table *stdout_id_ns_lbaf_table(struct nvme_id_ns *ns,
+						 bool cap_only)
+{
+	/* no_widen on "lbaf" and "lbads", see stdout_id_ctrl_ps_table(). */
+	struct shr_table_column columns[] = {
+		{ "lbaf", RIGHT, AUTO_WIDTH, .no_widen = true },
+		{ "ms", RIGHT, AUTO_WIDTH },
+		{ "lbads", RIGHT, AUTO_WIDTH, .no_widen = true },
+		{ "data_size", RIGHT, AUTO_WIDTH },
+		{ "rp", RIGHT, AUTO_WIDTH },
+		{ "performance", LEFT, AUTO_WIDTH },
+		{ "in_use", LEFT, AUTO_WIDTH },
+	};
+	struct shr_table *t;
+	struct stdout_id_ns_lbaf_table_support sup = {
+		.verbose = stdout_print_ops.flags & VERBOSE,
+		.cap_only = cap_only,
+	};
+	__u8 flbas;
+	int i;
+
+	t = shr_table_create();
+	if (!t)
+		return NULL;
+
+	if (shr_table_add_columns_filter(t, columns, ARRAY_SIZE(columns),
+			stdout_id_ns_lbaf_table_filter, &sup) < 0) {
+		shr_table_free(t);
+		return NULL;
+	}
+
+	nvme_id_ns_flbas_to_lbaf_inuse(ns->flbas, &flbas);
+	for (i = 0; i <= ns->nlbaf + ns->nulbaf; i++) {
+		struct nvme_lbaf *lbaf = &ns->lbaf[i];
+		int row = shr_table_get_row_id(t);
+		int col = -1;
+
+		shr_table_set_value_int(t, ++col, row, i, RIGHT);
+		shr_table_set_value_unsigned(t, ++col, row,
+				le16_to_cpu(lbaf->ms), RIGHT);
+		shr_table_set_value_unsigned(t, ++col, row, lbaf->ds, RIGHT);
+		if (sup.verbose)
+			shr_table_set_value_unsigned(t, ++col, row,
+					1U << lbaf->ds, RIGHT);
+		shr_table_set_value_unsigned(t, ++col, row, lbaf->rp, RIGHT);
+		if (sup.verbose)
+			shr_table_set_value_str(t, ++col, row,
+					stdout_id_ns_lbaf_rp_str(lbaf->rp),
+					LEFT);
+		if (!cap_only)
+			shr_table_set_value_str(t, ++col, row,
+					i == flbas ? "yes" : "", LEFT);
+
+		shr_table_add_row(t, row);
+	}
+
+	return t;
 }
 
 static void stdout_id_ns(struct nvme_id_ns *ns, unsigned int nsid,
 			 unsigned int lba_index, bool cap_only)
 {
-	bool human = stdout_print_ops.flags & VERBOSE;
+	bool verbose = stdout_print_ops.flags & VERBOSE;
 	int vs = stdout_print_ops.flags & VS;
-	int i;
-	__u8 flbas;
-	char *in_use = "(in use)";
+	struct shr_table *t;
+	char nguid_buf[2 * sizeof(ns->nguid) + 1], *nguid = nguid_buf;
+	char eui64_buf[2 * sizeof(ns->eui64) + 1], *eui64 = eui64_buf;
+	int row, i;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
 
 	if (!cap_only) {
 		printf("NVME Identify Namespace %d:\n", nsid);
 
-		if (human)
-			stdout_id_ns_size(ns->nsze, ns->ncap, ns->nuse);
-		else {
-			printf("nsze    : %#"PRIx64"\n", le64_to_cpu(ns->nsze));
-			printf("ncap    : %#"PRIx64"\n", le64_to_cpu(ns->ncap));
-			printf("nuse    : %#"PRIx64"\n", le64_to_cpu(ns->nuse));
+		if (verbose) {
+			stdout_kv_add(t, "nsze",
+				"%#"PRIx64"\tTotal size in logical blocks",
+				le64_to_cpu(ns->nsze));
+			stdout_kv_add(t, "ncap",
+				"%#"PRIx64"\tMaximum size in logical blocks",
+				le64_to_cpu(ns->ncap));
+			stdout_kv_add(t, "nuse",
+				"%#"PRIx64"\tCurrent size in logical blocks",
+				le64_to_cpu(ns->nuse));
+		} else {
+			stdout_kv_add(t, "nsze", "%#"PRIx64,
+				      le64_to_cpu(ns->nsze));
+			stdout_kv_add(t, "ncap", "%#"PRIx64,
+				      le64_to_cpu(ns->ncap));
+			stdout_kv_add(t, "nuse", "%#"PRIx64,
+				      le64_to_cpu(ns->nuse));
 		}
 
-		printf("nsfeat  : %#x\n", ns->nsfeat);
-		if (human)
-			stdout_id_ns_nsfeat(ns->nsfeat);
+		row = stdout_kv_add(t, "nsfeat", "%#x", ns->nsfeat);
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+					stdout_id_ns_nsfeat_table(ns->nsfeat));
 	} else
 		printf("NVMe Identify Namespace for LBA format[%d]:\n", lba_index);
 
-	printf("nlbaf   : %d\n", ns->nlbaf);
+	stdout_kv_add(t, "nlbaf", "%d", ns->nlbaf);
 	if (!cap_only) {
-		printf("flbas   : %#x\n", ns->flbas);
-		if (human)
-			stdout_id_ns_flbas(ns->flbas);
-	} else
-		in_use = "";
+		row = stdout_kv_add(t, "flbas", "%#x", ns->flbas);
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+					stdout_id_ns_flbas_table(ns->flbas));
+	}
 
-	printf("mc      : %#x\n", ns->mc);
-	if (human)
-		stdout_id_ns_mc(ns->mc);
-	printf("dpc     : %#x\n", ns->dpc);
-	if (human)
-		stdout_id_ns_dpc(ns->dpc);
+	row = stdout_kv_add(t, "mc", "%#x", ns->mc);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ns_mc_table(ns->mc));
+
+	row = stdout_kv_add(t, "dpc", "%#x", ns->dpc);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ns_dpc_table(ns->dpc));
+
 	if (!cap_only) {
-		printf("dps     : %#x\n", ns->dps);
-		if (human)
-			stdout_id_ns_dps(ns->dps);
-		printf("nmic    : %#x\n", ns->nmic);
-		if (human)
-			stdout_id_ns_nmic(ns->nmic);
-		printf("rescap  : %#x\n", ns->rescap);
-		if (human)
-			stdout_id_ns_rescap(ns->rescap);
-		printf("fpi     : %#x\n", ns->fpi);
-		if (human)
-			stdout_id_ns_fpi(ns->fpi);
-		printf("dlfeat  : %d\n", ns->dlfeat);
-		if (human)
-			stdout_id_ns_dlfeat(ns->dlfeat);
-		printf("nawun   : %d\n", le16_to_cpu(ns->nawun));
-		printf("nawupf  : %d\n", le16_to_cpu(ns->nawupf));
-		printf("nacwu   : %d\n", le16_to_cpu(ns->nacwu));
-		printf("nabsn   : %d\n", le16_to_cpu(ns->nabsn));
-		printf("nabo    : %d\n", le16_to_cpu(ns->nabo));
-		printf("nabspf  : %d\n", le16_to_cpu(ns->nabspf));
-		printf("noiob   : %d\n", le16_to_cpu(ns->noiob));
-		printf("nvmcap  : %s\n",
-			uint128_t_to_l10n_string(le128_to_cpu(ns->nvmcap)));
+		row = stdout_kv_add(t, "dps", "%#x", ns->dps);
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+					stdout_id_ns_dps_table(ns->dps));
+
+		row = stdout_kv_add(t, "nmic", "%#x", ns->nmic);
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+					stdout_id_ns_nmic_table(ns->nmic));
+
+		row = stdout_kv_add(t, "rescap", "%#x", ns->rescap);
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+					stdout_id_ns_rescap_table(ns->rescap));
+
+		row = stdout_kv_add(t, "fpi", "%#x", ns->fpi);
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+					stdout_id_ns_fpi_table(ns->fpi));
+
+		row = stdout_kv_add(t, "dlfeat", "%d", ns->dlfeat);
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+					stdout_id_ns_dlfeat_table(ns->dlfeat));
+
+		stdout_kv_add(t, "nawun", "%d", le16_to_cpu(ns->nawun));
+		stdout_kv_add(t, "nawupf", "%d", le16_to_cpu(ns->nawupf));
+		stdout_kv_add(t, "nacwu", "%d", le16_to_cpu(ns->nacwu));
+		stdout_kv_add(t, "nabsn", "%d", le16_to_cpu(ns->nabsn));
+		stdout_kv_add(t, "nabo", "%d", le16_to_cpu(ns->nabo));
+		stdout_kv_add(t, "nabspf", "%d", le16_to_cpu(ns->nabspf));
+		stdout_kv_add(t, "noiob", "%d", le16_to_cpu(ns->noiob));
+		stdout_kv_add(t, "nvmcap", "%s",
+			      uint128_t_to_l10n_string(
+					      le128_to_cpu(ns->nvmcap)));
 		if (ns->nsfeat & 0x30) {
-			printf("npwg    : %u\n", le16_to_cpu(ns->npwg));
-			printf("npwa    : %u\n", le16_to_cpu(ns->npwa));
+			stdout_kv_add(t, "npwg", "%u", le16_to_cpu(ns->npwg));
+			stdout_kv_add(t, "npwa", "%u", le16_to_cpu(ns->npwa));
 			if (ns->nsfeat & 0x10)
-				printf("npdg    : %u\n", le16_to_cpu(ns->npdg));
-			printf("npda    : %u\n", le16_to_cpu(ns->npda));
-			printf("nows    : %u\n", le16_to_cpu(ns->nows));
+				stdout_kv_add(t, "npdg", "%u",
+					      le16_to_cpu(ns->npdg));
+			stdout_kv_add(t, "npda", "%u", le16_to_cpu(ns->npda));
+			stdout_kv_add(t, "nows", "%u", le16_to_cpu(ns->nows));
 		}
-		printf("mssrl   : %u\n", le16_to_cpu(ns->mssrl));
-		printf("mcl     : %u\n", le32_to_cpu(ns->mcl));
-		printf("msrc    : %u\n", ns->msrc);
-		printf("kpios   : %u\n", ns->kpios);
-		if (human)
-			stdout_id_ns_kpios(ns->kpios);
+		stdout_kv_add(t, "mssrl", "%u", le16_to_cpu(ns->mssrl));
+		stdout_kv_add(t, "mcl", "%u", le32_to_cpu(ns->mcl));
+		stdout_kv_add(t, "msrc", "%u", ns->msrc);
+
+		row = stdout_kv_add(t, "kpios", "%u", ns->kpios);
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+					stdout_id_ns_kpios_table(ns->kpios));
 	}
-	printf("nulbaf  : %u\n", ns->nulbaf);
+
+	stdout_kv_add(t, "nulbaf", "%u", ns->nulbaf);
 	if (!cap_only) {
-		printf("kpiodaag: %u\n", le32_to_cpu(ns->kpiodaag));
-		printf("anagrpid: %u\n", le32_to_cpu(ns->anagrpid));
-		printf("nsattr	: %u\n", ns->nsattr);
-		if (human)
-			stdout_id_ns_nsattr(ns->nsattr);
-		printf("nvmsetid: %d\n", le16_to_cpu(ns->nvmsetid));
-		printf("endgid  : %d\n", le16_to_cpu(ns->endgid));
+		stdout_kv_add(t, "kpiodaag", "%u", le32_to_cpu(ns->kpiodaag));
+		stdout_kv_add(t, "anagrpid", "%u", le32_to_cpu(ns->anagrpid));
 
-		printf("nguid   : ");
-		for (i = 0; i < 16; i++)
-			printf("%02x", ns->nguid[i]);
-		printf("\n");
+		row = stdout_kv_add(t, "nsattr", "%u", ns->nsattr);
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+					stdout_id_ns_nsattr_table(ns->nsattr));
 
-		printf("eui64   : ");
-		for (i = 0; i < 8; i++)
-			printf("%02x", ns->eui64[i]);
-		printf("\n");
+		stdout_kv_add(t, "nvmsetid", "%d", le16_to_cpu(ns->nvmsetid));
+		stdout_kv_add(t, "endgid", "%d", le16_to_cpu(ns->endgid));
+
+		for (i = 0; i < (int)sizeof(ns->nguid); i++)
+			nguid += sprintf(nguid, "%02x", ns->nguid[i]);
+		stdout_kv_add(t, "nguid", "%s", nguid_buf);
+
+		for (i = 0; i < (int)sizeof(ns->eui64); i++)
+			eui64 += sprintf(eui64, "%02x", ns->eui64[i]);
+		stdout_kv_add(t, "eui64", "%s", eui64_buf);
 	}
 
-	nvme_id_ns_flbas_to_lbaf_inuse(ns->flbas, &flbas);
-	for (i = 0; i <= ns->nlbaf + ns->nulbaf; i++) {
-		if (human)
-			printf("LBA Format %2d : Metadata Size: %-3d bytes - "
-				"Data Size: %-2d bytes - Relative Performance: %#x %s %s\n",
-				i, le16_to_cpu(ns->lbaf[i].ms),
-				1 << ns->lbaf[i].ds, ns->lbaf[i].rp,
-				ns->lbaf[i].rp == 3 ? "Degraded" :
-					ns->lbaf[i].rp == 2 ? "Good" :
-					ns->lbaf[i].rp == 1 ? "Better" : "Best",
-					i == flbas ? in_use : "");
-		else
-			printf("lbaf %2d : ms:%-3d lbads:%-2d rp:%#x %s\n", i,
-				le16_to_cpu(ns->lbaf[i].ms), ns->lbaf[i].ds,
-				ns->lbaf[i].rp,	i == flbas ? in_use : "");
-	}
+	row = stdout_kv_add(t, "lbaf", "%d formats",
+			    ns->nlbaf + ns->nulbaf + 1);
+	shr_table_set_row_subtable(t, row,
+				   stdout_id_ns_lbaf_table(ns, cap_only));
+
+	stdout_kv_table_finish(t, "identify-namespace");
 
 	if (vs && !cap_only) {
 		printf("vs[]:\n");
@@ -3391,29 +5024,41 @@ static void stdout_id_ns(struct nvme_id_ns *ns, unsigned int nsid,
 	}
 }
 
-static void stdout_cmd_set_independent_id_ns_nsfeat(__u8 nsfeat)
+static struct shr_table *
+stdout_cmd_set_independent_id_ns_nsfeat_table(__u8 nsfeat)
 {
+	struct shr_table *t;
 	__u8 rsvd6 = (nsfeat & 0xE0) >> 6;
 	__u8 vwcnp = (nsfeat & 0x20) >> 5;
 	__u8 rmedia = (nsfeat & 0x10) >> 4;
 	__u8 uidreuse = (nsfeat & 0x8) >> 3;
 	__u8 rsvd0 = (nsfeat & 0x7);
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd6)
-		printf("  [7:6] : %#x\tReserved\n", rsvd6);
-	printf("  [5:5] : %#x\tVolatile Write Cache is %sPresent\n",
-		vwcnp, vwcnp ? "" : "Not ");
-	printf("  [4:4] : %#x\tNamespace %sstore data on rotational media\n",
-		rmedia, rmedia ? "" : "does not ");
-	printf("  [3:3] : %#x\tNGUID and EUI64 fields if non-zero, %sReused\n",
-		uidreuse, uidreuse ? "Never " : "");
+		stdout_bits_add(t, "[7:6]", rsvd6, "Reserved");
+	stdout_bits_add(t, "[5:5]", vwcnp,
+			 "Volatile Write Cache is %sPresent",
+			 vwcnp ? "" : "Not ");
+	stdout_bits_add(t, "[4:4]", rmedia,
+			 "Namespace %sstore data on rotational media",
+			 rmedia ? "" : "does not ");
+	stdout_bits_add(t, "[3:3]", uidreuse,
+			 "NGUID and EUI64 fields if non-zero, %sReused",
+			 uidreuse ? "Never " : "");
 	if (rsvd0)
-		printf("  [2:0] : %#x\tReserved\n", rsvd0);
-	printf("\n");
+		stdout_bits_add(t, "[2:0]", rsvd0, "Reserved");
+
+	return t;
 }
 
-static void stdout_cmd_set_independent_id_ns_nstat(__u8 nstat)
+static struct shr_table *
+stdout_cmd_set_independent_id_ns_nstat_table(__u8 nstat)
 {
+	struct shr_table *t;
 	__u8 rsvd3 = (nstat & 0xf8) >> 3;
 	__u8 ioi = (nstat & 0x6) >> 1;
 	__u8 nrdy = nstat & 0x1;
@@ -3425,47 +5070,78 @@ static void stdout_cmd_set_independent_id_ns_nstat(__u8 nstat)
 		"I/O performance is currently degraded"
 	};
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd3)
-		printf("  [7:3] : %#x\tReserved\n", rsvd3);
-	printf("  [2:1] : %#x\t%s\n", ioi, ioi_string[ioi]);
-	printf("  [0:0] : %#x\tName space is %sready\n",
-		nrdy, nrdy ? "" : "not ");
-	printf("\n");
+		stdout_bits_add(t, "[7:3]", rsvd3, "Reserved");
+	stdout_bits_add(t, "[2:1]", ioi, "%s", ioi_string[ioi]);
+	stdout_bits_add(t, "[0:0]", nrdy, "Name space is %sready",
+			 nrdy ? "" : "not ");
+
+	return t;
 }
 
 static void stdout_cmd_set_independent_id_ns(struct nvme_id_independent_id_ns *ns,
 					     unsigned int nsid)
 {
-	int human = stdout_print_ops.flags & VERBOSE;
+	bool verbose = stdout_print_ops.flags & VERBOSE;
+	struct shr_table *t;
+	int row;
 
 	printf("NVME Identify Command Set Independent Namespace %d:\n", nsid);
-	printf("nsfeat  : %#x\n", ns->nsfeat);
-	if (human)
-		stdout_cmd_set_independent_id_ns_nsfeat(ns->nsfeat);
-	printf("nmic    : %#x\n", ns->nmic);
-	if (human)
-		stdout_id_ns_nmic(ns->nmic);
-	printf("rescap  : %#x\n", ns->rescap);
-	if (human)
-		stdout_id_ns_rescap(ns->rescap);
-	printf("fpi     : %#x\n", ns->fpi);
-	if (human)
-		stdout_id_ns_fpi(ns->fpi);
-	printf("anagrpid: %u\n", le32_to_cpu(ns->anagrpid));
-	printf("nsattr	: %u\n", ns->nsattr);
-	if (human)
-		stdout_id_ns_nsattr(ns->nsattr);
-	printf("nvmsetid: %d\n", le16_to_cpu(ns->nvmsetid));
-	printf("endgid  : %d\n", le16_to_cpu(ns->endgid));
 
-	printf("nstat   : %#x\n", ns->nstat);
-	if (human)
-		stdout_cmd_set_independent_id_ns_nstat(ns->nstat);
-	printf("kpios   : %#x\n", ns->kpios);
-	if (human)
-		stdout_id_ns_kpios(ns->kpios);
-	printf("maxkt   : %#x\n", le16_to_cpu(ns->maxkt));
-	printf("rgrpid  : %#x\n", le32_to_cpu(ns->rgrpid));
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	row = stdout_kv_add(t, "nsfeat", "%#x", ns->nsfeat);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_cmd_set_independent_id_ns_nsfeat_table(
+						ns->nsfeat));
+
+	row = stdout_kv_add(t, "nmic", "%#x", ns->nmic);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ns_nmic_table(ns->nmic));
+
+	row = stdout_kv_add(t, "rescap", "%#x", ns->rescap);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ns_rescap_table(ns->rescap));
+
+	row = stdout_kv_add(t, "fpi", "%#x", ns->fpi);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ns_fpi_table(ns->fpi));
+
+	stdout_kv_add(t, "anagrpid", "%u", le32_to_cpu(ns->anagrpid));
+
+	row = stdout_kv_add(t, "nsattr", "%u", ns->nsattr);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ns_nsattr_table(ns->nsattr));
+
+	stdout_kv_add(t, "nvmsetid", "%d", le16_to_cpu(ns->nvmsetid));
+	stdout_kv_add(t, "endgid", "%d", le16_to_cpu(ns->endgid));
+
+	row = stdout_kv_add(t, "nstat", "%#x", ns->nstat);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_cmd_set_independent_id_ns_nstat_table(
+						ns->nstat));
+
+	row = stdout_kv_add(t, "kpios", "%#x", ns->kpios);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ns_kpios_table(ns->kpios));
+
+	stdout_kv_add(t, "maxkt", "%#x", le16_to_cpu(ns->maxkt));
+	stdout_kv_add(t, "rgrpid", "%#x", le32_to_cpu(ns->rgrpid));
+
+	stdout_kv_table_finish(t, "id-independent-id-ns");
 }
 
 static void stdout_id_ns_descs(void *data, unsigned int nsid)
@@ -3477,8 +5153,15 @@ static void stdout_id_ns_descs(void *data, unsigned int nsid)
 	__u8 eui64[8];
 	__u8 nguid[16];
 	__u8 csi;
+	struct shr_table *t;
+	char hex[NVME_UUID_LEN * 2 + 1], *hp;
 
 	printf("NVME Namespace Identification Descriptors NS %d:\n", nsid);
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
 	for (pos = 0; pos < NVME_IDENTIFY_DATA_SIZE; pos += len) {
 		struct nvme_ns_id_desc *cur = data + pos;
 
@@ -3486,45 +5169,45 @@ static void stdout_id_ns_descs(void *data, unsigned int nsid)
 			break;
 
 		if (verbose) {
-			printf("loc     : %d\n", pos);
-			printf("nidt    : %d\n", (int)cur->nidt);
-			printf("nidl    : %d\n", (int)cur->nidl);
+			stdout_kv_add(t, "loc", "%d", pos);
+			stdout_kv_add(t, "nidt", "%d", (int)cur->nidt);
+			stdout_kv_add(t, "nidl", "%d", (int)cur->nidl);
 		}
 
 		switch (cur->nidt) {
 		case NVME_NIDT_EUI64:
 			memcpy(eui64, data + pos + sizeof(*cur), sizeof(eui64));
 			if (verbose)
-				printf("type    : eui64\n");
-			printf("eui64   : ");
+				stdout_kv_add(t, "type", "%s", "eui64");
+			hp = hex;
 			for (i = 0; i < 8; i++)
-				printf("%02x", eui64[i]);
-			printf("\n");
+				hp += sprintf(hp, "%02x", eui64[i]);
+			stdout_kv_add(t, "eui64", "%s", hex);
 			len = sizeof(eui64);
 			break;
 		case NVME_NIDT_NGUID:
 			memcpy(nguid, data + pos + sizeof(*cur), sizeof(nguid));
 			if (verbose)
-				printf("type    : nguid\n");
-			printf("nguid   : ");
+				stdout_kv_add(t, "type", "%s", "nguid");
+			hp = hex;
 			for (i = 0; i < 16; i++)
-				printf("%02x", nguid[i]);
-			printf("\n");
+				hp += sprintf(hp, "%02x", nguid[i]);
+			stdout_kv_add(t, "nguid", "%s", hex);
 			len = sizeof(nguid);
 			break;
 		case NVME_NIDT_UUID:
 			memcpy(uuid, data + pos + sizeof(*cur), 16);
 			libnvme_uuid_to_string(uuid, uuid_str);
 			if (verbose)
-				printf("type    : uuid\n");
-			printf("uuid    : %s\n", uuid_str);
+				stdout_kv_add(t, "type", "%s", "uuid");
+			stdout_kv_add(t, "uuid", "%s", uuid_str);
 			len = sizeof(uuid);
 			break;
 		case NVME_NIDT_CSI:
 			memcpy(&csi, data + pos + sizeof(*cur), 1);
 			if (verbose)
-				printf("type    : csi\n");
-			printf("csi     : %#x\n", csi);
+				stdout_kv_add(t, "type", "%s", "csi");
+			stdout_kv_add(t, "csi", "%#x", csi);
 			len += sizeof(csi);
 			break;
 		default:
@@ -3535,381 +5218,836 @@ static void stdout_id_ns_descs(void *data, unsigned int nsid)
 
 		len += sizeof(*cur);
 	}
+
+	stdout_kv_table_finish(t, "id-ns-descs");
 }
 
-static void print_psd_workload(__u8 apw)
+static char *stdout_power_and_scale_str(__u16 power, __u8 scale)
 {
-	switch (apw & 0x7) {
-	case NVME_PSD_WORKLOAD_NP:
-		/* Unknown or not provided */
-		printf("-");
-		break;
-	case 1:
-		/* Extended idle period with burst of random write */
-		printf("1MiB 32 RW, 30s idle");
-		break;
-	case 2:
-		/* Heavy sequential writes */
-		printf("80K 128KiB SW");
-		break;
-	default:
-		printf("reserved");
-		break;
-	}
-}
+	char *s = NULL;
 
-static void print_power_and_scale(__u16 power, __u8 scale)
-{
 	switch (scale & 0x3) {
 	case NVME_PSD_PS_NOT_REPORTED:
-		/* Not reported for this power state */
-		printf("-");
+		if (asprintf(&s, "-") < 0)
+			s = NULL;
 		break;
 	case NVME_PSD_PS_100_MICRO_WATT:
-		/* Units of 0.0001W */
-		printf("%01u.%04uW", power / 10000, power % 10000);
+		if (asprintf(&s, "%01u.%04uW",
+			     power / 10000, power % 10000) < 0)
+			s = NULL;
 		break;
 	case NVME_PSD_PS_10_MILLI_WATT:
-		/* Units of 0.01W */
-		printf("%01u.%02uW", power / 100, power % 100);
+		if (asprintf(&s, "%01u.%02uW", power / 100, power % 100) < 0)
+			s = NULL;
 		break;
 	default:
-		printf("reserved");
+		if (asprintf(&s, "reserved") < 0)
+			s = NULL;
 		break;
 	}
+
+	return s;
 }
 
-static void print_ps_power_and_scale(__le16 ctr_power, __u8 scale)
+/*
+ * Only for &struct nvme_id_psd's idlp/actp: unlike
+ * stdout_power_and_scale_str()'s other callers (Power Limit/Threshold
+ * features, Interval Power Measurement, power-meas-log), the Power State
+ * Descriptor spec text says a raw value of 0 means "not reported"
+ * independent of the scale field.
+ */
+static char *stdout_psd_power_str(__u16 power, __u8 scale)
 {
-	print_power_and_scale(le16_to_cpu(ctr_power), scale);
+	char *s = NULL;
+
+	if (!power) {
+		if (asprintf(&s, "-") < 0)
+			s = NULL;
+		return s;
+	}
+
+	return stdout_power_and_scale_str(power, scale);
 }
 
-static void print_power_field(__u32 pwr)
+static char *stdout_bandwidth_and_scale_str(__u8 bw, __u8 scale)
 {
-	print_power_and_scale(pwr & 0xffff, (pwr >> 16) & 0x3);
+	char *s = NULL;
+
+	if (!bw) {
+		if (asprintf(&s, "-") < 0)
+			s = NULL;
+		return s;
+	}
+
+	switch (scale & 0x7) {
+	case NVME_PSD_MBWS_1_MIB_S:
+		if (asprintf(&s, "%uMiB/s", bw) < 0)
+			s = NULL;
+		break;
+	case NVME_PSD_MBWS_10_MIB_S:
+		if (asprintf(&s, "%uMiB/s", bw * 10) < 0)
+			s = NULL;
+		break;
+	case NVME_PSD_MBWS_100_MIB_S:
+		if (asprintf(&s, "%uMiB/s", bw * 100) < 0)
+			s = NULL;
+		break;
+	case NVME_PSD_MBWS_1_GIB_S:
+		if (asprintf(&s, "%uGiB/s", bw) < 0)
+			s = NULL;
+		break;
+	case NVME_PSD_MBWS_10_GIB_S:
+		if (asprintf(&s, "%uGiB/s", bw * 10) < 0)
+			s = NULL;
+		break;
+	case NVME_PSD_MBWS_100_GIB_S:
+		if (asprintf(&s, "%uGiB/s", bw * 100) < 0)
+			s = NULL;
+		break;
+	default:
+		if (asprintf(&s, "reserved") < 0)
+			s = NULL;
+		break;
+	}
+
+	return s;
 }
 
-static void print_psd_time(const char *desc, __u8 time, __u8 ts)
+static char *stdout_psd_workload_str(__u8 apw)
 {
-	int width = 12 + strlen(desc);
-	char value[STR_LEN] = { 0 };
+	const char *s;
+
+	switch (apw & 0x7) {
+	case NVME_PSD_WORKLOAD_NP:
+		s = "-";
+		break;
+	case 1:
+		s = "1MiB 32 RW, 30s idle";
+		break;
+	case 2:
+		s = "80K 128KiB SW";
+		break;
+	default:
+		s = "reserved";
+		break;
+	}
+
+	return strdup(s);
+}
+
+/*
+ * Multiplies @time by @ts's scale up front -- e.g. "60us" (6 counts of 10
+ * microseconds each) rather than leaving that math to the reader. @ts values
+ * beyond the scale table are reserved.
+ */
+static char *stdout_psd_time_str(__u8 time, __u8 ts)
+{
+	static const struct {
+		unsigned int mult;
+		const char *unit;
+	} scale[] = {
+		{ 1, "us" }, { 10, "us" }, { 100, "us" },
+		{ 1, "ms" }, { 10, "ms" }, { 100, "ms" },
+		{ 1, "s" }, { 10, "s" }, { 100, "s" },
+		{ 1000, "s" }, { 10000, "s" }, { 100000, "s" },
+		{ 1000000, "s" },
+	};
+	char *s = NULL;
 
 	switch (time) {
 	case 0:
-		snprintf(value, sizeof(value), "-");
+		if (asprintf(&s, "-") < 0)
+			s = NULL;
 		break;
 	case 1 ... 99:
-		snprintf(value, sizeof(value), "%d (unit: %s)", time,
-			 nvme_time_scale_to_string(ts));
+		if (ts >= ARRAY_SIZE(scale)) {
+			if (asprintf(&s, "reserved") < 0)
+				s = NULL;
+		} else if (asprintf(&s, "%u%s", time * scale[ts].mult,
+				    scale[ts].unit) < 0) {
+			s = NULL;
+		}
 		break;
 	default:
-		snprintf(value, sizeof(value), "reserved");
+		if (asprintf(&s, "reserved") < 0)
+			s = NULL;
 		break;
 	}
 
-	printf("%*s: %s\n", width, desc, value);
+	return s;
 }
 
-static void stdout_id_ctrl_power(struct nvme_id_ctrl *ctrl)
+/* @lat is in microseconds; a value of 0 means "not reported". */
+static char *stdout_psd_latency_str(__u32 lat)
+{
+	char *s = NULL;
+
+	if (!lat) {
+		if (asprintf(&s, "-") < 0)
+			s = NULL;
+	} else if (asprintf(&s, "%uus", lat) < 0) {
+		s = NULL;
+	}
+
+	return s;
+}
+
+struct stdout_id_ctrl_ps_table_support {
+	bool iiellss;
+	bool plsepf;
+	bool plsfq;
+	bool idle_power_used;
+	bool active_power_used;
+	bool workload_used;
+	bool max_bandwidth_used;
+	bool verbose;
+};
+
+static bool stdout_id_ctrl_ps_table_filter(const char *name, void *arg)
+{
+	const struct stdout_id_ctrl_ps_table_support *sup = arg;
+
+	if (sup->verbose)
+		return true;
+	if (!sup->iiellss && !strcmp(name, "miiell"))
+		return false;
+	if (!sup->plsepf && (!strcmp(name, "epfrt") || !strcmp(name, "epfvt")))
+		return false;
+	if (!sup->plsfq && !strcmp(name, "fqvt"))
+		return false;
+	if (!sup->idle_power_used && !strcmp(name, "idle_power"))
+		return false;
+	if (!sup->active_power_used && !strcmp(name, "active_power"))
+		return false;
+	if (!sup->workload_used && !strcmp(name, "workload"))
+		return false;
+	if (!sup->max_bandwidth_used && !strcmp(name, "max_bandwidth"))
+		return false;
+
+	return true;
+}
+
+static bool stdout_id_ctrl_ps_idlp_used(struct nvme_id_ctrl *ctrl)
 {
 	int i;
 
 	for (i = 0; i <= ctrl->npss; i++) {
-		__u16 max_power = le16_to_cpu(ctrl->psd[i].mp);
-
-		printf("ps   %4d : mp:", i);
-
-		if (ctrl->psd[i].flags & NVME_PSD_FLAGS_MXPS)
-			printf("%01u.%04uW ", max_power / 10000, max_power % 10000);
-		else
-			printf("%01u.%02uW ", max_power / 100, max_power % 100);
-
-		if (ctrl->psd[i].flags & NVME_PSD_FLAGS_NOPS)
-			printf("non-");
-
-		printf("operational enlat:%d exlat:%d rrt:%d rrl:%d\n"
-			"            rwt:%d rwl:%d idle_power:",
-			le32_to_cpu(ctrl->psd[i].enlat),
-			le32_to_cpu(ctrl->psd[i].exlat),
-			ctrl->psd[i].rrt, ctrl->psd[i].rrl,
-			ctrl->psd[i].rwt, ctrl->psd[i].rwl);
-		print_ps_power_and_scale(ctrl->psd[i].idlp,
-				 nvme_psd_power_scale(ctrl->psd[i].ips));
-		printf(" active_power:");
-		print_ps_power_and_scale(ctrl->psd[i].actp,
-				 nvme_psd_power_scale(ctrl->psd[i].apws));
-		printf("\n            active_power_workload:");
-		print_psd_workload(ctrl->psd[i].apws);
-		printf("\n");
-		print_psd_time("emergency power fail recovery time", ctrl->psd[i].epfrt,
-			       ctrl->psd[i].epfr_fqv_ts & 0xf);
-		print_psd_time("forced quiescence vault time", ctrl->psd[i].fqvt,
-			       ctrl->psd[i].epfr_fqv_ts >> 4);
-		print_psd_time("emergency power fail vault time", ctrl->psd[i].epfvt,
-			       ctrl->psd[i].epfvts & 0xf);
-
-		if (NVME_CTRL_CTRATT_IIELLSS(le32_to_cpu(ctrl->ctratt))) {
-			__u16 miiell = le16_to_cpu(ctrl->psd[i].miiell);
-
-			if (miiell)
-				printf("            minimum idle i/o exit latency limit:%uus\n",
-				       miiell * 100);
-			else
-				printf("            minimum idle i/o exit latency limit:none\n");
-		}
+		if (le16_to_cpu(ctrl->psd[i].idlp))
+			return true;
 	}
+
+	return false;
+}
+
+static bool stdout_id_ctrl_ps_actp_used(struct nvme_id_ctrl *ctrl)
+{
+	int i;
+
+	for (i = 0; i <= ctrl->npss; i++) {
+		if (le16_to_cpu(ctrl->psd[i].actp))
+			return true;
+	}
+
+	return false;
+}
+
+static bool stdout_id_ctrl_ps_apw_used(struct nvme_id_ctrl *ctrl)
+{
+	int i;
+
+	for (i = 0; i <= ctrl->npss; i++) {
+		if (ctrl->psd[i].apws & 0x7)
+			return true;
+	}
+
+	return false;
+}
+
+static bool stdout_id_ctrl_ps_mbw_used(struct nvme_id_ctrl *ctrl)
+{
+	int i;
+
+	for (i = 0; i <= ctrl->npss; i++) {
+		if (ctrl->psd[i].mbw)
+			return true;
+	}
+
+	return false;
+}
+
+/*
+ * One row per power state, one column per sub-field -- unlike the bit-decode
+ * subtables, which are one row per bit range -- since every power state
+ * repeats the same fixed set of fields: a real table, not a "name : value"
+ * list. Attached unconditionally, not just under -v.
+ */
+static struct shr_table *stdout_id_ctrl_ps_table(struct nvme_id_ctrl *ctrl)
+{
+	/*
+	 * no_widen on "ps" and "state": columns 0 and 2 are what
+	 * shr_table_align_column() widens to line up the outer table's
+	 * "name :" and the bits subtables' "value" column, and this table
+	 * happens to have its own columns at those same indices -- which do
+	 * not mean the same thing, so they must opt out.
+	 */
+	struct shr_table_column columns[] = {
+		{ "ps", RIGHT, AUTO_WIDTH, .no_widen = true },
+		{ "mp", RIGHT, AUTO_WIDTH },
+		{ "state", LEFT, AUTO_WIDTH, .no_widen = true },
+		{ "enlat", RIGHT, AUTO_WIDTH },
+		{ "exlat", RIGHT, AUTO_WIDTH },
+		{ "rrt", RIGHT, AUTO_WIDTH },
+		{ "rrl", RIGHT, AUTO_WIDTH },
+		{ "rwt", RIGHT, AUTO_WIDTH },
+		{ "rwl", RIGHT, AUTO_WIDTH },
+		{ "idle_power", RIGHT, AUTO_WIDTH },
+		{ "active_power", RIGHT, AUTO_WIDTH },
+		{ "workload", LEFT, AUTO_WIDTH },
+		{ "epfrt", LEFT, AUTO_WIDTH },
+		{ "fqvt", LEFT, AUTO_WIDTH },
+		{ "epfvt", LEFT, AUTO_WIDTH },
+		{ "max_bandwidth", RIGHT, AUTO_WIDTH },
+		{ "miiell", RIGHT, AUTO_WIDTH },
+	};
+	struct shr_table *t;
+	struct stdout_id_ctrl_ps_table_support sup = {
+		.iiellss = NVME_CTRL_CTRATT_IIELLSS(le32_to_cpu(ctrl->ctratt)),
+		.plsepf = NVME_CTRL_PLSI_PLSEPF(ctrl->plsi),
+		.plsfq = NVME_CTRL_PLSI_PLSFQ(ctrl->plsi),
+		.idle_power_used = stdout_id_ctrl_ps_idlp_used(ctrl),
+		.active_power_used = stdout_id_ctrl_ps_actp_used(ctrl),
+		.workload_used = stdout_id_ctrl_ps_apw_used(ctrl),
+		.max_bandwidth_used = stdout_id_ctrl_ps_mbw_used(ctrl),
+		.verbose = stdout_print_ops.flags & VERBOSE,
+	};
+	int i;
+
+	t = shr_table_create();
+	if (!t)
+		return NULL;
+
+	if (shr_table_add_columns_filter(t, columns, ARRAY_SIZE(columns),
+			stdout_id_ctrl_ps_table_filter, &sup) < 0) {
+		shr_table_free(t);
+		return NULL;
+	}
+
+	for (i = 0; i <= ctrl->npss; i++) {
+		struct nvme_id_psd *psd = &ctrl->psd[i];
+		__u16 max_power = le16_to_cpu(psd->mp);
+		__cleanup_free char *mp = NULL;
+		__cleanup_free char *enlat = NULL;
+		__cleanup_free char *exlat = NULL;
+		__cleanup_free char *idle_power = NULL;
+		__cleanup_free char *active_power = NULL;
+		__cleanup_free char *workload = NULL;
+		__cleanup_free char *epfrt = NULL;
+		__cleanup_free char *fqvt = NULL;
+		__cleanup_free char *epfvt = NULL;
+		__cleanup_free char *max_bandwidth = NULL;
+		__cleanup_free char *miiell = NULL;
+		int row = shr_table_get_row_id(t);
+		int col = -1;
+
+		if (!max_power) {
+			if (asprintf(&mp, "-") < 0)
+				mp = NULL;
+		} else if (psd->flags & NVME_PSD_FLAGS_MXPS) {
+			if (asprintf(&mp, "%01u.%04uW",
+				     max_power / 10000, max_power % 10000) < 0)
+				mp = NULL;
+		} else {
+			if (asprintf(&mp, "%01u.%02uW",
+				     max_power / 100, max_power % 100) < 0)
+				mp = NULL;
+		}
+
+		idle_power = stdout_psd_power_str(
+				le16_to_cpu(psd->idlp),
+				nvme_psd_power_scale(psd->ips));
+		active_power = stdout_psd_power_str(
+				le16_to_cpu(psd->actp),
+				nvme_psd_power_scale(psd->apws));
+		workload = stdout_psd_workload_str(psd->apws);
+		if (sup.plsepf) {
+			epfrt = stdout_psd_time_str(psd->epfrt,
+						     psd->epfr_fqv_ts & 0xf);
+			epfvt = stdout_psd_time_str(psd->epfvt,
+						     psd->epfvts & 0xf);
+		}
+		if (sup.plsfq)
+			fqvt = stdout_psd_time_str(psd->fqvt,
+						    psd->epfr_fqv_ts >> 4);
+		max_bandwidth = stdout_bandwidth_and_scale_str(psd->mbw,
+								psd->mbws);
+		enlat = stdout_psd_latency_str(le32_to_cpu(psd->enlat));
+		exlat = stdout_psd_latency_str(le32_to_cpu(psd->exlat));
+
+		if (sup.iiellss) {
+			__u16 miiell_val = le16_to_cpu(psd->miiell);
+
+			if (miiell_val) {
+				if (asprintf(&miiell, "%uus",
+					     miiell_val * 100) < 0)
+					miiell = NULL;
+			} else {
+				if (asprintf(&miiell, "none") < 0)
+					miiell = NULL;
+			}
+		}
+
+		shr_table_set_value_int(t, ++col, row, i, RIGHT);
+		shr_table_set_value_str(t, ++col, row, mp ?: "-", RIGHT);
+		shr_table_set_value_str(t, ++col, row,
+				psd->flags & NVME_PSD_FLAGS_NOPS ?
+				"non-operational" : "operational",
+				LEFT);
+		shr_table_set_value_str(t, ++col, row, enlat ?: "-", RIGHT);
+		shr_table_set_value_str(t, ++col, row, exlat ?: "-", RIGHT);
+		shr_table_set_value_unsigned(t, ++col, row, psd->rrt, RIGHT);
+		shr_table_set_value_unsigned(t, ++col, row, psd->rrl, RIGHT);
+		shr_table_set_value_unsigned(t, ++col, row, psd->rwt, RIGHT);
+		shr_table_set_value_unsigned(t, ++col, row, psd->rwl, RIGHT);
+		if (sup.idle_power_used || sup.verbose)
+			shr_table_set_value_str(t, ++col, row,
+					idle_power ?: "-", RIGHT);
+		if (sup.active_power_used || sup.verbose)
+			shr_table_set_value_str(t, ++col, row,
+					active_power ?: "-", RIGHT);
+		if (sup.workload_used || sup.verbose)
+			shr_table_set_value_str(t, ++col, row,
+					workload ?: "-", LEFT);
+		if (sup.plsepf || sup.verbose)
+			shr_table_set_value_str(t, ++col, row,
+					epfrt ?: "-", LEFT);
+		if (sup.plsfq || sup.verbose)
+			shr_table_set_value_str(t, ++col, row,
+					fqvt ?: "-", LEFT);
+		if (sup.plsepf || sup.verbose)
+			shr_table_set_value_str(t, ++col, row,
+					epfvt ?: "-", LEFT);
+		if (sup.max_bandwidth_used || sup.verbose)
+			shr_table_set_value_str(t, ++col, row,
+					max_bandwidth ?: "-", RIGHT);
+		if (sup.iiellss || sup.verbose)
+			shr_table_set_value_str(t, ++col, row,
+					miiell ?: "-", RIGHT);
+
+		shr_table_add_row(t, row);
+	}
+
+	return t;
 }
 
 static void stdout_id_ctrl(struct nvme_id_ctrl *ctrl, const char *product_name,
 			   void (*vendor_show)(__u8 *vs, struct json_object *root))
 {
-	bool human = stdout_print_ops.flags & VERBOSE, vs = stdout_print_ops.flags & VS;
+	bool verbose = stdout_print_ops.flags & VERBOSE;
+	bool vs = stdout_print_ops.flags & VS;
+	struct shr_table *t;
+	int row;
 
-	if (human && product_name)
+	if (verbose && product_name)
 		printf("%s\n\n", product_name);
-
 	printf("NVME Identify Controller:\n");
-	printf("vid       : %#x\n", le16_to_cpu(ctrl->vid));
-	printf("ssvid     : %#x\n", le16_to_cpu(ctrl->ssvid));
-	printf("sn        : %-.*s\n", (int)sizeof(ctrl->sn), ctrl->sn);
-	printf("mn        : %-.*s\n", (int)sizeof(ctrl->mn), ctrl->mn);
-	printf("fr        : %-.*s\n", (int)sizeof(ctrl->fr), ctrl->fr);
-	printf("rab       : %d\n", ctrl->rab);
-	printf("ieee      : %02x%02x%02x\n",
-		ctrl->ieee[2], ctrl->ieee[1], ctrl->ieee[0]);
-	printf("cmic      : %#x\n", ctrl->cmic);
-	if (human)
-		stdout_id_ctrl_cmic(ctrl->cmic);
-	printf("mdts      : %d\n", ctrl->mdts);
-	printf("cntlid    : %#x\n", le16_to_cpu(ctrl->cntlid));
-	printf("ver       : %#x\n", le32_to_cpu(ctrl->ver));
-	printf("rtd3r     : %#x\n", le32_to_cpu(ctrl->rtd3r));
-	printf("rtd3e     : %#x\n", le32_to_cpu(ctrl->rtd3e));
-	printf("oaes      : %#x\n", le32_to_cpu(ctrl->oaes));
-	if (human)
-		stdout_id_ctrl_oaes(ctrl->oaes);
-	printf("ctratt    : %#x\n", le32_to_cpu(ctrl->ctratt));
-	if (human)
-		stdout_id_ctrl_ctratt(ctrl->ctratt);
-	printf("rrls      : %#x\n", le16_to_cpu(ctrl->rrls));
-	printf("bpcap     : %#x\n", le16_to_cpu(ctrl->bpcap));
-	if (human)
-		stdout_id_ctrl_bpcap(ctrl->bpcap);
-	printf("chsi      : %#x\n", ctrl->chsi);
-	if (human)
-		stdout_id_ctrl_chsi(ctrl->chsi);
-	printf("nssl      : %#x\n", le32_to_cpu(ctrl->nssl));
-	printf("plsi      : %u\n", ctrl->plsi);
-	if (human)
-		stdout_id_ctrl_plsi(ctrl->plsi);
-	printf("cntrltype : %d\n", ctrl->cntrltype);
-	if (human)
-		stdout_id_ctrl_cntrltype(ctrl->cntrltype);
-	printf("fguid     : %s\n", shr_uuid_to_string(ctrl->fguid));
-	printf("crdt1     : %u\n", le16_to_cpu(ctrl->crdt1));
-	printf("crdt2     : %u\n", le16_to_cpu(ctrl->crdt2));
-	printf("crdt3     : %u\n", le16_to_cpu(ctrl->crdt3));
-	printf("crcap     : %u\n", ctrl->crcap);
-	if (human)
-		stdout_id_ctrl_crcap(ctrl->crcap);
-	printf("ciu       : %u\n", ctrl->ciu);
-	printf("cirn      : %"PRIu64"\n", le64_to_cpu(*(__le64 *)ctrl->cirn));
-	printf("nvmsr     : %u\n", ctrl->nvmsr);
-	if (human)
-		stdout_id_ctrl_nvmsr(ctrl->nvmsr);
-	printf("vwci      : %u\n", ctrl->vwci);
-	if (human)
-		stdout_id_ctrl_vwci(ctrl->vwci);
-	printf("mec       : %u\n", ctrl->mec);
-	if (human)
-		stdout_id_ctrl_mec(ctrl->mec);
 
-	printf("oacs      : %#x\n", le16_to_cpu(ctrl->oacs));
-	if (human)
-		stdout_id_ctrl_oacs(ctrl->oacs);
-	printf("acl       : %d\n", ctrl->acl);
-	printf("aerl      : %d\n", ctrl->aerl);
-	printf("frmw      : %#x\n", ctrl->frmw);
-	if (human)
-		stdout_id_ctrl_frmw(ctrl->frmw);
-	printf("lpa       : %#x\n", ctrl->lpa);
-	if (human)
-		stdout_id_ctrl_lpa(ctrl->lpa);
-	printf("elpe      : %d\n", ctrl->elpe);
-	if (human)
-		stdout_id_ctrl_elpe(ctrl->elpe);
-	printf("npss      : %d\n", ctrl->npss);
-	if (human)
-		stdout_id_ctrl_npss(ctrl->npss);
-	printf("avscc     : %#x\n", ctrl->avscc);
-	if (human)
-		stdout_id_ctrl_avscc(ctrl->avscc);
-	printf("apsta     : %#x\n", ctrl->apsta);
-	if (human)
-		stdout_id_ctrl_apsta(ctrl->apsta);
-	printf("wctemp    : %d\n", le16_to_cpu(ctrl->wctemp));
-	if (human)
-		stdout_id_ctrl_wctemp(ctrl->wctemp);
-	printf("cctemp    : %d\n", le16_to_cpu(ctrl->cctemp));
-	if (human)
-		stdout_id_ctrl_cctemp(ctrl->cctemp);
-	printf("mtfa      : %d\n", le16_to_cpu(ctrl->mtfa));
-	printf("hmpre     : %u\n", le32_to_cpu(ctrl->hmpre));
-	printf("hmmin     : %u\n", le32_to_cpu(ctrl->hmmin));
-	printf("tnvmcap   : %s\n",
-		uint128_t_to_l10n_string(le128_to_cpu(ctrl->tnvmcap)));
-	if (human)
-		stdout_id_ctrl_tnvmcap(ctrl->tnvmcap);
-	printf("unvmcap   : %s\n",
-		uint128_t_to_l10n_string(le128_to_cpu(ctrl->unvmcap)));
-	if (human)
-		stdout_id_ctrl_unvmcap(ctrl->unvmcap);
-	printf("rpmbs     : %#x\n", le32_to_cpu(ctrl->rpmbs));
-	if (human)
-		stdout_id_ctrl_rpmbs(ctrl->rpmbs);
-	printf("edstt     : %d\n", le16_to_cpu(ctrl->edstt));
-	printf("dsto      : %d\n", ctrl->dsto);
-	if (human)
-		stdout_id_ctrl_dsto(ctrl->dsto);
-	printf("fwug      : %d\n", ctrl->fwug);
-	printf("kas       : %d\n", le16_to_cpu(ctrl->kas));
-	printf("hctma     : %#x\n", le16_to_cpu(ctrl->hctma));
-	if (human)
-		stdout_id_ctrl_hctma(ctrl->hctma);
-	printf("mntmt     : %d\n", le16_to_cpu(ctrl->mntmt));
-	if (human)
-		stdout_id_ctrl_mntmt(ctrl->mntmt);
-	printf("mxtmt     : %d\n", le16_to_cpu(ctrl->mxtmt));
-	if (human)
-		stdout_id_ctrl_mxtmt(ctrl->mxtmt);
-	printf("sanicap   : %#x\n", le32_to_cpu(ctrl->sanicap));
-	if (human)
-		stdout_id_ctrl_sanicap(ctrl->sanicap);
-	printf("hmminds   : %u\n", le32_to_cpu(ctrl->hmminds));
-	printf("hmmaxd    : %d\n", le16_to_cpu(ctrl->hmmaxd));
-	printf("nsetidmax : %d\n", le16_to_cpu(ctrl->nsetidmax));
-	printf("endgidmax : %d\n", le16_to_cpu(ctrl->endgidmax));
-	printf("anatt     : %d\n", ctrl->anatt);
-	printf("anacap    : %d\n", ctrl->anacap);
-	if (human)
-		stdout_id_ctrl_anacap(ctrl->anacap);
-	printf("anagrpmax : %u\n", ctrl->anagrpmax);
-	printf("nanagrpid : %u\n", le32_to_cpu(ctrl->nanagrpid));
-	printf("pels      : %u\n", le32_to_cpu(ctrl->pels));
-	printf("domainid  : %d\n", le16_to_cpu(ctrl->domainid));
-	printf("kpioc     : %u\n", ctrl->kpioc);
-	if (human)
-		stdout_id_ctrl_kpioc(ctrl->kpioc);
-	printf("mptfawr   : %d\n", le16_to_cpu(ctrl->mptfawr));
-	printf("rmdca     : %#x\n", ctrl->rmdca);
-	if (human)
-		stdout_id_ctrl_rmdca(ctrl->rmdca);
-	printf("megcap    : %s\n",
-		uint128_t_to_l10n_string(le128_to_cpu(ctrl->megcap)));
-	printf("tmpthha   : %#x\n", ctrl->tmpthha);
-	if (human)
-		stdout_id_ctrl_tmpthha(ctrl->tmpthha);
-	stdout_id_ctrl_mupa(ctrl->mupa, human);
-	printf("cqt       : %d\n", le16_to_cpu(ctrl->cqt));
-	printf("cdpa      : %d\n", le16_to_cpu(ctrl->cdpa));
-	if (human)
-		stdout_id_ctrl_cdpa(ctrl->cdpa);
-	printf("mup       : %d\n", le16_to_cpu(ctrl->mup));
-	printf("ipmsr     : %#x\n", le16_to_cpu(ctrl->ipmsr));
-	if (human)
-		stdout_id_ctrl_ipmsr(ctrl->ipmsr);
-	printf("msmt      : %#x\n", le16_to_cpu(ctrl->msmt));
-	stdout_id_ctrl_mnens(le16_to_cpu(ctrl->mnens));
-	stdout_id_ctrl_mnecpens(le16_to_cpu(ctrl->mnecpens));
-	stdout_id_ctrl_mensnn(le32_to_cpu(ctrl->mensnn));
-	stdout_id_ctrl_ensa(ctrl->ensa, human);
-	stdout_id_ctrl_endsfs(ctrl->endsfs, human);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "vid", "%#x", le16_to_cpu(ctrl->vid));
+	stdout_kv_add(t, "ssvid", "%#x", le16_to_cpu(ctrl->ssvid));
+	stdout_kv_add(t, "sn", "%-.*s", (int)sizeof(ctrl->sn), ctrl->sn);
+	stdout_kv_add(t, "mn", "%-.*s", (int)sizeof(ctrl->mn), ctrl->mn);
+	stdout_kv_add(t, "fr", "%-.*s", (int)sizeof(ctrl->fr), ctrl->fr);
+	stdout_kv_add(t, "rab", "%d", ctrl->rab);
+	stdout_kv_add(t, "ieee", "%02x%02x%02x",
+		      ctrl->ieee[2], ctrl->ieee[1], ctrl->ieee[0]);
+
+	row = stdout_kv_add(t, "cmic", "%#x", ctrl->cmic);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_cmic_table(ctrl->cmic));
+
+	stdout_kv_add(t, "mdts", "%d", ctrl->mdts);
+	stdout_kv_add(t, "cntlid", "%#x", le16_to_cpu(ctrl->cntlid));
+	stdout_kv_add(t, "ver", "%#x", le32_to_cpu(ctrl->ver));
+	stdout_kv_add(t, "rtd3r", "%#x", le32_to_cpu(ctrl->rtd3r));
+	stdout_kv_add(t, "rtd3e", "%#x", le32_to_cpu(ctrl->rtd3e));
+
+	row = stdout_kv_add(t, "oaes", "%#x", le32_to_cpu(ctrl->oaes));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_oaes_table(ctrl->oaes));
+
+	row = stdout_kv_add(t, "ctratt", "%#x", le32_to_cpu(ctrl->ctratt));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_ctratt_table(ctrl->ctratt));
+
+	stdout_kv_add(t, "rrls", "%#x", le16_to_cpu(ctrl->rrls));
+
+	row = stdout_kv_add(t, "bpcap", "%#x", le16_to_cpu(ctrl->bpcap));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_bpcap_table(ctrl->bpcap));
+
+	row = stdout_kv_add(t, "chsi", "%#x", ctrl->chsi);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_chsi_table(ctrl->chsi));
+
+	stdout_kv_add(t, "nssl", "%#x", le32_to_cpu(ctrl->nssl));
+
+	row = stdout_kv_add(t, "plsi", "%u", ctrl->plsi);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_plsi_table(ctrl->plsi));
+
+	row = stdout_kv_add(t, "cntrltype", "%d", ctrl->cntrltype);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+			stdout_id_ctrl_cntrltype_table(ctrl->cntrltype));
+
+	stdout_kv_add(t, "fguid", "%s", shr_uuid_to_string(ctrl->fguid));
+	stdout_kv_add(t, "crdt1", "%u", le16_to_cpu(ctrl->crdt1));
+	stdout_kv_add(t, "crdt2", "%u", le16_to_cpu(ctrl->crdt2));
+	stdout_kv_add(t, "crdt3", "%u", le16_to_cpu(ctrl->crdt3));
+
+	row = stdout_kv_add(t, "crcap", "%u", ctrl->crcap);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_crcap_table(ctrl->crcap));
+
+	stdout_kv_add(t, "ciu", "%u", ctrl->ciu);
+	stdout_kv_add(t, "cirn", "%"PRIu64,
+		      le64_to_cpu(*(__le64 *)ctrl->cirn));
+
+	row = stdout_kv_add(t, "nvmsr", "%u", ctrl->nvmsr);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_nvmsr_table(ctrl->nvmsr));
+
+	row = stdout_kv_add(t, "vwci", "%u", ctrl->vwci);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_vwci_table(ctrl->vwci));
+
+	row = stdout_kv_add(t, "mec", "%u", ctrl->mec);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_mec_table(ctrl->mec));
+
+	row = stdout_kv_add(t, "oacs", "%#x", le16_to_cpu(ctrl->oacs));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_oacs_table(ctrl->oacs));
+
+	stdout_kv_add(t, "acl", "%d", ctrl->acl);
+	stdout_kv_add(t, "aerl", "%d", ctrl->aerl);
+
+	row = stdout_kv_add(t, "frmw", "%#x", ctrl->frmw);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_frmw_table(ctrl->frmw));
+
+	row = stdout_kv_add(t, "lpa", "%#x", ctrl->lpa);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_lpa_table(ctrl->lpa));
+
+	row = stdout_kv_add(t, "elpe", "%d", ctrl->elpe);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_elpe_table(ctrl->elpe));
+
+	row = stdout_kv_add(t, "npss", "%d", ctrl->npss);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_npss_table(ctrl->npss));
+
+	row = stdout_kv_add(t, "avscc", "%#x", ctrl->avscc);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_avscc_table(ctrl->avscc));
+
+	row = stdout_kv_add(t, "apsta", "%#x", ctrl->apsta);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_apsta_table(ctrl->apsta));
+
+	row = stdout_kv_add(t, "wctemp", "%d", le16_to_cpu(ctrl->wctemp));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_wctemp_table(ctrl->wctemp));
+
+	row = stdout_kv_add(t, "cctemp", "%d", le16_to_cpu(ctrl->cctemp));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_cctemp_table(ctrl->cctemp));
+
+	stdout_kv_add(t, "mtfa", "%d", le16_to_cpu(ctrl->mtfa));
+	stdout_kv_add(t, "hmpre", "%u", le32_to_cpu(ctrl->hmpre));
+	stdout_kv_add(t, "hmmin", "%u", le32_to_cpu(ctrl->hmmin));
+
+	row = stdout_kv_add(t, "tnvmcap", "%s",
+			     uint128_t_to_l10n_string(
+					le128_to_cpu(ctrl->tnvmcap)));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+			stdout_id_ctrl_tnvmcap_table(ctrl->tnvmcap));
+
+	row = stdout_kv_add(t, "unvmcap", "%s",
+			     uint128_t_to_l10n_string(
+					le128_to_cpu(ctrl->unvmcap)));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+			stdout_id_ctrl_unvmcap_table(ctrl->unvmcap));
+
+	row = stdout_kv_add(t, "rpmbs", "%#x", le32_to_cpu(ctrl->rpmbs));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_rpmbs_table(ctrl->rpmbs));
+
+	stdout_kv_add(t, "edstt", "%d", le16_to_cpu(ctrl->edstt));
+
+	row = stdout_kv_add(t, "dsto", "%d", ctrl->dsto);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_dsto_table(ctrl->dsto));
+
+	stdout_kv_add(t, "fwug", "%d", ctrl->fwug);
+	stdout_kv_add(t, "kas", "%d", le16_to_cpu(ctrl->kas));
+
+	row = stdout_kv_add(t, "hctma", "%#x", le16_to_cpu(ctrl->hctma));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_hctma_table(ctrl->hctma));
+
+	row = stdout_kv_add(t, "mntmt", "%d", le16_to_cpu(ctrl->mntmt));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_mntmt_table(ctrl->mntmt));
+
+	row = stdout_kv_add(t, "mxtmt", "%d", le16_to_cpu(ctrl->mxtmt));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_mxtmt_table(ctrl->mxtmt));
+
+	row = stdout_kv_add(t, "sanicap", "%#x", le32_to_cpu(ctrl->sanicap));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_sanicap_table(ctrl->sanicap));
+
+	stdout_kv_add(t, "hmminds", "%u", le32_to_cpu(ctrl->hmminds));
+	stdout_kv_add(t, "hmmaxd", "%d", le16_to_cpu(ctrl->hmmaxd));
+	stdout_kv_add(t, "nsetidmax", "%d", le16_to_cpu(ctrl->nsetidmax));
+	stdout_kv_add(t, "endgidmax", "%d", le16_to_cpu(ctrl->endgidmax));
+	stdout_kv_add(t, "anatt", "%d", ctrl->anatt);
+
+	row = stdout_kv_add(t, "anacap", "%d", ctrl->anacap);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_anacap_table(ctrl->anacap));
+
+	stdout_kv_add(t, "anagrpmax", "%u", ctrl->anagrpmax);
+	stdout_kv_add(t, "nanagrpid", "%u", le32_to_cpu(ctrl->nanagrpid));
+	stdout_kv_add(t, "pels", "%u", le32_to_cpu(ctrl->pels));
+	stdout_kv_add(t, "domainid", "%d", le16_to_cpu(ctrl->domainid));
+
+	row = stdout_kv_add(t, "kpioc", "%u", ctrl->kpioc);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_kpioc_table(ctrl->kpioc));
+
+	stdout_kv_add(t, "mptfawr", "%d", le16_to_cpu(ctrl->mptfawr));
+
+	row = stdout_kv_add(t, "rmdca", "%#x", ctrl->rmdca);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_rmdca_table(ctrl->rmdca));
+
+	stdout_kv_add(t, "megcap", "%s",
+		      uint128_t_to_l10n_string(le128_to_cpu(ctrl->megcap)));
+
+	row = stdout_kv_add(t, "tmpthha", "%#x", ctrl->tmpthha);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_tmpthha_table(ctrl->tmpthha));
+
+	row = stdout_kv_add(t, "mupa", "%#x", ctrl->mupa);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_mupa_table(ctrl->mupa));
+
+	stdout_kv_add(t, "cqt", "%d", le16_to_cpu(ctrl->cqt));
+
+	row = stdout_kv_add(t, "cdpa", "%d", le16_to_cpu(ctrl->cdpa));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_cdpa_table(ctrl->cdpa));
+
+	stdout_kv_add(t, "mup", "%d", le16_to_cpu(ctrl->mup));
+
+	row = stdout_kv_add(t, "ipmsr", "%#x", le16_to_cpu(ctrl->ipmsr));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_ipmsr_table(ctrl->ipmsr));
+
+	stdout_kv_add(t, "msmt", "%#x", le16_to_cpu(ctrl->msmt));
+	stdout_kv_add(t, "mnens", "%u", le16_to_cpu(ctrl->mnens));
+	stdout_kv_add(t, "mnecpens", "%u", le16_to_cpu(ctrl->mnecpens));
+	stdout_kv_add(t, "mensnn", "%u", le32_to_cpu(ctrl->mensnn));
+
+	row = stdout_kv_add(t, "ensa", "%#x", ctrl->ensa);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_ensa_table(ctrl->ensa));
+
+	row = stdout_kv_add(t, "endsfs", "%#x", ctrl->endsfs);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_endsfs_table(ctrl->endsfs));
+
 	if (NVME_CTRL_CTRATT_VMS(le32_to_cpu(ctrl->ctratt))) {
-		printf("vsen1     : %#x\n", le32_to_cpu(ctrl->vsen1));
-		if (human)
-			stdout_id_ctrl_vsen(ctrl->vsen1);
-		printf("vsen2     : %#x\n", le32_to_cpu(ctrl->vsen2));
-		if (human)
-			stdout_id_ctrl_vsen(ctrl->vsen2);
-		printf("vsen3     : %#x\n", le32_to_cpu(ctrl->vsen3));
-		if (human)
-			stdout_id_ctrl_vsen(ctrl->vsen3);
-		printf("vsen4     : %#x\n", le32_to_cpu(ctrl->vsen4));
-		if (human)
-			stdout_id_ctrl_vsen(ctrl->vsen4);
-		printf("msvmt     : %u\n", le16_to_cpu(ctrl->msvmt));
-	}
-	printf("sqes      : %#x\n", ctrl->sqes);
-	if (human)
-		stdout_id_ctrl_sqes(ctrl->sqes);
-	printf("cqes      : %#x\n", ctrl->cqes);
-	if (human)
-		stdout_id_ctrl_cqes(ctrl->cqes);
-	printf("maxcmd    : %d\n", le16_to_cpu(ctrl->maxcmd));
-	printf("nn        : %u\n", le32_to_cpu(ctrl->nn));
-	printf("oncs      : %#x\n", le16_to_cpu(ctrl->oncs));
-	if (human)
-		stdout_id_ctrl_oncs(ctrl->oncs);
-	printf("fuses     : %#x\n", le16_to_cpu(ctrl->fuses));
-	if (human)
-		stdout_id_ctrl_fuses(ctrl->fuses);
-	printf("fna       : %#x\n", ctrl->fna);
-	if (human)
-		stdout_id_ctrl_fna(ctrl->fna);
-	printf("vwc       : %#x\n", ctrl->vwc);
-	if (human)
-		stdout_id_ctrl_vwc(ctrl->vwc);
-	printf("awun      : %d\n", le16_to_cpu(ctrl->awun));
-	printf("awupf     : %d\n", le16_to_cpu(ctrl->awupf));
-	printf("icsvscc   : %d\n", ctrl->icsvscc);
-	if (human)
-		stdout_id_ctrl_icsvscc(ctrl->icsvscc);
-	printf("nwpc      : %d\n", ctrl->nwpc);
-	if (human)
-		stdout_id_ctrl_nwpc(ctrl->nwpc);
-	printf("acwu      : %d\n", le16_to_cpu(ctrl->acwu));
-	printf("ocfs      : %#x\n", le16_to_cpu(ctrl->ocfs));
-	if (human)
-		stdout_id_ctrl_ocfs(ctrl->ocfs);
-	printf("sgls      : %#x\n", le32_to_cpu(ctrl->sgls));
-	if (human)
-		stdout_id_ctrl_sgls(ctrl->sgls);
-	printf("mnan      : %u\n", le32_to_cpu(ctrl->mnan));
-	printf("maxdna    : %s\n",
-		uint128_t_to_l10n_string(le128_to_cpu(ctrl->maxdna)));
-	printf("maxcna    : %u\n", le32_to_cpu(ctrl->maxcna));
-	printf("oaqd      : %u\n", le32_to_cpu(ctrl->oaqd));
-	printf("rhiri     : %d\n", ctrl->rhiri);
-	printf("hirt      : %d\n", ctrl->hirt);
-	printf("cmmrtd    : %d\n", le16_to_cpu(ctrl->cmmrtd));
-	printf("nmmrtd    : %d\n", le16_to_cpu(ctrl->nmmrtd));
-	printf("minmrtg   : %d\n", ctrl->minmrtg);
-	printf("maxmrtg   : %d\n", ctrl->maxmrtg);
-	printf("trattr    : %d\n", ctrl->trattr);
-	if (human)
-		stdout_id_ctrl_trattr(ctrl->trattr);
-	printf("mcudmq    : %d\n", le16_to_cpu(ctrl->mcudmq));
-	printf("mnsudmq   : %d\n", le16_to_cpu(ctrl->mnsudmq));
-	printf("mcmr      : %d\n", le16_to_cpu(ctrl->mcmr));
-	printf("nmcmr     : %d\n", le16_to_cpu(ctrl->nmcmr));
-	printf("mcdqpc    : %d\n", le16_to_cpu(ctrl->mcdqpc));
-	printf("subnqn    : %-.*s\n", (int)sizeof(ctrl->subnqn), ctrl->subnqn);
-	printf("ioccsz    : %u\n", le32_to_cpu(ctrl->ioccsz));
-	printf("iorcsz    : %u\n", le32_to_cpu(ctrl->iorcsz));
-	printf("icdoff    : %d\n", le16_to_cpu(ctrl->icdoff));
-	printf("fcatt     : %#x\n", ctrl->fcatt);
-	if (human)
-		stdout_id_ctrl_fcatt(ctrl->fcatt);
-	printf("msdbd     : %d\n", ctrl->msdbd);
-	printf("ofcs      : %d\n", le16_to_cpu(ctrl->ofcs));
-	if (human)
-		stdout_id_ctrl_ofcs(ctrl->ofcs);
-	printf("dctype    : %d\n", ctrl->dctype);
-	if (human)
-		stdout_id_ctrl_dctype(ctrl->dctype);
-	printf("ccrl      : %d\n", ctrl->ccrl);
+		row = stdout_kv_add(t, "vsen1", "%#x",
+				    le32_to_cpu(ctrl->vsen1));
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+					stdout_id_ctrl_vsen_table(ctrl->vsen1));
 
-	stdout_id_ctrl_power(ctrl);
+		row = stdout_kv_add(t, "vsen2", "%#x",
+				    le32_to_cpu(ctrl->vsen2));
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+					stdout_id_ctrl_vsen_table(ctrl->vsen2));
+
+		row = stdout_kv_add(t, "vsen3", "%#x",
+				    le32_to_cpu(ctrl->vsen3));
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+					stdout_id_ctrl_vsen_table(ctrl->vsen3));
+
+		row = stdout_kv_add(t, "vsen4", "%#x",
+				    le32_to_cpu(ctrl->vsen4));
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+					stdout_id_ctrl_vsen_table(ctrl->vsen4));
+
+		stdout_kv_add(t, "msvmt", "%u", le16_to_cpu(ctrl->msvmt));
+	}
+
+	row = stdout_kv_add(t, "sqes", "%#x", ctrl->sqes);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_sqes_table(ctrl->sqes));
+
+	row = stdout_kv_add(t, "cqes", "%#x", ctrl->cqes);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_cqes_table(ctrl->cqes));
+
+	stdout_kv_add(t, "maxcmd", "%d", le16_to_cpu(ctrl->maxcmd));
+	stdout_kv_add(t, "nn", "%u", le32_to_cpu(ctrl->nn));
+
+	row = stdout_kv_add(t, "oncs", "%#x", le16_to_cpu(ctrl->oncs));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_oncs_table(ctrl->oncs));
+
+	row = stdout_kv_add(t, "fuses", "%#x", le16_to_cpu(ctrl->fuses));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_fuses_table(ctrl->fuses));
+
+	row = stdout_kv_add(t, "fna", "%#x", ctrl->fna);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_fna_table(ctrl->fna));
+
+	row = stdout_kv_add(t, "vwc", "%#x", ctrl->vwc);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_vwc_table(ctrl->vwc));
+
+	stdout_kv_add(t, "awun", "%d", le16_to_cpu(ctrl->awun));
+	stdout_kv_add(t, "awupf", "%d", le16_to_cpu(ctrl->awupf));
+
+	row = stdout_kv_add(t, "icsvscc", "%d", ctrl->icsvscc);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_icsvscc_table(ctrl->icsvscc));
+
+	row = stdout_kv_add(t, "nwpc", "%d", ctrl->nwpc);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_nwpc_table(ctrl->nwpc));
+
+	stdout_kv_add(t, "acwu", "%d", le16_to_cpu(ctrl->acwu));
+
+	row = stdout_kv_add(t, "ocfs", "%#x", le16_to_cpu(ctrl->ocfs));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_ocfs_table(ctrl->ocfs));
+
+	row = stdout_kv_add(t, "sgls", "%#x", le32_to_cpu(ctrl->sgls));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_sgls_table(ctrl->sgls));
+
+	stdout_kv_add(t, "mnan", "%u", le32_to_cpu(ctrl->mnan));
+	stdout_kv_add(t, "maxdna", "%s",
+		      uint128_t_to_l10n_string(le128_to_cpu(ctrl->maxdna)));
+	stdout_kv_add(t, "maxcna", "%u", le32_to_cpu(ctrl->maxcna));
+	stdout_kv_add(t, "oaqd", "%u", le32_to_cpu(ctrl->oaqd));
+	stdout_kv_add(t, "rhiri", "%d", ctrl->rhiri);
+	stdout_kv_add(t, "hirt", "%d", ctrl->hirt);
+	stdout_kv_add(t, "cmmrtd", "%d", le16_to_cpu(ctrl->cmmrtd));
+	stdout_kv_add(t, "nmmrtd", "%d", le16_to_cpu(ctrl->nmmrtd));
+	stdout_kv_add(t, "minmrtg", "%d", ctrl->minmrtg);
+	stdout_kv_add(t, "maxmrtg", "%d", ctrl->maxmrtg);
+
+	row = stdout_kv_add(t, "trattr", "%d", ctrl->trattr);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_trattr_table(ctrl->trattr));
+
+	stdout_kv_add(t, "mcudmq", "%d", le16_to_cpu(ctrl->mcudmq));
+	stdout_kv_add(t, "mnsudmq", "%d", le16_to_cpu(ctrl->mnsudmq));
+	stdout_kv_add(t, "mcmr", "%d", le16_to_cpu(ctrl->mcmr));
+	stdout_kv_add(t, "nmcmr", "%d", le16_to_cpu(ctrl->nmcmr));
+	stdout_kv_add(t, "mcdqpc", "%d", le16_to_cpu(ctrl->mcdqpc));
+	stdout_kv_add(t, "subnqn", "%-.*s",
+		      (int)sizeof(ctrl->subnqn), ctrl->subnqn);
+	stdout_kv_add(t, "ioccsz", "%u", le32_to_cpu(ctrl->ioccsz));
+	stdout_kv_add(t, "iorcsz", "%u", le32_to_cpu(ctrl->iorcsz));
+	stdout_kv_add(t, "icdoff", "%d", le16_to_cpu(ctrl->icdoff));
+
+	row = stdout_kv_add(t, "fcatt", "%#x", ctrl->fcatt);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_fcatt_table(ctrl->fcatt));
+
+	stdout_kv_add(t, "msdbd", "%d", ctrl->msdbd);
+
+	row = stdout_kv_add(t, "ofcs", "%d", le16_to_cpu(ctrl->ofcs));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_ofcs_table(ctrl->ofcs));
+
+	row = stdout_kv_add(t, "dctype", "%d", ctrl->dctype);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_dctype_table(ctrl->dctype));
+
+	stdout_kv_add(t, "ccrl", "%d", ctrl->ccrl);
+
+	row = stdout_kv_add(t, "ps", "%d states", ctrl->npss + 1);
+	/* Unlike the fields above, shown regardless of @verbose. */
+	shr_table_set_row_subtable(t, row, stdout_id_ctrl_ps_table(ctrl));
+
+	stdout_kv_table_finish(t, "identify-controller");
+
 	if (vendor_show)
 		vendor_show(ctrl->vs, NULL);
 	else if (vs) {
@@ -3918,114 +6056,161 @@ static void stdout_id_ctrl(struct nvme_id_ctrl *ctrl, const char *product_name,
 	}
 }
 
-static void stdout_id_ctrl_nvm_kpiocap(__u8 kpiocap)
+static struct shr_table *stdout_id_ctrl_nvm_kpiocap_table(__u8 kpiocap)
 {
+	struct shr_table *t;
 	__u8 rsvd2 = (kpiocap & 0xfc) >> 2;
 	__u8 kpiosc = NVME_CTRL_KPIOC_KPIOSC(kpiocap);
 	__u8 kpios = NVME_CTRL_KPIOC_KPIOS(kpiocap);
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd2)
-		printf("  [7:2] : %#x\tReserved\n", rsvd2);
-	printf("  [1:1] : %#x\tKey Per I/O capability enabled and disabled %s in the"
-		"NVM subsystem\n", kpiosc, kpiosc ? "all namespaces" : "each namespace");
-	printf("  [0:0] : %#x\tKey Per I/O capability %sSupported\n", kpios,
-		kpios ? "" : "Not ");
+		stdout_bits_add(t, "[7:2]", rsvd2, "Reserved");
+	stdout_bits_add(t, "[1:1]", kpiosc,
+			 "Key Per I/O capability enabled and disabled %s in the NVM subsystem",
+			 kpiosc ? "all namespaces" : "each namespace");
+	stdout_bits_add(t, "[0:0]", kpios, "Key Per I/O capability %sSupported",
+			 kpios ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_nvm_aocs(__u16 aocs)
+static struct shr_table *stdout_id_ctrl_nvm_aocs_table(__u16 aocs)
 {
+	struct shr_table *t;
 	__u16 rsvd = (aocs & 0xfffe) >> 1;
 	__u8 ralbas = aocs & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [15:1] : %#x\tReserved\n", rsvd);
-	printf("  [0:0] : %#x\tReporting Allocated LBA %sSupported\n", ralbas,
-		ralbas ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[15:1]", rsvd, "Reserved");
+	stdout_bits_add(t, "[0:0]", ralbas,
+			 "Reporting Allocated LBA %sSupported",
+			 ralbas ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_id_ctrl_nvm_ver(__u32 ver)
+static const char *stdout_id_ctrl_nvm_lbamqf_str(__u8 lbamqf)
 {
-	printf("  NVM command set specification: %d.%d.%d\n\n", NVME_MAJOR(ver), NVME_MINOR(ver),
-	       NVME_TERTIARY(ver));
-}
-
-static void stdout_id_ctrl_nvm_lbamqf(__u8 lbamqf)
-{
-	printf("  0x%x: ", lbamqf);
-
 	switch (lbamqf) {
 	case NVME_ID_CTRL_NVM_LBAMQF_TYPE_0:
-		printf("LBA Migration Queue Entry Type 0\n\n");
-		break;
+		return "LBA Migration Queue Entry Type 0";
 	case NVME_ID_CTRL_NVM_LBAMQF_VENDOR_MIN ... NVME_ID_CTRL_NVM_LBAMQF_VENDOR_MAX:
-		printf("Vendor Specific\n\n");
-		break;
+		return "Vendor Specific";
 	default:
-		printf("Reserved\n\n");
-		break;
+		return "Reserved";
 	}
 }
 
 static void stdout_id_ctrl_nvm(struct nvme_id_ctrl_nvm *ctrl_nvm)
 {
-	int verbose = stdout_print_ops.flags & VERBOSE;
+	bool verbose = stdout_print_ops.flags & VERBOSE;
+	struct shr_table *t;
+	__u32 ver;
+	int row;
 
 	printf("NVMe Identify Controller NVM:\n");
-	printf("vsl    : %u\n", ctrl_nvm->vsl);
-	printf("wzsl   : %u\n", ctrl_nvm->wzsl);
-	printf("wusl   : %u\n", ctrl_nvm->wusl);
-	printf("dmrl   : %u\n", ctrl_nvm->dmrl);
-	printf("dmrsl  : %u\n", le32_to_cpu(ctrl_nvm->dmrsl));
-	printf("dmsl   : %"PRIu64"\n", le64_to_cpu(ctrl_nvm->dmsl));
-	printf("kpiocap: %u\n", ctrl_nvm->kpiocap);
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "vsl", "%u", ctrl_nvm->vsl);
+	stdout_kv_add(t, "wzsl", "%u", ctrl_nvm->wzsl);
+	stdout_kv_add(t, "wusl", "%u", ctrl_nvm->wusl);
+	stdout_kv_add(t, "dmrl", "%u", ctrl_nvm->dmrl);
+	stdout_kv_add(t, "dmrsl", "%u", le32_to_cpu(ctrl_nvm->dmrsl));
+	stdout_kv_add(t, "dmsl", "%"PRIu64, le64_to_cpu(ctrl_nvm->dmsl));
+
+	row = stdout_kv_add(t, "kpiocap", "%u", ctrl_nvm->kpiocap);
 	if (verbose)
-		stdout_id_ctrl_nvm_kpiocap(ctrl_nvm->kpiocap);
-	printf("wzdsl  : %u\n", ctrl_nvm->wzdsl);
-	printf("aocs   : %u\n", le16_to_cpu(ctrl_nvm->aocs));
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_nvm_kpiocap_table(
+						ctrl_nvm->kpiocap));
+
+	stdout_kv_add(t, "wzdsl", "%u", ctrl_nvm->wzdsl);
+
+	row = stdout_kv_add(t, "aocs", "%u", le16_to_cpu(ctrl_nvm->aocs));
 	if (verbose)
-		stdout_id_ctrl_nvm_aocs(le16_to_cpu(ctrl_nvm->aocs));
-	printf("ver    : 0x%x\n", le32_to_cpu(ctrl_nvm->ver));
+		shr_table_set_row_subtable(t, row,
+				stdout_id_ctrl_nvm_aocs_table(
+						le16_to_cpu(ctrl_nvm->aocs)));
+
+	ver = le32_to_cpu(ctrl_nvm->ver);
 	if (verbose)
-		stdout_id_ctrl_nvm_ver(le32_to_cpu(ctrl_nvm->ver));
-	printf("lbamqf : %u\n", ctrl_nvm->lbamqf);
+		stdout_kv_add(t, "ver",
+			      "0x%x\tNVM command set specification: %d.%d.%d",
+			      ver, NVME_MAJOR(ver), NVME_MINOR(ver),
+			      NVME_TERTIARY(ver));
+	else
+		stdout_kv_add(t, "ver", "0x%x", ver);
+
 	if (verbose)
-		stdout_id_ctrl_nvm_lbamqf(ctrl_nvm->lbamqf);
+		stdout_kv_add(t, "lbamqf", "%u\t0x%x: %s", ctrl_nvm->lbamqf,
+			      ctrl_nvm->lbamqf,
+			      stdout_id_ctrl_nvm_lbamqf_str(ctrl_nvm->lbamqf));
+	else
+		stdout_kv_add(t, "lbamqf", "%u", ctrl_nvm->lbamqf);
+
+	stdout_kv_table_finish(t, "id-ctrl-nvm");
 }
 
-static void stdout_nvm_id_ns_pic(__u8 pic)
+static struct shr_table *stdout_nvm_id_ns_pic_table(__u8 pic)
 {
+	struct shr_table *t;
 	__u8 rsvd = (pic & 0xF0) >> 4;
 	__u8 qpifs = (pic & 0x8) >> 3;
 	__u8 stcrs = (pic & 0x4) >> 2;
 	__u8 pic_16bpistm = (pic & 0x2) >> 1;
 	__u8 pic_16bpists = pic & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:4] : %#x\tReserved\n", rsvd);
-	printf("  [3:3] : %#x\tQualified Protection Information Format %sSupported\n",
-		qpifs, qpifs ? "" : "Not ");
-	printf("  [2:2] : %#x\tStorage Tag Check Read %sSupported\n",
-		stcrs, stcrs ? "" : "Not ");
-	printf("  [1:1] : %#x\t16b Guard Protection Information Storage Tag Mask\n",
-		pic_16bpistm);
-	printf("  [0:0] : %#x\t16b Guard Protection Information Storage Tag %sSupported\n",
-		pic_16bpists, pic_16bpists ? "" : "Not ");
-	printf("\n");
+		stdout_bits_add(t, "[7:4]", rsvd, "Reserved");
+	stdout_bits_add(t, "[3:3]", qpifs,
+			 "Qualified Protection Information Format %sSupported",
+			 qpifs ? "" : "Not ");
+	stdout_bits_add(t, "[2:2]", stcrs,
+			 "Storage Tag Check Read %sSupported",
+			 stcrs ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", pic_16bpistm,
+			 "16b Guard Protection Information Storage Tag Mask");
+	stdout_bits_add(t, "[0:0]", pic_16bpists,
+			 "16b Guard Protection Information Storage Tag %sSupported",
+			 pic_16bpists ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_nvm_id_ns_pifa(__u8 pifa)
+static struct shr_table *stdout_nvm_id_ns_pifa_table(__u8 pifa)
 {
+	struct shr_table *t;
 	__u8 rsvd = (pifa & 0xF8) >> 3;
 	__u8 stmla = pifa & 0x7;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:3] : %#x\tReserved\n", rsvd);
-	printf("  [2:0] : %#x\tStorage Tag Masking Level Attribute : %s\n", stmla,
-		stmla == 0 ? "Bit Granularity Masking" :
-		stmla == 1 ? "Byte Granularity Masking" :
-		stmla == 2 ? "Masking Not Supported" : "Reserved");
-	printf("\n");
+		stdout_bits_add(t, "[7:3]", rsvd, "Reserved");
+	stdout_bits_add(t, "[2:0]", stmla,
+			 "Storage Tag Masking Level Attribute : %s",
+			 stmla == 0 ? "Bit Granularity Masking" :
+			 stmla == 1 ? "Byte Granularity Masking" :
+			 stmla == 2 ? "Masking Not Supported" : "Reserved");
+
+	return t;
 }
 
 static char *pif_to_string(__u8 pif, bool qpifs, bool pif_field)
@@ -4049,28 +6234,42 @@ static void stdout_nvm_id_ns(struct nvme_nvm_id_ns *nvm_ns, unsigned int nsid,
 			     struct nvme_id_ns *ns, unsigned int lba_index,
 			     bool cap_only)
 {
-	int i, verbose = stdout_print_ops.flags & VERBOSE;
+	bool verbose = stdout_print_ops.flags & VERBOSE;
 	bool qpifs = (nvm_ns->pic & 0x8) >> 3;
+	struct shr_table *t;
 	__u32 elbaf;
 	__u8 lbaf;
 	int pif, sts, qpif;
 	char *in_use = "(in use)";
+	int i, row;
 
 	nvme_id_ns_flbas_to_lbaf_inuse(ns->flbas, &lbaf);
 
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
 	if (!cap_only) {
 		printf("NVMe NVM Identify Namespace %d:\n", nsid);
-		printf("lbstm : %#"PRIx64"\n", le64_to_cpu(nvm_ns->lbstm));
+		stdout_kv_add(t, "lbstm", "%#"PRIx64,
+			      le64_to_cpu(nvm_ns->lbstm));
 	} else {
-		printf("NVMe NVM Identify Namespace for LBA format[%d]:\n", lba_index);
+		printf("NVMe NVM Identify Namespace for LBA format[%d]:\n",
+		       lba_index);
 		in_use = "";
 	}
-	printf("pic   : %#x\n", nvm_ns->pic);
+
+	row = stdout_kv_add(t, "pic", "%#x", nvm_ns->pic);
 	if (verbose)
-		stdout_nvm_id_ns_pic(nvm_ns->pic);
-	printf("pifa  : %#x\n", nvm_ns->pifa);
+		shr_table_set_row_subtable(t, row,
+				stdout_nvm_id_ns_pic_table(nvm_ns->pic));
+
+	row = stdout_kv_add(t, "pifa", "%#x", nvm_ns->pifa);
 	if (verbose)
-		stdout_nvm_id_ns_pifa(nvm_ns->pifa);
+		shr_table_set_row_subtable(t, row,
+				stdout_nvm_id_ns_pifa_table(nvm_ns->pifa));
+
+	stdout_kv_table_finish(t, "nvm-id-ns");
 
 	for (i = 0; i <= ns->nlbaf + ns->nulbaf; i++) {
 		elbaf = le32_to_cpu(nvm_ns->elbaf[i]);
@@ -4086,140 +6285,199 @@ static void stdout_nvm_id_ns(struct nvme_nvm_id_ns *nvm_ns, unsigned int nsid,
 			printf("elbaf %2d : qpif:%d pif:%d sts:%-2d %s\n", i,
 				qpif, pif, sts, i == lbaf ? in_use : "");
 	}
-	if (ns->nsfeat & 0x20)
-		printf("npdgl : %#x\n", le32_to_cpu(nvm_ns->npdgl));
 
-	printf("nprg  : %#x\n", le32_to_cpu(nvm_ns->nprg));
-	printf("npra  : %#x\n", le32_to_cpu(nvm_ns->npra));
-	printf("nors  : %#x\n", le32_to_cpu(nvm_ns->nors));
-	printf("npdal : %#x\n", le32_to_cpu(nvm_ns->npdal));
-	printf("lbapss: %#x\n", le32_to_cpu(nvm_ns->lbapss));
-	printf("tlbaag: %#x\n", le32_to_cpu(nvm_ns->tlbaag));
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	if (ns->nsfeat & 0x20)
+		stdout_kv_add(t, "npdgl", "%#x", le32_to_cpu(nvm_ns->npdgl));
+
+	stdout_kv_add(t, "nprg", "%#x", le32_to_cpu(nvm_ns->nprg));
+	stdout_kv_add(t, "npra", "%#x", le32_to_cpu(nvm_ns->npra));
+	stdout_kv_add(t, "nors", "%#x", le32_to_cpu(nvm_ns->nors));
+	stdout_kv_add(t, "npdal", "%#x", le32_to_cpu(nvm_ns->npdal));
+	stdout_kv_add(t, "lbapss", "%#x", le32_to_cpu(nvm_ns->lbapss));
+	stdout_kv_add(t, "tlbaag", "%#x", le32_to_cpu(nvm_ns->tlbaag));
+
+	stdout_kv_table_finish(t, "nvm-id-ns");
 }
 
 static void stdout_zns_id_ctrl(struct nvme_zns_id_ctrl *ctrl)
 {
+	struct shr_table *t;
+
 	printf("NVMe ZNS Identify Controller:\n");
-	printf("zasl    : %u\n", ctrl->zasl);
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "zasl", "%u", ctrl->zasl);
+
+	stdout_kv_table_finish(t, "zns-id-ctrl");
 }
 
-static void show_nvme_id_ns_zoned_zoc(__le16 ns_zoc)
+static struct shr_table *show_nvme_id_ns_zoned_zoc_table(__le16 ns_zoc)
 {
+	struct shr_table *t;
 	__u16 zoc = le16_to_cpu(ns_zoc);
 	__u8 rsvd = (zoc & 0xfffc) >> 2;
 	__u8 ze = (zoc & 0x2) >> 1;
 	__u8 vzc = zoc & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf(" [15:2] : %#x\tReserved\n", rsvd);
-	printf("  [1:1] : %#x\t  Zone Active Excursions: %s\n",
-		ze, ze ? "Yes (Host support required)" : "No");
-	printf("  [0:0] : %#x\t  Variable Zone Capacity: %s\n",
-		vzc, vzc ? "Yes (Host support required)" : "No");
-	printf("\n");
+		stdout_bits_add(t, "[15:2]", rsvd, "Reserved");
+	stdout_bits_add(t, "[1:1]", ze, "Zone Active Excursions: %s",
+			 ze ? "Yes (Host support required)" : "No");
+	stdout_bits_add(t, "[0:0]", vzc, "Variable Zone Capacity: %s",
+			 vzc ? "Yes (Host support required)" : "No");
+
+	return t;
 }
 
-static void show_nvme_id_ns_zoned_ozcs(__le16 ns_ozcs)
+static struct shr_table *show_nvme_id_ns_zoned_ozcs_table(__le16 ns_ozcs)
 {
+	struct shr_table *t;
 	__u16 ozcs = le16_to_cpu(ns_ozcs);
 	__u8 rsvd = (ozcs & 0xfffc) >> 2;
 	__u8 razb = ozcs & 0x1;
 	__u8 zrwasup = (ozcs & 0x2) >> 1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf(" [15:1] : %#x\tReserved\n", rsvd);
-	printf("  [0:0] : %#x\t  Read Across Zone Boundaries: %s\n",
-		razb, razb ? "Yes" : "No");
-	printf("  [1:1] : %#x\t  Zone Random Write Area: %s\n", zrwasup,
-				zrwasup ? "Yes" : "No");
+		stdout_bits_add(t, "[15:1]", rsvd, "Reserved");
+	stdout_bits_add(t, "[0:0]", razb, "Read Across Zone Boundaries: %s",
+			 razb ? "Yes" : "No");
+	stdout_bits_add(t, "[1:1]", zrwasup, "Zone Random Write Area: %s",
+			 zrwasup ? "Yes" : "No");
+
+	return t;
 }
 
-static void stdout_zns_id_ns_recommended_limit(__le32 ns_rl, int human,
-					       const char *target_limit)
+static void stdout_zns_id_ns_recommended_limit(struct shr_table *t,
+		const char *name, __le32 ns_rl, bool verbose)
 {
 	unsigned int recommended_limit = le32_to_cpu(ns_rl);
 
-	if (!recommended_limit && human)
-		printf("%s    : Not Reported\n", target_limit);
+	if (!recommended_limit && verbose)
+		stdout_kv_add(t, name, "%s", "Not Reported");
 	else
-		printf("%s    : %u\n", target_limit, recommended_limit);
+		stdout_kv_add(t, name, "%u", recommended_limit);
 }
 
-static void stdout_zns_id_ns_zrwacap(__u8 zrwacap)
+static struct shr_table *stdout_zns_id_ns_zrwacap_table(__u8 zrwacap)
 {
+	struct shr_table *t;
 	__u8 rsvd = (zrwacap & 0xfe) >> 1;
 	__u8 expflushsup = zrwacap & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf(" [7:1] : %#x\tReserved\n", rsvd);
-	printf("  [0:0] : %#x\t  Explicit ZRWA Flush Operations: %s\n",
-		expflushsup, expflushsup ? "Yes" : "No");
+		stdout_bits_add(t, "[7:1]", rsvd, "Reserved");
+	stdout_bits_add(t, "[0:0]", expflushsup,
+			 "Explicit ZRWA Flush Operations: %s",
+			 expflushsup ? "Yes" : "No");
+
+	return t;
 }
 
 static void stdout_zns_id_ns(struct nvme_zns_id_ns *ns,
 			     struct nvme_id_ns *id_ns)
 {
-	int human = stdout_print_ops.flags & VERBOSE, vs = stdout_print_ops.flags & VS;
+	bool verbose = stdout_print_ops.flags & VERBOSE;
+	bool vs = stdout_print_ops.flags & VS;
+	struct shr_table *t;
 	uint8_t lbaf;
-	int i;
+	int i, row;
 
 	nvme_id_ns_flbas_to_lbaf_inuse(id_ns->flbas, &lbaf);
 
 	printf("ZNS Command Set Identify Namespace:\n");
 
-	if (human) {
-		printf("zoc     : %u\tZone Operation Characteristics\n", le16_to_cpu(ns->zoc));
-		show_nvme_id_ns_zoned_zoc(ns->zoc);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	if (verbose) {
+		row = stdout_kv_add(t, "zoc",
+				     "%u\tZone Operation Characteristics",
+				     le16_to_cpu(ns->zoc));
+		shr_table_set_row_subtable(t, row,
+				show_nvme_id_ns_zoned_zoc_table(ns->zoc));
 	} else {
-		printf("zoc     : %u\n", le16_to_cpu(ns->zoc));
+		stdout_kv_add(t, "zoc", "%u", le16_to_cpu(ns->zoc));
 	}
 
-	if (human) {
-		printf("ozcs    : %u\tOptional Zoned Command Support\n", le16_to_cpu(ns->ozcs));
-		show_nvme_id_ns_zoned_ozcs(ns->ozcs);
+	if (verbose) {
+		row = stdout_kv_add(t, "ozcs",
+				     "%u\tOptional Zoned Command Support",
+				     le16_to_cpu(ns->ozcs));
+		shr_table_set_row_subtable(t, row,
+				show_nvme_id_ns_zoned_ozcs_table(ns->ozcs));
 	} else {
-		printf("ozcs    : %u\n", le16_to_cpu(ns->ozcs));
+		stdout_kv_add(t, "ozcs", "%u", le16_to_cpu(ns->ozcs));
 	}
 
-	if (human) {
+	if (verbose) {
 		if (ns->mar == 0xffffffff)
-			printf("mar     : No Active Resource Limit\n");
+			stdout_kv_add(t, "mar", "%s",
+				      "No Active Resource Limit");
 		else
-			printf("mar     : %u\tActive Resources\n", le32_to_cpu(ns->mar) + 1);
+			stdout_kv_add(t, "mar", "%u\tActive Resources",
+				      le32_to_cpu(ns->mar) + 1);
 	} else {
-		printf("mar     : %#x\n", le32_to_cpu(ns->mar));
+		stdout_kv_add(t, "mar", "%#x", le32_to_cpu(ns->mar));
 	}
 
-	if (human) {
+	if (verbose) {
 		if (ns->mor == 0xffffffff)
-			printf("mor     : No Open Resource Limit\n");
+			stdout_kv_add(t, "mor", "%s",
+				      "No Open Resource Limit");
 		else
-			printf("mor     : %u\tOpen Resources\n", le32_to_cpu(ns->mor) + 1);
+			stdout_kv_add(t, "mor", "%u\tOpen Resources",
+				      le32_to_cpu(ns->mor) + 1);
 	} else {
-		printf("mor     : %#x\n", le32_to_cpu(ns->mor));
+		stdout_kv_add(t, "mor", "%#x", le32_to_cpu(ns->mor));
 	}
 
-	stdout_zns_id_ns_recommended_limit(ns->rrl,  human, "rrl ");
-	stdout_zns_id_ns_recommended_limit(ns->frl,  human, "frl ");
-	stdout_zns_id_ns_recommended_limit(ns->rrl1, human, "rrl1");
-	stdout_zns_id_ns_recommended_limit(ns->rrl2, human, "rrl2");
-	stdout_zns_id_ns_recommended_limit(ns->rrl3, human, "rrl3");
-	stdout_zns_id_ns_recommended_limit(ns->frl1,  human, "frl1");
-	stdout_zns_id_ns_recommended_limit(ns->frl2,  human, "frl2");
-	stdout_zns_id_ns_recommended_limit(ns->frl3,  human, "frl3");
+	stdout_zns_id_ns_recommended_limit(t, "rrl", ns->rrl, verbose);
+	stdout_zns_id_ns_recommended_limit(t, "frl", ns->frl, verbose);
+	stdout_zns_id_ns_recommended_limit(t, "rrl1", ns->rrl1, verbose);
+	stdout_zns_id_ns_recommended_limit(t, "rrl2", ns->rrl2, verbose);
+	stdout_zns_id_ns_recommended_limit(t, "rrl3", ns->rrl3, verbose);
+	stdout_zns_id_ns_recommended_limit(t, "frl1", ns->frl1, verbose);
+	stdout_zns_id_ns_recommended_limit(t, "frl2", ns->frl2, verbose);
+	stdout_zns_id_ns_recommended_limit(t, "frl3", ns->frl3, verbose);
 
-	printf("numzrwa : %#x\n", le32_to_cpu(ns->numzrwa));
-	printf("zrwafg  : %u\n", le16_to_cpu(ns->zrwafg));
-	printf("zrwasz  : %u\n", le16_to_cpu(ns->zrwasz));
-	if (human) {
-		printf("zrwacap : %u\tZone Random Write Area Capability\n", ns->zrwacap);
-		stdout_zns_id_ns_zrwacap(ns->zrwacap);
+	stdout_kv_add(t, "numzrwa", "%#x", le32_to_cpu(ns->numzrwa));
+	stdout_kv_add(t, "zrwafg", "%u", le16_to_cpu(ns->zrwafg));
+	stdout_kv_add(t, "zrwasz", "%u", le16_to_cpu(ns->zrwasz));
+
+	if (verbose) {
+		row = stdout_kv_add(t, "zrwacap",
+				     "%u\tZone Random Write Area Capability",
+				     ns->zrwacap);
+		shr_table_set_row_subtable(t, row,
+				stdout_zns_id_ns_zrwacap_table(ns->zrwacap));
 	} else {
-		printf("zrwacap : %u\n", ns->zrwacap);
+		stdout_kv_add(t, "zrwacap", "%u", ns->zrwacap);
 	}
+
+	stdout_kv_table_finish(t, "zns-id-ns");
 
 	for (i = 0; i <= id_ns->nlbaf; i++) {
-		if (human)
+		if (verbose)
 			printf("LBA Format Extension %2d : Zone Size: %#"PRIx64" LBAs - "
 					"Zone Descriptor Extension Size: %-1d bytes%s\n",
 				i, le64_to_cpu(ns->lbafe[i].zsze), ns->lbafe[i].zdes << 6,
@@ -4241,15 +6499,57 @@ static void stdout_list_ns(struct nvme_ns_list *ns_list)
 	int i, verbose = stdout_print_ops.flags & VERBOSE;
 
 	printf("NVME Namespace List:\n");
-	for (i = 0; i < 1024; i++) {
-		if (ns_list->ns[i]) {
-			if (verbose)
-				printf("Identifier %4u: NSID %#x\n",
-						i, le32_to_cpu(ns_list->ns[i]));
-			else
-				printf("[%4u]:%#x\n",
-						i, le32_to_cpu(ns_list->ns[i]));
+
+	if (verbose) {
+		struct shr_table *t;
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		for (i = 0; i < 1024; i++) {
+			char name[24];
+
+			if (!ns_list->ns[i])
+				continue;
+
+			snprintf(name, sizeof(name), "Identifier %4u", i);
+			stdout_kv_add(t, name, "NSID %#x",
+				      le32_to_cpu(ns_list->ns[i]));
 		}
+
+		stdout_kv_table_finish(t, "list-ns");
+	} else {
+		struct shr_table_column columns[] = {
+			{ "Index", RIGHT, AUTO_WIDTH },
+			{ "NSID",  LEFT,  AUTO_WIDTH },
+		};
+		struct shr_table *t;
+		bool has_entries = false;
+
+		t = shr_table_init_with_columns(columns, ARRAY_SIZE(columns));
+		if (!t)
+			return;
+
+		for (i = 0; i < 1024; i++) {
+			char id[16];
+			int row;
+
+			if (!ns_list->ns[i])
+				continue;
+
+			has_entries = true;
+			row = shr_table_get_row_id(t);
+			snprintf(id, sizeof(id), "%#x",
+				 le32_to_cpu(ns_list->ns[i]));
+			shr_table_set_value_int(t, 0, row, i, RIGHT);
+			shr_table_set_value_str(t, 1, row, id, LEFT);
+			shr_table_add_row(t, row);
+		}
+
+		if (has_entries)
+			shr_table_print(t);
+		shr_table_free(t);
 	}
 }
 
@@ -4260,6 +6560,7 @@ static void stdout_zns_start_zone_list(__u64 nr_zones, struct json_object **zone
 
 static void stdout_zns_changed(struct nvme_zns_changed_zone_log *log)
 {
+	struct shr_table *t;
 	uint16_t nrzid;
 	int i;
 
@@ -4271,57 +6572,150 @@ static void stdout_zns_changed(struct nvme_zns_changed_zone_log *log)
 		return;
 	}
 
-	printf("nrzid:  %u\n", nrzid);
-	for (i = 0; i < nrzid; i++)
-		printf("zid %03d: %"PRIu64"\n", i, (uint64_t)le64_to_cpu(log->zid[i]));
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "nrzid", "%u", nrzid);
+	for (i = 0; i < nrzid; i++) {
+		char name[16];
+
+		snprintf(name, sizeof(name), "zid %03d", i);
+		stdout_kv_add(t, name, "%"PRIu64,
+			      (uint64_t)le64_to_cpu(log->zid[i]));
+	}
+
+	stdout_kv_table_finish(t, "zns-changed-zone-log");
 }
 
-static void stdout_zns_report_zone_attributes(__u8 za, __u8 zai)
+static void stdout_zns_report_zone_attrs_decoded(char *buf, size_t len,
+		__u8 za, __u8 zai)
 {
 	const char * const recommended_limit[4] = {"", "1", "2", "3"};
+	int n;
 
-	printf("Attrs: Zone Descriptor Extension is %sVaild\n",
-	       za & NVME_ZNS_ZA_ZDEV ? "" : "Not ");
+	n = snprintf(buf, len, "%sValid", za & NVME_ZNS_ZA_ZDEV ? "" : "Not ");
 
 	if (za & NVME_ZNS_ZA_RZR)
-		printf("       Reset Zone Recommended with Reset Recommended Limit%s\n",
-		       recommended_limit[(zai&0xd)>>2]);
+		n += snprintf(buf + n, len - n,
+			      ", Reset Recommended (Limit %s)",
+			      recommended_limit[(zai&0xd)>>2]);
 
 	if (za & NVME_ZNS_ZA_FZR)
-		printf("       Finish Zone Recommended with Finish Recommended Limit%s\n",
-		       recommended_limit[zai&0x3]);
+		n += snprintf(buf + n, len - n,
+			      ", Finish Recommended (Limit %s)",
+			      recommended_limit[zai&0x3]);
 
 	if (za & NVME_ZNS_ZA_ZFC)
-		printf("       Zone Finished by Controller\n");
+		snprintf(buf + n, len - n, ", Finished by Controller");
+}
+
+static struct nvme_zns_desc *stdout_zns_report_zones_desc(void *report,
+		__u8 ext_size, int i)
+{
+	struct nvme_zone_report *r = report;
+
+	return (struct nvme_zns_desc *)(report + sizeof(*r) +
+			i * (sizeof(struct nvme_zns_desc) + ext_size));
 }
 
 static void stdout_zns_report_zones(void *report, __u32 descs,
 				    __u8 ext_size, __u32 report_size,
 				    struct json_object *zone_list)
 {
+	struct shr_table_column columns_verbose[] = {
+		{ "SLBA",          LEFT, AUTO_WIDTH },
+		{ "WP",            LEFT, AUTO_WIDTH },
+		{ "Cap",           LEFT, AUTO_WIDTH },
+		{ "State",         LEFT, AUTO_WIDTH },
+		{ "Type",          LEFT, AUTO_WIDTH },
+		{ "Attrs",         LEFT, AUTO_WIDTH },
+		{ "AttrsInfo",     LEFT, AUTO_WIDTH },
+		{ "Attrs Decoded", LEFT, AUTO_WIDTH },
+	};
+	struct shr_table_column columns[] = {
+		{ "SLBA",      LEFT, AUTO_WIDTH },
+		{ "WP",        LEFT, AUTO_WIDTH },
+		{ "Cap",       LEFT, AUTO_WIDTH },
+		{ "State",     LEFT, AUTO_WIDTH },
+		{ "Type",      LEFT, AUTO_WIDTH },
+		{ "Attrs",     LEFT, AUTO_WIDTH },
+		{ "AttrsInfo", LEFT, AUTO_WIDTH },
+	};
 	struct nvme_zone_report *r = report;
 	struct nvme_zns_desc *desc;
-	int i, verbose = stdout_print_ops.flags & VERBOSE;
+	struct shr_table *t;
+	int i, row, verbose = stdout_print_ops.flags & VERBOSE;
 	__u64 nr_zones = le64_to_cpu(r->nr_zones);
 
 	if (nr_zones < descs)
 		descs = nr_zones;
 
+	if (verbose)
+		t = shr_table_init_with_columns(columns_verbose,
+						 ARRAY_SIZE(columns_verbose));
+	else
+		t = shr_table_init_with_columns(columns, ARRAY_SIZE(columns));
+	if (!t)
+		return;
+
 	for (i = 0; i < descs; i++) {
-		desc = (struct nvme_zns_desc *)
-			(report + sizeof(*r) + i * (sizeof(*desc) + ext_size));
+		char slba[24], wp[24], cap[24], attrs[8], attrsinfo[8];
+		int col = 0;
+
+		desc = stdout_zns_report_zones_desc(report, ext_size, i);
+		row = shr_table_get_row_id(t);
+
+		snprintf(slba, sizeof(slba), "%#"PRIx64,
+			 (uint64_t)le64_to_cpu(desc->zslba));
+		snprintf(wp, sizeof(wp), "%#"PRIx64,
+			 (uint64_t)le64_to_cpu(desc->wp));
+		snprintf(cap, sizeof(cap), "%#"PRIx64,
+			 (uint64_t)le64_to_cpu(desc->zcap));
+		snprintf(attrs, sizeof(attrs), "%#x", desc->za);
+		snprintf(attrsinfo, sizeof(attrsinfo), "%#x", desc->zai);
+
+		shr_table_set_value_str(t, col++, row, slba, LEFT);
+		shr_table_set_value_str(t, col++, row, wp, LEFT);
+		shr_table_set_value_str(t, col++, row, cap, LEFT);
+
 		if (verbose) {
-			printf("SLBA: %#-10"PRIx64" WP: %#-10"PRIx64" Cap: %#-10"PRIx64" State: %-12s Type: %-14s\n",
-				(uint64_t)le64_to_cpu(desc->zslba), (uint64_t)le64_to_cpu(desc->wp),
-				(uint64_t)le64_to_cpu(desc->zcap), nvme_zone_state_to_string(desc->zs >> 4),
-				nvme_zone_type_to_string(desc->zt));
-			stdout_zns_report_zone_attributes(desc->za, desc->zai);
+			const char *state =
+				nvme_zone_state_to_string(desc->zs >> 4);
+			const char *type = nvme_zone_type_to_string(desc->zt);
+
+			shr_table_set_value_str(t, col++, row, state, LEFT);
+			shr_table_set_value_str(t, col++, row, type, LEFT);
 		} else {
-			printf("SLBA: %#-10"PRIx64" WP: %#-10"PRIx64" Cap: %#-10"PRIx64" State: %#-4x Type: %#-4x Attrs: %#-4x AttrsInfo: %#-4x\n",
-				(uint64_t)le64_to_cpu(desc->zslba), (uint64_t)le64_to_cpu(desc->wp),
-				(uint64_t)le64_to_cpu(desc->zcap), desc->zs, desc->zt,
-				desc->za, desc->zai);
+			char state[8], type[8];
+
+			snprintf(state, sizeof(state), "%#x", desc->zs);
+			snprintf(type, sizeof(type), "%#x", desc->zt);
+
+			shr_table_set_value_str(t, col++, row, state, LEFT);
+			shr_table_set_value_str(t, col++, row, type, LEFT);
 		}
+
+		shr_table_set_value_str(t, col++, row, attrs, LEFT);
+		shr_table_set_value_str(t, col++, row, attrsinfo, LEFT);
+
+		if (verbose) {
+			char decoded[128];
+
+			stdout_zns_report_zone_attrs_decoded(decoded,
+					sizeof(decoded), desc->za, desc->zai);
+			shr_table_set_value_str(t, col++, row, decoded, LEFT);
+		}
+
+		shr_table_add_row(t, row);
+	}
+
+	shr_table_print_header(stdout, t);
+
+	for (i = 0; i < descs; i++) {
+		desc = stdout_zns_report_zones_desc(report, ext_size, i);
+
+		shr_table_print_row(stdout, t, i);
 
 		if (ext_size && (desc->za & NVME_ZNS_ZA_ZDEV)) {
 			printf("Extension Data: ");
@@ -4329,81 +6723,151 @@ static void stdout_zns_report_zones(void *report, __u32 descs,
 			printf("..\n");
 		}
 	}
+
+	shr_table_free(t);
 }
 
 static void stdout_list_ctrl(struct nvme_ctrl_list *ctrl_list)
 {
+	struct shr_table_column columns[] = {
+		{ "Index",         RIGHT, AUTO_WIDTH },
+		{ "Controller ID", LEFT,  AUTO_WIDTH },
+	};
 	__u16 num = le16_to_cpu(ctrl_list->num);
-	int i;
+	struct shr_table *t;
+	int i, row, n = min(num, 2047);
 
-	printf("num of ctrls present: %u\n", num);
-	for (i = 0; i < min(num, 2047); i++)
-		printf("[%4u]:%#x\n", i, le16_to_cpu(ctrl_list->identifier[i]));
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "num of ctrls present", "%u", num);
+
+	stdout_kv_table_finish(t, "list-ctrl");
+
+	if (!n)
+		return;
+
+	t = shr_table_init_with_columns(columns, ARRAY_SIZE(columns));
+	if (!t)
+		return;
+
+	for (i = 0; i < n; i++) {
+		char id[16];
+
+		row = shr_table_get_row_id(t);
+		snprintf(id, sizeof(id), "%#x",
+			 le16_to_cpu(ctrl_list->identifier[i]));
+		shr_table_set_value_int(t, 0, row, i, RIGHT);
+		shr_table_set_value_str(t, 1, row, id, LEFT);
+		shr_table_add_row(t, row);
+	}
+
+	shr_table_print(t);
+	shr_table_free(t);
 }
 
 static void stdout_id_nvmset(struct nvme_id_nvmset_list *nvmset,
 			     unsigned int nvmset_id)
 {
+	struct shr_table *t;
 	int i;
 
 	printf("NVME Identify NVM Set List %d:\n", nvmset_id);
-	printf("nid     : %d\n", nvmset->nid);
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "nid", "%d", nvmset->nid);
+
+	stdout_kv_table_finish(t, "id-nvmset");
+
 	printf(".................\n");
 	for (i = 0; i < nvmset->nid; i++) {
 		printf(" NVM Set Attribute Entry[%2d]\n", i);
 		printf(".................\n");
-		printf("nvmset_id               : %d\n",
-			le16_to_cpu(nvmset->ent[i].endgid));
-		printf("endurance_group_id      : %d\n",
-			le16_to_cpu(nvmset->ent[i].endgid));
-		printf("random_4k_read_typical  : %u\n",
-			le32_to_cpu(nvmset->ent[i].rr4kt));
-		printf("optimal_write_size      : %u\n",
-			le32_to_cpu(nvmset->ent[i].ows));
-		printf("total_nvmset_cap        : %s\n",
-			uint128_t_to_l10n_string(
-				le128_to_cpu(nvmset->ent[i].tnvmsetcap)));
-		printf("unalloc_nvmset_cap      : %s\n",
-			uint128_t_to_l10n_string(
-				le128_to_cpu(nvmset->ent[i].unvmsetcap)));
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "nvmset_id", "%d",
+			      le16_to_cpu(nvmset->ent[i].nvmsetid));
+		stdout_kv_add(t, "endurance_group_id", "%d",
+			      le16_to_cpu(nvmset->ent[i].endgid));
+		stdout_kv_add(t, "random_4k_read_typical", "%u",
+			      le32_to_cpu(nvmset->ent[i].rr4kt));
+		stdout_kv_add(t, "optimal_write_size", "%u",
+			      le32_to_cpu(nvmset->ent[i].ows));
+		stdout_kv_add(t, "total_nvmset_cap", "%s",
+			      uint128_t_to_l10n_string(le128_to_cpu(
+					nvmset->ent[i].tnvmsetcap)));
+		stdout_kv_add(t, "unalloc_nvmset_cap", "%s",
+			      uint128_t_to_l10n_string(le128_to_cpu(
+					nvmset->ent[i].unvmsetcap)));
+
+		stdout_kv_table_finish(t, "nvm-set-attribute");
+
 		printf(".................\n");
 	}
 }
 
-static void stdout_primary_ctrl_caps_crt(__u8 crt)
+static struct shr_table *stdout_primary_ctrl_caps_crt_table(__u8 crt)
 {
+	struct shr_table *t;
 	__u8 rsvd = (crt & 0xFC) >> 2;
 	__u8 vi = (crt & 0x2) >> 1;
 	__u8 vq = crt & 0x1;
 
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
 	if (rsvd)
-		printf("  [7:2] : %#x\tReserved\n", rsvd);
-	printf("  [1:1] %#x\tVI Resources are %ssupported\n", vi, vi ? "" : "not ");
-	printf("  [0:0] %#x\tVQ Resources are %ssupported\n", vq, vq ? "" : "not ");
+		stdout_bits_add(t, "[7:2]", rsvd, "Reserved");
+	stdout_bits_add(t, "[1:1]", vi, "VI Resources are %ssupported",
+			 vi ? "" : "not ");
+	stdout_bits_add(t, "[0:0]", vq, "VQ Resources are %ssupported",
+			 vq ? "" : "not ");
+
+	return t;
 }
 
 static void stdout_primary_ctrl_cap(const struct nvme_primary_ctrl_cap *caps)
 {
-	int human = stdout_print_ops.flags & VERBOSE;
+	bool verbose = stdout_print_ops.flags & VERBOSE;
+	struct shr_table *t;
+	int row;
 
 	printf("NVME Identify Primary Controller Capabilities:\n");
-	printf("cntlid    : %#x\n", le16_to_cpu(caps->cntlid));
-	printf("portid    : %#x\n", le16_to_cpu(caps->portid));
-	printf("crt       : %#x\n", caps->crt);
-	if (human)
-		stdout_primary_ctrl_caps_crt(caps->crt);
-	printf("vqfrt     : %u\n", le32_to_cpu(caps->vqfrt));
-	printf("vqrfa     : %u\n", le32_to_cpu(caps->vqrfa));
-	printf("vqrfap    : %d\n", le16_to_cpu(caps->vqrfap));
-	printf("vqprt     : %d\n", le16_to_cpu(caps->vqprt));
-	printf("vqfrsm    : %d\n", le16_to_cpu(caps->vqfrsm));
-	printf("vqgran    : %d\n", le16_to_cpu(caps->vqgran));
-	printf("vifrt     : %u\n", le32_to_cpu(caps->vifrt));
-	printf("virfa     : %u\n", le32_to_cpu(caps->virfa));
-	printf("virfap    : %d\n", le16_to_cpu(caps->virfap));
-	printf("viprt     : %d\n", le16_to_cpu(caps->viprt));
-	printf("vifrsm    : %d\n", le16_to_cpu(caps->vifrsm));
-	printf("vigran    : %d\n", le16_to_cpu(caps->vigran));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "cntlid", "%#x", le16_to_cpu(caps->cntlid));
+	stdout_kv_add(t, "portid", "%#x", le16_to_cpu(caps->portid));
+
+	row = stdout_kv_add(t, "crt", "%#x", caps->crt);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_primary_ctrl_caps_crt_table(caps->crt));
+
+	stdout_kv_add(t, "vqfrt", "%u", le32_to_cpu(caps->vqfrt));
+	stdout_kv_add(t, "vqrfa", "%u", le32_to_cpu(caps->vqrfa));
+	stdout_kv_add(t, "vqrfap", "%d", le16_to_cpu(caps->vqrfap));
+	stdout_kv_add(t, "vqprt", "%d", le16_to_cpu(caps->vqprt));
+	stdout_kv_add(t, "vqfrsm", "%d", le16_to_cpu(caps->vqfrsm));
+	stdout_kv_add(t, "vqgran", "%d", le16_to_cpu(caps->vqgran));
+	stdout_kv_add(t, "vifrt", "%u", le32_to_cpu(caps->vifrt));
+	stdout_kv_add(t, "virfa", "%u", le32_to_cpu(caps->virfa));
+	stdout_kv_add(t, "virfap", "%d", le16_to_cpu(caps->virfap));
+	stdout_kv_add(t, "viprt", "%d", le16_to_cpu(caps->viprt));
+	stdout_kv_add(t, "vifrsm", "%d", le16_to_cpu(caps->vifrsm));
+	stdout_kv_add(t, "vigran", "%d", le16_to_cpu(caps->vigran));
+
+	stdout_kv_table_finish(t, "primary-ctrl-cap");
 }
 
 static void stdout_list_secondary_ctrl(const struct nvme_secondary_ctrl_list *sc_list,
@@ -4415,54 +6879,92 @@ static void stdout_list_secondary_ctrl(const struct nvme_secondary_ctrl_list *sc
 
 	__u16 num = sc_list->num;
 	__u32 entries = min(num, count);
+	struct shr_table *t;
 	int i;
 
 	printf("Identify Secondary Controller List:\n");
-	printf("   NUMID       : Number of Identifiers           : %d\n", num);
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Number of Identifiers (NUMID)", "%d", num);
+
+	stdout_kv_table_finish(t, "secondary-ctrl-list");
 
 	for (i = 0; i < entries; i++) {
 		printf("   SCEntry[%-3d]:\n", i);
 		printf("................\n");
-		printf("     SCID      : Secondary Controller Identifier : %#.04x\n",
-				le16_to_cpu(sc_entry[i].scid));
-		printf("     PCID      : Primary Controller Identifier   : %#.04x\n",
-				le16_to_cpu(sc_entry[i].pcid));
-		printf("     SCS       : Secondary Controller State      : %#.04x (%s)\n",
-				sc_entry[i].scs,
-				state_desc[sc_entry[i].scs & 0x1]);
-		printf("     VFN       : Virtual Function Number         : %#.04x\n",
-				le16_to_cpu(sc_entry[i].vfn));
-		printf("     NVQ       : Num VQ Flex Resources Assigned  : %#.04x\n",
-				le16_to_cpu(sc_entry[i].nvq));
-		printf("     NVI       : Num VI Flex Resources Assigned  : %#.04x\n",
-				le16_to_cpu(sc_entry[i].nvi));
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		shr_table_set_indent(t, 2);
+
+		stdout_kv_add(t, "Secondary Controller Identifier (SCID)",
+			      "%#.04x", le16_to_cpu(sc_entry[i].scid));
+		stdout_kv_add(t, "Primary Controller Identifier (PCID)",
+			      "%#.04x", le16_to_cpu(sc_entry[i].pcid));
+		stdout_kv_add(t, "Secondary Controller State (SCS)",
+			      "%#.04x (%s)", sc_entry[i].scs,
+			      state_desc[sc_entry[i].scs & 0x1]);
+		stdout_kv_add(t, "Virtual Function Number (VFN)",
+			      "%#.04x", le16_to_cpu(sc_entry[i].vfn));
+		stdout_kv_add(t, "Num VQ Flex Resources Assigned (NVQ)",
+			      "%#.04x", le16_to_cpu(sc_entry[i].nvq));
+		stdout_kv_add(t, "Num VI Flex Resources Assigned (NVI)",
+			      "%#.04x", le16_to_cpu(sc_entry[i].nvi));
+
+		stdout_kv_table_finish(t, "secondary-ctrl-list");
 	}
 }
 
 static void stdout_id_ns_granularity_list(const struct nvme_id_ns_granularity_list *glist)
 {
+	struct shr_table *t;
 	int i;
 
 	printf("Identify Namespace Granularity List:\n");
-	printf("   ATTR        : Namespace Granularity Attributes: %#x\n",
-		glist->attributes);
-	printf("   NUMD        : Number of Descriptors           : %d\n",
-		glist->num_descriptors);
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Namespace Granularity Attributes (ATTR)",
+		      "%#x", glist->attributes);
+	stdout_kv_add(t, "Number of Descriptors (NUMD)",
+		      "%d", glist->num_descriptors);
+
+	stdout_kv_table_finish(t, "id-ns-granularity-list");
 
 	/* Number of Descriptors is a 0's based value */
 	for (i = 0; i <= glist->num_descriptors; i++) {
 		printf("\n     Entry[%2d] :\n", i);
 		printf("................\n");
-		printf("     NSG       : Namespace Size Granularity     : %#"PRIx64"\n",
-			le64_to_cpu(glist->entry[i].nszegran));
-		printf("     NCG       : Namespace Capacity Granularity : %#"PRIx64"\n",
-			le64_to_cpu(glist->entry[i].ncapgran));
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		shr_table_set_indent(t, 2);
+
+		stdout_kv_add(t, "Namespace Size Granularity (NSG)",
+			      "%#"PRIx64,
+			      le64_to_cpu(glist->entry[i].nszegran));
+		stdout_kv_add(t, "Namespace Capacity Granularity (NCG)",
+			      "%#"PRIx64,
+			      le64_to_cpu(glist->entry[i].ncapgran));
+
+		stdout_kv_table_finish(t, "id-ns-granularity-list");
 	}
 }
 
 static void stdout_id_uuid_list(const struct nvme_id_uuid_list *uuid_list)
 {
-	int i, human = stdout_print_ops.flags & VERBOSE;
+	bool verbose = stdout_print_ops.flags & VERBOSE;
+	struct shr_table *t;
+	int i;
 
 	printf("NVME Identify UUID:\n");
 
@@ -4474,7 +6976,7 @@ static void stdout_id_uuid_list(const struct nvme_id_uuid_list *uuid_list)
 		if (memcmp(uuid_list->entry[i].uuid, zero_uuid, NVME_UUID_LEN) == 0)
 			break;
 		memcpy(&uuid, uuid_list->entry[i].uuid, NVME_UUID_LEN);
-		if (human) {
+		if (verbose) {
 			switch (identifier_association) {
 			case 0x0:
 				association = "No association reported";
@@ -4490,79 +6992,167 @@ static void stdout_id_uuid_list(const struct nvme_id_uuid_list *uuid_list)
 				break;
 			}
 		}
-		printf(" Entry[%3d]\n", i+1);
+
+		printf(" Entry[%3d]\n", i + 1);
 		printf(".................\n");
-		printf("association  : %#x %s\n", identifier_association, association);
-		printf("UUID         : %s", shr_uuid_to_string(uuid));
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "association", "%#x %s",
+			      identifier_association, association);
+
 		if (memcmp(uuid_list->entry[i].uuid, invalid_uuid,
 			   sizeof(zero_uuid)) == 0)
-			printf(" (Invalid UUID)");
-		printf("\n.................\n");
+			stdout_kv_add(t, "UUID", "%s (Invalid UUID)",
+				      shr_uuid_to_string(uuid));
+		else
+			stdout_kv_add(t, "UUID", "%s",
+				      shr_uuid_to_string(uuid));
+
+		stdout_kv_table_finish(t, "id-uuid-list");
+
+		printf(".................\n");
 	}
 }
 
 static void stdout_id_domain_list(struct nvme_id_domain_list *id_dom)
 {
+	struct shr_table *t;
 	int i;
 
-	printf("Number of Domain Entries: %u\n", id_dom->num);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Number of Domain Entries", "%u", id_dom->num);
+
 	for (i = 0; i < id_dom->num; i++) {
-		printf("Domain Id for Attr Entry[%u]: %u\n", i,
-			le16_to_cpu(id_dom->domain_attr[i].dom_id));
-		printf("Domain Capacity for Attr Entry[%u]: %s\n", i,
-			uint128_t_to_l10n_string(
-				le128_to_cpu(id_dom->domain_attr[i].dom_cap)));
-		printf("Unallocated Domain Capacity for Attr Entry[%u]: %s\n", i,
-			uint128_t_to_l10n_string(
-				le128_to_cpu(id_dom->domain_attr[i].unalloc_dom_cap)));
-		printf("Max Endurance Group Domain Capacity for Attr Entry[%u]: %s\n", i,
-			uint128_t_to_l10n_string(
-				le128_to_cpu(id_dom->domain_attr[i].max_egrp_dom_cap)));
+		struct nvme_id_domain_attr *attr = &id_dom->domain_attr[i];
+		char name[64];
+
+		snprintf(name, sizeof(name), "Domain Id for Attr Entry[%u]", i);
+		stdout_kv_add(t, name, "%u", le16_to_cpu(attr->dom_id));
+
+		snprintf(name, sizeof(name),
+			 "Domain Capacity for Attr Entry[%u]", i);
+		stdout_kv_add(t, name, "%s", uint128_t_to_l10n_string(
+			      le128_to_cpu(attr->dom_cap)));
+
+		snprintf(name, sizeof(name),
+			 "Unallocated Domain Capacity for Attr Entry[%u]", i);
+		stdout_kv_add(t, name, "%s", uint128_t_to_l10n_string(
+			      le128_to_cpu(attr->unalloc_dom_cap)));
+
+		snprintf(name, sizeof(name),
+			 "Max Endurance Group Domain Capacity for Attr Entry[%u]",
+			 i);
+		stdout_kv_add(t, name, "%s", uint128_t_to_l10n_string(
+			      le128_to_cpu(attr->max_egrp_dom_cap)));
 	}
+
+	stdout_kv_table_finish(t, "id-domain-list");
 }
 
 static void stdout_endurance_group_list(struct nvme_id_endurance_group_list *endgrp_list)
 {
-	int i;
+	struct shr_table_column columns[] = {
+		{ "Index",               RIGHT, AUTO_WIDTH },
+		{ "Endurance Group ID",  LEFT,  AUTO_WIDTH },
+	};
 	__u16 num = le16_to_cpu(endgrp_list->num);
+	struct shr_table *t;
+	int i, row, n = min(num, 2047);
 
-	printf("num of endurance group ids: %u\n", num);
-	for (i = 0; i < min(num, 2047); i++)
-		printf("[%4u]:%#x\n", i, le16_to_cpu(endgrp_list->identifier[i]));
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "num of endurance group ids", "%u", num);
+
+	stdout_kv_table_finish(t, "endurance-group-list");
+
+	if (!n)
+		return;
+
+	t = shr_table_init_with_columns(columns, ARRAY_SIZE(columns));
+	if (!t)
+		return;
+
+	for (i = 0; i < n; i++) {
+		char id[16];
+
+		row = shr_table_get_row_id(t);
+		snprintf(id, sizeof(id), "%#x",
+			 le16_to_cpu(endgrp_list->identifier[i]));
+		shr_table_set_value_int(t, 0, row, i, RIGHT);
+		shr_table_set_value_str(t, 1, row, id, LEFT);
+		shr_table_add_row(t, row);
+	}
+
+	shr_table_print(t);
+	shr_table_free(t);
 }
 
-static void stdout_id_iocs_iocsc(__u64 iocsc)
+static struct shr_table *stdout_id_iocs_iocsc_table(__u64 iocsc)
 {
+	struct shr_table *t;
 	__u8 cpncs = NVME_GET(iocsc, IOCS_IOCSC_CPNCS);
 	__u8 slmcs = NVME_GET(iocsc, IOCS_IOCSC_SLMCS);
 	__u8 znscs = NVME_GET(iocsc, IOCS_IOCSC_ZNSCS);
 	__u8 kvcs = NVME_GET(iocsc, IOCS_IOCSC_KVCS);
 	__u8 nvmcs = NVME_GET(iocsc, IOCS_IOCSC_NVMCS);
 
-	printf("  [4:4] : %#x\tComputational Programs Namespace Command Set %sSelected\n",
-		cpncs, cpncs ? "" : "Not ");
-	printf("  [3:3] : %#x\tSubsystem Local Memory Command Set %sSelected\n", slmcs,
-		slmcs ? "" : "Not ");
-	printf("  [2:2] : %#x\tZoned Namespace Command Set %sSelected\n", znscs,
-		znscs ? "" : "Not ");
-	printf("  [1:1] : %#x\tKey Value Command Set %sSelected\n", kvcs, kvcs ? "" : "Not ");
-	printf("  [0:0] : %#x\tNVM Command Set %sSelected\n", nvmcs, nvmcs ? "" : "Not ");
-	printf("\n");
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[4:4]", cpncs,
+			"Computational Programs Namespace Command Set %sSelected",
+			cpncs ? "" : "Not ");
+	stdout_bits_add(t, "[3:3]", slmcs,
+			"Subsystem Local Memory Command Set %sSelected",
+			slmcs ? "" : "Not ");
+	stdout_bits_add(t, "[2:2]", znscs,
+			"Zoned Namespace Command Set %sSelected",
+			znscs ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", kvcs, "Key Value Command Set %sSelected",
+			kvcs ? "" : "Not ");
+	stdout_bits_add(t, "[0:0]", nvmcs, "NVM Command Set %sSelected",
+			nvmcs ? "" : "Not ");
+
+	return t;
 }
 
 static void stdout_id_iocs(struct nvme_id_iocs *iocs)
 {
-	bool human = stdout_print_ops.flags & VERBOSE;
+	bool verbose = stdout_print_ops.flags & VERBOSE;
+	struct shr_table *t;
+	int row;
 	__u16 i;
 
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
 	for (i = 0; i < ARRAY_SIZE(iocs->iocsc); i++) {
-		if (iocs->iocsc[i]) {
-			printf("I/O Command Set Combination[%u]:%"PRIx64"\n", i,
-				(uint64_t)le64_to_cpu(iocs->iocsc[i]));
-			if (human)
-				stdout_id_iocs_iocsc(le64_to_cpu(iocs->iocsc[i]));
-		}
+		char name[48];
+		__u64 iocsc;
+
+		if (!iocs->iocsc[i])
+			continue;
+
+		iocsc = le64_to_cpu(iocs->iocsc[i]);
+		snprintf(name, sizeof(name), "I/O Command Set Combination[%u]",
+			 i);
+		row = stdout_kv_add(t, name, "%"PRIx64, iocsc);
+		if (verbose)
+			shr_table_set_row_subtable(t, row,
+				stdout_id_iocs_iocsc_table(iocsc));
 	}
+
+	stdout_kv_table_finish(t, "id-iocs");
 }
 
 static void stdout_error_log(struct nvme_error_log_page *err_log, int entries,
@@ -4573,6 +7163,7 @@ static void stdout_error_log(struct nvme_error_log_page *err_log, int entries,
 	int i;
 	__u16 status;
 	__u16 sts;
+	struct shr_table *t;
 
 	printf("Error Log Entries for device:%s entries:%d\n", devname,
 	       entries);
@@ -4588,29 +7179,38 @@ static void stdout_error_log(struct nvme_error_log_page *err_log, int entries,
 
 		printf(" Entry[%2d]\n", i);
 		printf(".................\n");
-		printf("error_count	: %"PRIu64"\n",
-		       le64_to_cpu(err_log[i].error_count));
-		printf("sqid		: %d\n", le16_to_cpu(err_log[i].sqid));
-		printf("cmdid		: %#x\n",
-		       le16_to_cpu(err_log[i].cmdid));
-		printf("status_field	: %#x (%s)\n", status,
-		       libnvme_status_to_string(status, false));
-		printf("phase_tag	: %#x\n", NVME_ERR_SF_PHASE_TAG(sts));
-		printf("parm_err_loc	: %#x\n",
-		       le16_to_cpu(err_log[i].parm_error_location));
-		printf("lba		: %#"PRIx64"\n",
-		       le64_to_cpu(err_log[i].lba));
-		printf("nsid		: %#x\n", le32_to_cpu(err_log[i].nsid));
-		printf("vs		: %d\n", err_log[i].vs);
-		printf("trtype		: %#x (%s)\n", err_log[i].trtype,
-		       nvme_trtype_to_string(err_log[i].trtype));
-		printf("csi		: %d\n", err_log[i].csi);
-		printf("opcode		: %#x\n", err_log[i].opcode);
-		printf("cs		: %#"PRIx64"\n",
-		       le64_to_cpu(err_log[i].cs));
-		printf("trtype_spec_info: %#x\n",
-		       le16_to_cpu(err_log[i].trtype_spec_info));
-		printf("log_page_version: %d\n", err_log[i].log_page_version);
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "error_count", "%"PRIu64,
+			      le64_to_cpu(err_log[i].error_count));
+		stdout_kv_add(t, "sqid", "%d", le16_to_cpu(err_log[i].sqid));
+		stdout_kv_add(t, "cmdid", "%#x",
+			      le16_to_cpu(err_log[i].cmdid));
+		stdout_kv_add(t, "status_field", "%#x (%s)", status,
+			      libnvme_status_to_string(status, false));
+		stdout_kv_add(t, "phase_tag", "%#x",
+			      NVME_ERR_SF_PHASE_TAG(sts));
+		stdout_kv_add(t, "parm_err_loc", "%#x",
+			      le16_to_cpu(err_log[i].parm_error_location));
+		stdout_kv_add(t, "lba", "%#"PRIx64,
+			      le64_to_cpu(err_log[i].lba));
+		stdout_kv_add(t, "nsid", "%#x", le32_to_cpu(err_log[i].nsid));
+		stdout_kv_add(t, "vs", "%d", err_log[i].vs);
+		stdout_kv_add(t, "trtype", "%#x (%s)", err_log[i].trtype,
+			      nvme_trtype_to_string(err_log[i].trtype));
+		stdout_kv_add(t, "csi", "%d", err_log[i].csi);
+		stdout_kv_add(t, "opcode", "%#x", err_log[i].opcode);
+		stdout_kv_add(t, "cs", "%#"PRIx64, le64_to_cpu(err_log[i].cs));
+		stdout_kv_add(t, "trtype_spec_info", "%#x",
+			      le16_to_cpu(err_log[i].trtype_spec_info));
+		stdout_kv_add(t, "log_page_version", "%d",
+			      err_log[i].log_page_version);
+
+		stdout_kv_table_finish(t, "error-log");
+
 		printf(".................\n");
 	}
 
@@ -4621,15 +7221,24 @@ static void stdout_error_log(struct nvme_error_log_page *err_log, int entries,
 static void stdout_resv_report(struct nvme_resv_status *status, int bytes,
 			       bool eds)
 {
+	struct shr_table *t;
 	int i, j, regstrnt, entries;
+	char hex[33], *hp;
 
 	regstrnt = status->regstrnt[0] | (status->regstrnt[1] << 8);
 
 	printf("\nNVME Reservation status:\n\n");
-	printf("gen       : %u\n", le32_to_cpu(status->gen));
-	printf("rtype     : %d\n", status->rtype);
-	printf("regstrnt  : %d\n", regstrnt);
-	printf("ptpls     : %d\n", status->ptpls);
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "gen", "%u", le32_to_cpu(status->gen));
+	stdout_kv_add(t, "rtype", "%d", status->rtype);
+	stdout_kv_add(t, "regstrnt", "%d", regstrnt);
+	stdout_kv_add(t, "ptpls", "%d", status->ptpls);
+
+	stdout_kv_table_finish(t, "resv-report");
 
 	/* check Extended Data Structure bit */
 	if (!eds) {
@@ -4642,15 +7251,24 @@ static void stdout_resv_report(struct nvme_resv_status *status, int bytes,
 			regstrnt = entries;
 
 		for (i = 0; i < regstrnt; i++) {
+			struct nvme_registrant *reg = &status->registrant_ds[i];
+
 			printf("registrant[%d] :\n", i);
-			printf("  cntlid  : %x\n",
-				le16_to_cpu(status->registrant_ds[i].cntlid));
-			printf("  rcsts   : %x\n",
-				status->registrant_ds[i].rcsts);
-			printf("  hostid  : %"PRIx64"\n",
-				le64_to_cpu(status->registrant_ds[i].hostid));
-			printf("  rkey    : %"PRIx64"\n",
-				le64_to_cpu(status->registrant_ds[i].rkey));
+
+			t = stdout_kv_table_create();
+			if (!t)
+				return;
+			shr_table_set_indent(t, 2);
+
+			stdout_kv_add(t, "cntlid", "%x",
+				      le16_to_cpu(reg->cntlid));
+			stdout_kv_add(t, "rcsts", "%x", reg->rcsts);
+			stdout_kv_add(t, "hostid", "%"PRIx64,
+				      le64_to_cpu(reg->hostid));
+			stdout_kv_add(t, "rkey", "%"PRIx64,
+				      le64_to_cpu(reg->rkey));
+
+			stdout_kv_table_finish(t, "registrant");
 		}
 	} else {
 		/* if status buffer was too small, don't loop past the end of the buffer */
@@ -4659,18 +7277,28 @@ static void stdout_resv_report(struct nvme_resv_status *status, int bytes,
 			regstrnt = entries;
 
 		for (i = 0; i < regstrnt; i++) {
+			struct nvme_registrant_ext *reg =
+				&status->registrant_eds[i];
+
 			printf("registrantext[%d] :\n", i);
-			printf("  cntlid     : %x\n",
-				le16_to_cpu(status->registrant_eds[i].cntlid));
-			printf("  rcsts      : %x\n",
-				status->registrant_eds[i].rcsts);
-			printf("  rkey       : %"PRIx64"\n",
-				le64_to_cpu(status->registrant_eds[i].rkey));
-			printf("  hostid     : ");
+
+			t = stdout_kv_table_create();
+			if (!t)
+				return;
+			shr_table_set_indent(t, 2);
+
+			stdout_kv_add(t, "cntlid", "%x",
+				      le16_to_cpu(reg->cntlid));
+			stdout_kv_add(t, "rcsts", "%x", reg->rcsts);
+			stdout_kv_add(t, "rkey", "%"PRIx64,
+				      le64_to_cpu(reg->rkey));
+
+			hp = hex;
 			for (j = 0; j < 16; j++)
-				printf("%02x",
-					status->registrant_eds[i].hostid[j]);
-			printf("\n");
+				hp += sprintf(hp, "%02x", reg->hostid[j]);
+			stdout_kv_add(t, "hostid", "%s", hex);
+
+			stdout_kv_table_finish(t, "registrant");
 		}
 	}
 	printf("\n");
@@ -4679,338 +7307,557 @@ static void stdout_resv_report(struct nvme_resv_status *status, int bytes,
 static void stdout_fw_log(struct nvme_firmware_slot *fw_log,
 			  const char *devname)
 {
-	int i;
+	struct shr_table *t;
 	__le64 *frs;
+	char name[8];
+	int i;
 
 	printf("Firmware Log for device:%s\n", devname);
-	printf("afi  : %#x\n", fw_log->afi);
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "afi", "%#x", fw_log->afi);
 	for (i = 0; i < 7; i++) {
 		if (fw_log->frs[i][0]) {
 			frs = (__le64 *)&fw_log->frs[i];
-			printf("frs%d : %#016"PRIx64" (%s)\n", i + 1,
-				le64_to_cpu(*frs),
-				shr_fw_to_string(fw_log->frs[i]));
+			snprintf(name, sizeof(name), "frs%d", i + 1);
+			stdout_kv_add(t, name, "%#016"PRIx64" (%s)",
+				      le64_to_cpu(*frs),
+				      shr_fw_to_string(fw_log->frs[i]));
 		}
 	}
+
+	stdout_kv_table_finish(t, "fw-log");
 }
 
 static void stdout_changed_ns_list_log(struct nvme_ns_list *log, const char *devname, bool alloc)
 {
+	struct shr_table_column columns[] = {
+		{ "Index", RIGHT, AUTO_WIDTH },
+		{ "NSID",  LEFT,  AUTO_WIDTH },
+	};
+	struct shr_table *t;
 	__u32 nsid;
-	int i;
+	int i, row;
+	bool changed = false, terminated = false;
 
-	if (log->ns[0] != cpu_to_le32(NVME_NSID_ALL)) {
-		for (i = 0; i < NVME_ID_NS_LIST_MAX; i++) {
-			nsid = le32_to_cpu(log->ns[i]);
-			if (nsid == 0) {
-				printf("no ns changed\n");
-				break;
-			}
+	if (log->ns[0] == cpu_to_le32(NVME_NSID_ALL)) {
+		printf("more than %d ns changed\n", NVME_ID_NS_LIST_MAX);
+		return;
+	}
 
-			printf("[%4u]:%#x\n", i, nsid);
+	t = shr_table_init_with_columns(columns, ARRAY_SIZE(columns));
+	if (!t)
+		return;
+
+	for (i = 0; i < NVME_ID_NS_LIST_MAX; i++) {
+		char id[16];
+
+		nsid = le32_to_cpu(log->ns[i]);
+		if (nsid == 0) {
+			terminated = true;
+			break;
 		}
-	} else
-		printf("more than %d ns changed\n",
-			NVME_ID_NS_LIST_MAX);
-}
 
-static void stdout_effects_log_human(__u32 effect)
-{
-	const char *set = "+";
-	const char *clr = "-";
-
-	printf("  CSUPP+");
-	printf("  LBCC%s", (effect & NVME_CMD_EFFECTS_LBCC) ? set : clr);
-	printf("  NCC%s", (effect & NVME_CMD_EFFECTS_NCC) ? set : clr);
-	printf("  NIC%s", (effect & NVME_CMD_EFFECTS_NIC) ? set : clr);
-	printf("  CCC%s", (effect & NVME_CMD_EFFECTS_CCC) ? set : clr);
-	printf("  USS%s", (effect & NVME_CMD_EFFECTS_UUID_SEL) ? set : clr);
-
-	switch (NVME_CMD_EFFECTS_CSER(effect)) {
-	case 0:
-		printf("  No CSER defined\n");
-		break;
-	case 1:
-		printf("  No admin command for any namespace\n");
-		break;
-	default:
-		printf("  Reserved CSER\n");
+		changed = true;
+		row = shr_table_get_row_id(t);
+		snprintf(id, sizeof(id), "%#x", nsid);
+		shr_table_set_value_int(t, 0, row, i, RIGHT);
+		shr_table_set_value_str(t, 1, row, id, LEFT);
+		shr_table_add_row(t, row);
 	}
 
-	switch (NVME_CMD_EFFECTS_CSE(effect)) {
-	case 0:
-		printf("  No command restriction\n");
-		break;
-	case 1:
-		printf("  No other command for same namespace\n");
-		break;
-	case 2:
-		printf("  No other command for any namespace\n");
-		break;
-	default:
-		printf("  Reserved CSE\n");
-	}
+	if (changed)
+		shr_table_print(t);
+	shr_table_free(t);
+
+	/*
+	 * The terminating 0 can appear at any index, not just index 0, so
+	 * this can print after a non-empty list too -- matches old behavior.
+	 */
+	if (terminated)
+		printf("no ns changed\n");
 }
 
-static void stdout_effects_entry(int admin, int index,
-				 __le32 entry, unsigned int human)
+static void stdout_effects_entry_decoded(char *buf, size_t len, __u32 effect)
 {
-	__u32 effect;
-	char *format_string;
+	static const char * const cser_desc[] = {
+		"No CSER defined",
+		"No admin command for any namespace",
+	};
+	static const char * const cse_desc[] = {
+		"No command restriction",
+		"No other command for same namespace",
+		"No other command for any namespace",
+	};
+	__u8 cser = NVME_CMD_EFFECTS_CSER(effect);
+	__u8 cse = NVME_CMD_EFFECTS_CSE(effect);
+	const char *parts[7];
+	int n = 0, i;
 
-	format_string = admin ? "ACS%-6d[%-32s] %08x" : "IOCS%-5d[%-32s] %08x";
+	if (effect & NVME_CMD_EFFECTS_LBCC)
+		parts[n++] = "LBCC";
+	if (effect & NVME_CMD_EFFECTS_NCC)
+		parts[n++] = "NCC";
+	if (effect & NVME_CMD_EFFECTS_NIC)
+		parts[n++] = "NIC";
+	if (effect & NVME_CMD_EFFECTS_CCC)
+		parts[n++] = "CCC";
+	if (effect & NVME_CMD_EFFECTS_UUID_SEL)
+		parts[n++] = "USS";
+	parts[n++] = cser < ARRAY_SIZE(cser_desc) ? cser_desc[cser] :
+						     "Reserved CSER";
+	parts[n++] = cse < ARRAY_SIZE(cse_desc) ? cse_desc[cse] :
+						  "Reserved CSE";
 
-	effect = le32_to_cpu(entry);
-	if (effect & NVME_CMD_EFFECTS_CSUPP) {
-		printf(format_string, index, nvme_cmd_to_string(admin, index),
-		       effect);
-		if (human)
-			stdout_effects_log_human(effect);
-		else
-			printf("\n");
+	buf[0] = '\0';
+	for (i = 0; i < n; i++) {
+		if (i)
+			strncat(buf, ", ", len - strlen(buf) - 1);
+		strncat(buf, parts[i], len - strlen(buf) - 1);
 	}
 }
 
-static void stdout_effects_log_segment(int admin, int a, int b,
-				       struct nvme_cmd_effects_log *effects,
-				       char *header, int human)
+static struct shr_table *stdout_effects_log_segment_build(int admin, int a,
+		int b, struct nvme_cmd_effects_log *effects, int verbose)
 {
-	bool printed_header = false;
+	struct shr_table_column columns_verbose[] = {
+		{ "ID",      LEFT, AUTO_WIDTH },
+		{ "Command", LEFT, AUTO_WIDTH },
+		{ "Effects", LEFT, AUTO_WIDTH },
+		{ "Decoded", LEFT, AUTO_WIDTH },
+	};
+	struct shr_table_column columns[] = {
+		{ "ID",      LEFT, AUTO_WIDTH },
+		{ "Command", LEFT, AUTO_WIDTH },
+		{ "Effects", LEFT, AUTO_WIDTH },
+	};
+	struct shr_table *t;
+	bool has_entries = false;
+	int i, row;
 
-	for (int i = a; i < b; i++) {
-		__le32 entry;
-		__u32 effect;
+	if (verbose)
+		t = shr_table_init_with_columns(columns_verbose,
+						 ARRAY_SIZE(columns_verbose));
+	else
+		t = shr_table_init_with_columns(columns, ARRAY_SIZE(columns));
+	if (!t)
+		return NULL;
 
-		entry = admin ? effects->acs[i] : effects->iocs[i];
-		effect = le32_to_cpu(entry);
+	for (i = a; i < b; i++) {
+		__le32 entry = admin ? effects->acs[i] : effects->iocs[i];
+		__u32 effect = le32_to_cpu(entry);
+		char id[16], hex[16];
+		int col = 0;
 
 		if (!(effect & NVME_CMD_EFFECTS_CSUPP))
 			continue;
 
-		if (!printed_header && header) {
-			printf("%s\n", header);
-			printed_header = true;
-		}
+		has_entries = true;
+		snprintf(id, sizeof(id), "%s%d", admin ? "ACS" : "IOCS", i);
+		snprintf(hex, sizeof(hex), "%08x", effect);
 
-		stdout_effects_entry(admin, i, entry, human);
+		row = shr_table_get_row_id(t);
+		shr_table_set_value_str(t, col++, row, id, LEFT);
+		shr_table_set_value_str(t, col++, row,
+					 nvme_cmd_to_string(admin, i), LEFT);
+		shr_table_set_value_str(t, col++, row, hex, LEFT);
+		if (verbose) {
+			char decoded[128];
+
+			stdout_effects_entry_decoded(decoded,
+						      sizeof(decoded), effect);
+			shr_table_set_value_str(t, col++, row, decoded, LEFT);
+		}
+		shr_table_add_row(t, row);
 	}
 
-	if (printed_header)
-		printf("\n");
+	if (!has_entries) {
+		shr_table_free(t);
+		return NULL;
+	}
+
+	return t;
 }
 
-static void stdout_effects_log_page(enum nvme_csi csi,
-				    struct nvme_cmd_effects_log *effects)
+static void stdout_effects_align_tables(struct shr_table **tables, int n,
+		int num_columns)
 {
-	int human = stdout_print_ops.flags & VERBOSE;
+	int col, i, width;
 
-	switch (csi) {
-	case NVME_CSI_NVM:
-		printf("NVM Command Set Log Page\n");
-		printf("%-.80s\n", dash);
-		break;
-	case NVME_CSI_KV:
-		printf("KV Command Set Log Page\n");
-		printf("%-.80s\n", dash);
-		break;
-	case NVME_CSI_ZNS:
-		printf("ZNS Command Set Log Page\n");
-		printf("%-.80s\n", dash);
-		break;
-	default:
-		printf("Unknown Command Set Log Page\n");
-		printf("%-.80s\n", dash);
-		break;
+	for (col = 0; col < num_columns; col++) {
+		width = 0;
+		for (i = 0; i < n; i++) {
+			int w;
+
+			if (!tables[i])
+				continue;
+			w = shr_table_get_column_width(tables[i], col);
+			if (w > width)
+				width = w;
+		}
+		for (i = 0; i < n; i++) {
+			if (tables[i])
+				shr_table_set_column_width(tables[i], col,
+							    width);
+		}
 	}
-
-	stdout_effects_log_segment(1, 0, 0xbf, effects, "Admin Commands", human);
-	stdout_effects_log_segment(1, 0xc0, 0xff, effects, "Vendor Specific Admin Commands", human);
-	stdout_effects_log_segment(0, 0, 0x80, effects, "I/O Commands", human);
-	stdout_effects_log_segment(0, 0x80, 0x100, effects, "Vendor Specific I/O Commands", human);
 }
 
 static void stdout_effects_log_pages(struct list_head *list)
 {
+	static const char * const headers[4] = {
+		"Admin Commands",
+		"Vendor Specific Admin Commands",
+		"I/O Commands",
+		"Vendor Specific I/O Commands",
+	};
 	nvme_effects_log_node_t *node = NULL;
+	int verbose = stdout_print_ops.flags & VERBOSE;
+	int num_columns = verbose ? 4 : 3;
+	struct shr_table **segs;
+	int count = 0, idx, i;
 
+	list_for_each(list, node, node)
+		count++;
+	if (!count)
+		return;
+
+	segs = calloc(count * 4, sizeof(*segs));
+	if (!segs)
+		return;
+
+	idx = 0;
 	list_for_each(list, node, node) {
-		stdout_effects_log_page(node->csi, &node->effects);
+		segs[idx * 4 + 0] = stdout_effects_log_segment_build(1, 0,
+				0xbf, &node->effects, verbose);
+		segs[idx * 4 + 1] = stdout_effects_log_segment_build(1, 0xc0,
+				0xff, &node->effects, verbose);
+		segs[idx * 4 + 2] = stdout_effects_log_segment_build(0, 0,
+				0x80, &node->effects, verbose);
+		segs[idx * 4 + 3] = stdout_effects_log_segment_build(0, 0x80,
+				0x100, &node->effects, verbose);
+		idx++;
 	}
+
+	stdout_effects_align_tables(segs, count * 4, num_columns);
+
+	idx = 0;
+	list_for_each(list, node, node) {
+		switch (node->csi) {
+		case NVME_CSI_NVM:
+			printf("NVM Command Set Log Page\n");
+			break;
+		case NVME_CSI_KV:
+			printf("KV Command Set Log Page\n");
+			break;
+		case NVME_CSI_ZNS:
+			printf("ZNS Command Set Log Page\n");
+			break;
+		default:
+			printf("Unknown Command Set Log Page\n");
+			break;
+		}
+		printf("%-.80s\n", dash);
+
+		for (i = 0; i < 4; i++) {
+			struct shr_table *t = segs[idx * 4 + i];
+
+			if (!t)
+				continue;
+			printf("%s\n", headers[i]);
+			shr_table_print(t);
+			shr_table_free(t);
+			printf("\n");
+		}
+		idx++;
+	}
+
+	free(segs);
 }
 
-static void stdout_support_log_human(__u32 support, __u8 lid)
+static struct shr_table *
+stdout_support_log_verbose_table(__u32 support, __u8 lid)
 {
-	const char *set = "supported";
-	const char *clr = "not supported";
+	struct shr_table *t;
 	__u16 lidsp = support >> 16;
 
-	printf("  LSUPP is %s\n", (support & 0x1) ? set : clr);
-	printf("  IOS is %s\n", ((support >> 0x1) & 0x1) ? set : clr);
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[0:0]", support & 0x1, "LSUPP is %sSupported",
+			(support & 0x1) ? "" : "Not ");
+	stdout_bits_add(t, "[1:1]", (support >> 0x1) & 0x1,
+			"IOS is %sSupported",
+			((support >> 0x1) & 0x1) ? "" : "Not ");
 
 	switch (lid) {
 	case NVME_LOG_LID_TELEMETRY_HOST:
-		printf("  Maximum Created Data Area is %s\n",
-			(lidsp & 0x1) ? set : clr);
+		stdout_bits_add(t, "[16:16]", lidsp & 0x1,
+				"Maximum Created Data Area is %sSupported",
+				(lidsp & 0x1) ? "" : "Not ");
 		break;
 	case NVME_LOG_LID_PERSISTENT_EVENT:
-		printf("  Establish Context and Read 512 Bytes of Header is %s\n",
-			(lidsp & 0x1) ? set : clr);
+		stdout_bits_add(t, "[16:16]", lidsp & 0x1,
+				"Establish Context and Read 512 Bytes of Header is %sSupported",
+				(lidsp & 0x1) ? "" : "Not ");
 		break;
 	case NVME_LOG_LID_DISCOVERY:
-		printf("  Extended Discovery Log Page Entry is %s\n",
-			(lidsp & 0x1) ? set : clr);
-		printf("  Port Local Entries Only is %s\n",
-			(lidsp & 0x2) ? set : clr);
-		printf("  All NVM Subsystem Entries is %s\n",
-			(lidsp & 0x4) ? set : clr);
+		stdout_bits_add(t, "[16:16]", lidsp & 0x1,
+				"Extended Discovery Log Page Entry is %sSupported",
+				(lidsp & 0x1) ? "" : "Not ");
+		stdout_bits_add(t, "[17:17]", (lidsp >> 1) & 0x1,
+				"Port Local Entries Only is %sSupported",
+				((lidsp >> 1) & 0x1) ? "" : "Not ");
+		stdout_bits_add(t, "[18:18]", (lidsp >> 2) & 0x1,
+				"All NVM Subsystem Entries is %sSupported",
+				((lidsp >> 2) & 0x1) ? "" : "Not ");
 		break;
 	case NVME_LOG_LID_HOST_DISCOVERY:
-		printf("  All Host Entries is %s\n",
-			(lidsp & 0x1) ? set : clr);
+		stdout_bits_add(t, "[16:16]", lidsp & 0x1,
+				"All Host Entries is %sSupported",
+				(lidsp & 0x1) ? "" : "Not ");
 		break;
 	default:
 		break;
 	}
+
+	return t;
 }
 
 static void stdout_supported_log(struct nvme_supported_log_pages *support_log,
 				 const char *devname)
 {
-	int lid, human = stdout_print_ops.flags & VERBOSE;
+	int lid, verbose = stdout_print_ops.flags & VERBOSE;
 	__u32 support = 0;
+	struct shr_table *t;
 
 	printf("Support Log Pages Details for %s:\n", devname);
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
 	for (lid = 0; lid < 256; lid++) {
 		support = le32_to_cpu(support_log->lid_support[lid]);
 		if (support & 0x1) {
-			printf("LID %#x - %s\n", lid, nvme_log_to_string(lid));
-			if (human)
-				stdout_support_log_human(support, lid);
+			char name[16];
+			int row;
+
+			snprintf(name, sizeof(name), "LID %#x", lid);
+			row = stdout_kv_add(t, name, "%s",
+					     nvme_log_to_string(lid));
+			if (verbose)
+				shr_table_set_row_subtable(t, row,
+					stdout_support_log_verbose_table(
+						support, lid));
 		}
 	}
+
+	stdout_kv_table_finish(t, "supported-log");
 }
 
-static void stdout_endurance_log(struct nvme_endurance_group_log *endurance_log, __u16 group_id,
-				 const char *devname)
+static void stdout_endurance_log(struct nvme_endurance_group_log *el,
+				 __u16 group_id, const char *devname)
 {
+	struct shr_table *t;
+
 	printf("Endurance Group Log for NVME device:%s Group ID:%x\n", devname, group_id);
-	printf("critical_warning	: %u\n", endurance_log->critical_warning);
-	printf("endurance_group_features: %u\n", endurance_log->endurance_group_features);
-	printf("avl_spare		: %u\n", endurance_log->avl_spare);
-	printf("avl_spare_threshold	: %u\n", endurance_log->avl_spare_threshold);
-	printf("percent_used		: %u%%\n", endurance_log->percent_used);
-	printf("domain_identifier	: %u\n", endurance_log->domain_identifier);
-	printf("endurance_estimate	: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(endurance_log->endurance_estimate)));
-	printf("data_units_read		: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(endurance_log->data_units_read)));
-	printf("data_units_written	: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(endurance_log->data_units_written)));
-	printf("media_units_written	: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(endurance_log->media_units_written)));
-	printf("host_read_cmds		: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(endurance_log->host_read_cmds)));
-	printf("host_write_cmds		: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(endurance_log->host_write_cmds)));
-	printf("media_data_integrity_err: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(endurance_log->media_data_integrity_err)));
-	printf("num_err_info_log_entries: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(endurance_log->num_err_info_log_entries)));
-	printf("total_end_grp_cap	: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(endurance_log->total_end_grp_cap)));
-	printf("unalloc_end_grp_cap	: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(endurance_log->unalloc_end_grp_cap)));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "critical_warning", "%u", el->critical_warning);
+	stdout_kv_add(t, "endurance_group_features", "%u",
+		      el->endurance_group_features);
+	stdout_kv_add(t, "avl_spare", "%u", el->avl_spare);
+	stdout_kv_add(t, "avl_spare_threshold", "%u", el->avl_spare_threshold);
+	stdout_kv_add(t, "percent_used", "%u%%", el->percent_used);
+	stdout_kv_add(t, "domain_identifier", "%u", el->domain_identifier);
+	stdout_kv_add(t, "endurance_estimate", "%s",
+		      uint128_t_to_l10n_string(
+			      le128_to_cpu(el->endurance_estimate)));
+	stdout_kv_add(t, "data_units_read", "%s",
+		      uint128_t_to_l10n_string(
+			      le128_to_cpu(el->data_units_read)));
+	stdout_kv_add(t, "data_units_written", "%s",
+		      uint128_t_to_l10n_string(
+			      le128_to_cpu(el->data_units_written)));
+	stdout_kv_add(t, "media_units_written", "%s",
+		      uint128_t_to_l10n_string(
+			      le128_to_cpu(el->media_units_written)));
+	stdout_kv_add(t, "host_read_cmds", "%s",
+		      uint128_t_to_l10n_string(
+			      le128_to_cpu(el->host_read_cmds)));
+	stdout_kv_add(t, "host_write_cmds", "%s",
+		      uint128_t_to_l10n_string(
+			      le128_to_cpu(el->host_write_cmds)));
+	stdout_kv_add(t, "media_data_integrity_err", "%s",
+		      uint128_t_to_l10n_string(
+			      le128_to_cpu(el->media_data_integrity_err)));
+	stdout_kv_add(t, "num_err_info_log_entries", "%s",
+		      uint128_t_to_l10n_string(
+			      le128_to_cpu(el->num_err_info_log_entries)));
+	stdout_kv_add(t, "total_end_grp_cap", "%s",
+		      uint128_t_to_l10n_string(
+			      le128_to_cpu(el->total_end_grp_cap)));
+	stdout_kv_add(t, "unalloc_end_grp_cap", "%s",
+		      uint128_t_to_l10n_string(
+			      le128_to_cpu(el->unalloc_end_grp_cap)));
+
+	stdout_kv_table_finish(t, "endurance-log");
+}
+
+static struct shr_table *stdout_smart_log_critical_warning_table(__u8 cw)
+{
+	struct shr_table *t;
+
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[6:6]", NVME_SMART_CW_IPS(cw),
+			 "Indeterminate Personality");
+	stdout_bits_add(t, "[5:5]", NVME_SMART_CW_PMRRO(cw),
+			 "Persistent Mem. RO");
+	stdout_bits_add(t, "[4:4]", NVME_SMART_CW_VMBF(cw),
+			 "Volatile mem. backup failed");
+	stdout_bits_add(t, "[3:3]", NVME_SMART_CW_AMRO(cw), "Read-only");
+	stdout_bits_add(t, "[2:2]", NVME_SMART_CW_NDR(cw),
+			 "NVM subsystem Reliability");
+	stdout_bits_add(t, "[1:1]", NVME_SMART_CW_TTC(cw), "Temp. Threshold");
+	stdout_bits_add(t, "[0:0]", NVME_SMART_CW_ASCBT(cw), "Available Spare");
+
+	return t;
+}
+
+static struct shr_table *stdout_smart_log_informative_warning_table(__u8 iw)
+{
+	struct shr_table *t;
+
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[0:0]", !!(iw & NVME_SMART_INFW_VLTHW),
+			 "Voltage Log Threshold Warning");
+
+	return t;
 }
 
 static void stdout_smart_log(struct nvme_smart_log *smart, unsigned int nsid, const char *devname)
 {
+	__cleanup_free char *ipm_str = NULL;
 	__u16 temperature = smart->temperature[1] << 8 | smart->temperature[0];
 	__u32 ipm = le32_to_cpu(smart->interval_power_measurement);
-	int i;
-	bool human = stdout_print_ops.flags & VERBOSE;
+	bool verbose = stdout_print_ops.flags & VERBOSE;
+	struct shr_table *t;
+	char name[32];
+	int i, row;
 
 	printf("Smart Log for NVME device:%s namespace-id:%x\n", devname, nsid);
-	printf("critical_warning			: %#x\n", smart->critical_warning);
 
-	if (human) {
-		printf("      Available Spare[0]             : %d\n",
-		       NVME_SMART_CW_ASCBT(smart->critical_warning));
-		printf("      Temp. Threshold[1]             : %d\n",
-		       NVME_SMART_CW_TTC(smart->critical_warning));
-		printf("      NVM subsystem Reliability[2]   : %d\n",
-		       NVME_SMART_CW_NDR(smart->critical_warning));
-		printf("      Read-only[3]                   : %d\n",
-		       NVME_SMART_CW_AMRO(smart->critical_warning));
-		printf("      Volatile mem. backup failed[4] : %d\n",
-		       NVME_SMART_CW_VMBF(smart->critical_warning));
-		printf("      Persistent Mem. RO[5]          : %d\n",
-		       NVME_SMART_CW_PMRRO(smart->critical_warning));
-		printf("      Indeterminate Personality[6]   : %d\n",
-		       NVME_SMART_CW_IPS(smart->critical_warning));
-	}
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
 
-	printf("temperature				: %s (%u K, %s)\n",
-	       nvme_degrees_string(temperature), temperature,
-	       nvme_degrees_fahrenheit_string(temperature));
-	printf("available_spare				: %u%%\n", smart->avail_spare);
-	printf("available_spare_threshold		: %u%%\n", smart->spare_thresh);
-	printf("percentage_used				: %u%%\n", smart->percent_used);
-	printf("endurance group critical warning summary: %#x\n", smart->endu_grp_crit_warn_sumry);
-	printf("informative warning			: %#x\n", smart->informative_warning);
-	if (human)
-		printf("      Voltage Log Threshold Warning[0]: %d\n",
-		       !!(smart->informative_warning & NVME_SMART_INFW_VLTHW));
-	printf("Data Units Read				: %s (%s)\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(smart->data_units_read)),
-	       uint128_t_to_si_string(le128_to_cpu(smart->data_units_read), 1000 * 512));
-	printf("Data Units Written			: %s (%s)\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(smart->data_units_written)),
-	       uint128_t_to_si_string(le128_to_cpu(smart->data_units_written), 1000 * 512));
-	printf("host_read_commands			: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(smart->host_reads)));
-	printf("host_write_commands			: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(smart->host_writes)));
-	printf("controller_busy_time			: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(smart->ctrl_busy_time)));
-	printf("power_cycles				: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(smart->power_cycles)));
-	printf("power_on_hours				: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(smart->power_on_hours)));
-	printf("unsafe_shutdowns			: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(smart->unsafe_shutdowns)));
-	printf("media_errors				: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(smart->media_errors)));
-	printf("num_err_log_entries			: %s\n",
-	       uint128_t_to_l10n_string(le128_to_cpu(smart->num_err_log_entries)));
-	printf("Warning Temperature Time		: %u\n",
-	       le32_to_cpu(smart->warning_temp_time));
-	printf("Critical Composite Temperature Time	: %u\n",
-	       le32_to_cpu(smart->critical_comp_time));
+	row = stdout_kv_add(t, "critical_warning", "%#x",
+			     smart->critical_warning);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_smart_log_critical_warning_table(
+						smart->critical_warning));
+
+	stdout_kv_add(t, "temperature", "%s (%u K, %s)",
+		      nvme_degrees_string(temperature), temperature,
+		      nvme_degrees_fahrenheit_string(temperature));
+	stdout_kv_add(t, "available_spare", "%u%%", smart->avail_spare);
+	stdout_kv_add(t, "available_spare_threshold", "%u%%",
+		      smart->spare_thresh);
+	stdout_kv_add(t, "percentage_used", "%u%%", smart->percent_used);
+	stdout_kv_add(t, "endurance group critical warning summary", "%#x",
+		      smart->endu_grp_crit_warn_sumry);
+
+	row = stdout_kv_add(t, "informative warning", "%#x",
+			     smart->informative_warning);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+				stdout_smart_log_informative_warning_table(
+						smart->informative_warning));
+
+	stdout_kv_add(t, "Data Units Read", "%s (%s)",
+		      uint128_t_to_l10n_string(
+				      le128_to_cpu(smart->data_units_read)),
+		      uint128_t_to_si_string(
+				      le128_to_cpu(smart->data_units_read),
+				      1000 * 512));
+	stdout_kv_add(t, "Data Units Written", "%s (%s)",
+		      uint128_t_to_l10n_string(
+				      le128_to_cpu(smart->data_units_written)),
+		      uint128_t_to_si_string(
+				      le128_to_cpu(smart->data_units_written),
+				      1000 * 512));
+	stdout_kv_add(t, "host_read_commands", "%s",
+		      uint128_t_to_l10n_string(
+				      le128_to_cpu(smart->host_reads)));
+	stdout_kv_add(t, "host_write_commands", "%s",
+		      uint128_t_to_l10n_string(
+				      le128_to_cpu(smart->host_writes)));
+	stdout_kv_add(t, "controller_busy_time", "%s",
+		      uint128_t_to_l10n_string(
+				      le128_to_cpu(smart->ctrl_busy_time)));
+	stdout_kv_add(t, "power_cycles", "%s",
+		      uint128_t_to_l10n_string(
+				      le128_to_cpu(smart->power_cycles)));
+	stdout_kv_add(t, "power_on_hours", "%s",
+		      uint128_t_to_l10n_string(
+				      le128_to_cpu(smart->power_on_hours)));
+	stdout_kv_add(t, "unsafe_shutdowns", "%s",
+		      uint128_t_to_l10n_string(
+				      le128_to_cpu(smart->unsafe_shutdowns)));
+	stdout_kv_add(t, "media_errors", "%s",
+		      uint128_t_to_l10n_string(
+				      le128_to_cpu(smart->media_errors)));
+	stdout_kv_add(t, "num_err_log_entries", "%s",
+		      uint128_t_to_l10n_string(
+			      le128_to_cpu(smart->num_err_log_entries)));
+	stdout_kv_add(t, "Warning Temperature Time", "%u",
+		      le32_to_cpu(smart->warning_temp_time));
+	stdout_kv_add(t, "Critical Composite Temperature Time", "%u",
+		      le32_to_cpu(smart->critical_comp_time));
 
 	for (i = 0; i < ARRAY_SIZE(smart->temp_sensor); i++) {
 		temperature = le16_to_cpu(smart->temp_sensor[i]);
 		if (!temperature)
 			continue;
-		printf("Temperature Sensor %d			: %s (%u K, %s)\n", i + 1,
-		       nvme_degrees_string(temperature), temperature,
-		       nvme_degrees_fahrenheit_string(temperature));
+		snprintf(name, sizeof(name), "Temperature Sensor %d", i + 1);
+		stdout_kv_add(t, name, "%s (%u K, %s)",
+			      nvme_degrees_string(temperature), temperature,
+			      nvme_degrees_fahrenheit_string(temperature));
 	}
 
-	printf("Thermal Management T1 Trans Count	: %u\n",
-	       le32_to_cpu(smart->thm_temp1_trans_count));
-	printf("Thermal Management T2 Trans Count	: %u\n",
-	       le32_to_cpu(smart->thm_temp2_trans_count));
-	printf("Thermal Management T1 Total Time	: %u\n",
-	       le32_to_cpu(smart->thm_temp1_total_time));
-	printf("Thermal Management T2 Total Time	: %u\n",
-	       le32_to_cpu(smart->thm_temp2_total_time));
-	printf("Operational Lifetime Energy Consumed	: %"PRIu64"\n",
-	       le64_to_cpu(smart->op_lifetime_energy_consumed));
-	printf("Interval Power Measurement Type		: %s\n",
-	       nvme_power_measurement_type_to_string((ipm >> 20) & 0x3f));
-	printf("Interval Power Measurement		: ");
-	print_power_field(ipm);
-	printf("\n");
+	stdout_kv_add(t, "Thermal Management T1 Trans Count", "%u",
+		      le32_to_cpu(smart->thm_temp1_trans_count));
+	stdout_kv_add(t, "Thermal Management T2 Trans Count", "%u",
+		      le32_to_cpu(smart->thm_temp2_trans_count));
+	stdout_kv_add(t, "Thermal Management T1 Total Time", "%u",
+		      le32_to_cpu(smart->thm_temp1_total_time));
+	stdout_kv_add(t, "Thermal Management T2 Total Time", "%u",
+		      le32_to_cpu(smart->thm_temp2_total_time));
+	stdout_kv_add(t, "Operational Lifetime Energy Consumed", "%"PRIu64,
+		      le64_to_cpu(smart->op_lifetime_energy_consumed));
+	stdout_kv_add(t, "Interval Power Measurement Type", "%s",
+		      nvme_power_measurement_type_to_string(
+				      (ipm >> 20) & 0x3f));
+
+	ipm_str = stdout_power_and_scale_str(ipm & 0xffff, (ipm >> 16) & 0x3);
+	stdout_kv_add(t, "Interval Power Measurement", "%s", ipm_str ?: "-");
+
+	stdout_kv_table_finish(t, "smart-log");
 }
 
 static void stdout_ana_log(struct nvme_ana_log *ana_log, const char *devname,
@@ -5022,14 +7869,22 @@ static void stdout_ana_log(struct nvme_ana_log *ana_log, const char *devname,
 	size_t nsid_buf_size;
 	void *base = ana_log;
 	__u32 nr_nsids;
+	struct shr_table *t;
 	int i, j;
 
 	printf("Asymmetric Namespace Access Log for NVMe device: %s\n",
 			devname);
 	printf("ANA LOG HEADER :-\n");
-	printf("chgcnt	:	%"PRIu64"\n",
-			le64_to_cpu(hdr->chgcnt));
-	printf("ngrps	:	%u\n", le16_to_cpu(hdr->ngrps));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "chgcnt", "%"PRIu64, le64_to_cpu(hdr->chgcnt));
+	stdout_kv_add(t, "ngrps", "%u", le16_to_cpu(hdr->ngrps));
+
+	stdout_kv_table_finish(t, "ana-log header");
+
 	printf("ANA Log Desc :-\n");
 
 	for (i = 0; i < le16_to_cpu(ana_log->ngrps); i++) {
@@ -5042,15 +7897,23 @@ static void stdout_ana_log(struct nvme_ana_log *ana_log, const char *devname,
 			return;
 
 		offset += sizeof(*desc);
-		printf("grpid	:	%u\n", le32_to_cpu(desc->grpid));
-		printf("nnsids	:	%u\n", le32_to_cpu(desc->nnsids));
-		printf("chgcnt	:	%"PRIu64"\n",
-		       le64_to_cpu(desc->chgcnt));
-		printf("state	:	%s\n",
-				nvme_ana_state_to_string(desc->state));
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "grpid", "%u", le32_to_cpu(desc->grpid));
+		stdout_kv_add(t, "nnsids", "%u", le32_to_cpu(desc->nnsids));
+		stdout_kv_add(t, "chgcnt", "%"PRIu64,
+			      le64_to_cpu(desc->chgcnt));
+		stdout_kv_add(t, "state", "%s",
+			      nvme_ana_state_to_string(desc->state));
 		for (j = 0; j < nr_nsids; j++)
-			printf("	nsid	:	%u\n",
-					le32_to_cpu(desc->nsids[j]));
+			stdout_kv_add(t, "nsid", "%u",
+				      le32_to_cpu(desc->nsids[j]));
+
+		stdout_kv_table_finish(t, "ana-log group");
+
 		printf("\n");
 		offset += nsid_buf_size;
 	}
@@ -5074,77 +7937,94 @@ static void stdout_self_test_result(struct nvme_st_result *res)
 		"Reserved",
 		[NVME_ST_RESULT_NOT_USED] = "Entry not used (does not contain a result)",
 	};
+	static const char * const code_desc[] = {
+		[NVME_ST_CODE_SHORT] = "Short device self-test operation",
+		[NVME_ST_CODE_EXTENDED] = "Extended device self-test operation",
+		[NVME_ST_CODE_HOST_INIT] = "Host-Initiated Refresh operation",
+		[NVME_ST_CODE_VS] = "Vendor specific",
+	};
+	bool verbose = stdout_print_ops.flags & VERBOSE;
+	struct shr_table *t;
 	__u8 op, code;
 
-	op = res->dsts & NVME_ST_RESULT_MASK;
-	printf("  Operation Result             : %#x", op);
-	if (stdout_print_ops.flags & VERBOSE)
-		printf(" %s", (op < ARRAY_SIZE(test_res) && test_res[op]) ?
-			test_res[op] : test_res[ARRAY_SIZE(test_res) - 1]);
-	printf("\n");
-	if (op == NVME_ST_RESULT_NOT_USED)
+	t = stdout_kv_table_create();
+	if (!t)
 		return;
+	shr_table_set_indent(t, 2);
 
-	code = res->dsts >> NVME_ST_CODE_SHIFT;
-	printf("  Self Test Code               : %x", code);
+	op = res->dsts & NVME_ST_RESULT_MASK;
+	if (verbose)
+		stdout_kv_add(t, "Operation Result", "%#x %s", op,
+			      (op < ARRAY_SIZE(test_res) && test_res[op]) ?
+			      test_res[op] :
+			      test_res[ARRAY_SIZE(test_res) - 1]);
+	else
+		stdout_kv_add(t, "Operation Result", "%#x", op);
 
-	if (stdout_print_ops.flags & VERBOSE) {
-		switch (code) {
-		case NVME_ST_CODE_SHORT:
-			printf(" Short device self-test operation");
-			break;
-		case NVME_ST_CODE_EXTENDED:
-			printf(" Extended device self-test operation");
-			break;
-		case NVME_ST_CODE_HOST_INIT:
-			printf(" Host-Initiated Refresh operation");
-			break;
-		case NVME_ST_CODE_VS:
-			printf(" Vendor specific");
-			break;
-		default:
-			printf(" Reserved");
-			break;
+	if (op != NVME_ST_RESULT_NOT_USED) {
+		code = res->dsts >> NVME_ST_CODE_SHIFT;
+		if (verbose)
+			stdout_kv_add(t, "Self Test Code", "%x %s", code,
+				      code < ARRAY_SIZE(code_desc) &&
+				      code_desc[code] ?
+				      code_desc[code] : "Reserved");
+		else
+			stdout_kv_add(t, "Self Test Code", "%x", code);
+
+		if (op == NVME_ST_RESULT_KNOWN_SEG_FAIL)
+			stdout_kv_add(t, "Segment Number", "%#x", res->seg);
+
+		stdout_kv_add(t, "Valid Diagnostic Information", "%#x",
+			      res->vdi);
+		stdout_kv_add(t, "Power on hours (POH)", "%#"PRIx64,
+			      (uint64_t)le64_to_cpu(res->poh));
+
+		if (res->vdi & NVME_ST_VALID_DIAG_INFO_NSID)
+			stdout_kv_add(t, "Namespace Identifier", "%#x",
+				      le32_to_cpu(res->nsid));
+		if (res->vdi & NVME_ST_VALID_DIAG_INFO_FLBA)
+			stdout_kv_add(t, "Failing LBA", "%#"PRIx64,
+				      (uint64_t)le64_to_cpu(res->flba));
+		if (res->vdi & NVME_ST_VALID_DIAG_INFO_SCT)
+			stdout_kv_add(t, "Status Code Type", "%#x", res->sct);
+		if (res->vdi & NVME_ST_VALID_DIAG_INFO_SC) {
+			if (verbose)
+				stdout_kv_add(t, "Status Code", "%#x %s",
+					      res->sc,
+					      libnvme_status_to_string(
+						(res->sct & 7) << 8 | res->sc,
+						false));
+			else
+				stdout_kv_add(t, "Status Code", "%#x",
+					      res->sc);
 		}
+		stdout_kv_add(t, "Vendor Specific", "%#x %#x",
+			      res->vs[0], res->vs[1]);
 	}
-	printf("\n");
 
-	if (op == NVME_ST_RESULT_KNOWN_SEG_FAIL)
-		printf("  Segment Number               : %#x\n", res->seg);
-
-	printf("  Valid Diagnostic Information : %#x\n", res->vdi);
-	printf("  Power on hours (POH)         : %#"PRIx64"\n",
-		(uint64_t)le64_to_cpu(res->poh));
-
-	if (res->vdi & NVME_ST_VALID_DIAG_INFO_NSID)
-		printf("  Namespace Identifier         : %#x\n",
-			le32_to_cpu(res->nsid));
-	if (res->vdi & NVME_ST_VALID_DIAG_INFO_FLBA)
-		printf("  Failing LBA                  : %#"PRIx64"\n",
-			(uint64_t)le64_to_cpu(res->flba));
-	if (res->vdi & NVME_ST_VALID_DIAG_INFO_SCT)
-		printf("  Status Code Type             : %#x\n", res->sct);
-	if (res->vdi & NVME_ST_VALID_DIAG_INFO_SC) {
-		printf("  Status Code                  : %#x", res->sc);
-		if (stdout_print_ops.flags & VERBOSE)
-			printf(" %s", libnvme_status_to_string(
-				(res->sct & 7) << 8 | res->sc, false));
-		printf("\n");
-	}
-	printf("  Vendor Specific              : %#x %#x\n",
-		res->vs[0], res->vs[1]);
+	stdout_kv_table_finish(t, "self-test-result");
 }
 
 static void stdout_self_test_log(struct nvme_self_test_log *self_test,
 				 __u8 dst_entries, __u32 size,
 				 const char *devname)
 {
-	int i;
+	struct shr_table *t;
 	__u8 num_entries;
+	int i;
 
 	printf("Device Self Test Log for NVME device:%s\n", devname);
-	printf("Current operation  : %#x\n", self_test->current_operation);
-	printf("Current Completion : %u%%\n", self_test->completion);
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Current operation", "%#x",
+		      self_test->current_operation);
+	stdout_kv_add(t, "Current Completion", "%u%%", self_test->completion);
+
+	stdout_kv_table_finish(t, "self-test-log");
+
 	num_entries = min(dst_entries, NVME_LOG_ST_MAX_RESULTS);
 	for (i = 0; i < num_entries; i++) {
 		printf("Self Test Result[%d]:\n", i);
@@ -5152,115 +8032,153 @@ static void stdout_self_test_log(struct nvme_self_test_log *self_test,
 	}
 }
 
-static void stdout_sanitize_log_sprog(__u32 sprog)
+static struct shr_table *stdout_sanitize_log_sstat_table(__u16 status)
 {
-	double percent;
-
-	percent = (((double)sprog * 100) / 0x10000);
-	printf("\t(%f%%)\n", percent);
-}
-
-static void stdout_sanitize_log_sstat(__u16 status)
-{
+	struct shr_table *t;
 	const char *str = nvme_sstat_status_to_string(status);
 	__u16 gde, mvcncld, prgd;
 
-	printf("  [2:0] : Sanitize Operation Status  : %#x\t%s\n",
-		NVME_GET(status, SANITIZE_SSTAT_STATUS), str);
-	printf("  [7:3] : Overwrite Passes Completed : %u\n",
-		NVME_GET(status, SANITIZE_SSTAT_COMPLETED_PASSES));
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[2:0]", NVME_GET(status, SANITIZE_SSTAT_STATUS),
+			"Sanitize Operation Status: %s", str);
+	stdout_bits_add(t, "[7:3]",
+			NVME_GET(status, SANITIZE_SSTAT_COMPLETED_PASSES),
+			"Overwrite Passes Completed");
 
 	gde = NVME_GET(status, SANITIZE_SSTAT_GLOBAL_DATA_ERASED);
 	if (gde)
-		str = "No user data has been written in the NVM subsystem and"\
+		str = "No user data has been written in the NVM subsystem and"
 		       " no PMR has been enabled in the NVM subsystem";
 	else
-		str = "User data has been written in the NVM subsystem or"\
+		str = "User data has been written in the NVM subsystem or"
 		       " PMR has been enabled in the NVM subsystem";
-	printf("  [8:8] : Global Data Erased         : %#x\t%s\n", gde, str);
+	stdout_bits_add(t, "[8:8]", gde, "Global Data Erased: %s", str);
 
 	mvcncld = NVME_GET(status, SANITIZE_SSTAT_MVCNCLD);
-	printf("  [9:9] : Media Verification Canceled: %#x\t%scanceled\n",
-		mvcncld, mvcncld ? "" : "Not ");
+	stdout_bits_add(t, "[9:9]", mvcncld, "Media Verification %scanceled",
+			mvcncld ? "" : "Not ");
 
 	prgd = NVME_GET(status, SANITIZE_SSTAT_PRGD);
-	printf("  [11:11] : Purged                    : %#x\t%spurged\n",
-		prgd, prgd ? "" : "Not ");
-	printf("\n");
+	stdout_bits_add(t, "[11:11]", prgd, "%sPurged", prgd ? "" : "Not ");
+
+	return t;
 }
 
-static void stdout_estimate_sanitize_time(const char *text, uint32_t value)
+static struct shr_table *stdout_sanitize_log_ssi_table(__u8 ssi, __u16 status)
 {
-	printf("%s:  %u%s\n", text, value,
-		value == 0xffffffff ? " (No time period reported)" : "");
-}
-
-static void stdout_sanitize_log_ssi(__u8 ssi, __u16 status)
-{
+	struct shr_table *t;
 	__u8 sans, fails;
-	const char *str;
+
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
 
 	sans = NVME_GET(ssi, SANITIZE_SSI_SANS);
-	str = nvme_ssi_state_to_string(sans);
-	printf("  [3:0] : Sanitize State : %#x\t%s\n", sans, str);
+	stdout_bits_add(t, "[3:0]", sans, "Sanitize State: %s",
+			nvme_ssi_state_to_string(sans));
 
 	if (status == NVME_SANITIZE_SSTAT_STATUS_COMPLETED_FAILED) {
 		fails = NVME_GET(ssi, SANITIZE_SSI_FAILS);
-		str = nvme_ssi_state_to_string(fails);
-		printf("  [7:4] : Failure State  : %#x\t%s\n", fails, str);
+		stdout_bits_add(t, "[7:4]", fails, "Failure State: %s",
+				nvme_ssi_state_to_string(fails));
 	}
-	printf("\n");
+
+	return t;
+}
+
+static int stdout_estimate_sanitize_time_add(struct shr_table *t,
+		const char *name, uint32_t value)
+{
+	const char *note;
+
+	note = value == 0xffffffff ? " (No time period reported)" : "";
+	return stdout_kv_add(t, name, "%u%s", value, note);
 }
 
 static void stdout_sanitize_log(struct nvme_sanitize_log_page *sanitize,
 				const char *devname)
 {
-	int human = stdout_print_ops.flags & VERBOSE;
-	__u16 status = le16_to_cpu(sanitize->sstat) & NVME_SANITIZE_SSTAT_STATUS_MASK;
+	__cleanup_free char *sprog_val = NULL;
+	struct shr_table *t;
+	int verbose = stdout_print_ops.flags & VERBOSE;
+	__u16 sstat = le16_to_cpu(sanitize->sstat);
+	__u16 status = sstat & NVME_SANITIZE_SSTAT_STATUS_MASK;
+	double percent;
+	int row;
 
-	printf("Sanitize Progress                      (SPROG) :  %u",
-	       le16_to_cpu(sanitize->sprog));
+	if (verbose && status == NVME_SANITIZE_SSTAT_STATUS_IN_PROGRESS) {
+		percent = ((double)le16_to_cpu(sanitize->sprog) * 100) /
+			  0x10000;
 
-	if (human && status == NVME_SANITIZE_SSTAT_STATUS_IN_PROGRESS)
-		stdout_sanitize_log_sprog(le16_to_cpu(sanitize->sprog));
+		if (asprintf(&sprog_val, "%u  (%f%%)",
+			     le16_to_cpu(sanitize->sprog), percent) < 0)
+			sprog_val = NULL;
+	}
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	if (sprog_val)
+		stdout_kv_add(t, "Sanitize Progress (SPROG)", "%s", sprog_val);
 	else
-		printf("\n");
+		stdout_kv_add(t, "Sanitize Progress (SPROG)", "%u",
+			      le16_to_cpu(sanitize->sprog));
 
-	printf("Sanitize Status                        (SSTAT) :  %#x\n",
-		le16_to_cpu(sanitize->sstat));
-	if (human)
-		stdout_sanitize_log_sstat(le16_to_cpu(sanitize->sstat));
+	row = stdout_kv_add(t, "Sanitize Status (SSTAT)", "%#x", sstat);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+			stdout_sanitize_log_sstat_table(sstat));
 
-	printf("Sanitize Command Dword 10 Information (SCDW10) :  %#x\n",
-		le32_to_cpu(sanitize->scdw10));
-	stdout_estimate_sanitize_time("Estimated Time For Overwrite                   ",
-		le32_to_cpu(sanitize->eto));
-	stdout_estimate_sanitize_time("Estimated Time For Block Erase                 ",
-		le32_to_cpu(sanitize->etbe));
-	stdout_estimate_sanitize_time("Estimated Time For Crypto Erase                ",
-		le32_to_cpu(sanitize->etce));
-	stdout_estimate_sanitize_time("Estimated Time For Overwrite (No-Deallocate)   ",
+	stdout_kv_add(t, "Sanitize Command Dword 10 Information (SCDW10)",
+		      "%#x", le32_to_cpu(sanitize->scdw10));
+	stdout_estimate_sanitize_time_add(t, "Estimated Time For Overwrite",
+					   le32_to_cpu(sanitize->eto));
+	stdout_estimate_sanitize_time_add(t, "Estimated Time For Block Erase",
+					   le32_to_cpu(sanitize->etbe));
+	stdout_estimate_sanitize_time_add(t, "Estimated Time For Crypto Erase",
+					   le32_to_cpu(sanitize->etce));
+	stdout_estimate_sanitize_time_add(t,
+		"Estimated Time For Overwrite (No-Deallocate)",
 		le32_to_cpu(sanitize->etond));
-	stdout_estimate_sanitize_time("Estimated Time For Block Erase (No-Deallocate) ",
+	stdout_estimate_sanitize_time_add(t,
+		"Estimated Time For Block Erase (No-Deallocate)",
 		le32_to_cpu(sanitize->etbend));
-	stdout_estimate_sanitize_time("Estimated Time For Crypto Erase (No-Deallocate)",
+	stdout_estimate_sanitize_time_add(t,
+		"Estimated Time For Crypto Erase (No-Deallocate)",
 		le32_to_cpu(sanitize->etcend));
-	stdout_estimate_sanitize_time("Estimated Time For Post-Verification Deallocation",
+	stdout_estimate_sanitize_time_add(t,
+		"Estimated Time For Post-Verification Deallocation",
 		le32_to_cpu(sanitize->etpvds));
 
-	printf("Sanitize State Information               (SSI) : %#x\n", sanitize->ssi);
-	if (human)
-		stdout_sanitize_log_ssi(sanitize->ssi, status);
+	row = stdout_kv_add(t, "Sanitize State Information (SSI)", "%#x",
+			     sanitize->ssi);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+			stdout_sanitize_log_ssi_table(sanitize->ssi, status));
+
+	stdout_kv_table_finish(t, "sanitize-log");
 }
 
 static void stdout_select_result(enum nvme_features_id fid, __u64 result)
 {
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
 	if (result & 0x1)
-		printf("  Feature is saveable\n");
+		stdout_kv_add(t, "", "Feature is saveable");
 	if (result & 0x2)
-		printf("  Feature is per-namespace\n");
+		stdout_kv_add(t, "", "Feature is per-namespace");
 	if (result & 0x4)
-		printf("  Feature is changeable\n");
+		stdout_kv_add(t, "", "Feature is changeable");
+
+	stdout_kv_table_finish(t, "select-result");
 }
 
 static void stdout_lba_range(struct nvme_lba_range_type *lbrt, int nr_ranges)
@@ -5268,24 +8186,37 @@ static void stdout_lba_range(struct nvme_lba_range_type *lbrt, int nr_ranges)
 	int i, j;
 
 	for (i = 0; i <= nr_ranges; i++) {
-		printf("\ttype       : %#x - %s\n", lbrt->entry[i].type,
-		       nvme_feature_lba_type_to_string(lbrt->entry[i].type));
-		printf("\tattributes : %#x - %s, %s\n",
-		       lbrt->entry[i].attributes,
-		       NVME_LBART_ATTRB_LBARO(lbrt->entry[i].attributes) ?
-		       "LBA range may be overwritten" :
-		       "LBA range should not be overwritten",
-		       NVME_LBART_ATTRB_HLBAR(lbrt->entry[i].attributes) ?
-		       "LBA range should be hidden from the OS/EFI/BIOS" :
-		       "LBA range should be visible from the OS/EFI/BIOS");
-		printf("\tslba       : %#"PRIx64"\n",
-		       le64_to_cpu(lbrt->entry[i].slba));
-		printf("\tnlb        : %#"PRIx64"\n",
-		       le64_to_cpu(lbrt->entry[i].nlb));
-		printf("\tguid       : ");
-		for (j = 0; j < ARRAY_SIZE(lbrt->entry[i].guid); j++)
-			printf("%02x", lbrt->entry[i].guid[j]);
-		printf("\n");
+		struct nvme_lba_range_type_entry *e = &lbrt->entry[i];
+		struct shr_table *t;
+		char guid[2 * ARRAY_SIZE(e->guid) + 1];
+		char *p = guid;
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		shr_table_set_indent(t, 1);
+
+		stdout_kv_add(t, "type", "%#x - %s", e->type,
+			      nvme_feature_lba_type_to_string(e->type));
+		const char *overwrite_str =
+			NVME_LBART_ATTRB_LBARO(e->attributes) ?
+			"LBA range may be overwritten" :
+			"LBA range should not be overwritten";
+		const char *hidden_str = NVME_LBART_ATTRB_HLBAR(e->attributes) ?
+			"LBA range should be hidden from the OS/EFI/BIOS" :
+			"LBA range should be visible from the OS/EFI/BIOS";
+
+		stdout_kv_add(t, "attributes", "%#x - %s, %s", e->attributes,
+			      overwrite_str, hidden_str);
+		stdout_kv_add(t, "slba", "%#"PRIx64, le64_to_cpu(e->slba));
+		stdout_kv_add(t, "nlb", "%#"PRIx64, le64_to_cpu(e->nlb));
+
+		for (j = 0; j < ARRAY_SIZE(e->guid); j++)
+			p += sprintf(p, "%02x", e->guid[j]);
+		stdout_kv_add(t, "guid", "%s", guid);
+
+		stdout_kv_table_finish(t, "lba-range");
 	}
 }
 
@@ -5297,14 +8228,26 @@ static void stdout_auto_pst(struct nvme_feat_auto_pst *apst)
 	printf("\tAuto PST Entries");
 	printf("\t.................\n");
 	for (i = 0; i < ARRAY_SIZE(apst->apst_entry); i++) {
+		struct shr_table *t;
+
 		value = le64_to_cpu(apst->apst_entry[i]);
 
 		printf("\tEntry[%2d]\n", i);
 		printf("\t.................\n");
-		printf("\tIdle Time Prior to Transition (ITPT): %u ms\n",
-		       (__u32)NVME_GET(value, APST_ENTRY_ITPT));
-		printf("\tIdle Transition Power State   (ITPS): %u\n",
-		       (__u32)NVME_GET(value, APST_ENTRY_ITPS));
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		shr_table_set_indent(t, 2);
+		stdout_kv_add(t, "Idle Time Prior to Transition (ITPT)",
+			      "%u ms",
+			      (__u32)NVME_GET(value, APST_ENTRY_ITPT));
+		stdout_kv_add(t, "Idle Transition Power State (ITPS)", "%u",
+			      (__u32)NVME_GET(value, APST_ENTRY_ITPS));
+
+		stdout_kv_table_finish(t, "auto-pst");
+
 		printf("\t.................\n");
 	}
 }
@@ -5320,23 +8263,61 @@ static const char *stdout_format_timestamp(__u8 *timestamp_bytes)
 	return buf;
 }
 
+static struct shr_table *stdout_timestamp_attr_table(__u8 attr)
+{
+	struct shr_table *t;
+	__u8 to = NVME_TIMESTAMP_ATTR_TO(attr);
+	__u8 sync = NVME_TIMESTAMP_ATTR_SYNC(attr);
+
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[3:1]", to, "%s",
+			nvme_format_timestamp_origin(attr));
+	stdout_bits_add(t, "[0:0]", sync, "%s",
+			nvme_format_timestamp_sync(attr));
+
+	return t;
+}
+
 static void stdout_timestamp(struct nvme_timestamp *ts)
 {
-	printf("\tThe timestamp is : %s\n", stdout_format_timestamp(ts->timestamp));
-	printf("\t%s\n", nvme_format_timestamp_origin(ts->attr));
-	printf("\t%s\n", nvme_format_timestamp_sync(ts->attr));
+	struct shr_table *t;
+	int row;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Timestamp", "%s",
+		      stdout_format_timestamp(ts->timestamp));
+
+	row = stdout_kv_add(t, "Attributes", "%#x", ts->attr);
+	shr_table_set_row_subtable(t, row,
+				    stdout_timestamp_attr_table(ts->attr));
+
+	stdout_kv_table_finish(t, "timestamp");
 }
 
 static void stdout_host_mem_buffer(struct nvme_host_mem_buf_attrs *hmb)
 {
-	printf("\tHost Memory Descriptor List Entry Count (HMDLEC): %u\n",
-		le32_to_cpu(hmb->hmdlec));
-	printf("\tHost Memory Descriptor List Address     (HMDLAU): %#x\n",
-		le32_to_cpu(hmb->hmdlau));
-	printf("\tHost Memory Descriptor List Address     (HMDLAL): %#x\n",
-		le32_to_cpu(hmb->hmdlal));
-	printf("\tHost Memory Buffer Size                  (HSIZE): %u\n",
-		le32_to_cpu(hmb->hsize));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Host Memory Descriptor List Entry Count (HMDLEC)",
+		      "%u", le32_to_cpu(hmb->hmdlec));
+	stdout_kv_add(t, "Host Memory Descriptor List Address (HMDLAU)",
+		      "%#x", le32_to_cpu(hmb->hmdlau));
+	stdout_kv_add(t, "Host Memory Descriptor List Address (HMDLAL)",
+		      "%#x", le32_to_cpu(hmb->hmdlal));
+	stdout_kv_add(t, "Host Memory Buffer Size (HSIZE)", "%u",
+		      le32_to_cpu(hmb->hsize));
+
+	stdout_kv_table_finish(t, "host-mem-buffer");
 }
 
 static void stdout_directive_show_fields(__u8 dtype, __u8 doper,
@@ -5344,32 +8325,68 @@ static void stdout_directive_show_fields(__u8 dtype, __u8 doper,
 {
 	__u8 *field = buf;
 	int count, i;
+	struct shr_table *t;
 
 	switch (dtype) {
 	case NVME_DIRECTIVE_DTYPE_IDENTIFY:
 		switch (doper) {
 		case NVME_DIRECTIVE_RECEIVE_IDENTIFY_DOPER_PARAM:
 			printf("\tDirective support\n");
-			printf("\t\tIdentify Directive       : %s\n",
-				(*field & 0x1) ? "supported" : "not supported");
-			printf("\t\tStream Directive         : %s\n",
-				(*field & 0x2) ? "supported" : "not supported");
-			printf("\t\tData Placement Directive : %s\n",
-				(*field & 0x4) ? "supported" : "not supported");
+
+			t = stdout_kv_table_create();
+			if (!t)
+				return;
+
+			shr_table_set_indent(t, 2);
+			stdout_kv_add(t, "Identify Directive", "%s",
+				      (*field & 0x1) ?
+				      "supported" : "not supported");
+			stdout_kv_add(t, "Stream Directive", "%s",
+				      (*field & 0x2) ?
+				      "supported" : "not supported");
+			stdout_kv_add(t, "Data Placement Directive", "%s",
+				      (*field & 0x4) ?
+				      "supported" : "not supported");
+
+			stdout_kv_table_finish(t, "directive-show");
+
 			printf("\tDirective enabled\n");
-			printf("\t\tIdentify Directive       : %s\n",
-				(*(field + 32) & 0x1) ? "enabled" : "disabled");
-			printf("\t\tStream Directive         : %s\n",
-				(*(field + 32) & 0x2) ? "enabled" : "disabled");
-			printf("\t\tData Placement Directive : %s\n",
-				(*(field + 32) & 0x4) ? "enabled" : "disabled");
+
+			t = stdout_kv_table_create();
+			if (!t)
+				return;
+
+			shr_table_set_indent(t, 2);
+			stdout_kv_add(t, "Identify Directive", "%s",
+				      (*(field + 32) & 0x1) ?
+				      "enabled" : "disabled");
+			stdout_kv_add(t, "Stream Directive", "%s",
+				      (*(field + 32) & 0x2) ?
+				      "enabled" : "disabled");
+			stdout_kv_add(t, "Data Placement Directive", "%s",
+				      (*(field + 32) & 0x4) ?
+				      "enabled" : "disabled");
+
+			stdout_kv_table_finish(t, "directive-show");
+
 			printf("\tDirective Persistent Across Controller Level Resets\n");
-			printf("\t\tIdentify Directive       : %s\n",
-				(*(field + 64) & 0x1) ? "enabled" : "disabled");
-			printf("\t\tStream Directive         : %s\n",
-				(*(field + 64) & 0x2) ? "enabled" : "disabled");
-			printf("\t\tData Placement Directive : %s\n",
-				(*(field + 64) & 0x4) ? "enabled" : "disabled");
+
+			t = stdout_kv_table_create();
+			if (!t)
+				return;
+
+			shr_table_set_indent(t, 2);
+			stdout_kv_add(t, "Identify Directive", "%s",
+				      (*(field + 64) & 0x1) ?
+				      "enabled" : "disabled");
+			stdout_kv_add(t, "Stream Directive", "%s",
+				      (*(field + 64) & 0x2) ?
+				      "enabled" : "disabled");
+			stdout_kv_add(t, "Data Placement Directive", "%s",
+				      (*(field + 64) & 0x4) ?
+				      "enabled" : "disabled");
+
+			stdout_kv_table_finish(t, "directive-show");
 			break;
 		default:
 			fprintf(stderr,
@@ -5380,33 +8397,65 @@ static void stdout_directive_show_fields(__u8 dtype, __u8 doper,
 	case NVME_DIRECTIVE_DTYPE_STREAMS:
 		switch (doper) {
 		case NVME_DIRECTIVE_RECEIVE_STREAMS_DOPER_PARAM:
-			printf("\tMax Streams Limit                          (MSL): %u\n",
-				*(__u16 *)field);
-			printf("\tNVM Subsystem Streams Available           (NSSA): %u\n",
-				*(__u16 *)(field + 2));
-			printf("\tNVM Subsystem Streams Open                (NSSO): %u\n",
-				*(__u16 *)(field + 4));
-			printf("\tNVM Subsystem Stream Capability           (NSSC): %u\n",
-				*(__u16 *)(field + 6));
-			printf("\tStream Write Size (in unit of LB size)     (SWS): %u\n",
-				*(__u32 *)(field + 16));
-			printf("\tStream Granularity Size (in unit of SWS)   (SGS): %u\n",
-				*(__u16 *)(field + 20));
-			printf("\tNamespace Streams Allocated                (NSA): %u\n",
-				*(__u16 *)(field + 22));
-			printf("\tNamespace Streams Open                     (NSO): %u\n",
-				*(__u16 *)(field + 24));
+			t = stdout_kv_table_create();
+			if (!t)
+				return;
+
+			stdout_kv_add(t, "Max Streams Limit (MSL)", "%u",
+				      *(__u16 *)field);
+			stdout_kv_add(t,
+				      "NVM Subsystem Streams Available (NSSA)",
+				      "%u", *(__u16 *)(field + 2));
+			stdout_kv_add(t,
+				      "NVM Subsystem Streams Open (NSSO)",
+				      "%u", *(__u16 *)(field + 4));
+			stdout_kv_add(t,
+				      "NVM Subsystem Stream Capability (NSSC)",
+				      "%u", *(__u16 *)(field + 6));
+			stdout_kv_add(t,
+				      "Stream Write Size (in unit of LB size) (SWS)",
+				      "%u", *(__u32 *)(field + 16));
+			stdout_kv_add(t,
+				      "Stream Granularity Size (in unit of SWS) (SGS)",
+				      "%u", *(__u16 *)(field + 20));
+			stdout_kv_add(t,
+				      "Namespace Streams Allocated (NSA)",
+				      "%u", *(__u16 *)(field + 22));
+			stdout_kv_add(t, "Namespace Streams Open (NSO)", "%u",
+				      *(__u16 *)(field + 24));
+
+			stdout_kv_table_finish(t, "directive-show");
 			break;
 		case NVME_DIRECTIVE_RECEIVE_STREAMS_DOPER_STATUS:
 			count = *(__u16 *)field;
-			printf("\tOpen Stream Count  : %u\n", *(__u16 *)field);
-			for (i = 0; i < count; i++)
-				printf("\tStream Identifier %.6u : %u\n", i + 1,
-					*(__u16 *)(field + ((i + 1) * 2)));
+
+			t = stdout_kv_table_create();
+			if (!t)
+				return;
+
+			stdout_kv_add(t, "Open Stream Count", "%u",
+				      *(__u16 *)field);
+			for (i = 0; i < count; i++) {
+				char name[32];
+
+				snprintf(name, sizeof(name),
+					 "Stream Identifier %.6u", i + 1);
+				stdout_kv_add(t, name, "%u",
+					      *(__u16 *)(field +
+							 (i + 1) * 2));
+			}
+
+			stdout_kv_table_finish(t, "directive-show");
 			break;
 		case NVME_DIRECTIVE_RECEIVE_STREAMS_DOPER_RESOURCE:
-			printf("\tNamespace Streams Allocated (NSA): %u\n",
-				result & 0xffff);
+			t = stdout_kv_table_create();
+			if (!t)
+				return;
+
+			stdout_kv_add(t, "Namespace Streams Allocated (NSA)",
+				      "%u", result & 0xffff);
+
+			stdout_kv_table_finish(t, "directive-show");
 			break;
 		default:
 			fprintf(stderr,
@@ -5433,10 +8482,20 @@ static void stdout_directive_show(__u8 type, __u8 oper, __u16 spec, __u32 nsid, 
 
 static void stdout_lba_status_info(__u64 result)
 {
-	printf("\tLBA Status Information Poll Interval (LSIPI)  : %u\n",
-	       (__u32)NVME_FEAT_LBAS_LSIPI(result));
-	printf("\tLBA Status Information Report Interval (LSIRI): %u\n",
-	       (__u32)NVME_FEAT_LBAS_LSIRI(result));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	shr_table_set_indent(t, 1);
+
+	stdout_kv_add(t, "LBA Status Information Poll Interval (LSIPI)",
+		      "%u", (__u32)NVME_FEAT_LBAS_LSIPI(result));
+	stdout_kv_add(t, "LBA Status Information Report Interval (LSIRI)",
+		      "%u", (__u32)NVME_FEAT_LBAS_LSIRI(result));
+
+	stdout_kv_table_finish(t, "lba-status-info");
 }
 
 static bool line_equal(unsigned char *buf, int len, int width, int offset)
@@ -5502,63 +8561,126 @@ void stdout_d(unsigned char *buf, int len, int width, int group)
 
 static void stdout_plm_config(struct nvme_plm_config *plmcfg)
 {
-	printf("\tEnable Event          :%04x\n", le16_to_cpu(plmcfg->ee));
-	printf("\tDTWIN Reads Threshold :%"PRIu64"\n", le64_to_cpu(plmcfg->dtwinrt));
-	printf("\tDTWIN Writes Threshold:%"PRIu64"\n", le64_to_cpu(plmcfg->dtwinwt));
-	printf("\tDTWIN Time Threshold  :%"PRIu64"\n", le64_to_cpu(plmcfg->dtwintt));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Enable Event", "%04x", le16_to_cpu(plmcfg->ee));
+	stdout_kv_add(t, "DTWIN Reads Threshold", "%"PRIu64,
+		      le64_to_cpu(plmcfg->dtwinrt));
+	stdout_kv_add(t, "DTWIN Writes Threshold", "%"PRIu64,
+		      le64_to_cpu(plmcfg->dtwinwt));
+	stdout_kv_add(t, "DTWIN Time Threshold", "%"PRIu64,
+		      le64_to_cpu(plmcfg->dtwintt));
+
+	stdout_kv_table_finish(t, "plm-config");
 }
 
 static void stdout_rate_limiting_data(struct nvme_rate_limiting_data *rld)
 {
 	__u16 rlc = le16_to_cpu(rld->rlc);
 	__u16 rlm = NVME_RATE_LIMITING_RLC_RLM(rlc);
+	struct shr_table *t;
 
-	printf("\tRate Limiting Enable (RLE): %s\n",
-	       NVME_RATE_LIMITING_RLC_RLE(rlc) ? "Enabled" : "Disabled");
-	printf("\tRate Limiting Mode (RLM): %u - %s\n", rlm,
-		rlm == NVME_RATE_LIMITING_MODE_SOFT_LIMIT ? "Soft Limit" :
-		rlm == NVME_RATE_LIMITING_MODE_HARD_LIMIT ? "Hard Limit" : "Reserved");
-	printf("\tBandwidth Scale Factor (BWSF): %u\n", rld->bwsf);
-	printf("\tTotal Bandwidth Value (TBWV): %"PRIu64"\n", le64_to_cpu(rld->tbwv));
-	printf("\tWrite Bandwidth Value (WBWV): %"PRIu64"\n", le64_to_cpu(rld->wbwv));
-	printf("\tTotal IOPS (TIOPS): %u\n", le32_to_cpu(rld->tiops));
-	printf("\tWrite IOPS (WIOPS): %u\n", le32_to_cpu(rld->wiops));
-	printf("\tRead IOPS Ratio (RIOPSR): %u\n", rld->riopsr);
-	printf("\tWrite IOPS Ratio (WIOPSR): %u\n", rld->wiopsr);
-	printf("\tRead Bandwidth Ratio (RBWR): %u\n", rld->rbwr);
-	printf("\tWrite Bandwidth Ratio (WBWR): %u\n", rld->wbwr);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Rate Limiting Enable (RLE)", "%s",
+		      NVME_RATE_LIMITING_RLC_RLE(rlc) ? "Enabled" : "Disabled");
+	stdout_kv_add(t, "Rate Limiting Mode (RLM)", "%u - %s", rlm,
+		      rlm == NVME_RATE_LIMITING_MODE_SOFT_LIMIT ? "Soft Limit" :
+		      rlm == NVME_RATE_LIMITING_MODE_HARD_LIMIT ?
+		      "Hard Limit" : "Reserved");
+	stdout_kv_add(t, "Bandwidth Scale Factor (BWSF)", "%u", rld->bwsf);
+	stdout_kv_add(t, "Total Bandwidth Value (TBWV)", "%"PRIu64,
+		      le64_to_cpu(rld->tbwv));
+	stdout_kv_add(t, "Write Bandwidth Value (WBWV)", "%"PRIu64,
+		      le64_to_cpu(rld->wbwv));
+	stdout_kv_add(t, "Total IOPS (TIOPS)", "%u", le32_to_cpu(rld->tiops));
+	stdout_kv_add(t, "Write IOPS (WIOPS)", "%u", le32_to_cpu(rld->wiops));
+	stdout_kv_add(t, "Read IOPS Ratio (RIOPSR)", "%u", rld->riopsr);
+	stdout_kv_add(t, "Write IOPS Ratio (WIOPSR)", "%u", rld->wiopsr);
+	stdout_kv_add(t, "Read Bandwidth Ratio (RBWR)", "%u", rld->rbwr);
+	stdout_kv_add(t, "Write Bandwidth Ratio (WBWR)", "%u", rld->wbwr);
+
+	stdout_kv_table_finish(t, "rate-limiting-data");
 }
 
 static void stdout_feat_perfc_std(struct nvme_std_perf_attr *data)
 {
-	printf("random 4 kib average read latency (R4KARL): %s (0x%02x)\n",
-	       nvme_feature_perfc_r4karl_to_string(data->r4karl), data->r4karl);
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "random 4 kib average read latency (R4KARL)",
+		      "%s (0x%02x)",
+		      nvme_feature_perfc_r4karl_to_string(data->r4karl),
+		      data->r4karl);
+
+	stdout_kv_table_finish(t, "feat-perfc-std");
 }
 
 static void stdout_feat_perfc_id_list(struct nvme_perf_attr_id_list *data)
 {
 	int i;
 	int attri_vs;
+	struct shr_table *t;
 
-	printf("attribute type (ATTRTYP): %s (0x%02x)\n",
-	       nvme_feature_perfc_attrtyp_to_string(data->attrtyp), data->attrtyp);
-	printf("maximum saveable vendor specific performance attributes (MSVSPA): %d\n",
-	       data->msvspa);
-	printf("unused saveable vendor specific performance attributes (USVSPA): %d\n",
-	       data->usvspa);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "attribute type (ATTRTYP)", "%s (0x%02x)",
+		      nvme_feature_perfc_attrtyp_to_string(data->attrtyp),
+		      data->attrtyp);
+	stdout_kv_add(t,
+		      "maximum saveable vendor specific performance attributes (MSVSPA)",
+		      "%d", data->msvspa);
+	stdout_kv_add(t,
+		      "unused saveable vendor specific performance attributes (USVSPA)",
+		      "%d", data->usvspa);
+
+	stdout_kv_table_finish(t, "feat-perfc-id-list");
 
 	printf("performance attribute identifier list\n");
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
 	for (i = 0; i < ARRAY_SIZE(data->id_list); i++) {
+		char name[48];
+
 		attri_vs = i + NVME_FEAT_PERFC_ATTRI_VS_MIN;
-		printf("performance attribute %02xh identifier (PA%02XHI): %s\n", attri_vs,
-		       attri_vs, shr_uuid_to_string(data->id_list[i].id));
+		snprintf(name, sizeof(name),
+			 "performance attribute %02xh identifier (PA%02XHI)",
+			 attri_vs, attri_vs);
+		stdout_kv_add(t, name, "%s",
+			      shr_uuid_to_string(data->id_list[i].id));
 	}
+
+	stdout_kv_table_finish(t, "feat-perfc-id-list");
 }
 
 static void stdout_feat_perfc_vs(struct nvme_vs_perf_attr *data)
 {
-	printf("performance attribute identifier (PAID): %s\n", shr_uuid_to_string(data->paid));
-	printf("attribute length (ATTRL): %u\n", data->attrl);
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "performance attribute identifier (PAID)", "%s",
+		      shr_uuid_to_string(data->paid));
+	stdout_kv_add(t, "attribute length (ATTRL)", "%u", data->attrl);
+
+	stdout_kv_table_finish(t, "feat-perfc-vs");
+
 	printf("vendor specific (VS):\n");
 	d((unsigned char *)data->vs, data->attrl, 16, 1);
 }
@@ -5568,11 +8690,18 @@ static void stdout_feat_perfc(unsigned int result,
 {
 	__u8 attri;
 	bool rvspa;
+	struct shr_table *t;
 
 	nvme_feature_decode_perf_characteristics(result, &attri, &rvspa);
 
-	printf("attribute index (ATTRI): %s (0x%02x)\n", nvme_feature_perfc_attri_to_string(attri),
-	       attri);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "attribute index (ATTRI)", "%s (0x%02x)",
+		      nvme_feature_perfc_attri_to_string(attri), attri);
+
+	stdout_kv_table_finish(t, "feat-perfc");
 
 	switch (attri) {
 	case NVME_FEAT_PERFC_ATTRI_STD:
@@ -5596,18 +8725,35 @@ static void stdout_host_metadata(enum nvme_features_id fid,
 	int i;
 	char val[4096];
 	__u16 len;
+	struct shr_table *t;
 
-	printf("\tNum Metadata Element Descriptors: %d\n", data->ndesc);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Num Metadata Element Descriptors", "%d", data->ndesc);
+
+	stdout_kv_table_finish(t, "host-metadata");
+
 	for (i = 0; i < data->ndesc; i++) {
 		len = le16_to_cpu(desc->len);
 		strncpy(val, (char *)desc->val, min(sizeof(val) - 1, len));
 
 		printf("\tElement[%-3d]:\n", i);
-		printf("\t\tType	    : %#02x (%s)\n", desc->type,
-		       nvme_host_metadata_type_to_string(fid, desc->type));
-		printf("\t\tRevision : %d\n", desc->rev);
-		printf("\t\tLength   : %d\n", len);
-		printf("\t\tValue    : %s\n", val);
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		shr_table_set_indent(t, 2);
+		stdout_kv_add(t, "Type", "%#02x (%s)", desc->type,
+			      nvme_host_metadata_type_to_string(fid,
+								 desc->type));
+		stdout_kv_add(t, "Revision", "%d", desc->rev);
+		stdout_kv_add(t, "Length", "%d", len);
+		stdout_kv_add(t, "Value", "%s", val);
+
+		stdout_kv_table_finish(t, "host-metadata");
 
 		desc = (struct nvme_metadata_element_desc *)&desc->val[desc->len];
 	}
@@ -5616,18 +8762,25 @@ static void stdout_host_metadata(enum nvme_features_id fid,
 static void stdout_feat_host_id(unsigned int result, unsigned char *hostid)
 {
 	bool exhid;
+	struct shr_table *t;
 
 	if (!hostid)
 		return;
 
 	nvme_feature_decode_host_id(result, &exhid);
 
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
 	if (exhid)
-		printf("\tHost Identifier (HOSTID):  %s\n",
-		       uint128_t_to_l10n_string(le128_to_cpu(hostid)));
+		stdout_kv_add(t, "Host Identifier (HOSTID)", "%s",
+			      uint128_t_to_l10n_string(le128_to_cpu(hostid)));
 	else
-		printf("\tHost Identifier (HOSTID):  %" PRIu64 "\n",
-		       le64_to_cpu(*(__le64 *)hostid));
+		stdout_kv_add(t, "Host Identifier (HOSTID)", "%"PRIu64,
+			      le64_to_cpu(*(__le64 *)hostid));
+
+	stdout_kv_table_finish(t, "feat-host-id");
 }
 
 static void stdout_feature_show(enum nvme_features_id fid, int sel,
@@ -5650,136 +8803,244 @@ static void stdout_feature_show_fields(enum nvme_features_id fid,
 {
 	const char *async = "Send async event";
 	const char *no_async = "Do not send async event";
+	struct shr_table *t;
 	__u8 field;
 
 	switch (fid) {
 	case NVME_FEAT_FID_ARBITRATION:
-		printf("\tHigh Priority Weight   (HPW): %u\n", NVME_FEAT_ARB_HPW(result) + 1);
-		printf("\tMedium Priority Weight (MPW): %u\n", NVME_FEAT_ARB_MPW(result) + 1);
-		printf("\tLow Priority Weight    (LPW): %u\n", NVME_FEAT_ARB_LPW(result) + 1);
-		printf("\tArbitration Burst       (AB): ");
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "High Priority Weight (HPW)", "%u",
+			      NVME_FEAT_ARB_HPW(result) + 1);
+		stdout_kv_add(t, "Medium Priority Weight (MPW)", "%u",
+			      NVME_FEAT_ARB_MPW(result) + 1);
+		stdout_kv_add(t, "Low Priority Weight (LPW)", "%u",
+			      NVME_FEAT_ARB_LPW(result) + 1);
 		if (NVME_FEAT_ARB_BURST(result) == NVME_FEAT_ARBITRATION_BURST_MASK)
-			printf("No limit\n");
+			stdout_kv_add(t, "Arbitration Burst (AB)", "No limit");
 		else
-			printf("%u\n", 1 << NVME_FEAT_ARB_BURST(result));
+			stdout_kv_add(t, "Arbitration Burst (AB)", "%u",
+				      1 << NVME_FEAT_ARB_BURST(result));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_POWER_MGMT:
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
 		field = NVME_FEAT_PM_WH(result);
-		printf("\tWorkload Hint (WH): %u - %s\n", field,
-		       nvme_feature_wl_hints_to_string(field));
-		printf("\tPower State   (PS): %u\n", NVME_FEAT_PM_PS(result));
+		stdout_kv_add(t, "Workload Hint (WH)", "%u - %s", field,
+			      nvme_feature_wl_hints_to_string(field));
+		stdout_kv_add(t, "Power State (PS)", "%u",
+			      NVME_FEAT_PM_PS(result));
 		field = NVME_FEAT_PM_IIELL(result);
 		if (field)
-			printf("\tIdle I/O Exit Latency Limit (IIELL): %uus\n", field * 100);
+			stdout_kv_add(t, "Idle I/O Exit Latency Limit (IIELL)",
+				      "%uus", field * 100);
 		else
-			printf("\tIdle I/O Exit Latency Limit (IIELL): disabled\n");
+			stdout_kv_add(t, "Idle I/O Exit Latency Limit (IIELL)",
+				      "disabled");
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_LBA_RANGE:
 		field = NVME_FEAT_LBAR_NR(result);
-		printf("\tNumber of LBA Ranges (NUM): %u\n", field + 1);
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Number of LBA Ranges (NUM)", "%u", field + 1);
+
+		stdout_kv_table_finish(t, "feature-show-fields");
+
 		if (buf)
 			stdout_lba_range((struct nvme_lba_range_type *)buf, field);
 		break;
 	case NVME_FEAT_FID_TEMP_THRESH:
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
 		field = NVME_FEAT_TT_TMPTHH(result);
-		printf("\tTemperature Threshold Hysteresis(TMPTHH): %s (%u K, %s)\n",
-		       nvme_degrees_string(field), field, nvme_degrees_fahrenheit_string(field));
+		stdout_kv_add(t, "Temperature Threshold Hysteresis (TMPTHH)",
+			      "%s (%u K, %s)", nvme_degrees_string(field),
+			      field, nvme_degrees_fahrenheit_string(field));
 		field = NVME_FEAT_TT_THSEL(result);
-		printf("\tThreshold Type Select         (THSEL): %u - %s\n", field,
-		       nvme_feature_temp_type_to_string(field));
+		stdout_kv_add(t, "Threshold Type Select (THSEL)", "%u - %s",
+			      field, nvme_feature_temp_type_to_string(field));
 		field = NVME_FEAT_TT_TMPSEL(result);
-		printf("\tThreshold Temperature Select (TMPSEL): %u - %s\n",
-		       field, nvme_feature_temp_sel_to_string(field));
-		printf("\tTemperature Threshold         (TMPTH): %s (%u K, %s)\n",
-		       nvme_degrees_string(NVME_FEAT_TT_TMPTH(result)), NVME_FEAT_TT_TMPTH(result),
-		       nvme_degrees_fahrenheit_string(NVME_FEAT_TT_TMPTH(result)));
+		stdout_kv_add(t, "Threshold Temperature Select (TMPSEL)",
+			      "%u - %s", field,
+			      nvme_feature_temp_sel_to_string(field));
+		field = NVME_FEAT_TT_TMPTH(result);
+		stdout_kv_add(t, "Temperature Threshold (TMPTH)",
+			      "%s (%u K, %s)",
+			      nvme_degrees_string(field), field,
+			      nvme_degrees_fahrenheit_string(field));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_ERR_RECOVERY:
-		printf("\tDeallocated or Unwritten Logical Block Error Enable (DULBE): %s\n",
-		       NVME_FEAT_ER_DULBE(result) ? "Enabled" : "Disabled");
-		printf("\tTime Limited Error Recovery                          (TLER): %u ms\n",
-		       NVME_FEAT_ER_TLER(result) * 100);
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t,
+			      "Deallocated or Unwritten Logical Block Error Enable (DULBE)",
+			      "%s",
+			      NVME_FEAT_ER_DULBE(result) ?
+			      "Enabled" : "Disabled");
+		stdout_kv_add(t, "Time Limited Error Recovery (TLER)", "%u ms",
+			      NVME_FEAT_ER_TLER(result) * 100);
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_VOLATILE_WC:
-		printf("\tVolatile Write Cache Enable (WCE): %s\n",
-		       NVME_FEAT_VWC_WCE(result) ? "Enabled" : "Disabled");
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Volatile Write Cache Enable (WCE)", "%s",
+			      NVME_FEAT_VWC_WCE(result) ?
+			      "Enabled" : "Disabled");
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_NUM_QUEUES:
-		printf("\tNumber of IO Completion Queues Allocated (NCQA): %u\n",
-		       NVME_FEAT_NRQS_NCQR(result) + 1);
-		printf("\tNumber of IO Submission Queues Allocated (NSQA): %u\n",
-		       NVME_FEAT_NRQS_NSQR(result) + 1);
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t,
+			      "Number of IO Completion Queues Allocated (NCQA)",
+			      "%u", NVME_FEAT_NRQS_NCQR(result) + 1);
+		stdout_kv_add(t,
+			      "Number of IO Submission Queues Allocated (NSQA)",
+			      "%u", NVME_FEAT_NRQS_NSQR(result) + 1);
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_IRQ_COALESCE:
-		printf("\tAggregation Time     (TIME): %u usec\n",
-		       NVME_FEAT_IRQC_TIME(result) * 100);
-		printf("\tAggregation Threshold (THR): %u\n", NVME_FEAT_IRQC_THR(result) + 1);
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Aggregation Time (TIME)", "%u usec",
+			      NVME_FEAT_IRQC_TIME(result) * 100);
+		stdout_kv_add(t, "Aggregation Threshold (THR)", "%u",
+			      NVME_FEAT_IRQC_THR(result) + 1);
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_IRQ_CONFIG:
-		printf("\tCoalescing Disable (CD): %s\n",
-		       NVME_FEAT_ICFG_CD(result) ? "True" : "False");
-		printf("\tInterrupt Vector   (IV): %u\n", NVME_FEAT_ICFG_IV(result));
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Coalescing Disable (CD)", "%s",
+			      NVME_FEAT_ICFG_CD(result) ? "True" : "False");
+		stdout_kv_add(t, "Interrupt Vector (IV)", "%u",
+			      NVME_FEAT_ICFG_IV(result));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_WRITE_ATOMIC:
-		printf("\tDisable Normal (DN): %s\n", NVME_FEAT_WA_DN(result) ? "True" : "False");
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Disable Normal (DN)", "%s",
+			      NVME_FEAT_WA_DN(result) ? "True" : "False");
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_ASYNC_EVENT:
-		printf("\t%-58s: %s\n", feat_ae_dlpcn,
-		       NVME_FEAT_AE_DLPCN(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_hdlpcn,
-		       NVME_FEAT_AE_HDLPCN(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_adlpcn,
-		       NVME_FEAT_AE_ADLPCN(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_pmdrlpcn,
-		       NVME_FEAT_AE_PMDRLPCN(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_zdcn,
-		       NVME_FEAT_AE_ZDCN(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_rlccn,
-		       NVME_FEAT_AE_RLCCN(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_lhcn,
-		       NVME_FEAT_AE_LHCN(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_ccrcn,
-		       NVME_FEAT_AE_CCRCN(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_ansan,
-		       NVME_FEAT_AE_ANSAN(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_rgrp0,
-		       NVME_FEAT_AE_RGRP0(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_rassn,
-		       NVME_FEAT_AE_RASSN(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_tthry,
-		       NVME_FEAT_AE_TTHRY(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_nnsshdn,
-		       NVME_FEAT_AE_NNSSHDN(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_ega,
-		       NVME_FEAT_AE_EGA(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_lbas,
-		       NVME_FEAT_AE_LBAS(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_pla,
-		       NVME_FEAT_AE_PLA(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_ana,
-		       NVME_FEAT_AE_ANA(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_telem,
-		       NVME_FEAT_AE_TELEM(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_fw,
-		       NVME_FEAT_AE_FW(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_nan,
-		       NVME_FEAT_AE_NAN(result) ? async : no_async);
-		printf("\t%-58s: %s\n", feat_ae_smart,
-		       NVME_FEAT_AE_SMART(result) ? async : no_async);
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, feat_ae_dlpcn, "%s",
+			      NVME_FEAT_AE_DLPCN(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_hdlpcn, "%s",
+			      NVME_FEAT_AE_HDLPCN(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_adlpcn, "%s",
+			      NVME_FEAT_AE_ADLPCN(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_pmdrlpcn, "%s",
+			      NVME_FEAT_AE_PMDRLPCN(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_zdcn, "%s",
+			      NVME_FEAT_AE_ZDCN(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_rlccn, "%s",
+			      NVME_FEAT_AE_RLCCN(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_lhcn, "%s",
+			      NVME_FEAT_AE_LHCN(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_ccrcn, "%s",
+			      NVME_FEAT_AE_CCRCN(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_ansan, "%s",
+			      NVME_FEAT_AE_ANSAN(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_rgrp0, "%s",
+			      NVME_FEAT_AE_RGRP0(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_rassn, "%s",
+			      NVME_FEAT_AE_RASSN(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_tthry, "%s",
+			      NVME_FEAT_AE_TTHRY(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_nnsshdn, "%s",
+			      NVME_FEAT_AE_NNSSHDN(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_ega, "%s",
+			      NVME_FEAT_AE_EGA(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_lbas, "%s",
+			      NVME_FEAT_AE_LBAS(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_pla, "%s",
+			      NVME_FEAT_AE_PLA(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_ana, "%s",
+			      NVME_FEAT_AE_ANA(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_telem, "%s",
+			      NVME_FEAT_AE_TELEM(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_fw, "%s",
+			      NVME_FEAT_AE_FW(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_nan, "%s",
+			      NVME_FEAT_AE_NAN(result) ? async : no_async);
+		stdout_kv_add(t, feat_ae_smart, "%s",
+			      NVME_FEAT_AE_SMART(result) ? async : no_async);
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_AUTO_PST:
-		printf("\tAutonomous Power State Transition Enable (APSTE): %s\n",
-		       NVME_FEAT_APST_APSTE(result) ? "Enabled" : "Disabled");
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t,
+			      "Autonomous Power State Transition Enable (APSTE)",
+			      "%s",
+			      NVME_FEAT_APST_APSTE(result) ?
+			      "Enabled" : "Disabled");
+
+		stdout_kv_table_finish(t, "feature-show-fields");
+
 		if (buf)
 			stdout_auto_pst((struct nvme_feat_auto_pst *)buf);
 		break;
 	case NVME_FEAT_FID_HOST_MEM_BUF:
-		printf("\tEnable Host Memory (EHM): %s\n",
-		       NVME_FEAT_HMEM_EHM(result) ? "Enabled" : "Disabled");
-		printf("\tHost Memory Non-operational Access Restriction Enable (HMNARE): %s\n",
-		       (result & 0x00000004) ? "True" : "False");
-		printf("\tHost Memory Non-operational Access Restricted (HMNAR): %s\n",
-		       (result & 0x00000008) ? "True" : "False");
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Enable Host Memory (EHM)", "%s",
+			      NVME_FEAT_HMEM_EHM(result) ?
+			      "Enabled" : "Disabled");
+		stdout_kv_add(t,
+			      "Host Memory Non-operational Access Restriction Enable (HMNARE)",
+			      "%s", (result & 0x00000004) ? "True" : "False");
+		stdout_kv_add(t,
+			      "Host Memory Non-operational Access Restricted (HMNAR)",
+			      "%s", (result & 0x00000008) ? "True" : "False");
+
+		stdout_kv_table_finish(t, "feature-show-fields");
+
 		if (buf)
 			stdout_host_mem_buffer((struct nvme_host_mem_buf_attrs *)buf);
 		break;
@@ -5788,73 +9049,169 @@ static void stdout_feature_show_fields(enum nvme_features_id fid,
 			stdout_timestamp((struct nvme_timestamp *)buf);
 		break;
 	case NVME_FEAT_FID_KATO:
-		printf("\tKeep Alive Timeout (KATO) in milliseconds: %u\n", result);
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Keep Alive Timeout (KATO) in milliseconds",
+			      "%u", result);
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_HCTM:
-		printf("\tThermal Management Temperature 1 (TMT1) : %u K (%s, %s)\n",
-		       NVME_FEAT_HCTM_TMT1(result),
-		       nvme_degrees_string(NVME_FEAT_HCTM_TMT1(result)),
-		       nvme_degrees_fahrenheit_string(NVME_FEAT_HCTM_TMT1(result)));
-		printf("\tThermal Management Temperature 2 (TMT2) : %u K (%s, %s)\n",
-		       NVME_FEAT_HCTM_TMT2(result),
-		       nvme_degrees_string(NVME_FEAT_HCTM_TMT2(result)),
-		       nvme_degrees_fahrenheit_string(NVME_FEAT_HCTM_TMT2(result)));
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		field = NVME_FEAT_HCTM_TMT1(result);
+		stdout_kv_add(t, "Thermal Management Temperature 1 (TMT1)",
+			      "%u K (%s, %s)", field,
+			      nvme_degrees_string(field),
+			      nvme_degrees_fahrenheit_string(field));
+		field = NVME_FEAT_HCTM_TMT2(result);
+		stdout_kv_add(t, "Thermal Management Temperature 2 (TMT2)",
+			      "%u K (%s, %s)", field,
+			      nvme_degrees_string(field),
+			      nvme_degrees_fahrenheit_string(field));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_NOPSC:
-		printf("\tNon-Operational Power State Permissive Mode Enable (NOPPME): %s\n",
-		       NVME_FEAT_NOPS_NOPPME(result) ? "True" : "False");
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t,
+			      "Non-Operational Power State Permissive Mode Enable (NOPPME)",
+			      "%s",
+			      NVME_FEAT_NOPS_NOPPME(result) ? "True" : "False");
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_RRL:
-		printf("\tRead Recovery Level (RRL): %u\n", NVME_FEAT_RRL_RRL(result));
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Read Recovery Level (RRL)", "%u",
+			      NVME_FEAT_RRL_RRL(result));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_PLM_CONFIG:
-		printf("\tPredictable Latency Window Enabled: %s\n",
-		       NVME_FEAT_PLM_LPE(result) ? "True" : "False");
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Predictable Latency Window Enabled", "%s",
+			      NVME_FEAT_PLM_LPE(result) ? "True" : "False");
+
+		stdout_kv_table_finish(t, "feature-show-fields");
+
 		if (buf)
 			stdout_plm_config((struct nvme_plm_config *)buf);
 		break;
 	case NVME_FEAT_FID_PLM_WINDOW:
-		printf("\tWindow Select: %s", nvme_plm_window_to_string(result));
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Window Select", "%s",
+			      nvme_plm_window_to_string(result));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_LBA_STS_INTERVAL:
 		stdout_lba_status_info(result);
 		break;
 	case NVME_FEAT_FID_HOST_BEHAVIOR:
 		if (buf) {
-			struct nvme_feat_host_behavior *host_behavior =
+			struct nvme_feat_host_behavior *hb =
 				(struct nvme_feat_host_behavior *)buf;
-			printf("\tAdvanced Command Retry Enable (ACRE)                    : %s\n",
-			       host_behavior->acre ? "True" : "False");
-			printf("\tExtended Telemetry Data Area 4 Supported (ETDAS)        : %s\n",
-			       host_behavior->etdas ? "True" : "False");
-			printf("\tLBA Format Extension Enable (LBAFEE)                    : %s\n",
-			       host_behavior->lbafee ? "True" : "False");
-			printf("\tHost Dispersed Namespace Support (HDISNS)               : %s\n",
-			       host_behavior->hdisns ? "Enabled" : "Disabled");
-			printf("\tCopy Descriptor Format 2h Enabled (CDF2E)               : %s\n",
-			       host_behavior->cdfe & (1 << 2) ? "True" : "False");
-			printf("\tCopy Descriptor Format 3h Enabled (CDF3E)               : %s\n",
-			       host_behavior->cdfe & (1 << 3) ? "True" : "False");
-			printf("\tCopy Descriptor Format 4h Enabled (CDF4E)               : %s\n",
-			       host_behavior->cdfe & (1 << 4) ? "True" : "False");
+
+			t = stdout_kv_table_create();
+			if (!t)
+				return;
+
+			stdout_kv_add(t, "Advanced Command Retry Enable (ACRE)",
+				      "%s", hb->acre ? "True" : "False");
+			stdout_kv_add(t,
+				      "Extended Telemetry Data Area 4 Supported (ETDAS)",
+				      "%s", hb->etdas ? "True" : "False");
+			stdout_kv_add(t, "LBA Format Extension Enable (LBAFEE)",
+				      "%s", hb->lbafee ? "True" : "False");
+			stdout_kv_add(t,
+				      "Host Dispersed Namespace Support (HDISNS)",
+				      "%s",
+				      hb->hdisns ? "Enabled" : "Disabled");
+			stdout_kv_add(t,
+				      "Copy Descriptor Format 2h Enabled (CDF2E)",
+				      "%s",
+				      hb->cdfe & (1 << 2) ? "True" : "False");
+			stdout_kv_add(t,
+				      "Copy Descriptor Format 3h Enabled (CDF3E)",
+				      "%s",
+				      hb->cdfe & (1 << 3) ? "True" : "False");
+			stdout_kv_add(t,
+				      "Copy Descriptor Format 4h Enabled (CDF4E)",
+				      "%s",
+				      hb->cdfe & (1 << 4) ? "True" : "False");
+
+			stdout_kv_table_finish(t, "feature-show-fields");
 		}
 		break;
 	case NVME_FEAT_FID_SANITIZE:
-		printf("\tNo-Deallocate Response Mode (NODRM) : %u\n", NVME_FEAT_SC_NODRM(result));
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "No-Deallocate Response Mode (NODRM)", "%u",
+			      NVME_FEAT_SC_NODRM(result));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_ENDURANCE_EVT_CFG:
-		printf("\tEndurance Group Identifier (ENDGID): %u\n", NVME_FEAT_EG_ENDGID(result));
-		printf("\tEndurance Group Critical Warnings  : %u\n", NVME_FEAT_EG_EGCW(result));
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Endurance Group Identifier (ENDGID)", "%u",
+			      NVME_FEAT_EG_ENDGID(result));
+		stdout_kv_add(t, "Endurance Group Critical Warnings", "%u",
+			      NVME_FEAT_EG_EGCW(result));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_IOCS_PROFILE:
-		printf("\tI/O Command Set Profile: %s\n", result & 0x1 ? "True" : "False");
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "I/O Command Set Profile", "%s",
+			      result & 0x1 ? "True" : "False");
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_SPINUP_CONTROL:
-		printf("\tSpinup control feature Enabled: %s\n", (result & 1) ? "True" : "False");
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Spinup control feature Enabled", "%s",
+			      (result & 1) ? "True" : "False");
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_POWER_LOSS_SIGNAL:
-		printf("\tPower Loss Signaling Mode (PLSM): %s\n",
-		       nvme_pls_mode_to_string(NVME_GET(result, FEAT_PLS_MODE)));
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Power Loss Signaling Mode (PLSM)", "%s",
+			      nvme_pls_mode_to_string(
+					NVME_GET(result, FEAT_PLS_MODE)));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_PERF_CHARACTERISTICS:
 		stdout_feat_perfc(result,
@@ -5867,101 +9224,193 @@ static void stdout_feature_show_fields(enum nvme_features_id fid,
 			stdout_host_metadata(fid, (struct nvme_host_metadata *)buf);
 		break;
 	case NVME_FEAT_FID_SW_PROGRESS:
-		printf("\tPre-boot Software Load Count (PBSLC): %u\n", NVME_FEAT_SPM_PBSLC(result));
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Pre-boot Software Load Count (PBSLC)", "%u",
+			      NVME_FEAT_SPM_PBSLC(result));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_HOST_ID:
 		stdout_feat_host_id(result, buf);
 		break;
 	case NVME_FEAT_FID_RESV_NF_MASK:
-		printf("\tMask Reservation Preempted Notification  (RESPRE): %s\n",
-		       NVME_FEAT_RM_RESPRE(result) ? "True" : "False");
-		printf("\tMask Reservation Released Notification   (RESREL): %s\n",
-		       NVME_FEAT_RM_RESREL(result) ? "True" : "False");
-		printf("\tMask Registration Preempted Notification (REGPRE): %s\n",
-		       NVME_FEAT_RM_REGPRE(result) ? "True" : "False");
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t,
+			      "Mask Reservation Preempted Notification (RESPRE)",
+			      "%s",
+			      NVME_FEAT_RM_RESPRE(result) ? "True" : "False");
+		stdout_kv_add(t,
+			      "Mask Reservation Released Notification (RESREL)",
+			      "%s",
+			      NVME_FEAT_RM_RESREL(result) ? "True" : "False");
+		stdout_kv_add(t,
+			      "Mask Registration Preempted Notification (REGPRE)",
+			      "%s",
+			      NVME_FEAT_RM_REGPRE(result) ? "True" : "False");
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_RESV_PERSIST:
-		printf("\tPersist Through Power Loss (PTPL): %s\n",
-		       NVME_FEAT_RP_PTPL(result) ? "True" : "False");
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Persist Through Power Loss (PTPL)", "%s",
+			      NVME_FEAT_RP_PTPL(result) ? "True" : "False");
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_WRITE_PROTECT:
-		printf("\tNamespace Write Protect: %s\n", nvme_ns_wp_cfg_to_string(result));
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Namespace Write Protect", "%s",
+			      nvme_ns_wp_cfg_to_string(result));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_FDP:
-		printf("\tFlexible Direct Placement Enable (FDPE)       : %s\n",
-		       NVME_FEAT_FDPE(result) ? "Yes" : "No");
-		printf("\tFlexible Direct Placement Configuration Index : %u\n",
-		       NVME_FEAT_FDPCIDX(result));
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "Flexible Direct Placement Enable (FDPE)",
+			      "%s", NVME_FEAT_FDPE(result) ? "Yes" : "No");
+		stdout_kv_add(t,
+			      "Flexible Direct Placement Configuration Index",
+			      "%u", NVME_FEAT_FDPCIDX(result));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_FDP_EVENTS:
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
 		for (unsigned int i = 0; i < result; i++) {
 			struct nvme_fdp_supported_event_desc *d;
 
 			d = &((struct nvme_fdp_supported_event_desc *)buf)[i];
 
-			printf("\t%-53s: %sEnabled\n", nvme_fdp_event_to_string(d->evt),
-			       d->evta & 0x1 ? "" : "Not ");
+			stdout_kv_add(t, nvme_fdp_event_to_string(d->evt),
+				      "%sEnabled", d->evta & 0x1 ? "" : "Not ");
 		}
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_BP_WRITE_PROTECT:
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
 		field = NVME_FEAT_BPWPC_BP1WPS(result);
-		printf("\tBoot Partition 1 Write Protection State (BP1WPS): %s\n",
-			nvme_bpwps_to_string(field));
+		stdout_kv_add(t,
+			      "Boot Partition 1 Write Protection State (BP1WPS)",
+			      "%s", nvme_bpwps_to_string(field));
 		field = NVME_FEAT_BPWPC_BP0WPS(result);
-		printf("\tBoot Partition 0 Write Protection State (BP0WPS): %s\n",
-			nvme_bpwps_to_string(field));
+		stdout_kv_add(t,
+			      "Boot Partition 0 Write Protection State (BP0WPS)",
+			      "%s", nvme_bpwps_to_string(field));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
-	case NVME_FEAT_FID_POWER_LIMIT:
+	case NVME_FEAT_FID_POWER_LIMIT: {
+		__cleanup_free char *power_str = NULL;
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
 		field = NVME_FEAT_POWER_LIMIT_PLS(result);
-		printf("\tPower Limit Scale (PLS): %u - %s\n", field,
-		       nvme_feature_power_limit_scale_to_string(field));
-		printf("\tPower Limit Value (PLV): %u\n",
-		       NVME_FEAT_POWER_LIMIT_PLV(result));
-		printf("\tPower Limit: ");
-		print_power_and_scale(NVME_FEAT_POWER_LIMIT_PLV(result), field);
-		printf("\n");
+		power_str = stdout_power_and_scale_str(
+				NVME_FEAT_POWER_LIMIT_PLV(result), field);
+		stdout_kv_add(t, "Power Limit Scale (PLS)", "%u - %s", field,
+			      nvme_feature_power_limit_scale_to_string(field));
+		stdout_kv_add(t, "Power Limit Value (PLV)", "%u",
+			      NVME_FEAT_POWER_LIMIT_PLV(result));
+		stdout_kv_add(t, "Power Limit", "%s", power_str);
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
-	case NVME_FEAT_FID_POWER_THRESH:
+	}
+	case NVME_FEAT_FID_POWER_THRESH: {
+		__cleanup_free char *power_str = NULL;
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
 		field = NVME_FEAT_POWER_THRESH_EPT(result);
-		printf("\tEnable Power Threshold (EPT): %u - %s\n",
-		       field, field ? "Enabled" : "Disabled");
+		stdout_kv_add(t, "Enable Power Threshold (EPT)", "%u - %s",
+			      field, field ? "Enabled" : "Disabled");
 		field = NVME_FEAT_POWER_THRESH_PMTS(result);
-		printf("\tPower Measurement Type Select (PMTS): %u - %s\n",
-		       field, nvme_power_measurement_type_to_string(field));
+		stdout_kv_add(t, "Power Measurement Type Select (PMTS)",
+			      "%u - %s", field,
+			      nvme_power_measurement_type_to_string(field));
 		field = NVME_FEAT_POWER_THRESH_PTS(result);
-		printf("\tPower Threshold Scale (PTS): %u - %s\n", field,
-		       nvme_feature_power_limit_scale_to_string(field));
-		printf("\tPower Threshold Value (PTV): %u\n",
-		       NVME_FEAT_POWER_THRESH_PTV(result));
-		printf("\tPower Threshold: ");
-		print_power_and_scale(NVME_FEAT_POWER_THRESH_PTV(result),
-				      field);
-		printf("\n");
+		power_str = stdout_power_and_scale_str(
+				NVME_FEAT_POWER_THRESH_PTV(result), field);
+		stdout_kv_add(t, "Power Threshold Scale (PTS)", "%u - %s",
+			      field,
+			      nvme_feature_power_limit_scale_to_string(field));
+		stdout_kv_add(t, "Power Threshold Value (PTV)", "%u",
+			      NVME_FEAT_POWER_THRESH_PTV(result));
+		stdout_kv_add(t, "Power Threshold", "%s", power_str);
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
+	}
 	case NVME_FEAT_FID_POWER_MEASUREMENT:
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
 		field = NVME_FEAT_POWER_MEAS_ACT(result);
-		printf("\tAction (ACT): %u - %s\n", field,
-		       nvme_power_measurement_action_to_string(field));
+		stdout_kv_add(t, "Action (ACT)", "%u - %s", field,
+			      nvme_power_measurement_action_to_string(field));
 		field = NVME_FEAT_POWER_MEAS_PMTS(result);
-		printf("\tPower Measurement Type Select (PMTS): %u - %s\n",
-		       field, nvme_power_measurement_type_to_string(field));
-		printf("\tStop Measurement Time (SMT): %u\n",
-		       NVME_FEAT_POWER_MEAS_SMT(result));
+		stdout_kv_add(t, "Power Measurement Type Select (PMTS)",
+			      "%u - %s", field,
+			      nvme_power_measurement_type_to_string(field));
+		stdout_kv_add(t, "Stop Measurement Time (SMT)", "%u",
+			      NVME_FEAT_POWER_MEAS_SMT(result));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_VOLTAGE_THRESHOLD:
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
 		field = NVME_FEAT_VOLTAGE_THRESHOLD_VSENS(result);
-		printf("\tVoltage Sensor Select (VSENS): %u\n", field);
-		printf("\tEnable Voltage Threshold (EVT): %u - %s\n",
-		       !!(result & NVME_FEAT_VOLTAGE_THRESHOLD_EVT),
-		       result & NVME_FEAT_VOLTAGE_THRESHOLD_EVT ? "Enabled" : "Disabled");
-		printf("\tOvervoltage Threshold (OVT): %u\n",
-		       NVME_FEAT_VOLTAGE_THRESHOLD_OVT(result));
-		printf("\tUndervoltage Threshold (UVT): %u\n",
-		       NVME_FEAT_VOLTAGE_THRESHOLD_UVT(result));
+		stdout_kv_add(t, "Voltage Sensor Select (VSENS)", "%u", field);
+		stdout_kv_add(t, "Enable Voltage Threshold (EVT)", "%u - %s",
+			      !!(result & NVME_FEAT_VOLTAGE_THRESHOLD_EVT),
+			      result & NVME_FEAT_VOLTAGE_THRESHOLD_EVT ?
+			      "Enabled" : "Disabled");
+		stdout_kv_add(t, "Overvoltage Threshold (OVT)", "%u",
+			      NVME_FEAT_VOLTAGE_THRESHOLD_OVT(result));
+		stdout_kv_add(t, "Undervoltage Threshold (UVT)", "%u",
+			      NVME_FEAT_VOLTAGE_THRESHOLD_UVT(result));
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_VOLTAGE_MEASUREMENT:
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
 		field = NVME_FEAT_VOLTAGE_MEASUREMENT_ACT(result);
-		printf("\tAction (ACT): %u\n", field);
+		stdout_kv_add(t, "Action (ACT)", "%u", field);
+
+		stdout_kv_table_finish(t, "feature-show-fields");
 		break;
 	case NVME_FEAT_FID_RATE_LIMITING:
 		if (buf)
@@ -5975,11 +9424,24 @@ static void stdout_feature_show_fields(enum nvme_features_id fid,
 static void stdout_lba_status(struct nvme_lba_status *list,
 			      unsigned long len)
 {
-	int idx;
+	struct shr_table_column columns[] = {
+		{ "DSLBA",  LEFT, AUTO_WIDTH },
+		{ "NLB",    LEFT, AUTO_WIDTH },
+		{ "Status", LEFT, AUTO_WIDTH },
+	};
+	struct shr_table *t;
+	__u32 nlsd = le32_to_cpu(list->nlsd);
+	int idx, row;
 
-	printf("Number of LBA Status Descriptors(NLSD): %" PRIu32 "\n",
-		le32_to_cpu(list->nlsd));
-	printf("Completion Condition(CMPC): %u\n", list->cmpc);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "Number of LBA Status Descriptors(NLSD)", "%"PRIu32,
+		      nlsd);
+	stdout_kv_add(t, "Completion Condition(CMPC)", "%u", list->cmpc);
+
+	stdout_kv_table_finish(t, "lba-status");
 
 	switch (list->cmpc) {
 	case NVME_LBA_STATUS_CMPC_NO_CMPC:
@@ -5999,13 +9461,31 @@ static void stdout_lba_status(struct nvme_lba_status *list,
 		break;
 	}
 
-	for (idx = 0; idx < list->nlsd; idx++) {
-		struct nvme_lba_status_desc *e = &list->descs[idx];
+	if (!nlsd)
+		return;
 
-		printf("{ DSLBA: %#016"PRIx64", NLB: %#08x, Status: %#02x }\n",
-				le64_to_cpu(e->dslba), le32_to_cpu(e->nlb),
-				e->status);
+	t = shr_table_init_with_columns(columns, ARRAY_SIZE(columns));
+	if (!t)
+		return;
+
+	for (idx = 0; idx < nlsd; idx++) {
+		struct nvme_lba_status_desc *e = &list->descs[idx];
+		char dslba[24], nlb[16], status[8];
+
+		snprintf(dslba, sizeof(dslba), "%#016"PRIx64,
+			 le64_to_cpu(e->dslba));
+		snprintf(nlb, sizeof(nlb), "%#08x", le32_to_cpu(e->nlb));
+		snprintf(status, sizeof(status), "%#02x", e->status);
+
+		row = shr_table_get_row_id(t);
+		shr_table_set_value_str(t, 0, row, dslba, LEFT);
+		shr_table_set_value_str(t, 1, row, nlb, LEFT);
+		shr_table_set_value_str(t, 2, row, status, LEFT);
+		shr_table_add_row(t, row);
 	}
+
+	shr_table_print(t);
+	shr_table_free(t);
 }
 
 static void stdout_dev_full_path(struct libnvme_ns *n, char *path, size_t len)
@@ -6959,41 +10439,50 @@ static void stdout_discovery_log(const struct nvmf_discovery_log *log,
 		__cleanup_free char *trsvcid = NULL;
 		__cleanup_free char *subnqn = NULL;
 		__cleanup_free char *traddr = NULL;
+		struct shr_table *t;
 
 		trsvcid = shr_buf2str(e->trsvcid, sizeof(e->trsvcid));
 		subnqn = shr_buf2str(e->subnqn, sizeof(e->subnqn));
 		traddr = shr_buf2str(e->traddr, sizeof(e->traddr));
 
 		printf("=====Discovery Log Entry %d======\n", i);
-		printf("trtype:  %s\n", libnvmf_trtype_str(e->trtype));
-		printf("adrfam:  %s\n",
-			e->traddr[0] ?
-			libnvmf_adrfam_str(e->adrfam) : "");
-		printf("subtype: %s\n", libnvmf_subtype_str(e->subtype));
-		printf("treq:    %s\n", libnvmf_treq_str(e->treq));
-		printf("portid:  %d\n", le16_to_cpu(e->portid));
-		printf("trsvcid: %s\n", trsvcid);
-		printf("subnqn:  %s\n", subnqn);
-		printf("traddr:  %s\n", traddr);
-		printf("eflags:  %s\n",
-		       libnvmf_eflags_str(le16_to_cpu(e->eflags)));
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "trtype", "%s", libnvmf_trtype_str(e->trtype));
+		stdout_kv_add(t, "adrfam", "%s",
+			      e->traddr[0] ?
+			      libnvmf_adrfam_str(e->adrfam) : "");
+		stdout_kv_add(t, "subtype", "%s",
+			      libnvmf_subtype_str(e->subtype));
+		stdout_kv_add(t, "treq", "%s", libnvmf_treq_str(e->treq));
+		stdout_kv_add(t, "portid", "%d", le16_to_cpu(e->portid));
+		stdout_kv_add(t, "trsvcid", "%s", trsvcid);
+		stdout_kv_add(t, "subnqn", "%s", subnqn);
+		stdout_kv_add(t, "traddr", "%s", traddr);
+		stdout_kv_add(t, "eflags", "%s",
+			      libnvmf_eflags_str(le16_to_cpu(e->eflags)));
 
 		switch (e->trtype) {
 		case NVMF_TRTYPE_RDMA:
-			printf("rdma_prtype: %s\n",
-				libnvmf_prtype_str(e->tsas.rdma.prtype));
-			printf("rdma_qptype: %s\n",
-				libnvmf_qptype_str(e->tsas.rdma.qptype));
-			printf("rdma_cms:    %s\n",
-				libnvmf_cms_str(e->tsas.rdma.cms));
-			printf("rdma_pkey: %#04x\n",
-				le16_to_cpu(e->tsas.rdma.pkey));
+			stdout_kv_add(t, "rdma_prtype", "%s",
+				      libnvmf_prtype_str(e->tsas.rdma.prtype));
+			stdout_kv_add(t, "rdma_qptype", "%s",
+				      libnvmf_qptype_str(e->tsas.rdma.qptype));
+			stdout_kv_add(t, "rdma_cms", "%s",
+				      libnvmf_cms_str(e->tsas.rdma.cms));
+			stdout_kv_add(t, "rdma_pkey", "%#04x",
+				      le16_to_cpu(e->tsas.rdma.pkey));
 			break;
 		case NVMF_TRTYPE_TCP:
-			printf("sectype: %s\n",
-				libnvmf_sectype_str(e->tsas.tcp.sectype));
+			stdout_kv_add(t, "sectype", "%s",
+				      libnvmf_sectype_str(e->tsas.tcp.sectype));
 			break;
 		}
+
+		stdout_kv_table_finish(t, "discovery-log");
 	}
 }
 #else
@@ -7111,18 +10600,29 @@ static void stdout_connect_msg(struct libnvme_ctrl *c)
 
 static void stdout_mgmt_addr_list_log(struct nvme_mgmt_addr_list_log *ma_list)
 {
-	int i;
+	struct shr_table *t;
 	bool reserved = true;
+	int i;
 
 	printf("Management Address List:\n");
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
 	for (i = 0; i < ARRAY_SIZE(ma_list->mad); i++) {
+		char name[16];
+
 		switch (ma_list->mad[i].mat) {
 		case 1:
 		case 2:
-			printf("Descriptor: %d, Type: %d (%s), Address: %s\n", i,
-			       ma_list->mad[i].mat,
-			       ma_list->mad[i].mat == 1 ? "NVM subsystem management agent" :
-			       "fabric interface manager", ma_list->mad[i].madrs);
+			snprintf(name, sizeof(name), "Descriptor %d", i);
+			stdout_kv_add(t, name, "Type: %d (%s), Address: %s",
+				      ma_list->mad[i].mat,
+				      ma_list->mad[i].mat == 1 ?
+				      "NVM subsystem management agent" :
+				      "fabric interface manager",
+				      ma_list->mad[i].madrs);
 			reserved = false;
 			break;
 		case 0xff:
@@ -7132,69 +10632,123 @@ static void stdout_mgmt_addr_list_log(struct nvme_mgmt_addr_list_log *ma_list)
 		}
 	}
 out:
-	if (reserved)
+	if (reserved) {
 		printf("All management address descriptors reserved\n");
+		shr_table_free(t);
+		return;
+	}
+
+	stdout_kv_table_finish(t, "mgmt-addr-list");
 }
 
 static void stdout_rotational_media_info_log(struct nvme_rotational_media_info_log *info)
 {
-	printf("endgid: %u\n", le16_to_cpu(info->endgid));
-	printf("numa: %u\n", le16_to_cpu(info->numa));
-	printf("nrs: %u\n", le16_to_cpu(info->nrs));
-	printf("spinc: %u\n", le32_to_cpu(info->spinc));
-	printf("fspinc: %u\n", le32_to_cpu(info->fspinc));
-	printf("ldc: %u\n", le32_to_cpu(info->ldc));
-	printf("fldc: %u\n", le32_to_cpu(info->fldc));
+	struct shr_table *t;
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "endgid", "%u", le16_to_cpu(info->endgid));
+	stdout_kv_add(t, "numa", "%u", le16_to_cpu(info->numa));
+	stdout_kv_add(t, "nrs", "%u", le16_to_cpu(info->nrs));
+	stdout_kv_add(t, "spinc", "%u", le32_to_cpu(info->spinc));
+	stdout_kv_add(t, "fspinc", "%u", le32_to_cpu(info->fspinc));
+	stdout_kv_add(t, "ldc", "%u", le32_to_cpu(info->ldc));
+	stdout_kv_add(t, "fldc", "%u", le32_to_cpu(info->fldc));
+
+	stdout_kv_table_finish(t, "rotational-media-info");
 }
 
 static void stdout_dispersed_ns_psub_log(struct nvme_dispersed_ns_participating_nss_log *log)
 {
 	__u64 numpsub = le64_to_cpu(log->numpsub);
+	struct shr_table *t;
 	__u64 i;
 
-	printf("genctr: %"PRIu64"\n", le64_to_cpu(log->genctr));
-	printf("numpsub: %"PRIu64"\n", (uint64_t)numpsub);
-	for (i = 0; i < numpsub; i++)
-		printf("participating_nss %"PRIu64": %-.*s\n", (uint64_t)i, NVME_NQN_LENGTH,
-		       &log->participating_nss[i * NVME_NQN_LENGTH]);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "genctr", "%"PRIu64, le64_to_cpu(log->genctr));
+	stdout_kv_add(t, "numpsub", "%"PRIu64, (uint64_t)numpsub);
+
+	for (i = 0; i < numpsub; i++) {
+		char name[40];
+
+		snprintf(name, sizeof(name), "participating_nss %"PRIu64,
+			 (uint64_t)i);
+		stdout_kv_add(t, name, "%-.*s", NVME_NQN_LENGTH,
+			      &log->participating_nss[i * NVME_NQN_LENGTH]);
+	}
+
+	stdout_kv_table_finish(t, "dispersed-ns-psub");
 }
 
 static void stdout_reachability_groups_log(struct nvme_reachability_groups_log *log, __u64 len)
 {
+	struct shr_table *t;
 	__u16 i;
 	__u32 j;
 
 	print_debug("len: %"PRIu64"\n", (uint64_t)len);
-	printf("chngc: %"PRIu64"\n", le64_to_cpu(log->chngc));
-	printf("nrgd: %u\n", le16_to_cpu(log->nrgd));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "chngc", "%"PRIu64, le64_to_cpu(log->chngc));
+	stdout_kv_add(t, "nrgd", "%u", le16_to_cpu(log->nrgd));
 
 	for (i = 0; i < le16_to_cpu(log->nrgd); i++) {
-		printf("rgid: %u\n", le32_to_cpu(log->rgd[i].rgid));
-		printf("nnid: %u\n", le32_to_cpu(log->rgd[i].nnid));
-		printf("chngc: %"PRIu64"\n", le64_to_cpu(log->rgd[i].chngc));
-		for (j = 0; j < le32_to_cpu(log->rgd[i].nnid); j++)
-			printf("nsid%u: %u\n", j, le32_to_cpu(log->rgd[i].nsid[j]));
+		stdout_kv_add(t, "rgid", "%u", le32_to_cpu(log->rgd[i].rgid));
+		stdout_kv_add(t, "nnid", "%u", le32_to_cpu(log->rgd[i].nnid));
+		stdout_kv_add(t, "chngc", "%"PRIu64,
+			      le64_to_cpu(log->rgd[i].chngc));
+		for (j = 0; j < le32_to_cpu(log->rgd[i].nnid); j++) {
+			char name[16];
+
+			snprintf(name, sizeof(name), "nsid%u", j);
+			stdout_kv_add(t, name, "%u",
+				      le32_to_cpu(log->rgd[i].nsid[j]));
+		}
 	}
+
+	stdout_kv_table_finish(t, "reachability-groups");
 }
 
 static void stdout_reachability_associations_log(struct nvme_reachability_associations_log *log,
 						 __u64 len)
 {
+	struct shr_table *t;
 	__u16 i;
 	__u32 j;
 
 	print_debug("len: %"PRIu64"\n", (uint64_t)len);
-	printf("chngc: %"PRIu64"\n", le64_to_cpu(log->chngc));
-	printf("nrad: %u\n", le16_to_cpu(log->nrad));
+
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "chngc", "%"PRIu64, le64_to_cpu(log->chngc));
+	stdout_kv_add(t, "nrad", "%u", le16_to_cpu(log->nrad));
 
 	for (i = 0; i < le16_to_cpu(log->nrad); i++) {
-		printf("rasid: %u\n", le32_to_cpu(log->rad[i].rasid));
-		printf("nrid: %u\n", le32_to_cpu(log->rad[i].nrid));
-		printf("chngc: %"PRIu64"\n", le64_to_cpu(log->rad[i].chngc));
-		printf("rac: %u\n", log->rad[i].rac);
-		for (j = 0; j < le32_to_cpu(log->rad[i].nrid); j++)
-			printf("rgid%u: %u\n", j, le32_to_cpu(log->rad[i].rgid[j]));
+		stdout_kv_add(t, "rasid", "%u", le32_to_cpu(log->rad[i].rasid));
+		stdout_kv_add(t, "nrid", "%u", le32_to_cpu(log->rad[i].nrid));
+		stdout_kv_add(t, "chngc", "%"PRIu64,
+			      le64_to_cpu(log->rad[i].chngc));
+		stdout_kv_add(t, "rac", "%u", log->rad[i].rac);
+		for (j = 0; j < le32_to_cpu(log->rad[i].nrid); j++) {
+			char name[16];
+
+			snprintf(name, sizeof(name), "rgid%u", j);
+			stdout_kv_add(t, name, "%u",
+				      le32_to_cpu(log->rad[i].rgid[j]));
+		}
 	}
+
+	stdout_kv_table_finish(t, "reachability-associations");
 }
 
 #ifdef CONFIG_FABRICS
@@ -7208,57 +10762,96 @@ static void stdout_host_discovery_log(struct nvme_host_discovery_log *log)
 	__u32 tel;
 	__u16 numexat;
 	int n = 0;
+	struct shr_table *t;
 
-	printf("genctr: %"PRIu64"\n", le64_to_cpu(log->genctr));
-	printf("numrec: %"PRIu64"\n", le64_to_cpu(log->numrec));
-	printf("recfmt: %u\n", le16_to_cpu(log->recfmt));
-	printf("hdlpf: %02x\n", log->hdlpf);
-	printf("thdlpl: %u\n", thdlpl);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "genctr", "%"PRIu64, le64_to_cpu(log->genctr));
+	stdout_kv_add(t, "numrec", "%"PRIu64, le64_to_cpu(log->numrec));
+	stdout_kv_add(t, "recfmt", "%u", le16_to_cpu(log->recfmt));
+	stdout_kv_add(t, "hdlpf", "%02x", log->hdlpf);
+	stdout_kv_add(t, "thdlpl", "%u", thdlpl);
+
+	stdout_kv_table_finish(t, "host-discovery-log");
 
 	for (i = sizeof(*log); i < le32_to_cpu(log->thdlpl); i += tel) {
 		printf("hedlpe: %d\n", n++);
 		hedlpe = (void *)log + i;
 		tel = le32_to_cpu(hedlpe->tel);
 		numexat = le16_to_cpu(hedlpe->numexat);
-		printf("trtype: %s\n", libnvmf_trtype_str(hedlpe->trtype));
-		printf("adrfam: %s\n",
-		       strlen(hedlpe->traddr) ? libnvmf_adrfam_str(hedlpe->adrfam) : "");
-		printf("eflags: %s\n", libnvmf_eflags_str(le16_to_cpu(hedlpe->eflags)));
-		printf("hostnqn: %s\n", hedlpe->hostnqn);
-		printf("traddr: %s\n", hedlpe->traddr);
-		printf("tsas: ");
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "trtype", "%s",
+			      libnvmf_trtype_str(hedlpe->trtype));
+		stdout_kv_add(t, "adrfam", "%s",
+			      strlen(hedlpe->traddr) ?
+			      libnvmf_adrfam_str(hedlpe->adrfam) : "");
+		stdout_kv_add(t, "eflags", "%s",
+			      libnvmf_eflags_str(le16_to_cpu(hedlpe->eflags)));
+		stdout_kv_add(t, "hostnqn", "%s", hedlpe->hostnqn);
+		stdout_kv_add(t, "traddr", "%s", hedlpe->traddr);
 		switch (hedlpe->trtype) {
 		case NVMF_TRTYPE_RDMA:
-			printf("prtype: %s, qptype: %s, cms: %s, pkey: 0x%04x\n",
-			       libnvmf_prtype_str(hedlpe->tsas.rdma.prtype),
-			       libnvmf_qptype_str(hedlpe->tsas.rdma.qptype),
-			       libnvmf_cms_str(hedlpe->tsas.rdma.cms),
-			       le16_to_cpu(hedlpe->tsas.rdma.pkey));
+			stdout_kv_add(t, "tsas.prtype", "%s",
+				      libnvmf_prtype_str(
+						hedlpe->tsas.rdma.prtype));
+			stdout_kv_add(t, "tsas.qptype", "%s",
+				      libnvmf_qptype_str(
+						hedlpe->tsas.rdma.qptype));
+			stdout_kv_add(t, "tsas.cms", "%s",
+				      libnvmf_cms_str(hedlpe->tsas.rdma.cms));
+			stdout_kv_add(t, "tsas.pkey", "0x%04x",
+				      le16_to_cpu(hedlpe->tsas.rdma.pkey));
 			break;
 		case NVMF_TRTYPE_TCP:
-			printf("sectype: %s\n", libnvmf_sectype_str(hedlpe->tsas.tcp.sectype));
+			stdout_kv_add(t, "tsas.sectype", "%s",
+				      libnvmf_sectype_str(
+						hedlpe->tsas.tcp.sectype));
 			break;
 		default:
-			printf("common:\n");
-			d((unsigned char *)hedlpe->tsas.common, sizeof(hedlpe->tsas.common), 16, 1);
+			stdout_kv_add(t, "tsas.common", "");
 			break;
 		}
-		printf("tel: %u\n", tel);
-		printf("numexat: %u\n", numexat);
+		stdout_kv_add(t, "tel", "%u", tel);
+		stdout_kv_add(t, "numexat", "%u", numexat);
+
+		stdout_kv_table_finish(t, "host-discovery-log");
+
+		if (hedlpe->trtype != NVMF_TRTYPE_RDMA &&
+		    hedlpe->trtype != NVMF_TRTYPE_TCP)
+			d((unsigned char *)hedlpe->tsas.common,
+			  sizeof(hedlpe->tsas.common), 16, 1);
 
 		exat = hedlpe->exat;
 		for (j = 0; j < numexat; j++) {
 			printf("exat: %d\n", j);
-			printf("exattype: %u\n", le16_to_cpu(exat->exattype));
-			printf("exatlen: %u\n", le16_to_cpu(exat->exatlen));
+
+			t = stdout_kv_table_create();
+			if (!t)
+				return;
+
+			stdout_kv_add(t, "exattype", "%u",
+				      le16_to_cpu(exat->exattype));
+			stdout_kv_add(t, "exatlen", "%u",
+				      le16_to_cpu(exat->exatlen));
+
+			stdout_kv_table_finish(t, "host-discovery-log");
+
 			printf("exatval:\n");
-			d((unsigned char *)exat->exatval, le16_to_cpu(exat->exatlen), 16, 1);
+			d((unsigned char *)exat->exatval,
+			  le16_to_cpu(exat->exatlen), 16, 1);
 			exat = libnvmf_exat_ptr_next(exat);
 		}
 	}
 }
 
-static void print_traddr(char *field, __u8 adrfam, __u8 *traddr)
+static void stdout_kv_add_traddr(struct shr_table *t, const char *field,
+				 __u8 adrfam, __u8 *traddr)
 {
 	char dst[INET6_ADDRSTRLEN];
 	socklen_t size;
@@ -7271,12 +10864,12 @@ static void print_traddr(char *field, __u8 adrfam, __u8 *traddr)
 		af = AF_INET6;
 		size = INET6_ADDRSTRLEN;
 	} else {
-		printf("%s: <invalid>\n", field);
+		stdout_kv_add(t, field, "<invalid>");
 		return;
 	}
 
 	if (inet_ntop(af, traddr, dst, size))
-		printf("%s: %s\n", field, dst);
+		stdout_kv_add(t, field, "%s", dst);
 }
 
 static void stdout_ave_discovery_log(struct nvme_ave_discovery_log *log)
@@ -7289,27 +10882,52 @@ static void stdout_ave_discovery_log(struct nvme_ave_discovery_log *log)
 	__u32 tel;
 	__u8 numatr;
 	int n = 0;
+	struct shr_table *t;
 
-	printf("genctr: %"PRIu64"\n", le64_to_cpu(log->genctr));
-	printf("numrec: %"PRIu64"\n", le64_to_cpu(log->numrec));
-	printf("recfmt: %u\n", le16_to_cpu(log->recfmt));
-	printf("tadlpl: %u\n", tadlpl);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "genctr", "%"PRIu64, le64_to_cpu(log->genctr));
+	stdout_kv_add(t, "numrec", "%"PRIu64, le64_to_cpu(log->numrec));
+	stdout_kv_add(t, "recfmt", "%u", le16_to_cpu(log->recfmt));
+	stdout_kv_add(t, "tadlpl", "%u", tadlpl);
+
+	stdout_kv_table_finish(t, "ave-discovery-log");
 
 	for (i = sizeof(*log); i < le32_to_cpu(log->tadlpl); i += tel) {
 		printf("adlpe: %d\n", n++);
 		adlpe = (void *)log + i;
 		tel = le32_to_cpu(adlpe->tel);
 		numatr = adlpe->numatr;
-		printf("tel: %u\n", tel);
-		printf("avenqn: %s\n", adlpe->avenqn);
-		printf("numatr: %u\n", numatr);
+
+		t = stdout_kv_table_create();
+		if (!t)
+			return;
+
+		stdout_kv_add(t, "tel", "%u", tel);
+		stdout_kv_add(t, "avenqn", "%s", adlpe->avenqn);
+		stdout_kv_add(t, "numatr", "%u", numatr);
+
+		stdout_kv_table_finish(t, "ave-discovery-log");
 
 		atr = adlpe->atr;
 		for (j = 0; j < numatr; j++) {
 			printf("atr: %d\n", j);
-			printf("aveadrfam: %s\n", libnvmf_adrfam_str(atr->aveadrfam));
-			printf("avetrsvcid: %u\n", le16_to_cpu(atr->avetrsvcid));
-			print_traddr("avetraddr", atr->aveadrfam, atr->avetraddr);
+
+			t = stdout_kv_table_create();
+			if (!t)
+				return;
+
+			stdout_kv_add(t, "aveadrfam", "%s",
+				      libnvmf_adrfam_str(atr->aveadrfam));
+			stdout_kv_add(t, "avetrsvcid", "%u",
+				      le16_to_cpu(atr->avetrsvcid));
+			stdout_kv_add_traddr(t, "avetraddr", atr->aveadrfam,
+					     atr->avetraddr);
+
+			stdout_kv_table_finish(t, "ave-discovery-log");
+
 			atr++;
 		}
 	}
@@ -7323,86 +10941,151 @@ static void stdout_pull_model_ddc_req_log(struct nvme_pull_model_ddc_req_log *lo
 {
 	__u32 tpdrpl = le32_to_cpu(log->tpdrpl);
 	__u32 osp_len = tpdrpl - offsetof(struct nvme_pull_model_ddc_req_log, osp);
+	struct shr_table *t;
 
-	printf("ori: %u\n", log->ori);
-	printf("tpdrpl: %u\n", tpdrpl);
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
+
+	stdout_kv_add(t, "ori", "%u", log->ori);
+	stdout_kv_add(t, "tpdrpl", "%u", tpdrpl);
+
+	stdout_kv_table_finish(t, "pull-model-ddc-req");
+
 	printf("osp:\n");
 	d((unsigned char *)log->osp, osp_len, 16, 1);
+}
+
+static struct shr_table *stdout_power_meas_log_pma_table(__u16 pma)
+{
+	struct shr_table *t;
+	__u8 pmt = NVME_GET(pma, PMA_PMT);
+
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[0:0]", NVME_GET(pma, PMA_PME),
+			"Power Measurement Enable");
+	stdout_bits_add(t, "[1:1]", NVME_GET(pma, PMA_NCPDF),
+			"Non-Contiguous Power Data Flag");
+	stdout_bits_add(t, "[2:2]", NVME_GET(pma, PMA_EPF),
+			"Estimated Power Flag");
+	stdout_bits_add(t, "[3:3]", NVME_GET(pma, PMA_MIPWRTS),
+			"Maximum Interval Power Timestamp Support");
+	stdout_bits_add(t, "[4:4]", NVME_GET(pma, PMA_PHDO),
+			"Power Histogram Descriptor Overflow");
+	stdout_bits_add(t, "[15:12]", pmt, "%s",
+			nvme_power_measurement_type_to_string(pmt));
+
+	return t;
+}
+
+static struct shr_table *stdout_power_meas_log_ts_table(__u8 attr)
+{
+	struct shr_table *t;
+
+	t = stdout_bits_table_create();
+	if (!t)
+		return NULL;
+
+	stdout_bits_add(t, "[3:1]", NVME_TIMESTAMP_ATTR_TO(attr), "%s",
+			nvme_format_timestamp_origin(attr));
+	stdout_bits_add(t, "[0:0]", NVME_TIMESTAMP_ATTR_SYNC(attr), "%s",
+			nvme_format_timestamp_sync(attr));
+
+	return t;
 }
 
 static void stdout_power_meas_log(struct nvme_power_meas_log *log, __u32 size)
 {
 	__u16 nphd = le16_to_cpu(log->nphd);
 	__u16 pma = le16_to_cpu(log->pma);
-	__u8 pmt = NVME_GET(pma, PMA_PMT);
 	__u32 aipwr = le32_to_cpu(log->aipwr);
 	__u32 mipwr = le32_to_cpu(log->mipwr);
-	__u16 i;
+	__cleanup_free char *aipwr_str = NULL;
+	__cleanup_free char *mipwr_str = NULL;
 	bool verbose = stdout_print_ops.flags & VERBOSE;
+	struct shr_table *t;
+	__u16 i;
+	int row;
 
 	printf("Power Measurement Log\n");
-	printf("%-47s : %u\n",   "Version", log->ver);
-	printf("%-47s : %u\n",   "Power Measurement Generation Number", log->pmgn);
-	printf("%-47s : %#06x\n", "Power Measurement Attributes", pma);
 
-	if (verbose) {
-		printf("    %-43s : %u\n", "Power Measurement Enable", NVME_GET(pma, PMA_PME));
-		printf("    %-43s : %u\n", "Non-Contiguous Power Data Flag", NVME_GET(pma, PMA_NCPDF));
-		printf("    %-43s : %u\n", "Estimated Power Flag", NVME_GET(pma, PMA_EPF));
-		printf("    %-43s : %u\n", "Maximum Interval Power Timestamp Support", NVME_GET(pma, PMA_MIPWRTS));
-		printf("    %-43s : %u\n", "Power Histogram Descriptor Overflow", NVME_GET(pma, PMA_PHDO));
-		printf("    %-43s : %u (%s)\n", "Power Measurement Type", pmt,
-		       nvme_power_measurement_type_to_string(pmt));
-	}
+	t = stdout_kv_table_create();
+	if (!t)
+		return;
 
-	printf("%-47s : %u\n",   "Size (bytes)", le32_to_cpu(log->sze));
-	printf("%-47s : %u\n",   "Power Measurement Count", le32_to_cpu(log->pmc));
-	printf("%-47s : %u\n",   "Number of Power Histogram Descriptors", nphd);
-	printf("%-47s : %u\n",   "Stop Measurement Time Remaining (minutes)", le16_to_cpu(log->smtr));
-	printf("%-47s : %s\n", "Stop Measurement Timestamp", stdout_format_timestamp(log->smts.timestamp));
+	stdout_kv_add(t, "Version", "%u", log->ver);
+	stdout_kv_add(t, "Power Measurement Generation Number", "%u",
+		      log->pmgn);
+	row = stdout_kv_add(t, "Power Measurement Attributes", "%#06x", pma);
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+			stdout_power_meas_log_pma_table(pma));
 
-	if (verbose) {
-		printf("    %-43s : %u (%s)\n", "Timestamp Origin",
-		       NVME_TIMESTAMP_ATTR_TO(log->smts.attr),
-		       nvme_format_timestamp_origin(log->smts.attr));
-		printf("    %-43s : %u (%s)\n", "Sync",
-		       NVME_TIMESTAMP_ATTR_SYNC(log->smts.attr),
-		       nvme_format_timestamp_sync(log->smts.attr));
-	}
+	stdout_kv_add(t, "Size (bytes)", "%u", le32_to_cpu(log->sze));
+	stdout_kv_add(t, "Power Measurement Count", "%u",
+		      le32_to_cpu(log->pmc));
+	stdout_kv_add(t, "Number of Power Histogram Descriptors", "%u", nphd);
+	stdout_kv_add(t, "Stop Measurement Time Remaining (minutes)", "%u",
+		      le16_to_cpu(log->smtr));
+	row = stdout_kv_add(t, "Stop Measurement Timestamp", "%s",
+			     stdout_format_timestamp(log->smts.timestamp));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+			stdout_power_meas_log_ts_table(log->smts.attr));
 
-	printf("%-47s : %u\n",   "Power Histogram Descriptor Size (bytes)", le16_to_cpu(log->phds));
-	printf("%-47s : %u\n",   "Power Histogram Bin Size (mW)", le16_to_cpu(log->phbs));
-	printf("%-47s : %u\n",   "Number of Power Histogram Descriptors Supported", le16_to_cpu(log->nphds));
-	printf("%-47s : %u\n",   "Vendor Specific Size (bytes)", le16_to_cpu(log->vss));
-	printf("%-47s : %u\n",   "Power Histogram Descriptor Overflow Count", le32_to_cpu(log->phdoc));
-	printf("%-47s : ", "Average Interval Power");
-	print_power_field(aipwr);
-	printf("\n");
-	printf("%-47s : ", "Maximum Interval Power");
-	print_power_field(mipwr);
-	printf("\n");
-	printf("%-47s : %s\n", "Maximum Interval Power Timestamp", stdout_format_timestamp(log->mipwrt.timestamp));
+	stdout_kv_add(t, "Power Histogram Descriptor Size (bytes)", "%u",
+		      le16_to_cpu(log->phds));
+	stdout_kv_add(t, "Power Histogram Bin Size (mW)", "%u",
+		      le16_to_cpu(log->phbs));
+	stdout_kv_add(t, "Number of Power Histogram Descriptors Supported",
+		      "%u", le16_to_cpu(log->nphds));
+	stdout_kv_add(t, "Vendor Specific Size (bytes)", "%u",
+		      le16_to_cpu(log->vss));
+	stdout_kv_add(t, "Power Histogram Descriptor Overflow Count", "%u",
+		      le32_to_cpu(log->phdoc));
 
-	if (verbose) {
-		printf("    %-43s : %u (%s)\n", "Timestamp Origin",
-		       NVME_TIMESTAMP_ATTR_TO(log->mipwrt.attr),
-		       nvme_format_timestamp_origin(log->mipwrt.attr));
-		printf("    %-43s : %u (%s)\n", "Sync",
-		       NVME_TIMESTAMP_ATTR_SYNC(log->mipwrt.attr),
-		       nvme_format_timestamp_sync(log->mipwrt.attr));
-	}
+	aipwr_str = stdout_power_and_scale_str(aipwr & 0xffff,
+						(aipwr >> 16) & 0x3);
+	stdout_kv_add(t, "Average Interval Power", "%s", aipwr_str ?: "-");
+	mipwr_str = stdout_power_and_scale_str(mipwr & 0xffff,
+						(mipwr >> 16) & 0x3);
+	stdout_kv_add(t, "Maximum Interval Power", "%s", mipwr_str ?: "-");
 
-	printf("%-47s : %u\n",   "Interval Power Percent Error", log->ipwrpe);
+	row = stdout_kv_add(t, "Maximum Interval Power Timestamp", "%s",
+			     stdout_format_timestamp(log->mipwrt.timestamp));
+	if (verbose)
+		shr_table_set_row_subtable(t, row,
+			stdout_power_meas_log_ts_table(log->mipwrt.attr));
+
+	stdout_kv_add(t, "Interval Power Percent Error", "%u", log->ipwrpe);
+
+	stdout_kv_table_finish(t, "power-meas-log");
 
 	if (verbose) {
 		for (i = 0; i < nphd; i++) {
 			__u32 phblt = le32_to_cpu(log->descs[i].phblt);
+			__cleanup_free char *phblt_str = NULL;
 
 			printf("Power Histogram Descriptor [%u]:\n", i);
-			printf("    %-43s : %u\n", "Power Histogram Bin Count", le32_to_cpu(log->descs[i].phbc));
-			printf("    %-43s : ", "Power Histogram Bin Lower Threshold");
-			print_power_field(phblt);
-			printf("\n");
+
+			t = stdout_kv_table_create();
+			if (!t)
+				return;
+
+			shr_table_set_indent(t, 2);
+
+			stdout_kv_add(t, "Power Histogram Bin Count", "%u",
+				      le32_to_cpu(log->descs[i].phbc));
+			phblt_str = stdout_power_and_scale_str(
+				phblt & 0xffff, (phblt >> 16) & 0x3);
+			stdout_kv_add(t, "Power Histogram Bin Lower Threshold",
+				      "%s",
+				      phblt_str ?: "-");
+
+			stdout_kv_table_finish(t, "power-meas-log");
 		}
 	}
 }
