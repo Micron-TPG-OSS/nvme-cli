@@ -1,6 +1,30 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 # NEWS
 
+## Changes in 3.2 (unreleased)
+
+### Feature removals and incompatible changes
+
+* The human-readable stdout output of `id-ctrl`, `id-ns`, and most
+  other identify/log-page/feature commands is now rendered through a
+  computed-width table instead of hand-aligned `printf()` calls.
+  Field names, values, and decoded bit breakdowns are unchanged, but
+  column widths, spacing, and blank lines around them may differ from
+  previous releases. stdout was never a stable, parseable interface;
+  scripts that depend on its exact layout should switch to
+  `--output-format=json` (`-o json`), which this change does not
+  affect.
+
+* `nvme discover`, `nvme connect-all` and `nvme config create
+  --discovery` now default `--persistent` to `auto` instead of `no`.
+  With this, the discovery controller stays connected after the log
+  page fetch wherever the target reports EPCSD for that discovery log
+  page entry. That lets the host automatically react to discovery AENs
+  received on that discovery connection. Targets without EPCSD enabled
+  remain unaffected. Opt out with `--persistent=no`. `config create
+  --discovery` and converted `discovery.conf` lines now record
+  `persistent = auto`. See `nvme-discover(1)` and `nvme-config-create(1)`.
+
 ## Changes in 3.1 (2026-09-18)
 
 ### Feature removals and incompatible changes

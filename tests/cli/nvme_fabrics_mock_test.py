@@ -53,6 +53,7 @@ def _pack_disc_log_entry(portid, entry):
     """Packs one 1024-byte struct nvmf_disc_log_entry from a test-supplied dict.
 
     Recognized keys: transport, traddr, trsvcid, subsysnqn, eflags, subtype.
+    'adrfam' is IPv6 for a tcp/rdma traddr containing ':', IPv4 otherwise.
     'subtype' defaults to NVME_NQN_DISC for referral-looking NQNs (containing
     "discovery" or "dc-") and NVME_NQN_NVME otherwise; 'eflags' defaults to 0.
     """
@@ -67,7 +68,12 @@ def _pack_disc_log_entry(portid, entry):
         subtype = NVME_NQN_DISC if ('discovery' in subsysnqn or 'dc-' in subsysnqn) else NVME_NQN_NVME
 
     trtype = {'tcp': 3, 'rdma': 1, 'fc': 2}.get(transport, 254)
-    adrfam = 4 if transport == 'fc' else (1 if transport in ('tcp', 'rdma') else 254)
+    if transport == 'fc':
+        adrfam = 4
+    elif transport in ('tcp', 'rdma'):
+        adrfam = 2 if ':' in traddr else 1
+    else:
+        adrfam = 254
 
     header = struct.pack("<BBBBHHHH", trtype, adrfam, subtype, 0, portid, 0xffff, 32, eflags)
     rsvd12 = b"\x00" * 20
@@ -336,6 +342,55 @@ class FabricsMockCLITest(unittest.TestCase):
         self.assertEqual(self._subsysnqn(2), subsys1)
         self.assertEqual(self._subsysnqn(3), subsys2)
 
+    def test_connect_all_link_local_inherits_scope(self):
+        """A link-local traddr from the DLP inherits the DC's IPv6 scope.
+
+        The DLP never carries a scope; without it the kernel cannot tell
+        which link a fe80:: address is on, and RDMA has no host_iface to
+        fall back on (GitHub issue #2648).
+        """
+        io_subsys = "nqn.2014-08.org.nvmexpress:io-subsys-ll"
+        self.server.discovery_entries = [
+            {'transport': 'rdma', 'traddr': 'FE80::20C:CAFF:FE12:6747',
+             'trsvcid': '4420', 'subsysnqn': io_subsys},
+            {'transport': 'rdma', 'traddr': '2001:db8::1',
+             'trsvcid': '4420', 'subsysnqn': io_subsys + "-global"},
+        ]
+
+        self._run('connect-all', '-t', 'rdma', '-a', 'fe80::20c:caff:fe12:6747%lo',
+                  '-s', '4420')
+
+        by_nqn = {c['subsysnqn']: c['traddr'] for c in self.server.controllers.values()}
+        self.assertEqual(by_nqn.get(io_subsys), 'fe80::20c:caff:fe12:6747%lo')
+        # Only link-local addresses are scoped.
+        self.assertEqual(by_nqn.get(io_subsys + "-global"), '2001:db8::1')
+
+    def test_connect_all_link_local_unscoped_dc(self):
+        """Without a scope on the DC's traddr nothing is invented."""
+        io_subsys = "nqn.2014-08.org.nvmexpress:io-subsys-ll-noscope"
+        self.server.discovery_entries = [
+            {'transport': 'rdma', 'traddr': 'fe80::2', 'trsvcid': '4420',
+             'subsysnqn': io_subsys},
+        ]
+
+        self._run('connect-all', '-t', 'rdma', '-a', '2001:db8::10', '-s', '4420')
+
+        by_nqn = {c['subsysnqn']: c['traddr'] for c in self.server.controllers.values()}
+        self.assertEqual(by_nqn.get(io_subsys), 'fe80::2')
+
+    def test_connect_all_link_local_global_scoped_dc(self):
+        """A scope on a non-link-local DC traddr names no link; don't inherit it."""
+        io_subsys = "nqn.2014-08.org.nvmexpress:io-subsys-ll-global-dc"
+        self.server.discovery_entries = [
+            {'transport': 'rdma', 'traddr': 'fe80::2', 'trsvcid': '4420',
+             'subsysnqn': io_subsys},
+        ]
+
+        self._run('connect-all', '-t', 'rdma', '-a', '2001:db8::10%lo', '-s', '4420')
+
+        by_nqn = {c['subsysnqn']: c['traddr'] for c in self.server.controllers.values()}
+        self.assertEqual(by_nqn.get(io_subsys), 'fe80::2')
+
     def test_connect_already_connected(self):
         """Test how connect handles EALREADY (already connected) error gracefully."""
         self.server.connect_errno = 114  # EALREADY
@@ -568,16 +623,43 @@ class FabricsMockCLITest(unittest.TestCase):
             'eflags': eflags,
         }
 
-    def test_discover_persistent_default_disconnects(self):
-        """Without --persistent, the discovery controller is always torn down, EPCSD or not."""
+    def test_discover_persistent_default_persists(self):
+        """Without --persistent, the default is "auto": persist when EPCSD is set."""
         addr = '192.168.10.1'
         self.server.discovery_entries = [self._self_entry(addr, eflags=NVMF_DISC_EFLAGS_EPCSD)]
+
+        self._run('discover', '-t', 'tcp', '-a', addr)
+        self._assert_persisted(self._DISCOVERY_INSTANCE)
+
+    def test_discover_persistent_self_entry_ipv6_notation(self):
+        """The self entry matches by address value, not by spelling.
+
+        libnvme canonicalizes the DC's traddr, while the DC may report
+        itself in any valid IPv6 notation.
+        """
+        for addr, reported in (('2001:db8::a', '2001:DB8:0:0::A'),
+                               ('fe80::a%lo', 'FE80:0::A')):
+            with self.subTest(addr=addr):
+                self.server.discovery_entries = [
+                    self._self_entry(reported, eflags=NVMF_DISC_EFLAGS_EPCSD)]
+                self.server.controllers.clear()
+                self.server.next_instance = 0
+                shutil.rmtree(Path(self.sysfs_dir) / "sys/class/nvme")
+                Path(self.sysfs_dir, "sys/class/nvme").mkdir()
+
+                self._run('discover', '-t', 'tcp', '-a', addr)
+                self._assert_persisted(self._DISCOVERY_INSTANCE)
+
+    def test_discover_persistent_default_disconnects_without_epcsd(self):
+        """The "auto" default still degrades to non-persistent when EPCSD isn't set."""
+        addr = '192.168.10.11'
+        self.server.discovery_entries = [self._self_entry(addr, eflags=0)]
 
         self._run('discover', '-t', 'tcp', '-a', addr)
         self._assert_disconnected(self._DISCOVERY_INSTANCE)
 
     def test_discover_persistent_no_ignores_epcsd(self):
-        """--persistent=no behaves like the default: always disconnect, even with EPCSD set."""
+        """--persistent=no opts out of the default: always disconnect, even with EPCSD set."""
         addr = '192.168.10.2'
         self.server.discovery_entries = [self._self_entry(addr, eflags=NVMF_DISC_EFLAGS_EPCSD)]
 
