@@ -409,6 +409,15 @@ endif
 want_discoverd = want_discoverd and libsystemd_dep.found()
 conf.set('CONFIG_DISCOVERD', want_discoverd, description: 'Is nvme-discoverd enabled')
 
+# The sd_varlink client API used by mDNS exists since libsystemd v257.
+want_mdns = false
+if want_discoverd and not get_option('mdns').disabled()
+    want_mdns = libsystemd_dep.version().version_compare('>=257')
+    if get_option('mdns').enabled() and not want_mdns
+        error('mdns requires libsystemd >=257')
+    endif
+endif
+
 if not want_mi or get_option('libdbus').disabled()
     libdbus_dep = dependency('', required: false)
 else
@@ -602,6 +611,9 @@ substs.set('SBINDIR', sbindir)
 substs.set('SYSCONFDIR', sysconfdir)
 substs.set('SYSTEMDDIR', systemddir)
 substs.set('SYSTEMCTL', get_option('systemctl'))
+# mDNS uses systemd-resolved, so nvme-discoverd must start after it.
+substs.set('DISCOVERD_AFTER_RESOLVED',
+           want_mdns ? 'After=systemd-resolved.service' : '')
 substs.set('PREFIX', prefixdir)
 substs.set('URL', 'https://github.com/linux-nvme/nvme-cli/')
 substs.set('LIBNVME_API_NAME', libnvme_api_name)
@@ -865,6 +877,7 @@ wanted_dict = {
     'libnvme':          want_libnvme,
     'fabrics':          want_fabrics,
     'nvme-discoverd':   want_discoverd,
+    'mdns':             want_mdns,
     'nvmf-autoconnect': want_nvmf_autoconnect,
     'deprecated-cmds':  want_deprecated_cmds,
     'python bindings ': want_python,

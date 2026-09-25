@@ -13,14 +13,21 @@
 /*
  * nvme-discoverd's config file carries the daemon's own knobs only — the
  * connections it manages come from the shared fabrics config
- * (libnvmf_config_read()), not from here. Just a single [Global] section:
+ * (libnvmf_config_read()), not from here. Two sections:
  *
  *   [Global]
  *   nbft = true
  *   debug-level = info
- *   fc-kickstart-interval-minutes = 0
+ *
+ *   [Discovery]
  *   epcsd-poll-interval-minutes = 15
+ *   fc-kickstart-interval-minutes = 0
  *   dc-giveup-timeout = 72hours
+ *   zeroconf = false
+ *
+ * [Global] holds daemon-wide settings. [Discovery] holds the settings for
+ * dynamically discovered DCs. The [Discovery] keys are still accepted in
+ * [Global], where releases up to 3.1 placed them, with a warning.
  */
 struct discoverd_config {
 	bool nbft; // adopt/connect NBFT-listed controllers; default true
@@ -56,6 +63,13 @@ struct discoverd_config {
 	 * static/NBFT-sourced DC; 0 = give up on the first failure.
 	 */
 	uint64_t dc_giveup_timeout_usec;
+
+	/*
+	 * Connect to and manage DCs found through mDNS (TP8009). Default
+	 * false: nvme-discoverd must not act on mDNS without an explicit
+	 * opt-in.
+	 */
+	bool zeroconf;
 };
 
 /*

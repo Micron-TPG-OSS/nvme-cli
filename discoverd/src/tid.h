@@ -96,10 +96,34 @@ struct ifaddrs;
  * literally, because a connection made with host_iface alone reports a
  * source address the candidate never named. A candidate requesting the
  * well-known discovery NQN accepts any DC, since a DC may answer with a
- * unique NQN.
+ * unique NQN. The host ID is compared only when both TIDs have one.
  *
  * Return: true if @existing satisfies @candidate.
  */
+/*
+ * tid_link_local_scope() - scope of a TID's link-local traddr
+ * @t: TID
+ *
+ * Return: the scope after '%' if @t's traddr is a scoped IPv6 link-local
+ * address, else NULL. Borrowed from @t.
+ */
+const char *tid_link_local_scope(const struct libnvmf_tid *t);
+
+/*
+ * tid_scope_link_local() - add a scope to a link-local traddr
+ * @traddr: transport address
+ * @scope:  interface name or index, or NULL
+ *
+ * A link-local IPv6 address names no link by itself. Discovery Log Page
+ * entries and mDNS results carry no scope, and RDMA has no host_iface to
+ * select the link.
+ *
+ * Return: "@traddr%@scope" if @traddr is an unscoped IPv6 link-local
+ * address and @scope is not NULL, else a copy of @traddr. NULL if out of
+ * memory. Free with free().
+ */
+char *tid_scope_link_local(const char *traddr, const char *scope);
+
 bool tid_matches_existing(const struct libnvmf_tid *candidate,
 			  const struct libnvmf_tid *existing,
 			  bool existing_is_dc,

@@ -25,6 +25,33 @@
   --discovery` and converted `discovery.conf` lines now record
   `persistent = auto`. See `nvme-discover(1)` and `nvme-config-create(1)`.
 
+### nvme-discoverd
+
+* `epcsd-poll-interval-minutes`, `fc-kickstart-interval-minutes` and
+  `dc-giveup-timeout` move from `[Global]` to a new `[Discovery]`
+  section in `nvme-discoverd.conf`. In `[Global]`, they are now
+  ignored with an "unknown key" warning. See `nvme-discoverd(8)`.
+
+* nvme-discoverd can discover Discovery Controllers through mDNS
+  (TP8009), using systemd-resolved. It is off by default. Enable it
+  with `zeroconf = true` in the `[Discovery]` section. The new `mdns`
+  build option (`auto` by default) controls whether mDNS support is
+  built. It requires libsystemd v257 or later.
+
+* nvme-discoverd also compares the host ID, not only the host NQN, when
+  it matches a desired connection with an existing one.
+
+* nvme-discoverd adds the IPv6 scope to link-local addresses. For a
+  Discovery Log Page entry, the scope comes from the Discovery
+  Controller's own address. For an mDNS result, it is the interface.
+  RDMA needs this, because it has no `host_iface` to select the link.
+
+* A connection unit of nvme-discoverd no longer disconnects another
+  controller that reuses its device name. The unit records the sysfs
+  inode of its device at connect time and disconnects only if the inode
+  still matches. At startup, nvme-discoverd removes the state of
+  controllers that are gone.
+
 ## Changes in 3.1 (2026-09-18)
 
 ### Feature removals and incompatible changes
