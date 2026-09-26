@@ -8,7 +8,6 @@
 
 #include <dirent.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
 #include <signal.h>
@@ -16,7 +15,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ifaddrs.h>
-#include <unistd.h>
 
 #include <systemd/sd-bus.h>
 #include <systemd/sd-daemon.h>
@@ -35,6 +33,7 @@
 #include <nvme/fabrics.h>
 #include <nvme/lib.h>
 #include <nvme/registry.h>
+#include <nvme/util.h>
 
 #include "inventory.h"
 #include "config.h"
@@ -85,7 +84,26 @@ struct active_ctrl {
 	bool force_persistent_logged; // disc_info_once() marker
 
 	sd_event_source *epcsd_poll_timer; // NULL when not EPCSD-parked
+
+	// Desired at the last release_undesired() pass, see there.
+	bool desired;
+
+	// A DC whose DLP was fetched since nvme-discoverd started.
+	bool dlp_fetched;
 };
+
+/*
+ * A controller from the file of last known desired controllers that is
+ * not decided yet. See decide_saved().
+ */
+struct saved_ctrl {
+	struct list_node entry;
+	char *source;
+	struct libnvmf_tid *tid;
+	struct libnvmf_tid *parent; // the DC that listed it, for "dlp"
+};
+
+static LIST_HEAD(g_saved);
 
 static LIST_HEAD(g_ctrls);
 static struct discoverd_ctx ctx;
@@ -124,6 +142,8 @@ static void ctrl_free(struct active_ctrl *e)
 	free(e);
 }
 
+static void schedule_release(bool check_exclusions);
+
 static int ctrl_add(const char *unit_name, const struct libnvmf_tid *t,
 		    bool is_dc, const struct libnvmf_params *params)
 {
@@ -139,6 +159,7 @@ static int ctrl_add(const char *unit_name, const struct libnvmf_tid *t,
 	e->unit_name = strdup(unit_name);
 	e->tid = libnvmf_tid_dup(t);
 	e->is_dc = is_dc;
+	e->desired = inventory_is_desired(ctx.inventory, t);
 	e->force_persistent = params &&
 		shr_streqcase0(libnvmf_params_get(params, "persistent"),
 			       "force");
@@ -148,6 +169,7 @@ static int ctrl_add(const char *unit_name, const struct libnvmf_tid *t,
 	}
 
 	list_add(&g_ctrls, &e->entry);
+	schedule_release(false); // the saved desired set changes
 	return 0;
 }
 
@@ -155,6 +177,280 @@ static void ctrl_remove(struct active_ctrl *entry)
 {
 	list_del_init(&entry->entry);
 	ctrl_free(entry);
+	schedule_release(false); // the saved desired set changes
+}
+
+/*
+ * Release @unit_name's controller, and leave its connection up. The state
+ * goes first, so that the unit's ExecStop= has nothing to disconnect. Then
+ * the unit is stopped and the registry owner is cleared. @devname may be
+ * NULL when the controller is not connected.
+ */
+static void release_unit(const char *unit_name, const char *devname,
+			 const struct libnvmf_tid *tid, const char *reason)
+{
+	state_remove_devid(unit_name);
+	if (devname) {
+		__cleanup_free char *owner_unit = state_read_unit(devname);
+
+		if (shr_streq0(owner_unit, unit_name))
+			state_remove_ctrl(devname);
+	}
+
+	if (unit_exists(ctx.umgr, unit_name))
+		unit_stop(ctx.umgr, unit_name);
+
+	/* Only clear an owner that is still ours. */
+	if (devname &&
+	    !libnvmf_registry_attr_equal(ctx.nvme_ctx, devname, "owner",
+					 "discoverd"))
+		libnvmf_registry_update(ctx.nvme_ctx, devname, "owner", NULL);
+
+	disc_info("%s | %s - %s, released", libnvmf_tid_str(tid),
+		  devname ? devname : "-", reason);
+}
+
+/* Release a tracked controller, and stop tracking it. */
+static void ctrl_release(struct active_ctrl *e, const char *reason)
+{
+	__cleanup_free char *read_devname = NULL;
+	const char *devname = e->devname;
+
+	if (!devname)
+		devname = read_devname = unit_read_devid(e->unit_name);
+
+	release_unit(e->unit_name, devname, e->tid, reason);
+	ctrl_remove(e);
+}
+
+static bool devname_matches_tid(const char *devname,
+				const struct libnvmf_tid *tid);
+
+static void saved_free(struct saved_ctrl *s)
+{
+	list_del_init(&s->entry);
+	free(s->source);
+	tid_free(s->tid);
+	tid_free(s->parent);
+	free(s);
+}
+
+/*
+ * Decide a saved controller that nvme-discoverd did not adopt at startup.
+ * Returns true when it is decided, and false while it waits for the DLP of
+ * the DC that listed it.
+ */
+static bool decide_saved(struct saved_ctrl *s)
+{
+	__cleanup_free char *unit_name = tid_unit_name(s->tid);
+	__cleanup_free char *devname = NULL;
+
+	if (!unit_name || ctrl_find_by_unit(unit_name) ||
+	    inventory_is_desired(ctx.inventory, s->tid))
+		return true;
+
+	if (streq(s->source, "dlp") && s->parent &&
+	    inventory_is_desired(ctx.inventory, s->parent)) {
+		__cleanup_free char *dc_unit = tid_unit_name(s->parent);
+		struct active_ctrl *dc = dc_unit ?
+			ctrl_find_by_unit(dc_unit) : NULL;
+
+		if (!dc || !dc->dlp_fetched)
+			return false;
+	}
+
+	/* The kernel reuses device names: check it is still this one. */
+	devname = unit_read_devid(unit_name);
+	if (devname && !devname_matches_tid(devname, s->tid)) {
+		free(devname);
+		devname = NULL;
+	}
+
+	/* No unit and no connection: nothing is left to release. */
+	if (!devname && !unit_exists(ctx.umgr, unit_name))
+		return true;
+
+	release_unit(unit_name, devname, s->tid,
+		     "no longer desired since the last run");
+	return true;
+}
+
+/*
+ * Rewrite the file of last known desired controllers: the tracked
+ * controllers that are desired, and the saved ones not decided yet.
+ */
+static void save_desired(void)
+{
+	__cleanup_free char *content = NULL;
+	struct active_ctrl *e;
+	struct saved_ctrl *s;
+	size_t size = 0;
+	FILE *f;
+	int r;
+
+	f = open_memstream(&content, &size);
+	if (!f)
+		return;
+
+	list_for_each(&g_ctrls, e, entry) {
+		const struct libnvmf_tid *parent;
+		const char *source;
+
+		if (!e->desired)
+			continue;
+		source = inventory_source(ctx.inventory, e->tid, &parent);
+		if (!source)
+			continue;
+		fprintf(f, "%s\t%s\t%s\n", source,
+			libnvmf_tid_get_canonical(e->tid),
+			parent ? libnvmf_tid_get_canonical(parent) : "-");
+	}
+	list_for_each(&g_saved, s, entry)
+		fprintf(f, "%s\t%s\t%s\n", s->source,
+			libnvmf_tid_get_canonical(s->tid),
+			s->parent ? libnvmf_tid_get_canonical(s->parent) : "-");
+
+	if (fclose(f) != 0)
+		return;
+
+	r = state_write_desired(content);
+	if (r < 0)
+		disc_warn("cannot save the desired controllers: %s",
+			  strerror(-r));
+}
+
+/*
+ * Read the file of last known desired controllers. Discovered DCs become
+ * desired again, as they were before the restart. The others wait in
+ * g_saved for decide_saved().
+ */
+static void load_saved(void)
+{
+	__cleanup_free char *content = state_read_desired();
+	char *line, *next;
+
+	for (line = content; line && *line; line = next) {
+		char *source, *canon, *parent;
+		struct saved_ctrl *s;
+
+		next = strchr(line, '\n');
+		if (next)
+			*next++ = '\0';
+		else
+			next = line + strlen(line);
+
+		source = strtok(line, "\t");
+		canon = strtok(NULL, "\t");
+		parent = strtok(NULL, "\t");
+		if (!source || !canon || !parent)
+			continue;
+
+		s = calloc(1, sizeof(*s));
+		if (!s)
+			return;
+		list_node_init(&s->entry);
+		s->source = strdup(source);
+		if (!s->source ||
+		    libnvmf_tid_parse(ctx.nvme_ctx, canon, &s->tid) < 0 ||
+		    (!streq(parent, "-") &&
+		     libnvmf_tid_parse(ctx.nvme_ctx, parent, &s->parent) < 0)) {
+			saved_free(s);
+			continue;
+		}
+
+		if (streq(s->source, "discovered")) {
+			inventory_add_discovered_dc(ctx.inventory, s->tid);
+			saved_free(s);
+			continue;
+		}
+		list_add_tail(&g_saved, &s->entry);
+	}
+}
+
+static bool release_pending;
+static bool release_check_exclusions;
+
+/*
+ * Release the controllers that are no longer desired: desired at the last
+ * pass, and not desired now. A controller that was never desired, such as
+ * an mDNS DC whose DLP is not fetched yet, is never released here. With
+ * @release_check_exclusions, also release the controllers that the
+ * exclusion list now matches. NBFT controllers are never released.
+ */
+static int release_undesired(sd_event_source *src,
+			     void *user_data __attribute__((unused)))
+{
+	bool check_exclusions = release_check_exclusions;
+	struct active_ctrl *e, *next;
+	struct saved_ctrl *s, *snext;
+
+	release_pending = false;
+	release_check_exclusions = false;
+	sd_event_source_disable_unref(src);
+
+	list_for_each_safe(&g_ctrls, e, next, entry) {
+		bool desired = inventory_is_desired(ctx.inventory, e->tid);
+
+		if (inventory_is_nbft(ctx.inventory, e->tid))
+			continue;
+
+		if (check_exclusions &&
+		    libnvmf_exclusion_match(ctx.nvme_ctx, e->tid)) {
+			ctrl_release(e, "excluded");
+			continue;
+		}
+
+		if (e->desired && !desired) {
+			ctrl_release(e, "no longer desired");
+			continue;
+		}
+
+		e->desired = desired;
+	}
+
+	list_for_each_safe(&g_saved, s, snext, entry) {
+		if (decide_saved(s))
+			saved_free(s);
+	}
+
+	save_desired();
+
+	return 0;
+}
+
+/*
+ * Run release_undesired() from the event loop, after the change that
+ * called this is complete. Several changes before the pass share it.
+ */
+static void schedule_release(bool check_exclusions)
+{
+	sd_event_source *src;
+	int r;
+
+	release_check_exclusions |= check_exclusions;
+	if (release_pending)
+		return;
+
+	r = sd_event_add_defer(ctx.event, &src, release_undesired, NULL);
+	if (r < 0) {
+		disc_warn("cannot schedule the release check: %s",
+			  strerror(-r));
+		return;
+	}
+	release_pending = true;
+}
+
+/*
+ * Take the current desired state as the new reference, without releasing
+ * anything. For inventory changes that must not release, such as giving up
+ * on a DC.
+ */
+static void refresh_desired(void)
+{
+	struct active_ctrl *e;
+
+	list_for_each(&g_ctrls, e, entry)
+		e->desired = inventory_is_desired(ctx.inventory, e->tid);
 }
 
 /* One connected controller, as sysfs reports it. */
@@ -303,6 +599,21 @@ static void fetch_and_process_dlp(const char *devname,
 static bool devname_matches_tid(const char *devname,
 				const struct libnvmf_tid *tid);
 
+/* Fetch the DLP of an adopted DC. Runs once, from the event loop. */
+static int adopted_dc_fetch(sd_event_source *src, void *user_data)
+{
+	char *unit_name = user_data;
+	struct active_ctrl *e = ctrl_find_by_unit(unit_name);
+
+	if (e && e->devname)
+		fetch_and_process_dlp(e->devname, e->tid);
+
+	free(unit_name);
+	sd_event_source_disable_unref(src);
+
+	return 0;
+}
+
 /*
  * Track a unit this daemon started before it restarted. The connection is
  * already up and @devname names it. Takes ownership of @devname.
@@ -327,10 +638,25 @@ static void adopt_ctrl(const char *unit_name, const struct libnvmf_tid *tid,
 	/*
 	 * An adopted DC produces no device-add event, so fetch its DLP here.
 	 * Otherwise its DLP-sourced IOCs never enter the desired set and are
-	 * not reconnected if they drop.
+	 * not reconnected if they drop. Defer the fetch: a referral DC is
+	 * adopted while its parent's DLP is being processed, and the parent's
+	 * entries reach the inventory only when that is done.
 	 */
-	if (is_dc)
-		fetch_and_process_dlp(devname, tid);
+	if (is_dc) {
+		sd_event_source *src;
+		char *name = strdup(unit_name);
+		int r = -ENOMEM;
+
+		if (name)
+			r = sd_event_add_defer(ctx.event, &src,
+					       adopted_dc_fetch, name);
+		if (r < 0) {
+			disc_warn("%s - cannot defer DLP fetch: %s",
+				  libnvmf_tid_str(tid), strerror(-r));
+			free(name);
+			fetch_and_process_dlp(devname, tid);
+		}
+	}
 }
 
 /*
@@ -401,12 +727,12 @@ static void start_ctrl(const struct libnvmf_tid *tid, bool is_dc,
 	}
 }
 
-SHR_PTRARRAY_DEFINE(ioc_list, struct libnvmf_tid);
-
 struct dlp_fetch_ctx {
 	const struct libnvmf_config_conn *via_dc; // dc_tid's own conn, if any
 	const struct conn_scan *scan; // shared by every entry's connect check
-	struct ioc_list iocs;
+	struct tid_list iocs;      // for the inventory
+	struct tid_list referrals; // for the inventory
+	int hops; // the DC's referral hops from its source, -1 if none
 	bool self_seen;
 	bool epcsd; // meaningful only if self_seen
 };
@@ -416,9 +742,8 @@ static void dlp_ioc_callback(const struct libnvmf_tid *t, void *user_data)
 	struct dlp_fetch_ctx *fctx = user_data;
 	struct libnvmf_tid *dup;
 
-	// Accumulate IOC TIDs for inventory_update_dlp().
 	dup = libnvmf_tid_dup(t);
-	if (!dup || ioc_list_append(&fctx->iocs, dup) < 0) {
+	if (!dup || tid_list_append(&fctx->iocs, dup) < 0) {
 		tid_free(dup);
 		return;
 	}
@@ -453,6 +778,24 @@ static void dlp_dc_callback(const struct libnvmf_tid *t, bool epcsd,
 			    void *user_data)
 {
 	struct dlp_fetch_ctx *fctx = user_data;
+	struct libnvmf_tid *dup;
+
+	dup = libnvmf_tid_dup(t);
+	if (!dup || tid_list_append(&fctx->referrals, dup) < 0)
+		tid_free(dup);
+
+	/*
+	 * Follow a referral only within the hop limit, as the libnvme
+	 * discovery walk does. The referrals of a DC that is no longer
+	 * desired are not followed either.
+	 */
+	if (fctx->hops < 0)
+		return;
+	if (fctx->hops >= INVENTORY_MAX_REFERRAL_HOPS) {
+		disc_info("%s - referral %d hops from its source, not followed",
+			  libnvmf_tid_str(t), fctx->hops + 1);
+		return;
+	}
 
 	if (should_connect(fctx->scan, t, NULL)) {
 		start_ctrl(t, true, fctx->via_dc);
@@ -491,16 +834,18 @@ static void fetch_and_process_dlp(const char *devname,
 	__cleanup_conn_scan struct conn_scan scan = { 0 };
 	struct dlp_fetch_ctx fctx = {
 		.via_dc = inventory_config_conn_for(ctx.inventory, dc_tid),
+		.hops = inventory_referral_hops(ctx.inventory, dc_tid),
 	};
 	struct active_ctrl *e = ctrl_find_by_devname(devname);
 	bool epcsd;
+	int r;
 
 	// One snapshot for every entry this log page turns out to hold.
 	conn_scan_load(&scan);
 	fctx.scan = &scan;
 
-	dlp_fetch(&ctx, devname, dc_tid, dlp_ioc_callback, dlp_dc_callback,
-		  dlp_self_callback, &fctx);
+	r = dlp_fetch(&ctx, devname, dc_tid, dlp_ioc_callback,
+		      dlp_dc_callback, dlp_self_callback, &fctx);
 
 	epcsd = dc_effective_epcsd(&fctx, e);
 	disc_dbg("%s: self entry %s, effective EPCSD=%d",
@@ -516,17 +861,20 @@ static void fetch_and_process_dlp(const char *devname,
 			epcsd_park(e);
 	}
 
-	if (fctx.iocs.len) {
-		if (ioc_list_append(&fctx.iocs, NULL) == 0) {
-			inventory_update_dlp(ctx.inventory, dc_tid,
-					     fctx.iocs.items);
-		} else {
-			size_t i;
-
-			for (i = 0; i < fctx.iocs.len; i++)
-				tid_free(fctx.iocs.items[i]);
-			ioc_list_free(&fctx.iocs);
-		}
+	/*
+	 * A failed fetch tells nothing about the DC's entries, so keep the
+	 * last list. A log page without IOC entries replaces it.
+	 */
+	if (r == 0 && tid_list_append(&fctx.iocs, NULL) == 0 &&
+	    tid_list_append(&fctx.referrals, NULL) == 0) {
+		inventory_update_dlp(ctx.inventory, dc_tid, fctx.iocs.items,
+				     fctx.referrals.items);
+		if (e)
+			e->dlp_fetched = true;
+		schedule_release(false);
+	} else {
+		tid_list_free_items(&fctx.iocs);
+		tid_list_free_items(&fctx.referrals);
 	}
 }
 
@@ -644,8 +992,10 @@ static int retry_timeout(sd_event_source *src,
 	    now >= e->giveup_at_usec) {
 		disc_warn("%s - giving up after repeated failures",
 			  libnvmf_tid_str(e->tid));
-		if (e->is_dc)
-			inventory_remove_dlp(ctx.inventory, e->tid);
+		if (e->is_dc) {
+			inventory_forget_dc(ctx.inventory, e->tid);
+			refresh_desired(); // giving up releases nothing
+		}
 		ctrl_remove(e);
 		return 0;
 	}
@@ -739,6 +1089,27 @@ static int fc_kickstart_timeout(sd_event_source *src,
 	return 0;
 }
 
+/*
+ * Link a newly connected DC to its device and fetch its DLP. Both the
+ * device's add event and the unit's job completion call this, in either
+ * order. Only the first call does the work.
+ */
+static void dc_connected(struct active_ctrl *e, const char *devname)
+{
+	if (e->devname)
+		return;
+
+	e->devname = strdup(devname);
+
+	/*
+	 * DLP entries inherit host-side fields from the DC's TID. Use the
+	 * candidate TID, not one read from sysfs: sysfs reports the source
+	 * address the kernel selected, which the configuration did not ask
+	 * for.
+	 */
+	fetch_and_process_dlp(devname, e->tid);
+}
+
 static void on_job_done(const char *unit_name, bool success,
 			void *user_data __attribute__((unused)))
 {
@@ -754,6 +1125,19 @@ static void on_job_done(const char *unit_name, bool success,
 	if (success) {
 		e->attempts = 0;
 		e->giveup_at_usec = 0;
+
+		/*
+		 * The device's add event is soaked for about a second and
+		 * can be processed before ExecStartPost= wrote the state
+		 * file. The job completes only after ExecStartPost=.
+		 */
+		if (e->is_dc) {
+			__cleanup_free char *devname =
+				unit_read_devid(unit_name);
+
+			if (devname)
+				dc_connected(e, devname);
+		}
 		return;
 	}
 
@@ -763,28 +1147,21 @@ static void on_job_done(const char *unit_name, bool success,
 			 libnvmf_tid_str(e->tid));
 }
 
-static void on_dc_add(const char *devname, const struct libnvmf_tid *t,
+static void on_dc_add(const char *devname,
 		      void *user_data __attribute__((unused)))
 {
-	struct active_ctrl *e = NULL;
+	struct active_ctrl *e;
 	char *unit_name;
 
-	// Link devname to the in-memory entry via state file.
+	// Only a DC that nvme-discoverd connected has a state file.
 	unit_name = state_read_unit(devname);
-	if (unit_name) {
-		e = ctrl_find_by_unit(unit_name);
-		if (e && !e->devname)
-			e->devname = strdup(devname);
-		free(unit_name);
-	}
+	if (!unit_name)
+		return;
 
-	/*
-	 * DLP entries inherit host-side fields from the DC's TID. Use the
-	 * candidate, not @t: @t is read from sysfs and carries the source
-	 * address the kernel selected, which the configuration did not ask
-	 * for.
-	 */
-	fetch_and_process_dlp(devname, e && e->tid ? e->tid : t);
+	e = ctrl_find_by_unit(unit_name);
+	free(unit_name);
+	if (e)
+		dc_connected(e, devname);
 }
 
 static void on_dc_changed(const char *devname,
@@ -897,45 +1274,25 @@ static void on_fc_discovery(const struct libnvmf_tid *t,
 	 * always a DC here, never an IOC. Connect as a DC; we fetch its
 	 * DLP (and discover any IOCs behind it) once the device appears.
 	 */
+	inventory_add_discovered_dc(ctx.inventory, tid);
 	if (should_connect(NULL, tid, NULL))
 		start_ctrl(tid, true, NULL);
 }
 
 /*
  * Whether the kernel accepts a discovery connect to a DC's own NQN (TP8013).
- * libnvme does not export this check, so read /dev/nvme-fabrics directly.
  * On any error, answer no: the well-known discovery NQN always works.
  */
 static bool kernel_supports_discovery_nqn(void)
 {
-	static bool checked, supported;
-	char buf[0x1000];
-	char *p, *options;
-	ssize_t len;
-	int fd;
+	bool supported;
+	int r;
 
-	if (checked)
-		return supported;
-	checked = true;
-
-	fd = open("/dev/nvme-fabrics", O_RDONLY);
-	if (fd < 0)
-		return supported;
-
-	len = read(fd, buf, sizeof(buf) - 1);
-	close(fd);
-	if (len < 0)
-		return supported;
-
-	buf[len] = '\0';
-	options = buf;
-	while ((p = strsep(&options, ",\n"))) {
-		char *v = strsep(&p, "= ");
-
-		if (v && streq(v, "discovery")) {
-			supported = true;
-			break;
-		}
+	r = libnvmf_kernel_option_supported(ctx.nvme_ctx, "discovery",
+					    &supported);
+	if (r < 0) {
+		disc_dbg("kernel fabrics options: %s", libnvme_strerror(-r));
+		return false;
 	}
 
 	return supported;
@@ -971,6 +1328,7 @@ static void on_mdns_add(const char *traddr, const char *trsvcid,
 	    tid_set_default_host_if_unset(tid, ctx.hostnqn, ctx.hostid) < 0)
 		return;
 
+	inventory_add_discovered_dc(ctx.inventory, tid);
 	if (should_connect(NULL, tid, NULL))
 		start_ctrl(tid, true, NULL);
 }
@@ -1214,8 +1572,13 @@ static int sighup_handler(sd_event_source *src __attribute__((unused)),
 	}
 	inventory_load_config(ctx.inventory, &ctx);
 
-	// Connect any newly added desired controllers (no disconnects).
+	/*
+	 * Connect any newly added desired controllers. Release those the
+	 * configuration or the exclusion list removed, without disconnecting
+	 * them.
+	 */
 	connect_desired();
+	schedule_release(true);
 	apply_zeroconf();
 
 	sd_notify(0, "READY=1");
@@ -1392,6 +1755,7 @@ int main(int argc, char **argv)
 	if (ctx.cfg->nbft)
 		inventory_load_nbft(ctx.inventory, &ctx);
 	inventory_load_config(ctx.inventory, &ctx);
+	load_saved();
 
 	ctx.umgr = unit_mgr_new(ctx.bus, ctx.event, on_job_done, NULL,
 				nvme_path_abs);
@@ -1429,9 +1793,11 @@ int main(int argc, char **argv)
 
 	/*
 	 * Connect the desired set. start_ctrl() adopts anything a previous
-	 * run of this daemon left connected.
+	 * run of this daemon left connected. The release pass then decides
+	 * what the last run wanted and this one does not.
 	 */
 	connect_desired();
+	schedule_release(false);
 
 	/*
 	 * One-shot startup FC kickstart: mimics nvmefc-boot-connections.service

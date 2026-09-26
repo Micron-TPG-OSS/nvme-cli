@@ -726,8 +726,8 @@ static int micron_selective_download(int argc, char **argv,
 
 	if (err == 0x10B || err == 0x20B) {
 		err = 0;
-		nvme_show_error(
-			"Update successful! Power cycle for changes to take effect\n");
+		nvme_show_result(
+			"Update successful! Power cycle for changes to take effect");
 	}
 
 out:
@@ -775,7 +775,7 @@ static int micron_smbus_option(int argc, char **argv,
 
 	if (model != M5407 && model != M5411 && model != M6003 && model != M6004) {
 		nvme_show_error("This option is not supported for specified drive");
-		return err;
+		return -ENOTSUP;
 	}
 
 	if (!strcmp(opt.option, "enable")) {
@@ -908,7 +908,7 @@ struct {
 	const char *err;
 	int  bit;
 	int  val;
-} pcie_correctable_errors[] = {
+} pcie_uncorrectable_errors[] = {
 		{ (char *)"Unsupported Request Error Status (URES)", 20,
 		offsetof(struct pcie_error_counters, unsupported_request_error)},
 		{ (char *)"ECRC Error Status (ECRCES)", 19,
@@ -930,7 +930,7 @@ struct {
 		{ (char *)"Data Link Protocol Error Status (DLPES)", 4,
 		offsetof(struct pcie_error_counters, DLPES)},
 	},
-	pcie_uncorrectable_errors[] = {
+	pcie_correctable_errors[] = {
 		{ (char *)"Advisory Non-Fatal Error Status (ANFES)", 13,
 		offsetof(struct pcie_error_counters, advisory_non_fatal_error)},
 		{ (char *)"Replay Timer Timeout Status (RTS)",	12,
@@ -1008,16 +1008,16 @@ print_stats:
 		__u8 *pcounter = (__u8 *)&pcie_error_counters;
 
 		json_object_add_value_array(root, "PCIE Stats", pcieErrors);
-		for (i = 0; i < ARRAY_SIZE(pcie_correctable_errors); i++) {
-			__u16 val = counters ? *(__u16 *)(pcounter + pcie_correctable_errors[i].val) :
-					(correctable_errors >> pcie_correctable_errors[i].bit) & 1;
-			json_object_add_value_int(stats, pcie_correctable_errors[i].err, val);
-		}
 		for (i = 0; i < ARRAY_SIZE(pcie_uncorrectable_errors); i++) {
 			__u16 val = counters ? *(__u16 *)(pcounter + pcie_uncorrectable_errors[i].val) :
 					(uncorrectable_errors >>
 					pcie_uncorrectable_errors[i].bit) & 1;
 			json_object_add_value_int(stats, pcie_uncorrectable_errors[i].err, val);
+		}
+		for (i = 0; i < ARRAY_SIZE(pcie_correctable_errors); i++) {
+			__u16 val = counters ? *(__u16 *)(pcounter + pcie_correctable_errors[i].val) :
+					(correctable_errors >> pcie_correctable_errors[i].bit) & 1;
+			json_object_add_value_int(stats, pcie_correctable_errors[i].err, val);
 		}
 		json_array_add_value_object(pcieErrors, stats);
 		json_print_object(root, NULL);
@@ -1026,21 +1026,21 @@ print_stats:
 	} else if (counters == true) {
 		__u8 *pcounter = (__u8 *)&pcie_error_counters;
 
-		for (i = 0; i < ARRAY_SIZE(pcie_correctable_errors); i++)
-			printf("%-42s : %-1hu\n", pcie_correctable_errors[i].err,
-				   *(__u16 *)(pcounter + pcie_correctable_errors[i].val));
 		for (i = 0; i < ARRAY_SIZE(pcie_uncorrectable_errors); i++)
 			printf("%-42s : %-1hu\n", pcie_uncorrectable_errors[i].err,
 				   *(__u16 *)(pcounter + pcie_uncorrectable_errors[i].val));
-	} else if (eModel == M5407 || eModel == M5410) {
 		for (i = 0; i < ARRAY_SIZE(pcie_correctable_errors); i++)
-			printf("%-42s : %-1d\n", pcie_correctable_errors[i].err,
-				   ((correctable_errors >>
-				   pcie_correctable_errors[i].bit) & 1));
+			printf("%-42s : %-1hu\n", pcie_correctable_errors[i].err,
+				   *(__u16 *)(pcounter + pcie_correctable_errors[i].val));
+	} else if (eModel == M5407 || eModel == M5410) {
 		for (i = 0; i < ARRAY_SIZE(pcie_uncorrectable_errors); i++)
 			printf("%-42s : %-1d\n", pcie_uncorrectable_errors[i].err,
 				   ((uncorrectable_errors >>
 				   pcie_uncorrectable_errors[i].bit) & 1));
+		for (i = 0; i < ARRAY_SIZE(pcie_correctable_errors); i++)
+			printf("%-42s : %-1d\n", pcie_correctable_errors[i].err,
+				   ((correctable_errors >>
+				   pcie_correctable_errors[i].bit) & 1));
 	} else {
 		printf("PCIE Stats:\n");
 		printf("Device correctable errors detected: 0x%x\n",
@@ -3035,7 +3035,6 @@ static int micron_fw_activation_history(int argc, char **argv, struct command *a
 		goto out;
 	}
 
-	/* check if we have at least one entry to print */
 	struct micron_fw_activation_history_table *table =
 			   (struct micron_fw_activation_history_table *)logC2;
 
@@ -3043,11 +3042,7 @@ static int micron_fw_activation_history(int argc, char **argv, struct command *a
 	if (table->log_page != 0xC2 || (table->version != 2 && table->version != 1)) {
 		nvme_show_error("Unsupported fw activation history page: %x, version: %x",
 				table->log_page, table->version);
-		goto out;
-	}
-
-	if (!table->num_entries) {
-		nvme_show_error("No entries were found in fw activation history log");
+		err = -EINVAL;
 		goto out;
 	}
 
@@ -3074,6 +3069,10 @@ static int micron_fw_activation_history(int argc, char **argv, struct command *a
 			printf("\n");
 			json_free_object(root);
 	} else {
+		if (!table->num_entries) {
+			nvme_show_result("No entries were found in fw activation history log");
+			goto out;
+		}
 		micron_fw_activation_history_header_print();
 		for (count = 0; count < table->num_entries; count++) {
 			memset(formatted_output, '\0', 100);
@@ -3456,7 +3455,7 @@ static int micron_clr_fw_activation_history(int argc, char **argv,
 	if ((model != M51CX) && (model != M51BY) && (model != M51CY)
 				&& (model != M6003) && (model != M6004)) {
 		nvme_show_error("This option is not supported for specified drive");
-		return err;
+		return -ENOTSUP;
 	}
 
 	err = nvme_set_features_simple(hdl, 1 << 31, fid, 0, 0, &result);
@@ -4110,7 +4109,7 @@ static int micron_logpage_dir(int argc, char **argv, struct command *acmd,
 		uint8_t supported;
 		char	*desc;
 	} log_list[] = {
-		{0x00, 0, "Support Log Pages"},
+		{0x00, 0, "Supported Log Pages"},
 		{0x01, 0, "Error Information"},
 		{0x02, 0, "SMART / Health Information"},
 		{0x03, 0, "Firmware Slot Information"},
@@ -4124,7 +4123,7 @@ static int micron_logpage_dir(int argc, char **argv, struct command *acmd,
 		{0x0B, 0, "Predictable Latency Event Aggregate"},
 		{0x0C, 0, "Asymmetric Namespace Access"},
 		{0x0D, 0, "Persistent Event Log"},
-		{0x0E, 0, "Predictable Latency Event Aggregate"},
+		{0x0E, 0, "LBA Status Information"},
 		{0x0F, 0, "Endurance Group Event Aggregate"},
 		{0x10, 0, "Media Unit Status"},
 		{0x11, 0, "Supported Capacity Configuration List"},
@@ -4150,7 +4149,7 @@ static int micron_logpage_dir(int argc, char **argv, struct command *acmd,
 		printf("%02Xh    : %s\n", log_list[i].log_id, log_list[i].desc);
 	}
 
-	return err;
+	return 0;
 }
 
 static int micron_cloud_boot_SSD_version(int argc, char **argv,
@@ -4176,6 +4175,7 @@ static int micron_cloud_boot_SSD_version(int argc, char **argv,
 	if (err == 0) {
 		if (ctrl.vs[536] != MICRON_CUST_ID_GG) {
 			nvme_show_error("cloud-boot-SSD-version option is not supported for specified drive");
+			err = -ENOTSUP;
 			goto out;
 		}
 	} else {
@@ -4227,6 +4227,7 @@ static int micron_device_waf(int argc, char **argv, struct command *acmd,
 	if (err == 0) {
 		if (ctrl.vs[536] != MICRON_CUST_ID_GG) {
 			nvme_show_error("vs-device-waf option is not supported for specified drive");
+			err = -ENOTSUP;
 			goto out;
 		}
 	} else {
@@ -4296,6 +4297,7 @@ static int micron_cloud_log(int argc, char **argv, struct command *acmd,
 	if (err == 0) {
 		if (ctrl.vs[536] != MICRON_CUST_ID_GG) {
 			nvme_show_error("vs-cloud-log option is not supported for specified drive");
+			err = -ENOTSUP;
 			goto out;
 		}
 	} else {
@@ -4543,20 +4545,6 @@ static int micron_health_info(int argc, char **argv, struct command *acmd,
  */
 #define CTRATT_PMS_BIT           21
 
-static inline __u16 get_id_ctrl_ipmsr(struct nvme_id_ctrl *ctrl)
-{
-	__le16 *p = (__le16 *)&ctrl->ipmsr;
-
-	return le16_to_cpu(*p);
-}
-
-static inline __u16 get_id_ctrl_msmt(struct nvme_id_ctrl *ctrl)
-{
-	__le16 *p = (__le16 *)&ctrl->msmt;
-
-	return le16_to_cpu(*p);
-}
-
 static inline bool get_id_ctrl_pms(struct nvme_id_ctrl *ctrl)
 {
 	return (le32_to_cpu(ctrl->ctratt) >> CTRATT_PMS_BIT) & 0x1;
@@ -4568,21 +4556,14 @@ static void micron_id_ctrl_vs(__u8 *vs, struct json_object *root)
 	/* Cast back to get full ctrl structure for our extended fields */
 	struct nvme_id_ctrl *ctrl =
 		(struct nvme_id_ctrl *)(vs - offsetof(struct nvme_id_ctrl, vs));
-	__u16 ipmsr = get_id_ctrl_ipmsr(ctrl);
-	__u16 msmt = get_id_ctrl_msmt(ctrl);
 	bool pms = get_id_ctrl_pms(ctrl);
 
-	if (root) {
+	if (root)
 		/* JSON output */
 		json_object_add_value_int(root, "pms", pms ? 1 : 0);
-		json_object_add_value_uint(root, "ipmsr", ipmsr);
-		json_object_add_value_uint(root, "msmt", msmt);
-	} else {
+	else
 		/* Normal output */
 		printf("pms       : %u\n", pms ? 1 : 0);
-		printf("ipmsr     : %u\n", ipmsr);
-		printf("msmt      : %u\n", msmt);
-	}
 }
 
 static int micron_id_ctrl(int argc, char **argv, struct command *acmd,
