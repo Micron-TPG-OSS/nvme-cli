@@ -1,0 +1,160 @@
+---
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# This file is part of nvme.
+# Copyright (c) 2026 Micron Technology, Inc.
+#
+# Check the Micron-owned CI itself, on the pull request that changes it.
+#
+# WHY THIS EXISTS
+# Everything under .github/micron/ runs in exactly one place today: the release
+# workflow, on a schedule, holding a token that can write releases here and
+# upload to SharePoint. A typo in a shell script, a workflow that no longer
+# parses, or a projected copy that drifted from its overlay source are all
+# invisible until a release is being cut -- which is the worst moment to find
+# out, because the upstream release is already public and the clock is running.
+#
+# So these checks are cheap, they are boring, and they run on the pull request
+# that introduces the mistake. None of them build nvme-cli: upstream's build.yml
+# already does that, and duplicating it here would cost minutes to tell us
+# something we are already told.
+#
+# This file is deliberately not overlay-managed, for the same two reasons as
+# micron-sync-and-merge.yml: it runs the applier, so an overlay able to rewrite
+# it could disable the check that would have caught the breakage, and it is a
+# Micron-only addition that upstream never touches, so there is no merge
+# conflict for the overlay to prevent. Edit it in place.
+#
+# NOTE ON PATH FILTERS
+# The triggers are path-filtered, so this workflow does not report at all on a
+# pull request that touches only upstream code. That is intentional -- there is
+# nothing for it to check there -- but it does mean this must not be made a
+# *required* status check, because a required check that never runs blocks every
+# unrelated pull request forever. Keep it advisory-but-visible.
+
+name: Micron - CI
+
+on:
+  pull_request:
+    paths:
+      - '.github/micron/**'
+      - '.github/workflows/micron-*.yml'
+  push:
+    # A sync pushes straight to master and mingw with no pull request in
+    # between, and it re-applies the overlay as it goes. This is the only place
+    # the result of that re-apply gets looked at.
+    branches: [master, mingw]
+    paths:
+      - '.github/micron/**'
+      - '.github/workflows/micron-*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: micron-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Micron CI checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      # The README has said "wire it into a PR check if you want that enforced"
+      # since the overlay was added. This is that check. Without it the two
+      # committed copies of micron-release.yml can disagree, and the way that
+      # surfaces is a release behaving like the copy nobody read: GitHub runs
+      # .github/workflows/, humans review .github/micron/overlay/.
+      - name: 'Gate: projected copies match the overlay'
+        if: always()
+        run: bash .github/micron/apply.sh --check
+
+      # Syntax only -- no execution. A release-path script with an unbalanced
+      # quote fails at the point it is reached, which for sharepoint-publish.py
+      # is after the artifacts are built and the release is published.
+      - name: 'Gate: shell scripts parse'
+        if: always()
+        run: |
+          set -uo pipefail
+          rc=0
+          while IFS= read -r f; do
+            if bash -n "$f"; then
+              echo "ok    $f"
+            else
+              echo "::error file=$f::bash -n failed"
+              rc=1
+            fi
+          done < <(find .github/micron -name '*.sh' -type f | sort)
+          exit $rc
+
+      # Only error severity gates. shellcheck's warnings and info are style, and
+      # a gate that reports 40 of them is a gate somebody adds `|| true` to;
+      # error severity means the script does not do what it reads as doing.
+      - name: 'Gate: shellcheck (error severity)'
+        if: always()
+        run: |
+          set -uo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            echo "::notice::shellcheck not on the image; installing"
+            sudo apt-get update -qq && sudo apt-get install -y shellcheck
+          fi
+          shellcheck --version
+          find .github/micron -name '*.sh' -type f -print0 \
+            | xargs -0 shellcheck -S error
+
+      # The import-table denylist, against known-bad input. This is the only
+      # thing here that tests a gate's *failing* branch, which as inline YAML in
+      # micron-release.yml had never once executed. See scan_deps_pe.sh.
+      - name: 'Gate: import denylist behaves'
+        if: always()
+        run: bash .github/micron/tests/test_scan_deps_pe.sh
+
+      # A workflow that does not parse does not run, and GitHub reports that as
+      # silence rather than as a failure. For a scheduled release poll, silence
+      # is indistinguishable from "no new upstream release".
+      - name: 'Gate: Micron workflows parse'
+        if: always()
+        run: |
+          set -uo pipefail
+          rc=0
+          for f in .github/workflows/micron-*.yml; do
+            # encoding is explicit: these files contain UTF-8 punctuation in
+            # their comments, and open() without it follows the locale. That is
+            # UTF-8 on this runner and cp1252 on a Windows checkout, where this
+            # check then fails on a file GitHub parses fine. Naming the encoding
+            # also makes "is this file valid UTF-8" part of what is asserted.
+            if python3 -c 'import sys, yaml; yaml.safe_load(open(sys.argv[1], encoding="utf-8"))' "$f"; then
+              echo "ok    $f"
+            else
+              echo "::error file=$f::not valid YAML"
+              rc=1
+            fi
+          done
+          exit $rc
+
+      # Same argument as bash -n, for the publisher. It runs last in the release,
+      # holding the SharePoint credentials, after everything else has succeeded.
+      - name: 'Gate: sharepoint-publish.py compiles'
+        if: always()
+        run: python3 -m py_compile .github/micron/sharepoint-publish.py
+
+      - name: Summary
+        if: always()
+        run: |
+          set -uo pipefail
+          {
+            echo "## Micron CI"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| commit | \`$(git rev-parse HEAD)\` |"
+            echo "| overlay files | $(bash .github/micron/apply.sh --list 2>/dev/null | wc -l) |"
+            echo "| shell scripts checked | $(find .github/micron -name '*.sh' -type f | wc -l) |"
+            echo
+            echo "Checked: overlay drift, shell syntax, shellcheck (error), the"
+            echo "import denylist against known-bad tables, workflow YAML, and"
+            echo "the SharePoint publisher's syntax. Nothing here builds nvme-cli."
+          } >> "$GITHUB_STEP_SUMMARY"

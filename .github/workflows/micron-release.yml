@@ -384,43 +384,20 @@ jobs:
           set -euxo pipefail
           meson test -C .build-release
 
+      # The check itself is .github/micron/scan_deps_pe.sh, not inline here, so it
+      # can be run against a local build and so its denylist can be tested
+      # against a known-bad import table -- see .github/micron/tests/. As inline
+      # YAML it ran once per release against one input, and its failing branch had
+      # never executed. It distinguishes exit 1 (a leak) from exit 2 (the import
+      # table could not be read), which the inline version conflated.
+      #
+      # --out writes the import list where the Report step below reads it, which
+      # is what the inline version's "sort -u > imports.txt" did. Report runs
+      # `cat imports.txt` under set -euo pipefail, so dropping the file would
+      # have turned the provenance step into a release failure.
       - name: Verify no MinGW runtime deps
         shell: msys2 {0}
-        run: |
-          set -euo pipefail
-
-          # Read the PE import table rather than using ldd. ldd resolves paths
-          # through the MSYS2 runtime, which is x86_64 even on windows-11-arm,
-          # so it cannot be relied on for the aarch64 binary. Import names are
-          # host-independent. binutils ships objdump, the clang toolchain ships
-          # llvm-objdump; both print "DLL Name:" lines for PE files.
-          OBJDUMP="$(command -v objdump || command -v llvm-objdump || true)"
-          if [ -z "${OBJDUMP}" ]; then
-            echo "::error::neither objdump nor llvm-objdump found; cannot verify imports"
-            exit 1
-          fi
-
-          "${OBJDUMP}" -p .build-release/nvme.exe \
-            | awk -F'DLL Name:' '/DLL Name:/ {gsub(/[ \t\r]/, "", $2); print $2}' \
-            | sort -u > imports.txt
-
-          if [ ! -s imports.txt ]; then
-            echo "::error::could not read any DLL imports from nvme.exe"
-            exit 1
-          fi
-
-          echo "Imported DLLs:"
-          cat imports.txt
-
-          # A self-contained build imports only genuine Windows system DLLs.
-          # Any of these means the exe would need that runtime DLL shipped
-          # beside it, so fail rather than publish a zip that cannot run on a
-          # clean machine.
-          if grep -Eiq '^(libjson-c|libwinpthread|libgcc_s|libstdc\+\+|libc\+\+|libunwind|libatomic|libssp|libnvme|msys-)' imports.txt; then
-            echo "::error::nvme.exe imports MinGW/MSYS2 runtime DLLs (listed above); expected a self-contained binary"
-            exit 1
-          fi
-          echo "nvme.exe is self-contained."
+        run: bash .github/micron/scan_deps_pe.sh --out imports.txt .build-release/nvme.exe
 
       - name: Package
         id: package
@@ -691,7 +668,7 @@ jobs:
     steps:
       - name: Generate GitHub App token
         id: generate-token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ secrets.SYNC_APP_ID }}
           private-key: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
