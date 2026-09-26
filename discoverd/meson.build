@@ -14,10 +14,17 @@ discoverd_sources = files(
     'src/inventory.c',
     'src/log.c',
     'src/main.c',
+    'src/netif.c',
     'src/state.c',
     'src/tid.c',
     'src/units.c',
 )
+
+if want_mdns
+    discoverd_sources += files('src/mdns.c')
+else
+    discoverd_sources += files('src/no-mdns.c')
+endif
 
 discoverd_inc = include_directories('src')
 

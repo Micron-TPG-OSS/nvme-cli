@@ -25,6 +25,49 @@
   --discovery` and converted `discovery.conf` lines now record
   `persistent = auto`. See `nvme-discover(1)` and `nvme-config-create(1)`.
 
+### nvme-discoverd
+
+* `epcsd-poll-interval-minutes`, `fc-kickstart-interval-minutes` and
+  `dc-giveup-timeout` move from `[Global]` to a new `[Discovery]`
+  section in `nvme-discoverd.conf`. In `[Global]`, they are now
+  ignored with an "unknown key" warning. See `nvme-discoverd(8)`.
+
+* nvme-discoverd can discover Discovery Controllers through mDNS
+  (TP8009), using systemd-resolved. It is off by default. Enable it
+  with `zeroconf = true` in the `[Discovery]` section. The new `mdns`
+  build option (`auto` by default) controls whether mDNS support is
+  built. It requires libsystemd v257 or later.
+
+* nvme-discoverd releases a controller it no longer wants, for example
+  one removed from the configuration or from a DC's log page, or one the
+  exclusion list now matches. It clears the registry owner and leaves the
+  connection up. It no longer connects the IOCs of a DC that another
+  orchestrator connected. After a restart, it reconnects the DCs it found
+  through mDNS. A DC configured with a `persistent` setting now connects.
+
+* nvme-discoverd also compares the host ID, not only the host NQN, when
+  it matches a desired connection with an existing one.
+
+* nvme-discoverd adds the IPv6 scope to link-local addresses. For a
+  Discovery Log Page entry, the scope comes from the Discovery
+  Controller's own address. For an mDNS result, it is the interface.
+  RDMA needs this, because it has no `host_iface` to select the link.
+
+* A connection unit of nvme-discoverd no longer disconnects another
+  controller that reuses its device name. The unit records the sysfs
+  inode of its device at connect time and disconnects only if the inode
+  still matches. At startup, nvme-discoverd removes the state of
+  controllers that are gone.
+
+### libnvme
+
+* A failed read of `/dev/nvme-fabrics` is no longer cached for the
+  life of the global context, so a later connect retries it.
+
+* New `libnvmf_kernel_option_supported()` and
+  `libnvmf_kernel_options_for_each()` report the fabrics options the
+  kernel lists in `/dev/nvme-fabrics`.
+
 ## Changes in 3.1 (2026-09-18)
 
 ### Feature removals and incompatible changes

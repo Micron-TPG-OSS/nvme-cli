@@ -38,6 +38,7 @@
 #include <shared/array-util.h>
 #include <shared/compiler-attributes-util.h>
 #include <shared/machine-id-util.h>
+#include <shared/net-util.h>
 #include <shared/nqn-util.h>
 #include <shared/string-util.h>
 #include <shared/uuid-util.h>
@@ -1545,11 +1546,49 @@ static int build_options(struct libnvme_host *h, struct libnvme_ctrl *c, char **
 		continue;		   		\
 	}
 
+void _libnvmf_free_kernel_options(struct libnvme_global_ctx *ctx)
+{
+	char **name;
+
+	if (ctx->kernel_options) {
+		for (name = ctx->kernel_options; *name; name++)
+			free(*name);
+		free(ctx->kernel_options);
+		ctx->kernel_options = NULL;
+	}
+	free(ctx->options);
+	ctx->options = NULL;
+}
+
+static int add_kernel_option(struct libnvme_global_ctx *ctx, size_t *count,
+		const char *name)
+{
+	char **names;
+
+	names = realloc(ctx->kernel_options, (*count + 2) * sizeof(*names));
+	if (!names)
+		return -ENOMEM;
+	ctx->kernel_options = names;
+
+	names[*count] = strdup(name);
+	if (!names[*count])
+		return -ENOMEM;
+	names[++*count] = NULL;
+
+	return 0;
+}
+
+/*
+ * Read the options the kernel accepts from /dev/nvme-fabrics, once per
+ * @ctx. A failed read is not cached, so the next call retries it.
+ */
 static int __nvmf_supported_options(struct libnvme_global_ctx *ctx)
 {
 	char buf[0x1000], *options, *p, *v;
 	__cleanup_fd int fd = -1;
+	size_t count = 0;
 	ssize_t len;
+	int err;
 
 	if (ctx->options)
 		return 0;
@@ -1562,7 +1601,8 @@ static int __nvmf_supported_options(struct libnvme_global_ctx *ctx)
 	if (fd < 0) {
 		libnvme_msg(ctx, LIBNVME_LOG_ERR, "Failed to open %s: %s\n",
 			 nvmf_dev, libnvme_strerror(errno));
-		return -ENVME_CONNECT_OPEN;
+		err = -ENVME_CONNECT_OPEN;
+		goto out_free;
 	}
 
 	memset(buf, 0x0, sizeof(buf));
@@ -1582,7 +1622,8 @@ static int __nvmf_supported_options(struct libnvme_global_ctx *ctx)
 
 		libnvme_msg(ctx, LIBNVME_LOG_ERR, "Failed to read from %s: %s\n",
 			 nvmf_dev, libnvme_strerror(errno));
-		return -ENVME_CONNECT_READ;
+		err = -ENVME_CONNECT_READ;
+		goto out_free;
 	}
 
 	buf[len] = '\0';
@@ -1597,6 +1638,13 @@ static int __nvmf_supported_options(struct libnvme_global_ctx *ctx)
 		if (!v)
 			continue;
 		libnvme_msg(ctx, LIBNVME_LOG_DEBUG, "%s ", v);
+
+		/* "instance" & "cntlid" are returned values, not options. */
+		if (strcmp(v, "instance") && strcmp(v, "cntlid")) {
+			err = add_kernel_option(ctx, &count, v);
+			if (err)
+				goto out_free;
+		}
 
 		parse_option(ctx, v, cntlid);
 		parse_option(ctx, v, concat);
@@ -1630,6 +1678,73 @@ static int __nvmf_supported_options(struct libnvme_global_ctx *ctx)
 		parse_option(ctx, v, trsvcid);
 	}
 	libnvme_msg(ctx, LIBNVME_LOG_DEBUG, "\n");
+
+	return 0;
+out_free:
+	_libnvmf_free_kernel_options(ctx);
+
+	return err;
+}
+
+/*
+ * The kernel lists its options since Linux 5.17. For an older kernel,
+ * connect uses the default set above. That set is a guess, so the public
+ * API does not report it.
+ */
+static int kernel_options(struct libnvme_global_ctx *ctx)
+{
+	int err;
+
+	err = __nvmf_supported_options(ctx);
+	if (err)
+		return err;
+
+	return ctx->kernel_options ? 0 : -EOPNOTSUPP;
+}
+
+__shr_public int libnvmf_kernel_option_supported(
+		struct libnvme_global_ctx *ctx, const char *name,
+		bool *supported)
+{
+	char **opt;
+	int err;
+
+	if (!ctx || !name || !supported)
+		return -EINVAL;
+
+	err = kernel_options(ctx);
+	if (err)
+		return err;
+
+	*supported = false;
+	for (opt = ctx->kernel_options; *opt; opt++) {
+		if (!strcmp(*opt, name)) {
+			*supported = true;
+			break;
+		}
+	}
+
+	return 0;
+}
+
+__shr_public int libnvmf_kernel_options_for_each(
+		struct libnvme_global_ctx *ctx,
+		void (*callback)(const char *name, void *user_data),
+		void *user_data)
+{
+	char **opt;
+	int err;
+
+	if (!ctx || !callback)
+		return -EINVAL;
+
+	err = kernel_options(ctx);
+	if (err)
+		return err;
+
+	for (opt = ctx->kernel_options; *opt; opt++)
+		callback(*opt, user_data);
+
 	return 0;
 }
 
@@ -3207,20 +3322,6 @@ static void dc_walk_referral(struct libnvme_global_ctx *ctx,
 		libnvme_free_ctrl(d.c);
 }
 
-static bool ipv6_link_local(const char *addr, size_t len)
-{
-	char host[INET6_ADDRSTRLEN];
-	struct in6_addr in6;
-
-	if (len >= sizeof(host))
-		return false;
-	memcpy(host, addr, len);
-	host[len] = '\0';
-
-	return inet_pton(AF_INET6, host, &in6) == 1 &&
-	       IN6_IS_ADDR_LINKLOCAL(&in6);
-}
-
 /*
  * A Discovery Log Page entry never carries an IPv6 scope, but a link-local
  * address is only meaningful together with the link it was learned on.
@@ -3244,8 +3345,8 @@ static void dc_scope_link_local_entry(const struct libnvme_ctrl *c,
 	if (!scope)
 		return;
 	/* A scope on anything but a link-local address names no link. */
-	if (!ipv6_link_local(c->traddr, scope - c->traddr) ||
-	    !ipv6_link_local(e->traddr, strlen(e->traddr)))
+	if (!shr_ipv6_is_link_local(c->traddr) ||
+	    !shr_ipv6_is_link_local(e->traddr))
 		return;
 
 	len = strlen(e->traddr);

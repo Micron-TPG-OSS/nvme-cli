@@ -19,7 +19,6 @@
 
 #include <ccan/list/list.h>
 
-#include <shared/array-util.h>
 #include <nvme/fabrics.h>
 #include <nvme/lib.h>
 #include <nvme/nbft.h>
@@ -29,14 +28,12 @@
 #include "inventory.h"
 #include "log.h"
 
-/* Simple growable TID array, backed by struct shr_ptrarray. */
-SHR_PTRARRAY_DEFINE(tid_list, struct libnvmf_tid);
-
 /* Per-DC DLP cache entry. */
 struct dlp_entry {
 	struct list_node entry;
-	struct libnvmf_tid *dc_tid; // key
-	struct tid_list iocs;       // value: IOC TIDs from last DLP fetch
+	struct libnvmf_tid *dc_tid;  // key
+	struct tid_list iocs;        // IOC entries from the last fetch
+	struct tid_list referrals;   // referral entries from the last fetch
 };
 
 /*
@@ -57,27 +54,18 @@ struct inventory {
 	struct tid_list nbft_iocs;
 	struct tid_list cfg_dcs;
 	struct tid_list cfg_iocs;
+	struct tid_list discovered_dcs; // found through mDNS or FC kickstart
 	struct list_head dlp_cache;
 	struct list_head cfg_conns;
 };
 
-/* Free every TID in l, then the backing array, leaving l empty. */
-static void tlist_free_items(struct tid_list *l)
-{
-	size_t i;
-
-	for (i = 0; i < l->len; i++)
-		tid_free(l->items[i]);
-	tid_list_free(l);
-}
-
 /*
- * The four flat TID sets (nbft_dcs/nbft_iocs/cfg_dcs/cfg_iocs) have no key —
- * membership is a linear scan (tlist_contains()). dlp_cache is a map keyed
- * by DC TID, each entry holding that DC's last-fetched IOC set; lookups
- * (inventory_update_dlp(), inventory_remove_dlp(), inventory_is_desired())
- * walk it with tid_same(), not a hash or tree — fine given how few DCs are
- * tracked at once.
+ * The flat TID sets (nbft_dcs/nbft_iocs/cfg_dcs/cfg_iocs/discovered_dcs)
+ * have no key — membership is a linear scan (tid_list_contains()). dlp_cache
+ * is a map keyed by DC TID, each entry holding that DC's last-fetched
+ * entries; lookups (inventory_update_dlp(), inventory_forget_dc(),
+ * inventory_is_desired()) walk it with tid_same(), not a hash or tree —
+ * fine given how few DCs are tracked at once.
  */
 struct inventory *inventory_new(void)
 {
@@ -108,8 +96,8 @@ static struct libnvmf_tid *with_default_host(const struct discoverd_ctx *dctx,
 }
 
 /*
- * Free an inventory and everything in it: the four flat TID sets and
- * every per-DC dlp_entry (and that entry's own IOC set) in dlp_cache.
+ * Free an inventory and everything in it: the flat TID sets and every
+ * per-DC dlp_entry (and that entry's own list) in dlp_cache.
  */
 void inventory_free(struct inventory *inv)
 {
@@ -118,13 +106,15 @@ void inventory_free(struct inventory *inv)
 
 	if (!inv)
 		return;
-	tlist_free_items(&inv->nbft_dcs);
-	tlist_free_items(&inv->nbft_iocs);
-	tlist_free_items(&inv->cfg_dcs);
-	tlist_free_items(&inv->cfg_iocs);
+	tid_list_free_items(&inv->nbft_dcs);
+	tid_list_free_items(&inv->nbft_iocs);
+	tid_list_free_items(&inv->cfg_dcs);
+	tid_list_free_items(&inv->cfg_iocs);
+	tid_list_free_items(&inv->discovered_dcs);
 	list_for_each_safe(&inv->dlp_cache, e, next, entry) {
 		tid_free(e->dc_tid);
-		tlist_free_items(&e->iocs);
+		tid_list_free_items(&e->iocs);
+		tid_list_free_items(&e->referrals);
 		free(e);
 	}
 	list_for_each_safe(&inv->cfg_conns, ce, cnext, entry) {
@@ -134,18 +124,30 @@ void inventory_free(struct inventory *inv)
 	free(inv);
 }
 
+/* Move the NULL-terminated @tids into @l, and free the array. */
+static void tid_list_take(struct tid_list *l, struct libnvmf_tid **tids)
+{
+	size_t i;
+
+	if (!tids)
+		return;
+	for (i = 0; tids[i]; i++)
+		tid_list_append(l, tids[i]);
+	free(tids);
+}
+
 /*
- * Replace the IOC set learned from dc_tid's Discovery Log Page. Called
+ * Replace the entries learned from dc_tid's Discovery Log Page. Called
  * each time a DC's DLP is (re-)fetched, so this is a clean per-DC
- * replacement, not an incremental merge - any IOC that dropped out of
+ * replacement, not an incremental merge - any entry that dropped out of
  * the new DLP simply disappears from the DLP cache for this DC.
  */
 void inventory_update_dlp(struct inventory *inv,
 			  const struct libnvmf_tid *dc_tid,
-			  struct libnvmf_tid **ioc_tids)
+			  struct libnvmf_tid **iocs,
+			  struct libnvmf_tid **referrals)
 {
 	struct dlp_entry *e = NULL, *it;
-	size_t i;
 
 	/* Find the existing per-DC entry, if any. */
 	list_for_each(&inv->dlp_cache, it, entry) {
@@ -172,51 +174,23 @@ void inventory_update_dlp(struct inventory *inv,
 	} else {
 		/*
 		 * DLP refresh for a DC we already track: drop the
-		 * previous IOC set before repopulating it below.
+		 * previous entries before repopulating them below.
 		 */
-		tlist_free_items(&e->iocs);
+		tid_list_free_items(&e->iocs);
+		tid_list_free_items(&e->referrals);
 	}
 
-	/*
-	 * Take ownership of ioc_tids: each TID moves into e->iocs, and
-	 * the now-empty array itself is freed (per inventory.h contract).
-	 */
-	if (ioc_tids) {
-		for (i = 0; ioc_tids[i]; i++)
-			tid_list_append(&e->iocs, ioc_tids[i]);
-		free(ioc_tids);
-	}
-}
-
-/*
- * Drop the per-DC dlp_entry for dc_tid entirely (e.g. the DC was
- * removed from config on SIGHUP, or disconnected for good) - unlike
- * inventory_update_dlp(), which replaces an entry's IOC set in place,
- * this removes the entry itself, key and all, from dlp_cache.
- * A no-op if dc_tid has no entry.
- */
-void inventory_remove_dlp(struct inventory *inv,
-			  const struct libnvmf_tid *dc_tid)
-{
-	struct dlp_entry *e;
-
-	list_for_each(&inv->dlp_cache, e, entry) {
-		if (tid_same(e->dc_tid, dc_tid)) {
-			list_del_init(&e->entry);
-			tid_free(e->dc_tid);
-			tlist_free_items(&e->iocs);
-			free(e);
-			return;
-		}
-	}
+	/* Take ownership of both arrays (per inventory.h contract). */
+	tid_list_take(&e->iocs, iocs);
+	tid_list_take(&e->referrals, referrals);
 }
 
 /*
  * Linear membership test: is t the same (per tid_same()) as any item
  * already in l?
  */
-static bool tlist_contains(const struct tid_list *l,
-			    const struct libnvmf_tid *t)
+static bool tid_list_contains(const struct tid_list *l,
+			      const struct libnvmf_tid *t)
 {
 	size_t i;
 
@@ -227,29 +201,139 @@ static bool tlist_contains(const struct tid_list *l,
 	return false;
 }
 
+/* Remove the item of @l that is the same as @tid, if any. */
+static void tid_list_remove(struct tid_list *l, const struct libnvmf_tid *tid)
+{
+	size_t i;
+
+	for (i = 0; i < l->len; i++) {
+		if (tid_same(l->items[i], tid)) {
+			tid_free(l->items[i]);
+			l->items[i] = l->items[--l->len];
+			return;
+		}
+	}
+}
+
+void inventory_add_discovered_dc(struct inventory *inv,
+				 const struct libnvmf_tid *tid)
+{
+	struct libnvmf_tid *dup;
+
+	if (tid_list_contains(&inv->discovered_dcs, tid))
+		return;
+
+	dup = libnvmf_tid_dup(tid);
+	if (dup && tid_list_append(&inv->discovered_dcs, dup) < 0)
+		tid_free(dup);
+}
+
 /*
- * Is t something discoverd should be (re)connecting? True if t is in
- * any of the four flat sets, or if t is itself a tracked DC (a key in
- * dlp_cache), or if t is in any tracked DC's IOC set. This is the
- * union of every controller source discoverd knows about - NBFT,
- * config, and everything learned via DLP - and is the gate used
- * before reconnecting a dropped controller.
+ * Forget a DC that nvme-discoverd gave up on: drop its dlp_entry, key and
+ * all, and its place in discovered_dcs. A no-op for what @dc_tid is not in.
  */
+void inventory_forget_dc(struct inventory *inv,
+			 const struct libnvmf_tid *dc_tid)
+{
+	struct dlp_entry *e;
+
+	tid_list_remove(&inv->discovered_dcs, dc_tid);
+
+	list_for_each(&inv->dlp_cache, e, entry) {
+		if (tid_same(e->dc_tid, dc_tid)) {
+			list_del_init(&e->entry);
+			tid_free(e->dc_tid);
+			tid_list_free_items(&e->iocs);
+			tid_list_free_items(&e->referrals);
+			free(e);
+			return;
+		}
+	}
+}
+
+/*
+ * Hops from a DC with a source (NBFT, the configuration, or discovered)
+ * to @tid through referral entries, but no more than @budget. Returns the
+ * fewest hops, or -1 if @tid cannot be reached. The budget also ends a
+ * referral loop.
+ */
+static int hops(const struct inventory *inv, const struct libnvmf_tid *tid,
+		unsigned int budget)
+{
+	struct dlp_entry *e;
+	int best = -1;
+
+	if (tid_list_contains(&inv->nbft_dcs, tid) ||
+	    tid_list_contains(&inv->cfg_dcs, tid) ||
+	    tid_list_contains(&inv->discovered_dcs, tid))
+		return 0;
+
+	if (!budget)
+		return -1;
+
+	list_for_each(&inv->dlp_cache, e, entry) {
+		int h;
+
+		if (!tid_list_contains(&e->referrals, tid))
+			continue;
+		h = hops(inv, e->dc_tid, budget - 1);
+		if (h >= 0 && (best < 0 || h + 1 < best))
+			best = h + 1;
+	}
+
+	return best;
+}
+
+int inventory_referral_hops(const struct inventory *inv,
+			    const struct libnvmf_tid *dc_tid)
+{
+	return hops(inv, dc_tid, INVENTORY_MAX_REFERRAL_HOPS);
+}
+
+/*
+ * A cached DLP counts only while its DC is desired. So removing a DC from
+ * its source also removes everything learned through it.
+ */
+const char *inventory_source(const struct inventory *inv,
+			     const struct libnvmf_tid *tid,
+			     const struct libnvmf_tid **parent)
+{
+	struct dlp_entry *e;
+
+	*parent = NULL;
+	if (tid_list_contains(&inv->nbft_dcs, tid) ||
+	    tid_list_contains(&inv->nbft_iocs, tid))
+		return "nbft";
+	if (tid_list_contains(&inv->cfg_dcs, tid) ||
+	    tid_list_contains(&inv->cfg_iocs, tid))
+		return "config";
+	if (tid_list_contains(&inv->discovered_dcs, tid))
+		return "discovered";
+
+	list_for_each(&inv->dlp_cache, e, entry) {
+		if ((tid_list_contains(&e->iocs, tid) ||
+		     tid_list_contains(&e->referrals, tid)) &&
+		    inventory_referral_hops(inv, e->dc_tid) >= 0) {
+			*parent = e->dc_tid;
+			return "dlp";
+		}
+	}
+	return NULL;
+}
+
 bool inventory_is_desired(const struct inventory *inv,
 			  const struct libnvmf_tid *t)
 {
 	struct dlp_entry *e;
 
-	if (tlist_contains(&inv->nbft_dcs, t) ||
-	    tlist_contains(&inv->nbft_iocs, t) ||
-	    tlist_contains(&inv->cfg_dcs, t) ||
-	    tlist_contains(&inv->cfg_iocs, t))
+	if (tid_list_contains(&inv->nbft_iocs, t) ||
+	    tid_list_contains(&inv->cfg_iocs, t) ||
+	    inventory_referral_hops(inv, t) >= 0)
 		return true;
 
 	list_for_each(&inv->dlp_cache, e, entry) {
-		if (tid_same(e->dc_tid, t))
-			return true;
-		if (tlist_contains(&e->iocs, t))
+		if (tid_list_contains(&e->iocs, t) &&
+		    inventory_referral_hops(inv, e->dc_tid) >= 0)
 			return true;
 	}
 	return false;
@@ -262,15 +346,15 @@ bool inventory_is_desired(const struct inventory *inv,
  */
 bool inventory_is_nbft(const struct inventory *inv, const struct libnvmf_tid *t)
 {
-	return tlist_contains(&inv->nbft_dcs, t) ||
-	       tlist_contains(&inv->nbft_iocs, t);
+	return tid_list_contains(&inv->nbft_dcs, t) ||
+	       tid_list_contains(&inv->nbft_iocs, t);
 }
 
 /*
  * Build the NULL-terminated, deduplicated list of every DC that
- * should be connected at startup: nbft_dcs union cfg_dcs. Does not
- * include DCs only known via dlp_cache (those are reconnected via
- * unit RestartUnit, not from this startup list). Caller owns the
+ * should be connected at startup: nbft_dcs, cfg_dcs and discovered_dcs.
+ * Does not include DCs only known via dlp_cache (those are reconnected
+ * via unit RestartUnit, not from this startup list). Caller owns the
  * returned array and every TID in it.
  */
 struct libnvmf_tid **inventory_desired_dcs(const struct inventory *inv)
@@ -287,7 +371,7 @@ struct libnvmf_tid **inventory_desired_dcs(const struct inventory *inv)
 			tid_list_append(&combined, t);
 	}
 	for (i = 0; i < inv->cfg_dcs.len; i++) {
-		if (!tlist_contains(&combined, inv->cfg_dcs.items[i])) {
+		if (!tid_list_contains(&combined, inv->cfg_dcs.items[i])) {
 			struct libnvmf_tid *t =
 				libnvmf_tid_dup(inv->cfg_dcs.items[i]);
 
@@ -295,10 +379,20 @@ struct libnvmf_tid **inventory_desired_dcs(const struct inventory *inv)
 				tid_list_append(&combined, t);
 		}
 	}
+	for (i = 0; i < inv->discovered_dcs.len; i++) {
+		const struct libnvmf_tid *dc = inv->discovered_dcs.items[i];
+		struct libnvmf_tid *tid;
+
+		if (tid_list_contains(&combined, dc))
+			continue;
+		tid = libnvmf_tid_dup(dc);
+		if (tid)
+			tid_list_append(&combined, tid);
+	}
 
 	arr = malloc((combined.len + 1) * sizeof(*arr));
 	if (!arr) {
-		tlist_free_items(&combined);
+		tid_list_free_items(&combined);
 		return NULL;
 	}
 	for (i = 0; i < combined.len; i++)
@@ -595,8 +689,8 @@ void inventory_load_config(struct inventory *inv,
 	struct load_config_args args = { .inv = inv, .dctx = dctx };
 	struct cfg_conn_entry *ce, *next;
 
-	tlist_free_items(&inv->cfg_dcs);
-	tlist_free_items(&inv->cfg_iocs);
+	tid_list_free_items(&inv->cfg_dcs);
+	tid_list_free_items(&inv->cfg_iocs);
 	list_for_each_safe(&inv->cfg_conns, ce, next, entry) {
 		tid_free(ce->tid);
 		free(ce);
@@ -644,7 +738,7 @@ struct libnvmf_tid **inventory_desired_iocs(const struct inventory *inv)
 			tid_list_append(&combined, t);
 	}
 	for (i = 0; i < inv->cfg_iocs.len; i++) {
-		if (!tlist_contains(&combined, inv->cfg_iocs.items[i])) {
+		if (!tid_list_contains(&combined, inv->cfg_iocs.items[i])) {
 			struct libnvmf_tid *t =
 				libnvmf_tid_dup(inv->cfg_iocs.items[i]);
 
@@ -655,7 +749,7 @@ struct libnvmf_tid **inventory_desired_iocs(const struct inventory *inv)
 
 	arr = malloc((combined.len + 1) * sizeof(*arr));
 	if (!arr) {
-		tlist_free_items(&combined);
+		tid_list_free_items(&combined);
 		return NULL;
 	}
 	for (i = 0; i < combined.len; i++)

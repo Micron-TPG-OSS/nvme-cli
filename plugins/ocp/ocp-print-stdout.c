@@ -100,7 +100,7 @@ static void stdout_fw_activation_history(const struct fw_activation_history *fw_
 	printf("  %-26s%d\n", "log page version:",
 	       le16_to_cpu(fw_history->log_page_version));
 
-	printf("  %-26s0x%"PRIx64"%"PRIx64"\n", "log page guid:",
+	printf("  %-26s0x%016"PRIx64"%016"PRIx64"\n", "log page guid:",
 	       le64_to_cpu(fw_history->log_page_guid[1]),
 	       le64_to_cpu(fw_history->log_page_guid[0]));
 
@@ -111,7 +111,6 @@ static void stdout_smart_extended_log(struct ocp_smart_extended_log *log, unsign
 {
 	uint16_t smart_log_ver = 0;
 	uint16_t dssd_version = 0;
-	int i = 0;
 
 	printf("SMART Cloud Attributes :-\n");
 
@@ -170,7 +169,8 @@ static void stdout_smart_extended_log(struct ocp_smart_extended_log *log, unsign
 	smart_log_ver = le16_to_cpu(log->log_page_version);
 	printf("  Log page version				%"PRIu16"\n", smart_log_ver);
 	printf("  Log page GUID					0x");
-	printf("%"PRIx64"%"PRIx64"\n", le64_to_cpu(*(uint64_t *)&log->log_page_guid[8]),
+	printf("%016"PRIx64"%016"PRIx64"\n",
+		le64_to_cpu(*(uint64_t *)&log->log_page_guid[8]),
 		le64_to_cpu(*(uint64_t *)&log->log_page_guid));
 	switch (smart_log_ver) {
 	case 0 ... 1:
@@ -219,16 +219,14 @@ static void stdout_smart_extended_log(struct ocp_smart_extended_log *log, unsign
 			le16_to_cpu(log->current_max_avg_power));
 		printf("  Lifetime power consumed			%"PRIu64"\n",
 			int48_to_long(log->lifetime_power_consumed));
-		printf("  Dssd firmware revision			");
-		for (i = 0; i < sizeof(log->dssd_firmware_revision); i++)
-			printf("%c", log->dssd_firmware_revision[i]);
-		printf("\n");
+		printf("  Dssd firmware revision			%.*s\n",
+			(int)sizeof(log->dssd_firmware_revision),
+			(char *)log->dssd_firmware_revision);
 		printf("  Dssd firmware build UUID			%s\n",
 			shr_uuid_to_string(log->dssd_firmware_build_uuid));
-		printf("  Dssd firmware build label			");
-		for (i = 0; i < sizeof(log->dssd_firmware_build_label); i++)
-			printf("%c", log->dssd_firmware_build_label[i]);
-		printf("\n");
+		printf("  Dssd firmware build label			%.*s\n",
+			(int)sizeof(log->dssd_firmware_build_label),
+			(char *)log->dssd_firmware_build_label);
 		fallthrough;
 	case 4:
 		printf("  NVMe Command Set Errata Version               %d\n",
