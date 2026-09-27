@@ -166,6 +166,11 @@ static void ontap_get_subsysname(char *subnqn, char *subsysname,
 	size_t n;
 	int i, len = sizeof(ctrl->subnqn);
 
+	if (!subsysname_len)
+		return;
+
+	subsysname[0] = '\0';
+
 	/* get the target NQN */
 	memcpy(subnqn, ctrl->subnqn, len);
 	subnqn[len] = '\0';
@@ -176,18 +181,15 @@ static void ontap_get_subsysname(char *subnqn, char *subsysname,
 
 	/* get the subsysname from the target NQN */
 	subname = strrchr(subnqn, '.');
-	if (subname) {
-		subname++;
-		n = strnlen(subname, sizeof(ctrl->subnqn));
-		if (subsysname_len) {
-			if (n >= subsysname_len)
-				n = subsysname_len - 1;
-			memcpy(subsysname, subname, n);
-			subsysname[n] = '\0';
-		}
-	} else
-		nvme_show_error(
-			"Unable to fetch ONTAP subsystem name");
+	if (!subname) {
+		nvme_show_error("Unable to fetch ONTAP subsystem name");
+		return;
+	}
+
+	subname++;
+	n = strnlen(subname, subsysname_len - 1);
+	memcpy(subsysname, subname, n);
+	subsysname[n] = '\0';
 }
 
 static void ontap_labels_to_str(char *dst, const char *src, size_t count)
@@ -219,6 +221,10 @@ static void netapp_get_ontap_labels(char *vsname, char *nspath,
 	bool nspath_tlv_available = false;
 	const char *ontap_vol = "/vol/";
 
+	/* the caller reuses these buffers for every device */
+	snprintf(vsname, ONTAP_LABEL_LEN, " ");
+	snprintf(nspath, ONTAP_NS_PATHLEN, " ");
+
 	/* get the lsp */
 	lsp = (*(__u8 *)&log_data[16]) & 0x0F;
 	if (lsp != ONTAP_C2_LOG_NSINFO_LSP)
@@ -230,7 +236,7 @@ static void netapp_get_ontap_labels(char *vsname, char *nspath,
 	if (tlv == ONTAP_VSERVER_NAME_TLV) {
 		label_len = (size_t)(*(__u16 *)&log_data[34]) * 4;
 		if (36 + label_len > log_len)
-			return;
+			goto bad_log;
 		vserver_name = (char *)&log_data[36];
 		ontap_labels_to_str(vsname, vserver_name, label_len);
 	} else {
@@ -242,13 +248,13 @@ static void netapp_get_ontap_labels(char *vsname, char *nspath,
 	i = 36 + label_len;
 	j = i + 2;
 	if (j + 2 > log_len)
-		return;
+		goto bad_log;
 	/* get the volume name tlv */
 	tlv = *(__u8 *)&log_data[i];
 	if (tlv == ONTAP_VOLUME_NAME_TLV) {
 		label_len = (size_t)(*(__u16 *)&log_data[j]) * 4;
 		if (j + 2 + label_len > log_len)
-			return;
+			goto bad_log;
 		volume_name = (char *)&log_data[j + 2];
 		ontap_labels_to_str(vol_name, volume_name, label_len);
 	} else {
@@ -260,13 +266,13 @@ static void netapp_get_ontap_labels(char *vsname, char *nspath,
 	i += 4 + label_len;
 	j += 4 + label_len;
 	if (j + 2 > log_len)
-		return;
+		goto bad_log;
 	/* get the namespace name tlv */
 	tlv = *(__u8 *)&log_data[i];
 	if (tlv == ONTAP_NS_NAME_TLV) {
 		label_len = (size_t)(*(__u16 *)&log_data[j]) * 4;
 		if (j + 2 + label_len > log_len)
-			return;
+			goto bad_log;
 		namespace_name = (char *)&log_data[j + 2];
 		ontap_labels_to_str(ns_name, namespace_name, label_len);
 	} else {
@@ -278,14 +284,14 @@ static void netapp_get_ontap_labels(char *vsname, char *nspath,
 	i += 4 + label_len;
 	j += 4 + label_len;
 	if (j + 2 > log_len)
-		return;
+		goto bad_log;
 	/* get the namespace path tlv if available */
 	tlv = *(__u8 *)&log_data[i];
 	if (tlv == ONTAP_NS_PATH_TLV) {
 		nspath_tlv_available = true;
 		label_len = (size_t)(*(__u16 *)&log_data[j]) * 4;
 		if (j + 2 + label_len > log_len)
-			return;
+			goto bad_log;
 		namespace_path = (char *)&log_data[j + 2];
 		ontap_labels_to_str(ns_path, namespace_path, label_len);
 	}
@@ -298,6 +304,11 @@ static void netapp_get_ontap_labels(char *vsname, char *nspath,
 		snprintf(nspath, ONTAP_NS_PATHLEN, "%s%s%s%s", ontap_vol,
 			vol_name, "/", ns_name);
 	}
+
+	return;
+
+bad_log:
+	nvme_show_error("Truncated ONTAP nsinfo log data");
 }
 
 static void netapp_smdevice_json(struct json_object *devices, char *devname,
@@ -766,7 +777,6 @@ out:
 static int nvme_get_ontap_c2_log(struct libnvme_transport_handle *hdl, __u32 nsid, void *buf, __u32 buflen)
 {
 	struct libnvme_passthru_cmd get_log;
-	int err;
 
 	memset(buf, 0, buflen);
 	memset(&get_log, 0, sizeof(struct libnvme_passthru_cmd));
@@ -784,13 +794,7 @@ static int nvme_get_ontap_c2_log(struct libnvme_transport_handle *hdl, __u32 nsi
 	get_log.cdw10 |= ONTAP_C2_LOG_NSINFO_LSP << 8;
 	get_log.cdw11 = numdu;
 
-	err = libnvme_exec_admin_passthru(hdl, &get_log);
-	if (err) {
-		nvme_show_error("ioctl error %0x", err);
-		return 1;
-	}
-
-	return 0;
+	return libnvme_exec_admin_passthru(hdl, &get_log);
 }
 
 static int netapp_smdevices_get_info(struct libnvme_transport_handle *hdl,
@@ -995,7 +999,7 @@ static int netapp_smdevices(int argc, char **argv, struct command *acmd,
 			return -EINVAL;
 		}
 
-		sprintf(path, "/dev/%s", devname);
+		snprintf(path, sizeof(path), "/dev/%s", devname);
 		if (stat(path, &st) != 0) {
 			nvme_show_error("%s does not exist", path);
 			return -EINVAL;
@@ -1086,7 +1090,7 @@ static int netapp_ontapdevices(int argc, char **argv, struct command *acmd,
 			return -EINVAL;
 		}
 
-		sprintf(path, "/dev/%s", devname);
+		snprintf(path, sizeof(path), "/dev/%s", devname);
 		if (stat(path, &st) != 0) {
 			nvme_show_error("%s does not exist", path);
 			return -EINVAL;
