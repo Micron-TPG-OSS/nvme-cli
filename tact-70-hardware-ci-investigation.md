@@ -1,7 +1,20 @@
 # TACT-70 — Real-Hardware CI for nvme-cli & blktests (Windows + Linux)
 
 **Status:** Draft for review · **Owner:** Jim Munn · **Type:** Investigation (no infrastructure changes under this ticket)
-**Purpose:** Feed a Micron ART architecture + security review. This document explains how the upstream linux-nvme community runs its automated real-hardware tests, why that stack is built the way it is, and what Micron would actually need to stand up an equivalent that also covers Windows.
+**Purpose:** Feed a Micron ART (Architecture Request Tracker) architecture + security review. This document explains how the upstream linux-nvme community runs its automated real-hardware tests, why that stack is built the way it is, and what Micron would actually need to stand up an equivalent that also covers Windows.
+
+---
+
+## What Micron actually needs (the two requirements)
+
+Stripped of all the upstream complexity, this work exists to satisfy **two requirements**:
+
+1. **Run the `nvme-cli` e2e/plugin tests on Linux against a real Micron drive.** Upstream already runs these on Linux — but against **WDC** drives. The Micron-specific code in the e2e suite and the `micron` plugin is therefore **never exercised on Micron hardware today**. A Linux runner with a Micron drive closes that gap.
+2. **Run the `nvme-cli` e2e/plugin tests on Windows against a real Micron drive.** nvme-cli's Windows code paths have **no real-hardware coverage anywhere** — upstream is Linux-only. This is the net-new half of the work.
+
+Everything else in this document — the disposable-VM machinery, Kubernetes, and the rest of the upstream stack — is background for figuring out *how* to meet these two requirements as simply as possible.
+
+> **A note on blktests scope.** The ticket (TACT-70) commissions `nvme-cli` **and** blktests as co-equals. This investigation concludes blktests is better treated as **bonus coverage than a co-equal requirement**: it tests the **Linux kernel**, not `nvme-cli`, and has no Windows counterpart. It rides along on the Linux runner at no extra cost, but it does not drive the design and is out of scope on Windows. Flagging the divergence here so it is a deliberate scoping decision, not an omission.
 
 ---
 
@@ -21,19 +34,19 @@ If you read nothing else, read the [TL;DR](#tldr) and [Part 5 (Recommendation)](
 
 - The upstream test rig exists to solve **one hard problem**: let an automated test grab a **real, physical NVMe SSD** and run destructive tests on it, inside a **disposable virtual machine** that can boot **any kernel version**, triggered automatically from a GitHub workflow — over and over, unattended, on shared hardware.
 - To do that at the scale of the whole Linux kernel community, they built a **Kubernetes cluster** (a fleet-management system) with roughly ten cooperating subsystems. **Most of that complexity is a consequence of scale and of kernel-development needs that Micron does not share.**
-- The genuinely essential, load-bearing core is small: turn on a CPU feature called **IOMMU**, hand one physical SSD to a virtual machine (a technique called **PCIe passthrough**), run the tests, wipe the drive, repeat.
-- **Recommendation:** Micron almost certainly does **not** need the Kubernetes machinery. Start with the simplest thing that works and only add complexity if a concrete need forces it. For Windows + Linux support, use **one Linux host** that boots either a Linux or a Windows virtual machine against the **same** physical drive — not two separate hardware pools.
+- The genuinely essential core is small: turn on a CPU feature called **IOMMU** (I/O Memory Management Unit), hand one physical SSD to a virtual machine (a technique called **PCIe passthrough**), run the tests, wipe the drive, repeat.
+- **Recommendation:** Micron almost certainly does **not** need the Kubernetes machinery. Start with the simplest thing that works and only add complexity if a concrete need forces it. For Windows + Linux support, use **one Linux host** that boots either a Linux or a Windows virtual machine against the **same** physical drive — not two separate machines.
 - nvme-cli builds on Windows, and its end-to-end (e2e) test suite is already Windows-aware. The net-new engineering is **infrastructure**: a Windows test target with a real Micron drive and the CI wiring to run the existing suite against it.
 
 ---
 
 ## Part 1 — The one problem, in plain English
 
-Imagine you want to automatically test `nvme-cli` and `blktests` (a Linux storage test suite) against a **real Micron SSD** every night, kicked off by a CI workflow — the same way unit tests run on GitHub today, but touching actual hardware.
+The goal is to automatically test `nvme-cli` and `blktests` (a Linux storage test suite) against a **real Micron SSD** every night, kicked off by a CI workflow — the same way unit tests run on GitHub today, but touching actual hardware.
 
-Three requirements make this much harder than a normal CI job:
+Three things make this much harder than a normal CI job:
 
-1. **It must use a real, physical drive.** You cannot qualify how a Micron SSD behaves by testing against a fake/emulated disk. Something has to give the test *exclusive, direct* access to the actual PCIe SSD.
+1. **It must use a real, physical drive.** nvme-cli and blktests issue real NVMe admin/IO commands, and an emulated disk will not answer them faithfully — so the tests need a real controller to talk to. Something has to give the test *exclusive, direct* access to the actual PCIe SSD.
 2. **The tests are destructive.** blktests and the device-prep scripts erase the drive, delete and recreate namespaces, and reformat it. You do not want that running on a machine you care about — it needs to be isolated.
 3. **(Upstream only) It must be able to boot any kernel.** The kernel community tests *unreleased, in-development* kernels. Every test run may need a *different* kernel booted fresh.
 
@@ -55,7 +68,7 @@ It is easy to assume the upstream rig was built to test `nvme-cli`. It was not.
 - **The `blktests-ci` infrastructure exists to catch regressions in the Linux kernel storage stack.** That is *why* it needs to boot an arbitrary, in-development kernel for every job (requirement #3) and run across a shared pool of machines. Kernel testing is the entire reason for the complexity.
 - **`nvme-cli` is a tenant, not the owner.** The nvme-cli project did not build this rig. Its nightly workflow simply *reuses* the community's runner and VM machinery to get "free" real-drive coverage — in one job it runs both blktests and the nvme-cli e2e suite against the passed-through drive.
 
-Why this matters: **Micron does not inherit the reason the stack is complex.** Micron's goal is to qualify Micron drives and `nvme-cli` — a tenant workload — which a single host-level rig delivers without any kernel-CI machinery. It also raises a scoping question answered later: *does Micron even want blktests in scope?* (See [Part 6](#part-6--windows--linux-design) — blktests is Linux-kernel-only and does not run on Windows; against a fixed kernel it is a broad drive/driver smoke test, not a test of Micron's product.)
+Why this matters: **Micron does not inherit the reason the stack is complex.** Micron's goal is to run `nvme-cli` against a real Micron drive — a tenant workload — which a single host-level rig delivers without any kernel-CI machinery. The drive is the *target* the tests run against, not the thing being qualified. (blktests rides along on the Linux rig but tests the kernel, not `nvme-cli`, and does not run on Windows — see [the two requirements](#what-micron-actually-needs-the-two-requirements) above.)
 
 ---
 
@@ -208,20 +221,20 @@ That's the whole cycle. Note how many of the moving parts (steps 1–6 of setup)
 
 ## Part 4 — Why is it so complex?
 
-The complexity is real, but it is not arbitrary. It comes from **three requirements upstream has that Micron very likely does not**:
+The complexity is real, but it is not arbitrary. It comes from **three needs upstream has that Micron very likely does not**:
 
-| Upstream requirement | What it forces into the stack | Does Micron have this need? |
+| Upstream need | What it forces into the stack | Does Micron have this need? |
 |---|---|---|
 | **Boot any kernel, per job** | Disposable VMs, [KubeVirt](#kubevirt) `kernelBoot`, the nightly [kernel-builder](#kernel-pipeline), [kpd](#kernel-pipeline) patch automation | **No** — Micron tests a *fixed, released* kernel. |
 | **Many machines, many concurrent jobs (shared pool)** | [Kubernetes/k3s](#kubernetes), the KubeVirt device-plugin scheduling, [Longhorn](#storage), [private registry](#registry-svc), [binary cache](#registry-svc), [Loki](#logging), fleet-recovery tooling | **No** — one machine, run at night. |
 | **Ephemeral workloads behind a TLS-inspecting firewall** | in-cluster [mitmproxy](#mitmproxy) + a self-signed certificate injected everywhere | **Partly** — Micron *has* the firewall, but already owns the proxy + certificate, so it needs a much smaller solution. |
 
-Here is the same idea as a component-by-component verdict. "Load-bearing" means *you genuinely need it to test a drive*; "scale artifact" means *it only exists because of the three requirements above*.
+Here is the same idea as a component-by-component verdict. "Essential" means *you genuinely need it to test a drive*; "scale artifact" means *it only exists because of the three requirements above*.
 
 | Component | Plain-language role | Verdict for a minimal Micron rig |
 |---|---|---|
-| **IOMMU + vfio-pci binding** | The safety fence + the mechanism that hands a real SSD to a VM | **Load-bearing** (if using a VM at all). But it's plain Linux — no Kubernetes needed. |
-| **QEMU/KVM + libvirt** | Runs the VM | **Load-bearing** (if using a VM). |
+| **IOMMU + vfio-pci binding** | The safety fence + the mechanism that hands a real SSD to a VM | **Essential** (if using a VM at all). But it's plain Linux — no Kubernetes needed. |
+| **QEMU/KVM + libvirt** | Runs the VM | **Essential** (if using a VM). |
 | **KubeVirt** | Lets Kubernetes run passthrough VMs + inject kernels | **Scale artifact.** Only needed with Kubernetes and arbitrary kernels. |
 | **Kubernetes / k3s** | Fleet manager for many machines | **Scale artifact.** Meaningless on one machine. |
 | **ARC / GitLab runners** | Keep the CI runner alive while spawning VMs | **Scale artifact.** A single normal self-hosted runner replaces it — unless you must isolate untrusted outside code. |
@@ -268,13 +281,13 @@ Upstream runs only on Linux; the Windows path has no upstream precedent and must
 The core question is *where does the Windows test run?*
 
 ### <a name="option-a"></a>Option A — One Linux host, boot a Windows VM (recommended)
-Keep the single Linux + [passthrough](#passthrough) host. For Linux runs it boots a Linux VM; for Windows runs it boots a **Windows VM** against the *same* physical drive. The passthrough mechanism is **guest-OS-agnostic** — a Windows guest sees the Micron SSD through its built-in NVMe driver just as Linux does.
-- **Net-new work:** build a **Windows VM image** (with the paravirtual drivers, an unattended first-boot config, and OpenSSH so the runner can drive it), handle **Windows licensing/activation**, and switch the VM's firmware to **UEFI** (Windows requires it). Upstream's existing **FreeBSD** support is a working template for "a non-Linux guest," which de-risks this.
+Keep the single Linux + [passthrough](#passthrough) host. For Linux runs it boots a Linux VM; for Windows runs it boots a **Windows VM** against the *same* physical drive. The passthrough mechanism is **guest-OS-agnostic** — a Windows guest sees the Micron SSD through its built-in NVMe driver just as Linux does. Because there is one drive, the Linux and Windows runs happen **sequentially, not concurrently** — one VM at a time claims the drive, and the drive is wiped between runs.
+- **Net-new work:** build a **Windows VM image** (with the `virtio-win` drivers — the disk/network drivers Windows needs to boot inside a KVM VM — an unattended first-boot config, and OpenSSH so the runner can drive it), handle **Windows licensing/activation**, and switch the VM's firmware to **UEFI** (Windows requires it).
 
 ### <a name="option-b"></a>Option B — A separate Windows/Hyper-V host using DDA
 Use a second, Windows-Server machine and Microsoft's native **[DDA](#dda)** passthrough.
 - **Upside:** first-class Microsoft-supported path; familiar to Windows admins; no Linux-VM-of-Windows quirks.
-- **Downside (decisive):** a **completely separate second hardware pool and automation stack** (nothing is shared with the Linux side), on server-class hardware, and **drives cannot be shared** between the two pools without physically re-cabling and rebooting.
+- **Downside (decisive):** a **completely separate second machine and automation stack** (nothing is shared with the Linux side), on server-class hardware, and **drives cannot be shared** between the two machines without physically re-cabling and rebooting.
 
 ### <a name="option-c"></a>Option C — A separate bare-metal Windows host (no VM)
 Use a second machine running Windows directly on the metal, with a **dedicated Micron drive** in it, and run the e2e suite against the physical `\\.\PhysicalDriveN`. This is the Windows mirror of the Linux [Tier 1](#tier-1--bare-metal-no-vm-simplest-recommended-default) rig — no VM, no passthrough, no [DDA](#dda).
@@ -286,14 +299,19 @@ Two separate questions:
 - **Wiping the media between runs:** **Yes, fully automatable.** `nvme format` and `nvme sanitize` are controller-level commands that work identically from Linux or Windows; the existing drive-prep script already does this reset at the start of every run.
 - **Handing the physical drive from one OS to the other:**
   - **Under Option A:** the drive never moves — it stays attached to the one Linux host, and "Windows vs Linux" is just *which VM image boots*. **Fully automatable, no human, no reboot.**
-  - **Under Option B:** the drive is physically bound to *different machines* for Windows vs Linux. Switching means unbind → re-cable/move → rebind → reboot. **Manual**, unless you buy *separate* drives for each pool (doubling that part of the hardware cost).
+  - **Under Option B:** the drive is physically bound to *different machines* for Windows vs Linux. Switching means unbind → re-cable/move → rebind → reboot. **Manual**, unless you buy *separate* drives for each machine (doubling that part of the hardware cost).
   - **Under Option C:** Windows and Linux run on *different machines* with their own dedicated drives, so no handoff happens — each side wipes its own drive at the start of its run. No sharing, no manual step.
 
+### <a name="windows-device"></a>How is the drive identified to the test on Windows?
+On Linux, upstream injects the drive via the `BDEV0` environment variable ([Part 3](#part-3--how-upstream-does-it-end-to-end)). The nvme-cli **e2e suite itself, however, does not read `BDEV0`** — it takes the device as explicit **`--controller` / `--ns1`** parameters (e.g. `--controller /dev/nvme0 --ns1 /dev/nvme0n1`), which the harness fills in.
+- **On Windows** the same parameters take the Windows physical-disk path — **`\\.\PhysicalDriveN`** — which is how nvme-cli/libnvme address a controller on Windows (`libnvme/src/nvme/scan-win.c`, `tree-win.c`). The runner enumerates which `PhysicalDriveN` the passed-through Micron drive received (e.g. via `Get-PhysicalDisk`/WMI) and passes that as `--controller`/`--ns1`.
+- **Drive prep is OS-agnostic:** `nvme format` and `nvme sanitize` are controller-level commands that behave identically on Windows, so the reset step needs no Windows-specific logic — only the device path differs.
+
 ### Recommendation: **Option A** (with **Option C** as the pragmatic fallback)
-Option A gives one hardware pool, one BOM, one orchestration approach; the same drive serves both operating systems by swapping the VM image; OS-switching is fully automatable.
+Option A gives one host, one bill of materials (BOM), one orchestration approach; the same drive serves both operating systems by swapping the VM image; OS-switching is fully automatable.
 
 - Choose **Option C** if a dedicated Windows box is easy to provision and the simplicity of "no hypervisor at all" is worth a second machine — it is the lowest-effort way to get Windows coverage and the most faithful to real Windows use.
-- Choose **Option B only if** Micron IT policy forbids running Windows under Linux/KVM *and* the native Microsoft DDA path is required — accepting the second pool and non-shareable drives as the cost.
+- Choose **Option B only if** Micron IT policy forbids running Windows under Linux/KVM *and* the native Microsoft DDA path is required — accepting the second machine and non-shareable drives as the cost.
 
 > Note: Option A can be built at **Tier 2** (plain libvirt/QEMU, no Kubernetes) — you do not need the full upstream stack to boot a Windows VM with passthrough. Option C needs no virtualization at all.
 
@@ -308,6 +326,8 @@ Option A gives one hardware pool, one BOM, one orchestration approach; the same 
 - 1+ × **dedicated/sacrificial Micron NVMe SSD(s)** for testing, in **non-boot** slots. (One per drive model you want covered; a ZNS model too if you test zoned.)
 - A separate boot drive for the host OS.
 - No special networking or switch requirements at single-node scale. (Upstream's ConnectX-6 NICs and 3-node cluster are scale features you don't need.)
+
+> This BOM assumes **[Option A](#option-a)** — one host running both the Linux and Windows tests as VMs against the same drive. **[Option C](#option-c)** (a separate bare-metal Windows host) adds a second machine with its own dedicated Micron drive.
 
 **Software (all open-source, no license cost except Windows):**
 - Linux host OS; QEMU/KVM + libvirt (Tier 2); a self-hosted CI runner.
@@ -365,15 +385,18 @@ Option A gives one hardware pool, one BOM, one orchestration approach; the same 
 
 | Term | Plain-language meaning |
 |---|---|
-| **Actions Runner Controller (ARC)** | Software that runs GitHub CI runners as disposable Kubernetes pods, auto-created per job. |
 | **Alloy** | Agent that ships logs into Loki. |
-| **AMD-Vi** | AMD's name for the [IOMMU](#iommu) CPU feature. |
+| **AMD-Vi (AMD Virtualization for I/O)** | AMD's name for the [IOMMU](#iommu) CPU feature. |
 | **Ansible** | Automation tool that configures machines from recipe files ("playbooks"). |
+| **ARC (Actions Runner Controller)** | Software that runs GitHub CI runners as disposable Kubernetes pods, auto-created per job. |
+| **ART (Architecture Request Tracker)** | Micron's intake and tracking system for architecture and security governance reviews. |
 | **BDEV0 / ZBD0** | Environment variables the rig sets to tell the test which drive to use (`ZBD0` = a zoned/ZNS drive). |
-| **BIOS / firmware** | The low-level software on a machine's motherboard; where IOMMU is enabled. |
+| **BIOS (Basic Input/Output System) / firmware** | The low-level software on a machine's motherboard; where IOMMU is enabled. |
 | **blktests** | A Linux-kernel storage test suite. Linux-only. |
-| **CA certificate** | A trust anchor; software checks it to decide whether to trust an encrypted connection. |
+| **BOM (bill of materials)** | The list of hardware and software a rig requires. |
+| **CA (Certificate Authority) certificate** | A trust anchor; software checks it to decide whether to trust an encrypted connection. |
 | **CDI (Containerized Data Importer)** | KubeVirt add-on that imports VM disk images into the cluster. |
+| **CI (Continuous Integration)** | Automated build/test triggered by code changes. |
 | **Container** | A lightweight package of an app + its files, run isolated on the host's kernel. |
 | **Container image** | The frozen, shippable bundle a container starts from. |
 | **containerdisk** | A VM disk image packaged as a container image so a registry can serve it. |
@@ -382,31 +405,32 @@ Option A gives one hardware pool, one BOM, one orchestration approach; the same 
 | **Host** | The real physical machine running the VM(s). |
 | **Hyper-V** | Microsoft's hypervisor (VM engine) for Windows. |
 | **Hypervisor** | Software that creates and runs virtual machines. |
-| **IOMMU** | CPU safety feature that fences a passed-through device so it can only touch its VM's memory. |
+| **IOMMU (I/O Memory Management Unit)** | CPU safety feature that fences a passed-through device so it can only touch its VM's memory. |
 | **k3s** | A lightweight, easy-to-install version of Kubernetes. |
+| **k8s (Kubernetes)** | System for running many containers/VMs across a fleet of machines. |
 | **kpd (kernel-patches-daemon)** | Upstream automation that tests emailed kernel patches and reports to mailing lists. |
 | **KubeVirt** | Add-on that lets Kubernetes run full VMs (and pass through devices, boot custom kernels). |
-| **Kubernetes (k8s)** | System for running many containers/VMs across a fleet of machines. |
-| **KVM** | The Linux kernel's built-in hypervisor. |
+| **KVM (Kernel-based Virtual Machine)** | The Linux kernel's built-in hypervisor. |
 | **kernelBoot** | KubeVirt feature to boot a VM with a specific, externally-supplied kernel. |
 | **libvirt** | Friendly management layer over QEMU/KVM. |
 | **Loki / Grafana** | Log storage (Loki) and dashboard (Grafana). |
 | **Longhorn / Rook-Ceph** | Distributed storage systems that replicate data across cluster machines. |
-| **mitmproxy** | A proxy that lets many workloads traverse a TLS-inspecting firewall with one trusted certificate. |
+| **mitmproxy (man-in-the-middle proxy)** | A proxy that lets many workloads traverse a TLS-inspecting firewall with one trusted certificate. |
 | **namespace (NVMe)** | A logical partition of an NVMe SSD presented as a block device. |
 | **node** | A single machine within a Kubernetes cluster. |
-| **NVMe** | The protocol/interface modern SSDs use over PCIe. |
-| **PCIe** | The high-speed bus connecting SSDs, GPUs, NICs to the CPU. |
+| **NVMe (Non-Volatile Memory Express)** | The protocol/interface modern SSDs use over PCIe. |
+| **PCIe (Peripheral Component Interconnect Express)** | The high-speed bus connecting SSDs, GPUs, NICs to the CPU. |
 | **PCIe passthrough** | Giving a physical PCIe device directly and exclusively to a VM. |
 | **pod** | The unit of work Kubernetes runs (one or more containers together). |
-| **QEMU** | The program that actually runs a VM (emulates the hardware). |
+| **QEMU (Quick Emulator)** | The program that actually runs a VM (emulates the hardware). |
 | **registry** | A server that stores and serves container images. |
 | **runner (CI)** | The machine/process that executes a CI job. "Self-hosted" = one you provide. |
 | **StorageClass** | A named kind of storage a Kubernetes workload can request. |
-| **TLS-inspecting firewall** | A corporate firewall that decrypts, inspects, and re-encrypts internet traffic. |
-| **vfio-pci** | The Linux driver that "parks" a device so a VM can claim it for passthrough. |
-| **virtual machine (VM)** | A complete fake computer running as software inside a real one. |
-| **VT-d** | Intel's name for the [IOMMU](#iommu) CPU feature. |
+| **TLS (Transport Layer Security)-inspecting firewall** | A corporate firewall that decrypts, inspects, and re-encrypts internet traffic. |
+| **UEFI (Unified Extensible Firmware Interface)** | Modern boot firmware that replaces the legacy BIOS; Windows guests require it. |
+| **vfio-pci (Virtual Function I/O)** | The Linux driver that "parks" a device so a VM can claim it for passthrough. |
+| **VM (virtual machine)** | A complete fake computer running as software inside a real one. |
+| **VT-d (Virtualization Technology for Directed I/O)** | Intel's name for the [IOMMU](#iommu) CPU feature. |
 | **ZNS (Zoned Namespace)** | A type of NVMe namespace organized into sequential-write zones. |
 
 ---
