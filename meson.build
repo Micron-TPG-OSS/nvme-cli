@@ -405,6 +405,13 @@ else
 endif
 conf.set('CONFIG_LIBARCHIVE', libarchive_dep.found(), description: 'Is libarchive available?')
 
+if host_system == 'windows' or get_option('libjq').disabled()
+    libjq_dep = dependency('', required: false)
+else
+    libjq_dep = dependency('libjq', required: get_option('libjq'))
+endif
+conf.set('CONFIG_LIBJQ', libjq_dep.found(), description: 'Is libjq available?')
+
 if not want_discoverd
     libsystemd_dep = dependency('', required: false)
 else
@@ -661,6 +668,7 @@ if want_nvme
         libnvme_dep,
         shared_dep,
         json_c_dep,
+        libjq_dep,
         libkmod_dep,
     ]
 
@@ -879,6 +887,7 @@ dep_dict = {
     'OpenSSL':          openssl_dep.found(),
     'keyutils':         keyutils_dep.found(),
     'libarchive':       libarchive_dep.found(),
+    'libjq':            libjq_dep.found(),
     'libdbus':          libdbus_dep.found(),
     'python3':          py3_dep.found(),
     'liburing':         liburing_dep.found(),

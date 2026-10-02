@@ -234,6 +234,12 @@ option(
   description : 'libarchive support (vendor plugin log archiving)'
 )
 option(
+  'libjq',
+  type : 'feature',
+  value: 'auto',
+  description : 'libjq support (solidigm --jq-filter)'
+)
+option(
   'pypi',
   type : 'boolean',
   value : false,

@@ -39,6 +39,73 @@ static void cleanup_json_object(struct json_object **jobj_ptr)
 	*jobj_ptr = NULL;
 }
 
+#ifdef CONFIG_LIBJQ
+#include <jq.h>
+
+/*
+ * Run the jq program against json_str and print its output, linking
+ * directly against libjq instead of spawning the external jq binary: no
+ * shell is involved, so a quote in program or json_str cannot break out of
+ * a command string the way it could when this built "jq -r '<program>'".
+ * Return: 0 on success, -EINVAL on a compile/parse/runtime error.
+ */
+static int run_jq_filter(const char *program, const char *json_str)
+{
+	jq_state *jq;
+	jv input, result;
+	int ret = 0;
+
+	jq = jq_init();
+	if (!jq)
+		return -ENOMEM;
+
+	if (!jq_compile(jq, program)) {
+		jq_teardown(&jq);
+		return -EINVAL;
+	}
+
+	input = jv_parse(json_str);
+	if (!jv_is_valid(input)) {
+		jv_free(input);
+		jq_teardown(&jq);
+		nvme_show_error("Failed to parse telemetry JSON for jq filter");
+		return -EINVAL;
+	}
+
+	jq_start(jq, input, 0);
+
+	while (jv_is_valid(result = jq_next(jq))) {
+		if (jv_get_kind(result) == JV_KIND_STRING) {
+			printf("%s\n", jv_string_value(result));
+			jv_free(result);
+		} else {
+			jv_dump(result, 0);
+			printf("\n");
+		}
+	}
+
+	if (jv_invalid_has_msg(jv_copy(result))) {
+		jv msg = jv_invalid_get_msg(result);
+
+		nvme_show_error("jq filter error: %s", jv_string_value(msg));
+		jv_free(msg);
+		ret = -EINVAL;
+	} else {
+		jv_free(result);
+	}
+
+	jq_teardown(&jq);
+	return ret;
+}
+#else
+static int run_jq_filter(const char *program, const char *json_str)
+{
+	nvme_show_error(
+		"nvme-cli was built without libjq, --jq-filter is unavailable");
+	return -ENOTSUP;
+}
+#endif
+
 int solidigm_get_telemetry_log(int argc, char **argv, struct command *acmd, struct plugin *plugin)
 {
 	const char *desc = "Parse Solidigm Telemetry log";
@@ -176,28 +243,10 @@ int solidigm_get_telemetry_log(int argc, char **argv, struct command *acmd, stru
 
 			jq_filter_str = json_object_get_string(jq_filter_obj);
 			if (jq_filter_str) {
-				/* Get JSON string representation */
 				const char *json_str;
-				char cmd[1024];
-				FILE *jq_pipe;
 
 				json_str = json_object_to_json_string(tl.root);
-
-				/* Create jq command and pipe JSON through it */
-				snprintf(cmd, sizeof(cmd), "jq -r '%s'",
-					 jq_filter_str);
-				jq_pipe = popen(cmd, "w");
-				if (jq_pipe) {
-					fprintf(jq_pipe, "%s", json_str);
-					err = pclose(jq_pipe);
-					if (err != 0)
-						err = -EINVAL;
-				} else {
-					errno = ENOENT;
-					nvme_show_perror(
-						"Failed to execute jq command");
-					err = -ENOENT;
-				}
+				err = run_jq_filter(jq_filter_str, json_str);
 			} else {
 				nvme_show_error(
 					"jq filter entry '%s' is not a valid string",
