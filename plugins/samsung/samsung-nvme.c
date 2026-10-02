@@ -7,15 +7,14 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <errno.h>
-#include <dirent.h>
 
 #include <libnvme.h>
 
 #include <ccan/endian/endian.h>
+#include <shared/archive-util.h>
 #include <shared/compiler-attributes-util.h>
 #include <shared/fs-util.h>
 #include <shared/io-util.h>
-#include <shared/proc-util.h>
 #include <shared/progress-util.h>
 #include <shared/string-util.h>
 
@@ -306,181 +305,43 @@ static int insert_dir(const char *base_dir, const char *dir_name,
 	return 0;
 }
 
-/*
- * Run argv without a shell. No command string is built, so a serial number
- * or an output path can never become syntax. shr_spawnp() resolves argv[0]
- * through PATH, as the micron plugin does: tar and rm sit in different
- * directories across platforms, so there is no absolute path to prefer.
- */
-static int run_command(const char *const argv[])
-{
-	shr_proc_t proc;
-	bool exited;
-	int code;
-	int ret;
-
-	/*
-	 * The child writes to this process's stdout, so flush what is still
-	 * buffered here or it lands after the child's output.
-	 */
-	fflush(stdout);
-
-	ret = shr_spawnp(argv, -1, -1, &proc);
-	if (!ret)
-		ret = shr_wait_proc(proc, &exited, &code);
-	if (ret) {
-		fprintf(stderr, "%s: %s\n", argv[0], strerror(-ret));
-		return SAMSUNG_GENERAL_FILE_WRITE_ERROR;
-	}
-
-	if (!exited) {
-		fprintf(stderr, "%s was killed.\n", argv[0]);
-		return SAMSUNG_GENERAL_FILE_WRITE_ERROR;
-	}
-
-	if (code != 0) {
-		fprintf(stderr, "%s exited with status %d.\n", argv[0], code);
-		return SAMSUNG_GENERAL_FILE_WRITE_ERROR;
-	}
-
-	return 0;
-}
-
-/* The names of the dump files staged for archiving. */
-struct dump_names {
-	char **name;
-	size_t count;
-};
-
-static void free_dump_names(struct dump_names *names)
-{
-	size_t i;
-
-	for (i = 0; i < names->count; i++)
-		free(names->name[i]);
-	free(names->name);
-	names->name = NULL;
-	names->count = 0;
-}
-
-/*
- * Collect the staged file names so that tar can be given them one by one.
- * A "." operand would be shorter, but it also archives the staging
- * directory itself as a "./" member carrying that directory's mode, and
- * extracting the member applies the mode to whatever directory the archive
- * is unpacked into. Skipping names that start with '.' keeps the
- * behaviour of the shell glob this replaces.
- */
-static int list_dump_names(const char *dir, struct dump_names *names)
-{
-	struct dirent *entry;
-	DIR *d;
-	int ret = 0;
-
-	names->name = NULL;
-	names->count = 0;
-
-	d = opendir(dir);
-	if (!d) {
-		fprintf(stderr, "opendir %s: %s\n", dir, strerror(errno));
-		return SAMSUNG_GENERAL_FILE_OPEN_ERROR;
-	}
-
-	while ((entry = readdir(d))) {
-		char **grown;
-
-		if (entry->d_name[0] == '.')
-			continue;
-
-		grown = realloc(names->name,
-				(names->count + 1) * sizeof(*grown));
-		if (!grown) {
-			ret = SAMSUNG_GENERAL_MEM_ALLOC_ERROR;
-			break;
-		}
-		names->name = grown;
-
-		names->name[names->count] = strdup(entry->d_name);
-		if (!names->name[names->count]) {
-			ret = SAMSUNG_GENERAL_MEM_ALLOC_ERROR;
-			break;
-		}
-		names->count++;
-	}
-
-	closedir(d);
-
-	if (ret != 0)
-		free_dump_names(names);
-	else if (names->count == 0) {
-		fprintf(stderr, "No dump was collected in %s.\n", dir);
-		ret = SAMSUNG_GENERAL_FILE_WRITE_ERROR;
-	}
-
-	return ret;
-}
-
-/* "tar" "cvzf" <archive> "-C" <dir> "--", ahead of the file names */
-#define TAR_ARGC_FIXED 6
-
 static int compress_dump_files(const char *temp_dir, const char *output_prefix,
 		const char *sn)
 {
 	__cleanup_free char *targz_file = NULL;
-	__cleanup_free const char **argv = NULL;
 	const char *prefix = output_prefix ? output_prefix : "./";
 	const char *archive_name = shr_basename(prefix);
-	const char *local_prefix = "";
-	struct dump_names names = { NULL, 0 };
-	size_t argc;
-	size_t i;
 	int ret;
 
-#if !defined(_WIN32)
-	/*
-	 * Keep a colon before the first slash from invoking tar's remote mode.
-	 */
-	if (prefix[strcspn(prefix, "/:")] == ':')
-		local_prefix = "./";
-#endif
-
-	if (asprintf(&targz_file, "%s%sSamsung_Dump_%s.tar.gz",
-			local_prefix, prefix, sn) < 0)
+	if (asprintf(&targz_file, "%sSamsung_Dump_%s.tar.gz", prefix, sn) < 0)
 		return SAMSUNG_GENERAL_MEM_ALLOC_ERROR;
-
-	ret = list_dump_names(temp_dir, &names);
-	if (ret != 0)
-		return ret;
-
-	argv = calloc(TAR_ARGC_FIXED + names.count + 1, sizeof(*argv));
-	if (!argv) {
-		free_dump_names(&names);
-		return SAMSUNG_GENERAL_MEM_ALLOC_ERROR;
-	}
-
-	argc = 0;
-	argv[argc++] = "tar";
-	argv[argc++] = "cvzf";
-	argv[argc++] = targz_file;
-	argv[argc++] = "-C";
-	argv[argc++] = temp_dir;
-	argv[argc++] = "--";
-	for (i = 0; i < names.count; i++)
-		argv[argc++] = names.name[i];
-	argv[argc] = NULL;
 
 	printf("Compressing...\n");
-	ret = run_command(argv);
-	free_dump_names(&names);
-	if (ret != 0)
-		return ret;
+
+	/*
+	 * dir_path itself is not added as a member (unlike "tar -C dir -czf
+	 * archive ."), so the archive carries only the staged dump files,
+	 * not the staging directory's own mode.
+	 */
+	ret = shr_archive_create_dir(targz_file, temp_dir, "",
+				      SHR_ARCHIVE_TAR_GZ);
+	if (ret != 0) {
+		fprintf(stderr, "Failed to create %s: %s\n", targz_file,
+			strerror(-ret));
+		return SAMSUNG_GENERAL_FILE_WRITE_ERROR;
+	}
 
 	printf("%sSamsung_Dump_%s.tar.gz saved at the designated location.\n",
 			archive_name, sn);
 
-	return run_command((const char *const []) {
-		"rm", "-rf", "--", temp_dir, NULL
-	});
+	ret = shr_rmdir_recursive(temp_dir);
+	if (ret) {
+		fprintf(stderr, "Failed to remove %s: %s\n", temp_dir,
+			strerror(-ret));
+		return SAMSUNG_GENERAL_FILE_WRITE_ERROR;
+	}
+
+	return 0;
 }
 
 static void print_border(const char *dump_name, char cmd_type, int arg1, int arg2)
