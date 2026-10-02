@@ -120,6 +120,8 @@ CLASS_MEDIA = 0x08
 CLASS_MEDIA_WEAR = 0x09
 CLASS_STATISTIC_SNAPSHOT = 0x0A
 CLASS_VIRTUAL_FIFO = 0x0B
+CLASS_SMBUS_I2C_I3C = 0x0C
+CLASS_MCTP = 0x0D
 CLASS_VU_FIRST = 0x80
 
 # Bytes of class specific data ahead of any VU Event Identifier.
@@ -137,6 +139,29 @@ COMMON_CLASSES = (CLASS_RESET, CLASS_BOOT_SEQUENCE, CLASS_FIRMWARE_ASSERT,
 VIRTUAL_FIFO_PHY_SHIFT = 11
 VIRTUAL_FIFO_PHY_MAX = 0x1F
 VIRTUAL_FIFO_MASK = 0x7FF
+
+# Fixed records of the SMBUS/I2C/I3C (0Ch) and MCTP (0Dh) classes, ahead of
+# their optional VU fields.
+SMBUS_EVENT_SIZE = 4
+MCTP_EVENT_SIZE = 8
+
+# SMBUS/I2C/I3C Event ID whose Event Data values are defined.
+SMBUS_NACK_ERROR = 0x0003
+
+# MCTP Event Flags bit 7: MCTP Transport Header Valid.
+MCTP_HEADER_VALID = 0x80
+
+# Statistic Information (descriptor byte 2) bit 6: set only in a Context
+# Statistic Descriptor.
+STAT_INFO_CONTEXT_INDEX = 0x40
+
+# Context Statistic Descriptors: Statistic Specific Data opens with a
+# Context Data Size Dword count and the context fields, then the
+# encapsulated Statistic Descriptors.
+STAT_NAMESPACE_ID_CONTEXT = 0x6D
+STAT_CONTROLLER_ID_CONTEXT = 0x6E
+STAT_QUEUE_ID_CONTEXT = 0x6F
+CONTEXT_DATA_DWORDS = 2
 
 Name = Union[str, bytes]
 EventStrings = Mapping[Tuple[int, int], Name]
@@ -189,15 +214,92 @@ def virtual_fifo_event(fifo_id: int, event_id: int = 0, reserved: int = 0,
                  struct.pack('<HH', fifo_id, reserved) + extra, size_dw)
 
 
+def smbus_event(event_id: int = 0, event_data: int = 0, reserved: int = 0,
+                vu: bytes = b'', size_dw: Optional[int] = None) -> bytes:
+    """A SMBUS/I2C/I3C event (0Ch):
+
+      Bytes 5:4   SMBUS Debug Event Data
+      Bytes 7:6   Reserved
+      Bytes 9:8   VU Event Identifier  } present when Event Data Size > 1,
+      Bytes 10..  VU Data              } as @vu (see vu_part())"""
+    return event(CLASS_SMBUS_I2C_I3C, event_id,
+                 struct.pack('<HH', event_data, reserved) + vu, size_dw)
+
+
+def mctp_event(event_id: int = 0, event_data: int = 0, protocol: int = 0,
+               flags: int = 0, header: bytes = bytes(4), vu: bytes = b'',
+               size_dw: Optional[int] = None) -> bytes:
+    """An MCTP event (0Dh):
+
+      Bytes 5:4   MCTP Debug Event Data
+      Byte  6     MCTP Transport Protocol Information
+      Byte  7     MCTP Event Flags (bit 7 Transport Header Valid)
+      Bytes 11:8  MCTP Transport Header, @header as captured
+      Bytes 13:12 VU Event Identifier  } present when Event Data Size > 2,
+      Bytes 14..  VU Data              } as @vu (see vu_part())"""
+    if len(header) != 4:
+        raise ValueError('the MCTP Transport Header is 4 bytes')
+    return event(CLASS_MCTP, event_id,
+                 struct.pack('<HBB', event_data, protocol, flags) + header
+                 + vu, size_dw)
+
+
 def statistic(stat_id: int, data: bytes = b'', behavior: int = 0,
               info_reserved: int = 0, nsid: int = 0, ns_valid: bool = False,
-              reserved: int = 0) -> bytes:
-    """One statistic: the 8-byte descriptor, then @data padded to Dwords."""
+              nsid_15_0: int = 0, context_index: bool = False,
+              host_hint: int = 0) -> bytes:
+    """One statistic: the 8-byte descriptor, then @data padded to Dwords.
+
+    Statistic Information holds @behavior in bits 3:0, @host_hint in
+    bits 5:4, @context_index in bit 6 and @info_reserved in bit 7.
+    @nsid_15_0 fills bytes 7:6, Namespace Identifier[15:0]."""
     data = _pad(data)
-    return struct.pack(_STAT_DESCRIPTOR, stat_id,
-                       (behavior & 0xF) | ((info_reserved & 0xF) << 4),
+    info = ((behavior & 0xF) | ((host_hint & 0x3) << 4)
+            | ((info_reserved & 0x1) << 7))
+    if context_index:
+        info |= STAT_INFO_CONTEXT_INDEX
+    return struct.pack(_STAT_DESCRIPTOR, stat_id, info,
                        (nsid & 0x7F) | (0x80 if ns_valid else 0),
-                       len(data) // DWORD, reserved) + data
+                       len(data) // DWORD, nsid_15_0) + data
+
+
+def context_data(scope: bytes, context_data_size: int = CONTEXT_DATA_DWORDS,
+                 reserved: int = 0) -> bytes:
+    """Context data: Context Data Size, reserved, then the 4-byte scope."""
+    if len(scope) != 4:
+        raise ValueError('the context scope is 4 bytes')
+    return struct.pack('<HH', context_data_size, reserved) + scope
+
+
+def namespace_id_context(nsid: int,
+                         context_data_size: int = CONTEXT_DATA_DWORDS
+                         ) -> bytes:
+    """Namespace ID Context (6Dh) data: size, reserved, 32-bit NSID."""
+    return context_data(struct.pack('<I', nsid), context_data_size)
+
+
+def controller_id_context(cntlid: int,
+                          context_data_size: int = CONTEXT_DATA_DWORDS
+                          ) -> bytes:
+    """Controller ID Context (6Eh) data: size, 4 reserved bytes, CNTLID."""
+    return context_data(struct.pack('<HH', 0, cntlid), context_data_size)
+
+
+def queue_id_context(cntlid: int, qid: int,
+                     context_data_size: int = CONTEXT_DATA_DWORDS) -> bytes:
+    """Queue ID Context (6Fh) data: size, reserved, CNTLID, queue ID."""
+    return context_data(struct.pack('<HH', cntlid, qid), context_data_size)
+
+
+def context_statistic(stat_id: int, context: bytes,
+                      encapsulated: Iterable[bytes] = (),
+                      **kwargs) -> bytes:
+    """A Context Statistic Descriptor: @context data, then the
+    @encapsulated Statistic Descriptors. Its own Statistic Data Size spans
+    both, and its namespace fields stay cleared unless @kwargs set them
+    along with any other statistic() field."""
+    kwargs.setdefault('context_index', True)
+    return statistic(stat_id, context + b''.join(encapsulated), **kwargs)
 
 
 def statistic_snapshot_event(stat: bytes, event_id: int = 0) -> bytes:
@@ -437,6 +539,55 @@ def iter_events(fifo: bytes) -> Iterator[Event]:
         yield Event(offset, cls, event_id, size_dw,
                     fifo[offset + EVENT_DESCRIPTOR_SIZE:offset + length])
         offset += length
+
+
+class Statistic(NamedTuple):
+    stat_id: int
+    size_dw: int
+    context_index: bool
+    data: bytes
+    encapsulated: Tuple['Statistic', ...] = ()
+
+
+def is_context_statistic(stat_id: int, context_index: bool) -> bool:
+    """A Context Statistic Descriptor is flagged by Statistic Information
+    bit 6; 6Dh-6Fh are one whatever the flag says."""
+    return context_index or (STAT_NAMESPACE_ID_CONTEXT <= stat_id
+                             <= STAT_QUEUE_ID_CONTEXT)
+
+
+def _walk_statistics(area: bytes, nested: bool) -> Iterator[Statistic]:
+    offset = 0
+    while offset + STAT_DESCRIPTOR_SIZE <= len(area):
+        stat_id, info, _, size_dw, _ = struct.unpack_from(_STAT_DESCRIPTOR,
+                                                          area, offset)
+        start = offset + STAT_DESCRIPTOR_SIZE
+        end = start + size_dw * DWORD
+        if stat_id == 0 or end > len(area):
+            return
+        context_index = bool(info & STAT_INFO_CONTEXT_INDEX)
+        data = area[start:end]
+        encapsulated: Tuple[Statistic, ...] = ()
+        if (not nested and is_context_statistic(stat_id, context_index)
+                and size_dw >= CONTEXT_DATA_DWORDS):
+            encapsulated = tuple(_walk_statistics(
+                data[CONTEXT_DATA_DWORDS * DWORD:], True))
+        yield Statistic(stat_id, size_dw, context_index, data, encapsulated)
+        offset = end
+
+
+def iter_statistics(telemetry: bytes, da: int) -> Iterator[Statistic]:
+    """Walk the statistics of Data Area @da (1 or 2) as the OCP header
+    places them, up to their declared size or the first identifier 0.
+
+    A Context Statistic Descriptor's encapsulated descriptors come out
+    in its @encapsulated; they do not nest further."""
+    start_field, size_field = ((DA1_STAT_START, DA1_STAT_SIZE) if da == 1
+                               else (DA2_STAT_START, DA2_STAT_SIZE))
+    start = (data_area_span(telemetry, da)[0]
+             + _u(telemetry, DA1_START + start_field, 8) * DWORD)
+    size = _u(telemetry, DA1_START + size_field, 8) * DWORD
+    return _walk_statistics(telemetry[start:start + size], False)
 
 
 def split_virtual_fifo_id(fifo_id: int) -> Tuple[int, int]:
