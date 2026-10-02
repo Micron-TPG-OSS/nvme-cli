@@ -1101,6 +1101,94 @@ int parse_media_wear_event(
 	return 0;
 }
 
+/*
+ * The Virtual FIFO Event class (0Bh) carries a single Dword of class specific
+ * data and no VU data: a VU Virtual FIFO Identifier and a reserved half-word.
+ * The identifier names a virtual FIFO in the String Log's VU event table, and
+ * splits into the enclosing physical Event FIFO number and the virtual FIFO
+ * number within that physical FIFO.
+ */
+int parse_virtual_fifo_event(
+		struct nvme_ocp_telemetry_event_descriptor *pevent_descriptor,
+		struct json_object *pevent_descriptor_obj,
+		__u8 *pevent_specific_data,
+		struct json_object *pevent_fifos_object,
+		FILE *fp)
+{
+	struct nvme_ocp_virtual_fifo_dbg_evt_class_format *pvirtual_fifo_event =
+		(struct nvme_ocp_virtual_fifo_dbg_evt_class_format *)
+		pevent_specific_data;
+	char description_str[OCP_TELEMETRY_DESCRIPTION_MAX] = "";
+	char fifo_name_str[OCP_TELEMETRY_DESCRIPTION_MAX] = "";
+	__u16 vu_virtual_fifo_id = 0;
+	__u8 physical_fifo_num = 0;
+	__u16 virtual_fifo_num = 0;
+
+	if ((pevent_descriptor->event_data_size * SIZE_OF_DWORD) <
+			sizeof(*pvirtual_fifo_event))
+		return -1;
+
+	vu_virtual_fifo_id =
+		le16_to_cpu(pvirtual_fifo_event->vu_virtual_fifo_identifier);
+	physical_fifo_num = vu_virtual_fifo_id >> VU_VIRTUAL_FIFO_PHY_NUM_SHIFT;
+	virtual_fifo_num = vu_virtual_fifo_id & VU_VIRTUAL_FIFO_NUM_MASK;
+
+	parse_ocp_telemetry_string_log(0, vu_virtual_fifo_id,
+		pevent_descriptor->debug_event_class_type,
+		VU_EVENT_STRING, description_str);
+
+	/*
+	 * A physical FIFO number of 0h is invalid and the field is wide enough
+	 * to hold values past the 10h maximum, so range-check it before using
+	 * it to index the string log's FIFO name array.
+	 */
+	if (physical_fifo_num >= 1 && physical_fifo_num <= MAX_NUM_FIFOS)
+		parse_ocp_telemetry_string_log(physical_fifo_num, 0, 0,
+			EVENT_STRING, fifo_name_str);
+
+	if (pevent_fifos_object != NULL) {
+		json_add_formatted_u32_str(pevent_descriptor_obj,
+					   STR_VU_VIRTUAL_FIFO_ID,
+					   vu_virtual_fifo_id);
+		json_object_add_value_string(pevent_descriptor_obj,
+					      STR_VU_VIRTUAL_FIFO_STRING,
+					      description_str);
+		json_add_formatted_u32_str(pevent_descriptor_obj,
+					   STR_PHYSICAL_EVENT_FIFO_NUM,
+					   physical_fifo_num);
+		json_object_add_value_string(pevent_descriptor_obj,
+					      STR_PHYSICAL_EVENT_FIFO_STRING,
+					      fifo_name_str);
+		json_add_formatted_u32_str(pevent_descriptor_obj,
+					   STR_VIRTUAL_FIFO_NUM,
+					   virtual_fifo_num);
+	} else if (fp) {
+		fprintf(fp, "%s: 0x%x\n", STR_VU_VIRTUAL_FIFO_ID,
+			vu_virtual_fifo_id);
+		fprintf(fp, "%s: %s\n", STR_VU_VIRTUAL_FIFO_STRING,
+			description_str);
+		fprintf(fp, "%s: 0x%x\n", STR_PHYSICAL_EVENT_FIFO_NUM,
+			physical_fifo_num);
+		fprintf(fp, "%s: %s\n", STR_PHYSICAL_EVENT_FIFO_STRING,
+			fifo_name_str);
+		fprintf(fp, "%s: 0x%x\n", STR_VIRTUAL_FIFO_NUM,
+			virtual_fifo_num);
+	} else {
+		printf("%s: 0x%x\n", STR_VU_VIRTUAL_FIFO_ID,
+		       vu_virtual_fifo_id);
+		printf("%s: %s\n", STR_VU_VIRTUAL_FIFO_STRING,
+		       description_str);
+		printf("%s: 0x%x\n", STR_PHYSICAL_EVENT_FIFO_NUM,
+		       physical_fifo_num);
+		printf("%s: %s\n", STR_PHYSICAL_EVENT_FIFO_STRING,
+		       fifo_name_str);
+		printf("%s: 0x%x\n", STR_VIRTUAL_FIFO_NUM,
+		       virtual_fifo_num);
+	}
+
+	return 0;
+}
+
 int parse_event_fifo(unsigned int fifo_num, unsigned char *pfifo_start,
 	struct json_object *pevent_fifos_object, unsigned char *pstring_buffer,
 	struct nvme_ocp_telemetry_offsets *poffsets, __u64 fifo_size, FILE *fp)
@@ -1165,16 +1253,55 @@ int parse_event_fifo(unsigned int fifo_num, unsigned char *pfifo_start,
 		__u16 event_id = 0;
 		char description_str[OCP_TELEMETRY_DESCRIPTION_MAX] = "";
 		unsigned int data_size = 0;
+		__u64 remaining = fifo_size - offset_to_move;
+		bool is_snapshot = pevent_descriptor->debug_event_class_type ==
+				STATISTIC_SNAPSHOT_CLASS_TYPE;
+		struct nvme_ocp_statistic_snapshot_evt_class_format *psnapshot =
+			(struct nvme_ocp_statistic_snapshot_evt_class_format *)
+			pevent_descriptor;
 
-		if (pevent_descriptor->debug_event_class_type !=
-				STATISTIC_SNAPSHOT_CLASS_TYPE) {
-			event_des_size = sizeof(struct nvme_ocp_telemetry_event_descriptor);
-			/* Data is present in the form of DWORDS,
-			 * So multiplying with sizeof(DWORD)
-			 */
+		/*
+		 * Bound the whole entry by what is left of the FIFO before its
+		 * size field or any class specific data is read. A snapshot's
+		 * Event ID and Event Data Size bytes are reserved, so its
+		 * statistic's identifier and size are reported instead.
+		 */
+		event_des_size = is_snapshot ? sizeof(*psnapshot) :
+			sizeof(struct nvme_ocp_telemetry_event_descriptor);
+		if (remaining < event_des_size) {
+			nvme_show_error(
+				"Invalid entry at offset 0x%x of Event FIFO %u: "
+				"class 0x%x needs a %u-byte header, %llu bytes left in FIFO",
+				offset_to_move, event_fifo_number,
+				pevent_descriptor->debug_event_class_type,
+				event_des_size, (unsigned long long)remaining);
+			ret = -1;
+			goto free_desc;
+		}
+
+		/* Data sizes are in Dwords */
+		if (is_snapshot)
+			data_size = le16_to_cpu(psnapshot->stat_data_size) *
+				SIZE_OF_DWORD;
+		else
 			data_size = pevent_descriptor->event_data_size *
-							SIZE_OF_DWORD;
+				SIZE_OF_DWORD;
+		if (remaining - event_des_size < data_size) {
+			nvme_show_error(
+				"Invalid entry at offset 0x%x of Event FIFO %u: "
+				"class 0x%x, %s 0x%x declares %u data bytes, %llu left in FIFO",
+				offset_to_move, event_fifo_number,
+				pevent_descriptor->debug_event_class_type,
+				is_snapshot ? "Statistic ID" : "Event ID",
+				le16_to_cpu(is_snapshot ? psnapshot->stat_id :
+					    pevent_descriptor->event_id),
+				data_size,
+				(unsigned long long)(remaining - event_des_size));
+			ret = -1;
+			goto free_desc;
+		}
 
+		if (!is_snapshot) {
 			if (pevent_descriptor->event_data_size > 0)
 				pevent_specific_data = (__u8 *)pevent_descriptor + event_des_size;
 
@@ -1266,6 +1393,14 @@ int parse_event_fifo(unsigned int fifo_num, unsigned char *pfifo_start,
 					pevent_fifos_object,
 					fp);
 				break;
+			case VIRTUAL_FIFO_EVENT_CLASS_TYPE:
+				ret = parse_virtual_fifo_event(
+					pevent_descriptor,
+					pevent_descriptor_obj,
+					pevent_specific_data,
+					pevent_fifos_object,
+					fp);
+				break;
 			case RESERVED_CLASS_TYPE:
 			default:
 				break;
@@ -1276,11 +1411,11 @@ int parse_event_fifo(unsigned int fifo_num, unsigned char *pfifo_start,
 					"ERROR : OCP : Invalid NVMe Event FIFO entry\n");
 				nvme_show_error(
 					"FIFO: %d, offset: 0x%x\n",
-					fifo_num, offset_to_move);
+					event_fifo_number, offset_to_move);
 				nvme_show_error(
 					"Type: 0x%x, ID: 0x%x, Size: 0x%x\n",
 					pevent_descriptor->debug_event_class_type,
-					pevent_descriptor->event_id,
+					event_id,
 					pevent_descriptor->event_data_size);
 				goto free_desc;
 			}
@@ -1325,19 +1460,12 @@ int parse_event_fifo(unsigned int fifo_num, unsigned char *pfifo_start,
 					(struct nvme_ocp_statistic_snapshot_evt_class_format *)
 					pevent_descriptor;
 
-			event_des_size =
-				sizeof(struct nvme_ocp_statistic_snapshot_evt_class_format);
-
 			struct json_object *pstats_array =
 				((pevent_fifos_object != NULL) ? json_create_array() : NULL);
 
 			if (pStaticSnapshotEvent != NULL &&
 				pStaticSnapshotEvent->stat_data_size > 0) {
 				__u8 *pstatistic_entry;
-
-				data_size =
-					(le16_to_cpu((unsigned int)pStaticSnapshotEvent->stat_data_size) *
-						SIZE_OF_DWORD);
 
 				pstatistic_entry =
 					(__u8 *)pStaticSnapshotEvent +
