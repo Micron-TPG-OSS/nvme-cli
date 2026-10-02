@@ -139,19 +139,16 @@ static void print_hwcomp_descs_json(struct hwcomp_desc *desc, long double log_si
 
 static void json_hwcomp_log(struct hwcomp_log *log, __u32 id, bool list)
 {
-	long double log_bytes = uint128_t_to_double(le128_to_cpu(log->size));
 	struct json_object *r = json_create_object();
-
-	if (log->ver == 1)
-		log_bytes *= sizeof(__le32);
 
 	json_object_add_uint_02x(r, "Log Identifier", OCP_LID_HWCOMP);
 	json_object_add_uint_0x(r, "Log Page Version", le16_to_cpu(log->ver));
 	json_object_add_byte_array(r, "Reserved2", log->rsvd2, ARRAY_SIZE(log->rsvd2));
 	json_object_add_byte_array(r, "Log page GUID", log->guid, ARRAY_SIZE(log->guid));
-	json_object_add_nprix64(r, "Hardware Component Log Size", (unsigned long long)log_bytes);
+	json_object_add_nprix64(r, "Hardware Component Log Size",
+				(unsigned long long)log->desc_len);
 	json_object_add_byte_array(r, "Reserved48", log->rsvd48, ARRAY_SIZE(log->rsvd48));
-	print_hwcomp_descs_json(log->desc, log_bytes - offsetof(struct hwcomp_log, desc), id, list,
+	print_hwcomp_descs_json(log->desc, log->desc_len, id, list,
 				obj_create_array_obj(r, "Component Descriptions"));
 
 	json_print(r);
@@ -1303,10 +1300,11 @@ static void json_pevent_entry(void *pevent_log_info, __u8 action, __u32 size, co
 						valid_attrs);
 			break;
 		case NVME_PEL_POWER_ON_RESET_EVENT:
-			nvme_json_pel_power_on_reset(pevent_log_info, offset,
-						     valid_attrs,
+			nvme_json_pel_power_on_reset(pevent_log_info,
+						     offset, valid_attrs,
 						     pevent_entry_head->vsil,
-						     pevent_entry_head->el);
+						     pevent_entry_head->el,
+						     size);
 			break;
 		case NVME_PEL_NSS_HW_ERROR_EVENT:
 			nvme_json_pel_nss_hw_error(pevent_log_info, offset,
@@ -1330,10 +1328,16 @@ static void json_pevent_entry(void *pevent_log_info, __u8 action, __u32 size, co
 							  offset, valid_attrs);
 			break;
 		case NVME_PEL_SET_FEATURE_EVENT:
-			nvme_json_pel_set_feature(pevent_log_info, offset, valid_attrs);
+			nvme_json_pel_set_feature(pevent_log_info,
+						  offset, valid_attrs,
+						  pevent_entry_head->el,
+						  size);
 			break;
 		case NVME_PEL_TELEMETRY_CRT:
-			nvme_json_pel_telemetry_crt(pevent_log_info, offset, valid_attrs);
+			nvme_json_pel_telemetry_crt(pevent_log_info,
+						    offset, valid_attrs,
+						    pevent_entry_head->el,
+						    size);
 			break;
 		case NVME_PEL_THERMAL_EXCURSION_EVENT:
 			nvme_json_pel_thermal_excursion(pevent_log_info,

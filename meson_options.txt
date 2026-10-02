@@ -33,13 +33,13 @@ option(
   'mdns',
   type : 'feature',
   value: 'auto',
-  description : 'mDNS (TP8009) discovery in nvme-discoverd (requires libsystemd >=257)'
+  description : 'mDNS (TP8009) discovery in nvme-discoverd (requires libsystemd >=258)'
 )
 option(
   'nvmf-autoconnect',
   type : 'feature',
-  value: 'disabled',
-  description : 'legacy udev/systemd NVMe-oF autoconnect (independent of nvme-discoverd; both may be installed side by side)'
+  value: 'auto',
+  description : 'legacy udev/systemd NVMe-oF autoconnect (auto: built only when nvme-discoverd is not built; enabled: built alongside nvme-discoverd)'
 )
 option(
   'top',
