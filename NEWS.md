@@ -53,6 +53,25 @@
   active, `nvmf-autoconnect.service` and the FC kickstart skip their
   connect step.
 
+### Plugins
+
+* Fixed root command injection in WDC (`vs-internal-log`,
+  `drive-essentials`, SN730 capture), SanDisk (telemetry capture), and
+  Solidigm (`parse-telemetry-log --jq-filter`): a caller-controlled
+  string reached a shell (`system()`, unquoted `jq` pipe), so a
+  crafted input could run arbitrary commands as root.
+
+* WDC, SanDisk, Micron, Solidigm and Samsung plugins no longer spawn
+  external `tar`, `zip`, `jq`, `cat`, `lsmod`, `uname` or `dmesg`
+  processes; they use libarchive/libjq or direct syscalls instead.
+
+* New optional build dependencies: `libarchive` (WDC, SanDisk, Micron,
+  Samsung and Solidigm archiving) and `libjq` (Solidigm
+  `--jq-filter`), both `auto` by default. Without them, the affected
+  subcommands fail with a clear error instead of depending on
+  whatever `tar`/`zip`/`jq` happens to be on `PATH`. See
+  [BUILDING.md](Documentation/BUILDING.md).
+
 ### nvme-discoverd
 
 * `epcsd-poll-interval-minutes`, `fc-kickstart-interval-minutes` and
