@@ -79,7 +79,7 @@ EOF
 	fi
 }
 
-TOOLS="nvme systemd-run modprobe"
+TOOLS="systemd-run modprobe"
 [ -n "${IFACE}" ] && TOOLS="${TOOLS} avahi-publish resolvectl"
 for tool in ${TOOLS}; do
 	if ! command -v "${tool}" >/dev/null 2>&1; then
@@ -94,14 +94,15 @@ BUILD_DIR="${BUILD_DIR:-${REPO_ROOT}/.build}"
 DISCOVERD_BIN="${BUILD_DIR}/discoverd/nvme-discoverd"
 NVME_BIN="${BUILD_DIR}/nvme"
 
-if [ ! -x "${DISCOVERD_BIN}" ]; then
+for bin in "${DISCOVERD_BIN}" "${NVME_BIN}"; do
+	[ -x "${bin}" ] && continue
 	cat >&2 <<EOF
-${DISCOVERD_BIN} not found. Build first:
+${bin} not found. Build first:
   meson setup ${BUILD_DIR} -Dnvme-discoverd=enabled
   meson compile -C ${BUILD_DIR}
 EOF
 	exit 1
-fi
+done
 
 # The config directory this build reads, e.g. /usr/local/etc/nvme for the
 # default /usr/local prefix. The isolated copy is bind-mounted over it.
@@ -136,8 +137,9 @@ FOREIGN_NQN=nqn.2026-09.org.nvmexpress.discoverd-wringer:foreign
 FOREIGN_PORT=4420
 FOREIGN_PORT_ID=2
 
-# Listed directly in nvme-fabrics.conf, with no [Host] section, from
-# phase 6 on. Its port serves no other subsystem, so no DLP lists it.
+# Listed directly in nvme-fabrics.conf, with no [Host] section, from the
+# "configured IOC without [Host]" phase on. Its port serves no other
+# subsystem, so no DLP lists it.
 CONF_NQN=nqn.2026-09.org.nvmexpress.discoverd-wringer:configured
 CONF_PORT=4421
 CONF_PORT_ID=3
@@ -161,6 +163,12 @@ REL2_NQN=nqn.2026-09.org.nvmexpress.discoverd-wringer:release2
 REL_PORT=8014
 REL_PORT_ID=7
 
+# Not-live phase. A DC kept connected with persistent=force. Its port is
+# removed, so the DC is held in the CONNECTING state.
+NL_NQN=nqn.2026-09.org.nvmexpress.discoverd-wringer:not-live
+NL_PORT=8015
+NL_PORT_ID=8
+
 # mDNS phases only. Advertised through mDNS, on ${IFACE}'s address. The
 # port is opened and closed per phase, so a phase can advertise a DC whose
 # port is not open yet.
@@ -170,7 +178,7 @@ MDNS_PORT_ID=4
 MDNS_TRADDR=
 MDNS_DC_REQUESTED=
 PUBLISHER_UNIT=discoverd-wringer-mdns-publisher.service
-RESOLVED_DROPIN=/etc/systemd/resolved.conf.d/99-discoverd-wringer.conf
+RESOLVED_DROPIN=/run/systemd/resolved.conf.d/99-discoverd-wringer.conf
 RESOLVED_MDNS_WAS=
 
 confirm
@@ -186,6 +194,7 @@ NORMAL="\033[0m"
 PASS=0
 FAIL=0
 SKIP=0
+PHASE=0
 
 log() {
 	printf "%b%s%b\n" "${CYAN}" "$1" "${NORMAL}"
@@ -204,6 +213,45 @@ fail() {
 skip() {
 	printf "%b  SKIP: %s%b\n" "${YELLOW}" "$1" "${NORMAL}"
 	SKIP=$((SKIP + 1))
+}
+
+# Start the next phase, numbered in order. Under GitHub Actions, each phase
+# is a collapsible group in the log.
+phase() {
+	PHASE=$((PHASE + 1))
+	if [ -n "${GITHUB_ACTIONS:-}" ]; then
+		[ "${PHASE}" -gt 1 ] && echo "::endgroup::"
+		echo "::group::Phase ${PHASE}: $1"
+	fi
+	log ">>>>> Phase ${PHASE}: $1 <<<<<"
+}
+
+# Wait $1 seconds and say why ($2). On a terminal, the remaining time
+# counts down in place. Elsewhere, a log would keep every update as a line
+# of its own, so the wait is announced once.
+countdown() {
+	local secs="$1"
+
+	log "$2 (${secs} s)"
+	if [ ! -t 1 ]; then
+		sleep "${secs}"
+		return
+	fi
+	while [ "${secs}" -gt 0 ]; do
+		printf "\r    %3d s remaining " "${secs}"
+		sleep 1
+		secs=$((secs - 1))
+	done
+	printf "\r%*s\r" 24 ""
+}
+
+results() {
+	if [ -n "${GITHUB_ACTIONS:-}" ] && [ "${PHASE}" -gt 0 ]; then
+		echo "::endgroup::"
+	fi
+	printf "\n"
+	log "Results: ${PASS} passed, ${FAIL} failed, ${SKIP} skipped"
+	[ "${FAIL}" -eq 0 ]
 }
 
 # ---------------------------------------------------------------------------
@@ -256,13 +304,13 @@ nvmet_teardown() {
 	log "nvmet: tear down"
 	for id in "${DISC_PORT_ID}" "${FOREIGN_PORT_ID}" "${CONF_PORT_ID}" \
 		  "${V6_PORT_ID}" "${LL_PORT_ID}" "${REL_PORT_ID}" \
-		  "${MDNS_PORT_ID}"; do
+		  "${MDNS_PORT_ID}" "${NL_PORT_ID}"; do
 		rm -f /sys/kernel/config/nvmet/ports/"${id}"/subsystems/*
 		rmdir "/sys/kernel/config/nvmet/ports/${id}" 2>/dev/null
 	done
 	for nqn in "${TARGET_NQN}" "${FOREIGN_NQN}" "${CONF_NQN}" \
 		   "${V6_NQN}" "${LL_NQN}" "${REL_NQN}" "${REL2_NQN}" \
-		   "${MDNS_NQN}"; do
+		   "${MDNS_NQN}" "${NL_NQN}"; do
 		local subsys_dir="/sys/kernel/config/nvmet/subsystems/${nqn}"
 
 		if [ -e "${subsys_dir}/namespaces/1/enable" ]; then
@@ -356,6 +404,7 @@ discoverd_stop() {
 	"${NVME_BIN}" disconnect -n "${LL_NQN}" >/dev/null 2>&1 || true
 	"${NVME_BIN}" disconnect -n "${REL_NQN}" >/dev/null 2>&1 || true
 	"${NVME_BIN}" disconnect -n "${REL2_NQN}" >/dev/null 2>&1 || true
+	"${NVME_BIN}" disconnect -n "${NL_NQN}" >/dev/null 2>&1 || true
 }
 
 # Is any nvme-discoverd transient unit loaded?
@@ -444,6 +493,35 @@ dev_nqn() {
 	cat "/sys/class/nvme/$1/subsysnqn" 2>/dev/null
 }
 
+# Device name of the DC connected on port $1, or non-zero if there is none.
+dc_dev() {
+	local port="$1" d
+
+	for d in /sys/class/nvme/nvme*; do
+		[ "$(cat "${d}/subsysnqn" 2>/dev/null)" = \
+		  nqn.2014-08.org.nvmexpress.discovery ] || continue
+		if grep -qE "trsvcid=${port}(,|$)" "${d}/address" \
+			2>/dev/null; then
+			basename "${d}"
+			return 0
+		fi
+	done
+	return 1
+}
+
+# Poll for up to $3 seconds for device $1 to reach controller state $2.
+wait_for_state() {
+	local dev="$1" want="$2" timeout="$3" waited=0
+
+	while [ "${waited}" -lt "${timeout}" ]; do
+		[ "$(cat "/sys/class/nvme/${dev}/state" 2>/dev/null)" = \
+		  "${want}" ] && return 0
+		sleep 1
+		waited=$((waited + 1))
+	done
+	return 1
+}
+
 # Watch for $4 seconds (default 10) that device $3 stays connected to
 # subsystem $2.
 assert_dev_holds() {
@@ -489,14 +567,19 @@ journal_has() {
 	journalctl -t nvme-discoverd --since "$1" 2>/dev/null | grep -q -- "$2"
 }
 
+# Poll for up to $4 seconds (default 0) for the journal line.
 assert_journal_has() {
-	local desc="$1" since="$2" pattern="$3"
+	local desc="$1" since="$2" pattern="$3" timeout="${4:-0}" waited=0
 
-	if journal_has "${since}" "${pattern}"; then
-		pass "${desc}"
-	else
-		fail "${desc}"
-	fi
+	until journal_has "${since}" "${pattern}"; do
+		if [ "${waited}" -ge "${timeout}" ]; then
+			fail "${desc}"
+			return
+		fi
+		sleep 1
+		waited=$((waited + 1))
+	done
+	pass "${desc}"
 }
 
 # The unit that owns device $1, as nvme-discoverd recorded it.
@@ -679,8 +762,8 @@ assert_not_connected() {
 # terminal.
 #
 # libnvme's scan merges controllers with identical connection parameters
-# into one node, so one disconnect-all removes only one of phase 5's
-# duplicate connections. Repeat until none is left.
+# into one node, so one disconnect-all removes only one of the duplicate
+# connections that connect_onto_dev() makes. Repeat until none is left.
 disconnect_foreign() {
 	local i
 
@@ -731,99 +814,101 @@ disconnect_foreign
 "${NVME_BIN}" disconnect -n "${LL_NQN}" >/dev/null 2>&1 || true
 "${NVME_BIN}" disconnect -n "${REL_NQN}" >/dev/null 2>&1 || true
 "${NVME_BIN}" disconnect -n "${REL2_NQN}" >/dev/null 2>&1 || true
+"${NVME_BIN}" disconnect -n "${NL_NQN}" >/dev/null 2>&1 || true
 # ... and left its desired controllers saved.
 rm -f "${DESIRED_FILE}"
 
 etc_nvme_populate
 nvmet_setup
 
-log ">>>>> Phase 1: connect through a configured DC <<<<<"
+phase "connect through a configured DC"
 discoverd_start
 assert_connected "connects the subsystem listed in the DC's DLP" \
 	"${TARGET_NQN}" 30
 
-log ">>>>> Phase 2: restart over a live connection <<<<<"
+phase "restart over a live connection"
 log "the connection must survive untouched"
 #
 # Every ordinary daemon restart looks like this: the controller is still
 # connected and its unit still loaded. nvme-discoverd must adopt the unit.
 # Starting it again would fail with -EEXIST, and the recovery for that
 # stops the unit, whose ExecStop= disconnects.
-PHASE2_DEV=$(connected_dev "${TARGET_NQN}")
-log "phase 2: connected as ${PHASE2_DEV}"
+P_DEV=$(connected_dev "${TARGET_NQN}")
+log "connected as ${P_DEV}"
 
 discoverd_stop_daemon_only
 if units_loaded; then
-	pass "phase 2 setup: unit still loaded with the daemon down"
+	pass "setup: unit still loaded with the daemon down"
 else
-	fail "phase 2 setup: expected the unit to outlive the daemon"
+	fail "setup: expected the unit to outlive the daemon"
 fi
 
-PHASE2_START=$(date +%H:%M:%S)
+P_START=$(date +%H:%M:%S)
 discoverd_start
 assert_dev_stable "restart adopts the live connection" \
-	"${TARGET_NQN}" "${PHASE2_DEV}"
+	"${TARGET_NQN}" "${P_DEV}"
 assert_journal_has "the adoption path was taken" \
-	"${PHASE2_START}" "adopted, already connected"
+	"${P_START}" "adopted, already connected"
 assert_journal_lacks "no stale-unit collision on a live connection" \
-	"${PHASE2_START}" "held by a stale unit"
+	"${P_START}" "held by a stale unit"
 
-log ">>>>> Phase 3: an adopted controller that drops is reconnected <<<<<"
+phase "an adopted controller that drops is reconnected"
 #
-# Continues from phase 2: the controller is tracked because it was
-# adopted, not because this daemon connected it.
-PHASE3_START=$(date +%H:%M:%S)
+# Continues from the previous phase: the controller is tracked because it
+# was adopted, not because this daemon connected it.
+P_START=$(date +%H:%M:%S)
 disconnect_out_of_band "${TARGET_NQN}"
 assert_connected "reconnects the adopted controller" "${TARGET_NQN}" 30
 assert_journal_has "treated the drop as a desired controller" \
-	"${PHASE3_START}" "removed but still desired, reconnecting"
+	"${P_START}" "removed but still desired, reconnecting"
 
-log ">>>>> Phase 4: restart over a stale unit <<<<<"
+phase "restart over a stale unit"
 #
-# The mirror of phase 2: the unit is still loaded, but its controller
-# dropped while the daemon was down. nvme-discoverd must replace the unit.
+# The mirror of "restart over a live connection": the unit is still
+# loaded, but its controller dropped while the daemon was down.
+# nvme-discoverd must replace the unit.
 discoverd_stop_daemon_only
 disconnect_out_of_band "${TARGET_NQN}"
 if units_loaded; then
-	pass "phase 4 setup: stale unit left loaded"
+	pass "setup: stale unit left loaded"
 else
-	fail "phase 4 setup: expected a stale unit, found none"
+	fail "setup: expected a stale unit, found none"
 fi
 
-PHASE4_START=$(date +%H:%M:%S)
+P_START=$(date +%H:%M:%S)
 discoverd_start
 assert_connected "replaces the stale unit and reconnects" \
 	"${TARGET_NQN}" 30
 assert_journal_has "the stale-unit collision was hit" \
-	"${PHASE4_START}" "held by a stale unit"
+	"${P_START}" "held by a stale unit"
 assert_journal_has "startup removes the state of the gone device" \
-	"${PHASE4_START}" "device gone, removing stale state"
+	"${P_START}" "device gone, removing stale state"
 
-log ">>>>> Phase 5: a stale unit's device name was reused <<<<<"
+phase "a stale unit's device name was reused"
 #
 # The kernel hands out the lowest free nvmeN. While the daemon is down, the
 # controller drops and another orchestrator's connection takes its name.
 # The stale unit still records that name. nvme-discoverd must neither adopt
 # that connection nor let the stale unit's ExecStop= disconnect it.
 discoverd_stop_daemon_only
-PHASE5_DEV=$(connected_dev "${TARGET_NQN}")
+P_DEV=$(connected_dev "${TARGET_NQN}")
 disconnect_out_of_band "${TARGET_NQN}"
 
-if ! connect_onto_dev "${FOREIGN_NQN}" "${PHASE5_DEV}"; then
-	skip "phase 5: could not get ${FOREIGN_NQN} onto ${PHASE5_DEV}"
+if ! connect_onto_dev "${FOREIGN_NQN}" "${P_DEV}"; then
+	skip "could not get ${FOREIGN_NQN} onto ${P_DEV}"
 else
-	PHASE5_START=$(date +%H:%M:%S)
+	P_START=$(date +%H:%M:%S)
 	discoverd_start
 	assert_connected "reconnects its own controller" "${TARGET_NQN}" 30
 	assert_dev_holds "leaves the other connection on the reused name" \
-		"${FOREIGN_NQN}" "${PHASE5_DEV}"
+		"${FOREIGN_NQN}" "${P_DEV}"
 	assert_journal_lacks "does not adopt the other connection" \
-		"${PHASE5_START}" "${PHASE5_DEV} - adopted"
+		"${P_START}" "${P_DEV} - adopted"
 	assert_journal_has "startup removes the reused name's state" \
-		"${PHASE5_START}" "${PHASE5_DEV}: device name reused"
+		"${P_START}" "${P_DEV}: device name reused"
 fi
 
-log ">>>>> Phase 6: restart over a configured IOC without [Host] <<<<<"
+phase "restart over a configured IOC without [Host]"
 #
 # A connection listed in nvme-fabrics.conf with no [Host] section connects
 # as the default host. Its candidate must carry that identity, or a
@@ -838,42 +923,42 @@ controller = transport=tcp;traddr=${TRADDR};trsvcid=${CONF_PORT}
 EOF
 discoverd_start
 assert_connected "connects the configured IOC" "${CONF_NQN}" 30
-PHASE6_DEV=$(connected_dev "${CONF_NQN}")
-log "phase 6: connected as ${PHASE6_DEV}"
+P_DEV=$(connected_dev "${CONF_NQN}")
+log "connected as ${P_DEV}"
 
 discoverd_stop_daemon_only
-PHASE6_START=$(date +%H:%M:%S)
+P_START=$(date +%H:%M:%S)
 discoverd_start
 assert_dev_stable "restart adopts the configured IOC" \
-	"${CONF_NQN}" "${PHASE6_DEV}"
+	"${CONF_NQN}" "${P_DEV}"
 assert_journal_has "the adoption path was taken" \
-	"${PHASE6_START}" "${PHASE6_DEV} - adopted"
+	"${P_START}" "${P_DEV} - adopted"
 
-log ">>>>> Phase 7: stopping a stale unit spares a reused device name <<<<<"
+phase "stopping a stale unit spares a reused device name"
 #
-# As in phase 5, but the stale unit is stopped while the daemon is down.
-# Its ExecStop= finds its state for the device name. Only the inode
-# recorded at connect time shows that the name now belongs to another
-# connection.
+# As in "a stale unit's device name was reused", but the stale unit is
+# stopped while the daemon is down. Its ExecStop= finds its state for the
+# device name. Only the inode recorded at connect time shows that the name
+# now belongs to another connection.
 discoverd_stop_daemon_only
-PHASE7_DEV=$(connected_dev "${TARGET_NQN}")
-PHASE7_UNIT=$(cat "${STATE_CTRLS_DIR}/${PHASE7_DEV}/unit" 2>/dev/null)
+P_DEV=$(connected_dev "${TARGET_NQN}")
+P_UNIT=$(cat "${STATE_CTRLS_DIR}/${P_DEV}/unit" 2>/dev/null)
 disconnect_out_of_band "${TARGET_NQN}"
 
-if [ -z "${PHASE7_UNIT}" ]; then
-	fail "phase 7 setup: no unit recorded for ${PHASE7_DEV}"
-elif ! connect_onto_dev "${FOREIGN_NQN}" "${PHASE7_DEV}"; then
-	skip "phase 7: could not get ${FOREIGN_NQN} onto ${PHASE7_DEV}"
+if [ -z "${P_UNIT}" ]; then
+	fail "setup: no unit recorded for ${P_DEV}"
+elif ! connect_onto_dev "${FOREIGN_NQN}" "${P_DEV}"; then
+	skip "could not get ${FOREIGN_NQN} onto ${P_DEV}"
 else
-	log "Stop ${PHASE7_UNIT}"
-	systemctl stop "${PHASE7_UNIT}" >/dev/null 2>&1
+	log "Stop ${P_UNIT}"
+	systemctl stop "${P_UNIT}" >/dev/null 2>&1
 	assert_dev_holds "the stale unit's ExecStop= spares the reused name" \
-		"${FOREIGN_NQN}" "${PHASE7_DEV}"
+		"${FOREIGN_NQN}" "${P_DEV}"
 fi
 discoverd_start
 assert_connected "reconnects its own controller" "${TARGET_NQN}" 30
 
-log ">>>>> Phase 8: a DC reached over IPv6 <<<<<"
+phase "a DC reached over IPv6"
 nvmet_add_subsystem "${V6_NQN}"
 nvmet_add_port "${V6_PORT_ID}" "${V6_PORT}" "${V6_NQN}" "::" ipv6
 discoverd_stop_daemon_only
@@ -886,7 +971,7 @@ discoverd_start
 assert_connected "connects the subsystem listed in the DC's DLP" \
 	"${V6_NQN}" 30
 
-log ">>>>> Phase 9: a DC reached over a scoped IPv6 link-local address <<<<<"
+phase "a DC reached over a scoped IPv6 link-local address"
 #
 # A DLP entry carries no IPv6 scope. The DC reports the IOC as a bare
 # fe80:: address. Without a scope, the kernel cannot use a link-local
@@ -902,7 +987,7 @@ if modprobe dummy 2>/dev/null &&
 fi
 
 if [ -z "${LL_TRADDR}" ]; then
-	skip "phase 9: no link-local address on a dummy interface"
+	skip "no link-local address on a dummy interface"
 else
 	nvmet_add_subsystem "${LL_NQN}"
 	nvmet_add_port "${LL_PORT_ID}" "${LL_PORT}" "${LL_NQN}" "::" ipv6
@@ -923,22 +1008,23 @@ EOF
 	fi
 fi
 
-log ">>>>> Phase 10: a reload releases a removed configured IOC <<<<<"
+phase "a reload releases a removed configured IOC"
 #
-# Phase 6 configured this IOC. Without it in the configuration, it is not
-# desired anymore. nvme-discoverd releases it and leaves it connected.
-PHASE10_DEV=$(connected_dev "${CONF_NQN}")
-PHASE10_UNIT=$(dev_unit "${PHASE10_DEV}")
+# "Restart over a configured IOC without [Host]" configured this IOC.
+# Without it in the configuration, it is not desired anymore.
+# nvme-discoverd releases it and leaves it connected.
+P_DEV=$(connected_dev "${CONF_NQN}")
+P_UNIT=$(dev_unit "${P_DEV}")
 sed -i "/^\[Subsystem\]\$/,/trsvcid=${CONF_PORT}\$/d" \
 	"${ETC_NVME_DIR}/nvme-fabrics.conf"
-PHASE10_START=$(date +%H:%M:%S)
+P_START=$(date +%H:%M:%S)
 systemctl reload "${DISCOVERD_UNIT}"
-assert_released "the configured IOC" "${CONF_NQN}" "${PHASE10_DEV}" \
-	"${PHASE10_UNIT}"
+assert_released "the configured IOC" "${CONF_NQN}" "${P_DEV}" \
+	"${P_UNIT}"
 assert_journal_has "the release was logged" \
-	"${PHASE10_START}" "${PHASE10_DEV} - no longer desired, released"
+	"${P_START}" "${P_DEV} - no longer desired, released"
 
-log ">>>>> Phase 11: a changed log page releases the entry it dropped <<<<<"
+phase "a changed log page releases the entry it dropped"
 #
 # persistent=force keeps the DC connected, so the kernel reports log page
 # changes. Unlinking a subsystem from a port would also delete its
@@ -957,65 +1043,114 @@ EOF
 discoverd_start
 assert_connected "connects the subsystem listed in the DC's DLP" \
 	"${REL_NQN}" 30
-PHASE11_DEV=$(connected_dev "${REL_NQN}")
-PHASE11_UNIT=$(dev_unit "${PHASE11_DEV}")
+P_DEV=$(connected_dev "${REL_NQN}")
+P_UNIT=$(dev_unit "${P_DEV}")
 log "nvmet: ${REL_NQN} no longer allows any host"
 echo 0 > "/sys/kernel/config/nvmet/subsystems/${REL_NQN}/attr_allow_any_host"
 nvmet_add_subsystem "${REL2_NQN}"
-PHASE11_START=$(date +%H:%M:%S)
+P_START=$(date +%H:%M:%S)
 log "nvmet: port ${REL_PORT} also serves ${REL2_NQN}"
 ln -s "/sys/kernel/config/nvmet/subsystems/${REL2_NQN}" \
 	"/sys/kernel/config/nvmet/ports/${REL_PORT_ID}/subsystems/${REL2_NQN}"
 assert_connected "connects the subsystem added to the DLP" "${REL2_NQN}" 30
-assert_released "the dropped entry" "${REL_NQN}" "${PHASE11_DEV}" \
-	"${PHASE11_UNIT}"
+assert_released "the dropped entry" "${REL_NQN}" "${P_DEV}" \
+	"${P_UNIT}"
 assert_journal_has "the release was logged" \
-	"${PHASE11_START}" "${PHASE11_DEV} - no longer desired, released"
+	"${P_START}" "${P_DEV} - no longer desired, released"
 
-log ">>>>> Phase 12: a restart releases what was removed while down <<<<<"
+phase "a restart releases what was removed while down"
 #
-# Phase 8's DC is removed from the configuration while nvme-discoverd is
+# The IPv6 DC is removed from the configuration while nvme-discoverd is
 # down. The IOC it listed is in the saved desired set, and its DC is gone,
 # so the restart releases it at once.
-PHASE12_DEV=$(connected_dev "${V6_NQN}")
-PHASE12_UNIT=$(dev_unit "${PHASE12_DEV}")
+P_DEV=$(connected_dev "${V6_NQN}")
+P_UNIT=$(dev_unit "${P_DEV}")
 discoverd_stop_daemon_only
 sed -i "/traddr=::1;trsvcid=${V6_PORT}\$/d" \
 	"${ETC_NVME_DIR}/nvme-fabrics.conf"
-PHASE12_START=$(date +%H:%M:%S)
+P_START=$(date +%H:%M:%S)
 discoverd_start
 assert_released "the IOC of the removed DC" "${V6_NQN}" \
-	"${PHASE12_DEV}" "${PHASE12_UNIT}"
-assert_journal_has "the release was logged" "${PHASE12_START}" \
-	"${PHASE12_DEV} - no longer desired since the last run, released"
+	"${P_DEV}" "${P_UNIT}"
+assert_journal_has "the release was logged" "${P_START}" \
+	"${P_DEV} - no longer desired since the last run, released"
 
-log ">>>>> Phase 13: a reload releases a newly excluded IOC <<<<<"
-PHASE13_DEV=$(connected_dev "${TARGET_NQN}")
-PHASE13_UNIT=$(dev_unit "${PHASE13_DEV}")
+phase "a reload releases a newly excluded IOC"
+P_DEV=$(connected_dev "${TARGET_NQN}")
+P_UNIT=$(dev_unit "${P_DEV}")
 printf '[exclusions]\nexclusion = nqn=%s\n' "${TARGET_NQN}" \
 	> "${ETC_NVME_DIR}/exclusions.conf"
-PHASE13_START=$(date +%H:%M:%S)
+P_START=$(date +%H:%M:%S)
 systemctl reload "${DISCOVERD_UNIT}"
-assert_released "the excluded IOC" "${TARGET_NQN}" "${PHASE13_DEV}" \
-	"${PHASE13_UNIT}"
+assert_released "the excluded IOC" "${TARGET_NQN}" "${P_DEV}" \
+	"${P_UNIT}"
 assert_journal_has "the release was logged" \
-	"${PHASE13_START}" "${PHASE13_DEV} - excluded, released"
+	"${P_START}" "${P_DEV} - excluded, released"
 : > "${ETC_NVME_DIR}/exclusions.conf"
+
+phase "a restart adopts a DC that is not live"
+#
+# The kernel refuses to open a controller that is not LIVE (EWOULDBLOCK).
+# An adopted DC has its DLP fetched at once, so a restart while a DC
+# reconnects fetches from a device that cannot be opened. The fetch must
+# fail without crashing the daemon.
+nvmet_add_subsystem "${NL_NQN}"
+nvmet_add_port "${NL_PORT_ID}" "${NL_PORT}" "${NL_NQN}"
+discoverd_stop_daemon_only
+cat >> "${ETC_NVME_DIR}/nvme-fabrics.conf" <<EOF
+
+[Discovery Controller]
+persistent = force
+controller = transport=tcp;traddr=${TRADDR};trsvcid=${NL_PORT}
+EOF
+discoverd_start
+assert_connected "connects the subsystem listed in the DC's DLP" \
+	"${NL_NQN}" 30
+P_DEV=$(dc_dev "${NL_PORT}")
+log "DC connected as ${P_DEV:-<none>}"
+
+discoverd_stop_daemon_only
+log "nvmet: remove port ${NL_PORT}"
+rm -f "/sys/kernel/config/nvmet/ports/${NL_PORT_ID}/subsystems/${NL_NQN}"
+rmdir "/sys/kernel/config/nvmet/ports/${NL_PORT_ID}"
+if [ -n "${P_DEV}" ] && wait_for_state "${P_DEV}" connecting 30; then
+	pass "setup: the DC is connecting"
+else
+	fail "setup: the DC is connecting"
+fi
+
+P_START=$(date +%H:%M:%S)
+discoverd_start
+assert_journal_has "the DC was adopted" \
+	"${P_START}" "${P_DEV} - adopted" 10
+assert_journal_has "the DLP fetch failed" \
+	"${P_START}" "${P_DEV} - get_discovery_log failed" 10
+if systemctl is-active --quiet "${DISCOVERD_UNIT}"; then
+	pass "nvme-discoverd is still running"
+else
+	fail "nvme-discoverd is still running"
+fi
+
+nvmet_add_port "${NL_PORT_ID}" "${NL_PORT}" "${NL_NQN}"
+if wait_for_state "${P_DEV}" live 30; then
+	pass "the DC is live again once its port returns"
+else
+	fail "the DC is live again once its port returns"
+fi
+assert_connected "the IOC is connected" "${NL_NQN}" 30
 
 if [ -z "${IFACE}" ]; then
 	log "No <iface> given: mDNS phases not run"
-	printf "\n"
-	log "Results: ${PASS} passed, ${FAIL} failed, ${SKIP} skipped"
-	[ "${FAIL}" -eq 0 ]
+	results
 	exit
 fi
 
 mdns_setup
 
-log ">>>>> Phase 14: SIGHUP enables mDNS; an advertised DC is connected <<<<<"
+phase "SIGHUP enables mDNS; an advertised DC is connected"
 mdns_port_open
 zeroconf_enable
-PHASE14_START=$(date +%H:%M:%S)
+P_START=$(date +%H:%M:%S)
 if timeout 20 systemctl reload "${DISCOVERD_UNIT}"; then
 	pass "systemctl reload completes"
 else
@@ -1023,86 +1158,83 @@ else
 fi
 sleep 2
 assert_journal_has "the reload started mDNS on ${IFACE}" \
-	"${PHASE14_START}" "mdns: browsing ${IFACE} for _nvme-disc._tcp"
+	"${P_START}" "mdns: browsing ${IFACE} for _nvme-disc._tcp"
 publish_start "p=tcp"
 assert_connected "connects the subsystem behind the advertised DC" \
 	"${MDNS_NQN}" 30
 
-log ">>>>> Phase 15: a withdrawn advertisement disconnects nothing <<<<<"
-PHASE15_DEV=$(connected_dev "${MDNS_NQN}")
+phase "a withdrawn advertisement disconnects nothing"
+P_DEV=$(connected_dev "${MDNS_NQN}")
 publish_stop
 assert_dev_stable "stays connected after the advertisement is withdrawn" \
-	"${MDNS_NQN}" "${PHASE15_DEV}" 5
+	"${MDNS_NQN}" "${P_DEV}" 5
 
-log ">>>>> Phase 16: a DC advertised before its port is open <<<<<"
+phase "a DC advertised before its port is open"
 #
 # A real DC was seen to advertise before its TCP listener was up. A plain
 # TCP connect is retried silently until the port opens. No NVMe connect is
 # attempted before then.
 mdns_phase_reset
-PHASE16_START=$(date +%H:%M:%S)
+P_START=$(date +%H:%M:%S)
 publish_start "p=tcp"
 sleep 3
 assert_not_connected "does not connect while the port is closed" \
 	"${MDNS_NQN}"
 assert_journal_lacks "no NVMe connect attempted while the port is closed" \
-	"${PHASE16_START}" "${MDNS_DC_REQUESTED}"
+	"${P_START}" "${MDNS_DC_REQUESTED}"
 mdns_port_open
 assert_connected "connects once the port opens" "${MDNS_NQN}" 30
 
-log ">>>>> Phase 17: an unusable TXT record <<<<<"
+phase "an unusable TXT record"
 mdns_phase_reset
 mdns_port_open
-PHASE17_START=$(date +%H:%M:%S)
+P_START=$(date +%H:%M:%S)
 publish_start "p=bogus"
 sleep 3
 assert_not_connected "unknown p= value: not connected" "${MDNS_NQN}"
 assert_journal_has "unknown p= value: logged" \
-	"${PHASE17_START}" "missing/invalid transport in TXT record"
+	"${P_START}" "missing/invalid transport in TXT record"
 publish_stop
 publish_start
 sleep 3
 assert_not_connected "no TXT record: not connected" "${MDNS_NQN}"
 
-log ">>>>> Phase 18: an rdma DC is not checked first <<<<<"
+phase "an rdma DC is not checked first"
 #
 # No RDMA hardware is needed: the test only checks that the connect is
 # requested at once, without a TCP check.
 mdns_phase_reset
-PHASE18_START=$(date +%H:%M:%S)
+P_START=$(date +%H:%M:%S)
 publish_start "p=roce"
 sleep 3
 assert_journal_has "rdma: connect requested at once" \
-	"${PHASE18_START}" "${MDNS_DC_REQUESTED}"
+	"${P_START}" "${MDNS_DC_REQUESTED}"
 
-log ">>>>> Phase 19: mDNS still works after 45 seconds <<<<<"
+phase "mDNS still works after 45 seconds"
 #
 # sd-varlink's default call timeout is 45 s, and it also applies to the
 # BrowseServices call. The browse must outlive it.
 mdns_phase_reset
 mdns_port_open
-log "wait 50 s"
-sleep 50
+countdown 50 "wait past the 45 s call timeout"
 publish_start "p=tcp"
 assert_connected "connects a DC advertised 50 s after startup" \
 	"${MDNS_NQN}" 30
 
-log ">>>>> Phase 20: mDNS recovers from a systemd-resolved restart <<<<<"
+phase "mDNS recovers from a systemd-resolved restart"
 mdns_phase_reset
 mdns_port_open
-PHASE20_START=$(date +%H:%M:%S)
+P_START=$(date +%H:%M:%S)
 systemctl restart systemd-resolved
 sleep 1
 resolved_mdns_link_enable
 sleep 5
 assert_journal_has "the browse failed when systemd-resolved restarted" \
-	"${PHASE20_START}" "browsing _nvme-disc._tcp failed"
+	"${P_START}" "browsing _nvme-disc._tcp failed"
 assert_journal_has "the browse restarted" \
-	"${PHASE20_START}" "mdns: browsing ${IFACE} for _nvme-disc._tcp again"
+	"${P_START}" "mdns: browsing ${IFACE} for _nvme-disc._tcp again"
 publish_start "p=tcp"
 assert_connected "connects a DC advertised after the restart" \
 	"${MDNS_NQN}" 30
 
-printf "\n"
-log "Results: ${PASS} passed, ${FAIL} failed, ${SKIP} skipped"
-[ "${FAIL}" -eq 0 ]
+results
