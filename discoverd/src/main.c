@@ -464,6 +464,7 @@ struct scanned_ctrl {
 	char *devname;
 	struct libnvmf_tid *tid;
 	bool is_dc;
+	bool live;
 };
 
 SHR_PTRARRAY_DEFINE(scanned_ctrl_list, struct scanned_ctrl);
@@ -853,6 +854,16 @@ static void fetch_and_process_dlp(const char *devname,
 	r = dlp_fetch(&ctx, devname, dc_tid, dlp_ioc_callback,
 		      dlp_dc_callback, dlp_self_callback, &fctx);
 
+	/*
+	 * A failed fetch tells nothing about EPCSD or the DC's entries, so
+	 * keep the DC and its last list.
+	 */
+	if (r < 0) {
+		tid_list_free_items(&fctx.iocs);
+		tid_list_free_items(&fctx.referrals);
+		return;
+	}
+
 	epcsd = dc_effective_epcsd(&fctx, e);
 	log_dbg("%s: self entry %s, effective EPCSD=%d",
 		libnvmf_tid_str(dc_tid), fctx.self_seen ? "seen" : "absent",
@@ -867,11 +878,8 @@ static void fetch_and_process_dlp(const char *devname,
 			epcsd_park(e);
 	}
 
-	/*
-	 * A failed fetch tells nothing about the DC's entries, so keep the
-	 * last list. A log page without IOC entries replaces it.
-	 */
-	if (r == 0 && tid_list_append(&fctx.iocs, NULL) == 0 &&
+	// A log page without IOC entries replaces the last list.
+	if (tid_list_append(&fctx.iocs, NULL) == 0 &&
 	    tid_list_append(&fctx.referrals, NULL) == 0) {
 		inventory_update_dlp(ctx.inventory, dc_tid, fctx.iocs.items,
 				     fctx.referrals.items);
@@ -1202,11 +1210,41 @@ static void on_ioc_add(const char *devname,
 	free(unit_name);
 }
 
+static bool sysfs_ctrl_deleting(const char *devname)
+{
+	sd_device *dev = NULL;
+	const char *state = NULL;
+	char syspath[256];
+	bool deleting;
+
+	snprintf(syspath, sizeof(syspath), SYSFS_NVME_DIR "/%s", devname);
+	if (sd_device_new_from_syspath(&dev, syspath) < 0)
+		return true;
+
+	sd_device_get_sysattr_value(dev, "state", &state);
+	deleting = !state || !strncmp(state, "deleting", 8);
+	sd_device_unref(dev);
+
+	return deleting;
+}
+
 static void on_nvme_remove(const char *devname,
 			   void *user_data __attribute__((unused)))
 {
 	struct active_ctrl *e;
 	bool is_fc;
+
+	/*
+	 * The kernel reuses a device name as soon as it is free. A "remove"
+	 * can arrive after a new device took the name, and the new device
+	 * must be kept. The kernel sends "remove" before it deletes the
+	 * sysfs directory, so a device that is being deleted is not new.
+	 */
+	if (state_ctrl_present(devname) && !sysfs_ctrl_deleting(devname)) {
+		log_dbg("%s - remove for an earlier device of this name, ignored",
+			devname);
+		return;
+	}
 
 	e = ctrl_find_by_devname(devname);
 	state_remove_ctrl(devname);
@@ -1368,20 +1406,25 @@ static void apply_zeroconf(void)
 	}
 }
 
-static struct libnvmf_tid *sysfs_read_tid(const char *devname, bool *is_dc)
+static struct libnvmf_tid *sysfs_read_tid(const char *devname, bool *is_dc,
+					   bool *live)
 {
 	sd_device *dev = NULL;
+	const char *state = NULL;
 	char syspath[256];
 	struct libnvmf_tid *t;
 
 	if (is_dc)
 		*is_dc = false;
+	*live = false;
 
 	snprintf(syspath, sizeof(syspath), "/sys/class/nvme/%s", devname);
 	if (sd_device_new_from_syspath(&dev, syspath) < 0)
 		return NULL;
 
 	t = tid_from_sysfs(dev, is_dc);
+	sd_device_get_sysattr_value(dev, "state", &state);
+	*live = shr_streq0(state, "live");
 	sd_device_unref(dev);
 	return t;
 }
@@ -1395,9 +1438,9 @@ static bool devname_matches_tid(const char *devname,
 {
 	__cleanup_tid struct libnvmf_tid *existing = NULL;
 	struct ifaddrs *iface_list = NULL;
-	bool is_dc, match;
+	bool is_dc, live, match;
 
-	existing = sysfs_read_tid(devname, &is_dc);
+	existing = sysfs_read_tid(devname, &is_dc, &live);
 	if (!existing)
 		return false;
 
@@ -1406,7 +1449,7 @@ static bool devname_matches_tid(const char *devname,
 		iface_list = NULL;
 	}
 
-	match = tid_matches_existing(tid, existing, is_dc, iface_list);
+	match = tid_matches_existing(tid, existing, is_dc, live, iface_list);
 	freeifaddrs(iface_list);
 
 	return match;
@@ -1461,7 +1504,7 @@ static void conn_scan_load(struct conn_scan *scan)
 			break;
 		}
 
-		sc->tid = sysfs_read_tid(ent->d_name, &sc->is_dc);
+		sc->tid = sysfs_read_tid(ent->d_name, &sc->is_dc, &sc->live);
 		sc->devname = shr_xstrdup(ent->d_name);
 		if (!sc->tid || !sc->devname) {
 			scanned_ctrl_free(sc);
@@ -1492,7 +1535,7 @@ static const char *find_devname_for_tid(const struct conn_scan *scan,
 	for (i = 0; i < scan->ctrls.len; i++) {
 		const struct scanned_ctrl *sc = scan->ctrls.items[i];
 
-		if (tid_matches_existing(tid, sc->tid, sc->is_dc,
+		if (tid_matches_existing(tid, sc->tid, sc->is_dc, sc->live,
 					 scan->iface_list))
 			return sc->devname;
 	}
