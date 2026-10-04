@@ -53,7 +53,21 @@
   active, `nvmf-autoconnect.service` and the FC kickstart skip their
   connect step.
 
+### nvme-cli
+
+* `nvme discover` and `nvme connect-all` now send the keep-alive
+  timeout to a persistent Discovery Controller. Before, the value was
+  set too late. The DC got no keep-alive timeout, so it was never
+  asked for a persistent connection or for AENs.
+
+* New option `nvme connect --discovery`. It tells the kernel that the
+  controller is a Discovery Controller, also when it has a unique NQN.
+
 ### nvme-discoverd
+
+* Discovery Controllers are now connected with `--discovery` and a
+  keep-alive timeout of 30 s, or the configured `keep-alive-tmo`. No
+  keep-alive timeout is used for `persistent = no`.
 
 * `epcsd-poll-interval-minutes`, `fc-kickstart-interval-minutes` and
   `dc-giveup-timeout` move from `[Global]` to a new `[Discovery]`
@@ -95,6 +109,21 @@
 * New `libnvmf_kernel_option_supported()` and
   `libnvmf_kernel_options_for_each()` report the fabrics options the
   kernel lists in `/dev/nvme-fabrics`.
+
+### nvme-keysd
+
+* New daemon, nvme-keysd, a technology preview: it will put NVMe/TCP
+  TLS pre-shared keys into the kernel's .nvme keyring before a
+  connection needs them. Built with the new `nvme-keysd` meson option,
+  `disabled` by default. It imports the PSKs of the entries with
+  `key-source = systemd-creds` from encrypted systemd credentials in
+  `/etc/nvme/creds`. It needs systemd 257 or later. See `nvme-keysd(8)`.
+
+* New `key-source` key in `nvme-fabrics.conf`. With
+  `key-source = systemd-creds`, `tls-key` is the name of a systemd
+  credential, not the key. `nvme connect-all` and nvme-discoverd then
+  connect with TLS and let the kernel find the PSK in the keyring. The
+  default, `inline`, keeps today's behavior. See `nvme-fabrics.conf(5)`.
 
 ## Changes in 3.1 (2026-09-18)
 

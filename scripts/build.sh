@@ -58,6 +58,7 @@ usage() {
     echo "  minimal_static      build a static binary without fabrics support"
     echo "  nofabrics           build without fabrics support, run unit tests"
     echo "  libnvme             build only libnvme"
+    echo "  libnvme_abi         build only libnvme3.so, no tests/examples"
     echo "  tests               build for nightly build"
     echo ""
     echo "configs with muon:"
@@ -191,6 +192,10 @@ config_meson_default() {
     local extra_args=()
     if [ "${use_asan:-0}" -eq 1 ]; then
         extra_args+=(-Db_sanitize=address,undefined)
+    fi
+    # Build nvme-keysd in CI. "enabled" fails without libsystemd >= 257.
+    if pkg-config --atleast-version=257 libsystemd 2>/dev/null; then
+        extra_args+=(-Dnvme-keysd=enabled)
     fi
 
     CC="${CC}" ${SCAN_BUILD} "${MESON}" setup \
@@ -413,6 +418,23 @@ config_meson_libnvme() {
         -Dnvme=disabled                         \
         -Dlibnvme=enabled                       \
         "${BUILDDIR}"
+}
+
+# Like libnvme above, but for callers that only need the compiled
+# libnvme3.so itself (e.g. an ABI comparison) and not the test suite.
+config_meson_libnvme_abi() {
+    CC="${CC}" "${MESON}" setup                 \
+        --werror                                \
+        --buildtype="${BUILDTYPE}"              \
+        -Dnvme=disabled                         \
+        -Dlibnvme=enabled                       \
+        -Dtests=false                           \
+        -Dexamples=false                        \
+        "${BUILDDIR}"
+}
+
+test_meson_libnvme_abi() {
+    :
 }
 
 build_meson() {
