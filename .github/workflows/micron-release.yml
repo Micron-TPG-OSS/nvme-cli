@@ -3,18 +3,6 @@
 # This file is part of nvme.
 # Copyright (c) 2026 Micron Technology, Inc.
 #
-#
-# ---------------------------------------------------------------------------
-# PROJECTED FILE -- do not edit this copy.
-#
-# The source of truth is:
-#     .github/micron/overlay/.github/workflows/micron-release.yml
-#
-# .github/micron/apply.sh copies it here, and micron-sync-and-merge.yml runs
-# that applier after every upstream sync. Edits made directly to this file are
-# reverted by the next sync.
-# ---------------------------------------------------------------------------
-#
 # Publish Windows x64 + ARM64 builds of nvme-cli whenever a new release is
 # posted upstream at linux-nvme/nvme-cli.
 #
