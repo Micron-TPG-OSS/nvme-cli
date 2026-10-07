@@ -34,11 +34,11 @@ If you read nothing else, read the [TL;DR](#tldr) and [Part 5 (Recommendation)](
 
 - The upstream test rig exists to solve **one hard problem**: let an automated test grab a **real, physical NVMe SSD** and run destructive tests on it, inside a **disposable virtual machine** that can boot **any kernel version**, triggered automatically from a GitHub workflow — over and over, unattended, on shared hardware.
 - To do that at the scale of the whole Linux kernel community, they built a **Kubernetes cluster** (a fleet-management system) with roughly ten cooperating subsystems. **Most of that complexity is a consequence of scale and of kernel-development needs that Micron does not share.**
-- The genuinely essential core is small: dedicate a **real, physical SSD** to the tests, run them, wipe the drive, repeat. Everything beyond that is a cost-and-logistics choice — chiefly whether to use two machines (one per OS, bare metal) or consolidate onto one, which then runs each OS in a virtual machine with the SSD handed over via **PCIe passthrough** (requiring the platform's **IOMMU**, the I/O Memory Management Unit).
+- The genuinely essential core is small: dedicate a **real, physical SSD** to the tests, run them, wipe the drive, repeat. Everything beyond that is a cost-and-logistics choice — chiefly whether to use two machines (one per OS, bare metal) or consolidate onto one, which runs Linux on bare metal and Windows in a virtual machine with the SSD handed over via **PCIe passthrough** (requiring the platform's **IOMMU**, the I/O Memory Management Unit).
 - **Recommendation:** Micron almost certainly does **not** need the Kubernetes machinery. Start with the simplest thing that works and only add complexity if a concrete need forces it. Three configurations fit, all solid starting points (detailed in [Part 5](#part-5--recommended-approach-for-micron)):
   1. **Two bare-metal boxes** — one Linux, one Windows, each with its own drive; tests run directly on each host.
-  2. **One consolidated host, shared drive** — both OSes as VMs against a single drive; runs go sequentially.
-  3. **One consolidated host, one drive per OS** — two drives; runs go concurrently.
+  2. **One consolidated host, shared drive** — Linux on bare metal, Windows in a VM, sharing a single drive; runs go sequentially.
+  3. **One consolidated host, one drive per OS** — Linux on bare metal, Windows in a VM, a drive each; runs go concurrently.
 
   The choice is a cost/fidelity/throughput call for the infrastructure owner.
 - nvme-cli builds on Windows, and its end-to-end (e2e) test suite is already Windows-aware. The net-new engineering is **infrastructure**: a Windows test target with a real Micron drive and the CI wiring to run the existing suite against it.
@@ -260,36 +260,36 @@ Here is the same idea as a component-by-component verdict. "Essential" means *yo
 
 Two decisions define the architecture, and they are **independent axes**:
 
-1. **How much isolation does the rig need?** This turns on one question: *does Micron's CI ever run untrusted, outside-contributor code, or test unreleased kernels?* If not — the likely case for internal testing against a released kernel — the tests can run directly on the host. If yes, you need disposable-VM isolation, and at the extreme, the full upstream cluster.
-2. **How is Windows covered?** Either one host runs both operating systems as VMs, or a second machine is dedicated to Windows.
+1. **Does a run need a disposable VM, and why?** Two things push a run off bare metal into a throwaway VM. First, **isolation**: *does Micron's CI ever execute untrusted code?* Code already merged into master is trusted: it passed maintainer review before merge, even though it's bleeding-edge. Code that hasn't — outside-contributor PRs, unreleased kernels — is not. Second, **a clean OS per run**: a disposable VM guarantees every run starts from an identical, known-good image, with no cross-run state drift ([Keeping each VM run clean](#vm-reset)). If neither applies — likely here — the tests run directly on the host; otherwise, a disposable VM.
+2. **How is Windows covered?** Either Windows runs in a VM on the consolidated host, or a second machine is dedicated to Windows.
 
-Rather than present these as two separate menus, the sections below give the **end-to-end configurations** those axes actually produce, in increasing cost and complexity. **Config 1, 2, or 3 is the right starting point; escalate only if a concrete need forces it.** (The Windows-specific mechanics each configuration relies on are detailed in [Part 6](#part-6--windows-mechanics--drive-handling).)
+Rather than present these as two separate menus, the sections below give the **end-to-end configurations** those axes actually produce, in roughly increasing complexity. **Config 1, 2, or 3 is the right starting point; escalate only if a concrete need forces it.** (The Windows-specific mechanics each configuration relies on are detailed in [Part 6](#part-6--windows-mechanics--drive-handling).)
 
 ### <a name="config-1"></a>Config 1 — Two bare-metal boxes (simplest)
 One Linux box and one Windows box, each with its own dedicated, sacrificial Micron SSD. Tests run **directly on each host** — no VM, no passthrough, no Kubernetes. The Linux box runs `nvme-cli` + blktests against `/dev/nvmeX`; the Windows box runs the e2e suite against its physical `\\.\PhysicalDriveN`.
 - **Machines / drives:** 2 machines, 1 drive each (2 drives total, one per host).
-- **Isolation:** none — a catastrophic test bug could disrupt a box. Fine when each box is dedicated and the code is trusted-internal.
+- **Isolation:** none — a catastrophic test bug could disrupt a box. Fine when each box is dedicated and the code is trusted.
 - **Windows fidelity:** highest — the drive behaves exactly as it would in a customer's Windows machine.
 - **Build / maintain:** least of any option; nothing to virtualize.
 
 ### <a name="config-2"></a>Config 2 — One consolidated host, shared drive (fewest machines)
-A single Linux host runs **both** operating systems, each inside a disposable [libvirt/QEMU](#qemu) VM with the SSD [passed through](#passthrough) ([IOMMU](#iommu) on, drive parked on `vfio-pci`). A Linux run boots a Linux VM; a Windows run boots a Windows VM — against the **same drive, sequentially**: a single passed-through drive has one owner at a time, so the runs alternate (wiped between).
+A single Linux host runs the **Linux tests directly on bare metal** and boots a disposable [libvirt/QEMU](#qemu) **Windows** VM for the Windows runs. One **shared drive** serves both, **sequentially**: for a Linux run the drive stays on the host's `nvme` driver; for a Windows run it is rebound to `vfio-pci` ([IOMMU](#iommu) on) and [passed through](#passthrough) to the Windows VM. A single drive has one owner at a time, so the runs alternate (wiped between). The rebind is a scripted sysfs operation — no reboot per switch.
 - **Machines / drives:** 1 machine, 1 drive.
-- **Isolation:** VM-level — the destructive tests can't harm the host, and it can boot a non-stock kernel when needed (QEMU boots a specific kernel directly, the same feature KubeVirt wraps).
-- **Windows fidelity:** slightly lower — Windows runs in a KVM guest rather than on bare metal.
-- **Build / maintain:** a small VM-launch script (salvage upstream's ~40-line host-binding logic and the `prepare-nvme-devices.sh` drive-prep script), **plus** a Windows VM image (`virtio-win` drivers, unattended first-boot, OpenSSH, UEFI firmware) and Windows licensing/activation.
+- **Isolation:** none on the Linux side (tests run on the host); the Windows VM is disposable. Fine when the code is trusted (axis #1). *Run Linux in a VM too for either reason in axis #1 — isolation (the untrusted-code case) or a clean OS per run — at the cost of an extra image and a hypervisor in the Linux path.*
+- **Fidelity:** Linux at bare-metal fidelity; Windows slightly lower (KVM guest rather than bare metal).
+- **Build / maintain:** a small launch/rebind script (salvage upstream's ~40-line host-binding logic and the `prepare-nvme-devices.sh` drive-prep script), **plus** a Windows VM image (`virtio-win` drivers, unattended first-boot, OpenSSH, UEFI firmware) and Windows licensing/activation. No Linux image — Linux runs on the host.
 
 ### <a name="config-3"></a>Config 3 — One consolidated host, one drive per OS (concurrent)
-The same single-host passthrough setup as [Config 2](#config-2), but with **two drives — one bound to each VM**. Because each VM owns its own drive, the Linux and Windows runs execute **concurrently** rather than sequentially, removing the one-drive bottleneck.
+The same single host as [Config 2](#config-2), but with **two drives**. Linux tests run on the host against drive A (permanently on the `nvme` driver), while the Windows VM owns drive B (permanently on `vfio-pci`). The bindings are fixed and non-conflicting, so nothing is rebound between runs and the Linux and Windows runs execute **concurrently**, removing the one-drive bottleneck.
 - **Machines / drives:** 1 machine, 2 drives.
-- **Isolation:** VM-level, same as Config 2.
-- **Windows fidelity:** same as Config 2 — Windows in a KVM guest.
-- **Build / maintain:** same as Config 2, plus a second passed-through drive. Micron builds its own drives and the group already has spare hosts/drives, so the extra drive is a cost input, not a blocker.
+- **Isolation:** same as Config 2 — none on the Linux side, disposable Windows VM; the same Linux-in-a-VM variant applies for either reason in axis #1 (isolation or a clean OS per run).
+- **Fidelity:** same as Config 2 — Linux bare metal, Windows in a KVM guest.
+- **Build / maintain:** same as Config 2, plus a second drive and enough host CPU/RAM to run the Linux tests and the Windows VM at once. Micron builds its own drives and the group already has spare hosts/drives, so the extra drive is a cost input, not a blocker.
 
 ### <a name="config-4"></a>Config 4 — Separate Hyper-V/DDA Windows host (only if required)
 The Linux rig (bare-metal or single-VM) plus a **dedicated Windows Server** machine using Microsoft's native [DDA](#dda) passthrough for the Windows runs.
-- **Machines / drives:** 2 machines; a drive cannot move between them without manual re-cabling and a reboot, so in practice 1 drive per host.
-- **When:** only if Micron IT policy forbids running Windows under Linux/KVM *and* the native Microsoft-supported path is required.
+- **Machines / drives:** 2 machines, each with its own dedicated drive.
+- **When:** only if Windows must run in a VM *and* Microsoft's support terms require that VM to sit on a Microsoft-validated hypervisor (i.e. Hyper-V, not KVM) — confirm with IT. If bare-metal Windows (Config 1) is acceptable, or a KVM-hosted Windows guest is, this buys nothing over Config 2/3.
 - **Cost:** a second, server-class machine plus a separate automation stack to maintain.
 
 ### <a name="config-5"></a>Config 5 — Full upstream cluster (only if scale demands)
@@ -309,9 +309,20 @@ Upstream runs only on Linux; the Windows path has no upstream precedent and must
 Two separate questions:
 - **Wiping the media between runs:** **Yes, fully automatable.** `nvme format` and `nvme sanitize` are controller-level commands that work identically from Linux or Windows; the existing drive-prep script already does this reset at the start of every run.
 - **Handing the physical drive from one OS to the other:**
-  - **[Config 2](#config-2) / [Config 3](#config-3) (one consolidated host):** the drive(s) never move — they stay attached to the one host, and "Windows vs Linux" is just *which VM image boots* (Config 2) or *which VM owns which drive* (Config 3). **Fully automatable, no human, no reboot.**
-  - **[Config 4](#config-4) (separate Hyper-V/DDA host):** the drive is physically bound to *different machines* for Windows vs Linux. Switching means unbind → re-cable/move → rebind → reboot. **Manual**, unless each machine has its own drive.
+  - **[Config 2](#config-2) / [Config 3](#config-3) (one consolidated host):** the drive(s) never physically move — they stay attached to the one host. In **Config 2** the single shared drive is rebound between the host `nvme` driver (Linux run) and `vfio-pci` (Windows VM) between runs; in **Config 3** each drive has a fixed binding — one on the host, one on the Windows VM — so nothing is rebound at all. **Fully automatable, no human, no reboot.**
+  - **[Config 4](#config-4) (separate Hyper-V/DDA host):** Windows and Linux run on *different machines*, each with its own dedicated drive, so no handoff happens — each side wipes its own drive at the start of its run.
   - **[Config 1](#config-1) (two bare-metal boxes):** Windows and Linux run on *different machines* with their own dedicated drives, so no handoff happens — each side wipes its own drive at the start of its run. No sharing, no manual step.
+
+### <a name="vm-reset"></a>Keeping each VM run clean
+For any OS that runs in a VM (Windows under Config 2/3, and Linux too under the isolation variant), the default is an **immutable golden image plus a per-run copy-on-write overlay**: build the image once (drivers, unattended config, OpenSSH, nvme-cli, test deps) and keep it read-only; each run boots a throwaway qcow2 overlay backed by it (`qemu-img create -b golden.qcow2 run.qcow2`, or a libvirt `<transient/>` disk) and writes only to the overlay. **Discard the overlay on success; keep it on failure** so a failed run can be inspected. This gives a clean test environment every run at negligible cost — the overlay sits off the test's hot path, since the measured I/O goes to the passed-through physical drive, not the overlay.
+
+Two independent resets happen per run, and they should not be conflated:
+- **VM image reset** (discard the overlay) → the *guest OS* starts fresh, with no cross-run state drift.
+- **Drive wipe** (`nvme format`/`sanitize`) → the *device under test* is reset. The passed-through NVMe can't be overlaid, so this is always a separate step.
+
+Update the golden image deliberately (patch cycles, driver bumps) by building a new version and pointing new runs at it; never mutate a backing image while overlays depend on it, and don't move or rename it (the overlay records its path).
+
+This is the same model upstream uses — a KubeVirt **containerDisk** is a read-only base image with an ephemeral copy-on-write layer that KubeVirt discards when the VM is torn down. The only difference is distribution: upstream ships the base as a container image through a registry (needing [CDI](#cdi) and the private registry), whereas a single host keeps the golden image as a local qcow2 file and skips that plumbing entirely.
 
 ### <a name="windows-device"></a>How is the drive identified to the test on Windows?
 On Linux, upstream injects the drive via the `BDEV0` environment variable ([Part 3](#part-3--how-upstream-does-it-end-to-end)). The nvme-cli **e2e suite itself, however, does not read `BDEV0`** — it takes the device as explicit **`--controller` / `--ns1`** parameters (e.g. `--controller /dev/nvme0 --ns1 /dev/nvme0n1`), which the harness fills in.
@@ -353,6 +364,7 @@ On Linux, upstream injects the drive via the `BDEV0` environment variable ([Part
 - The single-node vs cluster decision and why.
 
 **Security review will want to see (and these are the upstream red flags to explicitly *not* inherit):**
+- **Network isolation / attack surface:** the rig is a potential entry point into Micron's internal network — a compromised run could attempt lateral movement, not just wipe the test drive. How the machine is placed and segmented (dedicated/quarantined VLAN, east-west restrictions, egress policy) is a security-review and IT decision, not one this document makes; see Kevin Kennedy (IT MFG) and ART. Note that "Micron-managed" need not mean "on the flat internal network." *(This is the primary concern driving this review.)*
 - **Untrusted-code isolation:** whether outside-contributor PRs can ever run on this hardware. If yes, the ephemeral-VM isolation and GitHub "require approval for outside collaborators" settings matter; if no, the risk drops sharply.
 - **Privileged containers:** upstream runs privileged Docker-in-Docker containers — a likely policy violation. Only the full upstream cluster (Config 5) brings these; Configs 1–4 avoid them entirely.
 - **Insecure internal registry:** upstream's registry runs over plain HTTP — avoid by not having one.
@@ -378,7 +390,7 @@ On Linux, upstream injects the drive via the `BDEV0` environment variable ([Part
 2. **File the ART architecture + security review** (Brandon Busacker to initiate) using this document as input.
 3. **Gap-review the Windows e2e coverage** — confirm which nvme-cli commands stay skipped versus become testable on Windows, and add coverage where the Windows path is exercisable. *(Independent of infrastructure.)*
 4. **Stand up the Config 1 bare-metal Linux rig** + self-hosted runner; get Linux nvme-cli + blktests running nightly against a Micron drive.
-5. **(If isolation required) Add Config 2 / Config 3 passthrough + VM-launch script**, salvaging upstream's host-binding and drive-prep logic.
+5. **(If consolidating onto one host) Add the Config 2 / Config 3 Windows-VM passthrough + launch/rebind script**, salvaging upstream's host-binding and drive-prep logic.
 6. **Build the Windows test VM image** (drivers, unattended boot, OpenSSH, nvme-cli) — Config 2 / Config 3.
 7. **Wire up the Windows nvme-cli e2e run** against the same drive; automate the `nvme format`/`sanitize` reset between Windows and Linux runs.
 
