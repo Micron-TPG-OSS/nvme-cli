@@ -3,18 +3,6 @@
 # This file is part of nvme.
 # Copyright (c) 2026 Micron Technology, Inc.
 #
-#
-# ---------------------------------------------------------------------------
-# PROJECTED FILE -- do not edit this copy.
-#
-# The source of truth is:
-#     .github/micron/overlay/.github/workflows/micron-release.yml
-#
-# .github/micron/apply.sh copies it here, and micron-sync-and-merge.yml runs
-# that applier after every upstream sync. Edits made directly to this file are
-# reverted by the next sync.
-# ---------------------------------------------------------------------------
-#
 # Publish Windows x64 + ARM64 builds of nvme-cli whenever a new release is
 # posted upstream at linux-nvme/nvme-cli.
 #
@@ -304,6 +292,18 @@ jobs:
           # Full history so meson's git describe yields the exact tag.
           fetch-depth: 0
 
+      # The checkout above is the upstream tag, and an upstream tag's tree has
+      # no .github/micron/ -- these files exist only on this fork's branches.
+      # So fetch the sanity-check and import-gate scripts from the ref this
+      # workflow is running from, into a subdirectory rather than on top of the
+      # source tree. They land untracked, which "git describe --dirty" ignores.
+      - name: Check out the Micron CI helpers
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          path: .micron-ci
+          sparse-checkout: .github/micron
+          sparse-checkout-cone-mode: true
+
       - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
         with:
           msystem: ${{ matrix.msystem }}
@@ -384,43 +384,31 @@ jobs:
           set -euxo pipefail
           meson test -C .build-release
 
-      - name: Verify no MinGW runtime deps
+      # The unit tests above exercise library code; this is the step that runs
+      # the program. --expect-version also ties the binary we are about to
+      # package to the tag we think we are building, which the "git describe"
+      # check earlier can only assert about the source tree.
+      - name: Sanity-run nvme.exe
         shell: msys2 {0}
         run: |
-          set -euo pipefail
+          set -euxo pipefail
+          bash .micron-ci/.github/micron/smoke-test.sh \
+            --expect-version "${VERSION}" .build-release/nvme.exe
 
-          # Read the PE import table rather than using ldd. ldd resolves paths
-          # through the MSYS2 runtime, which is x86_64 even on windows-11-arm,
-          # so it cannot be relied on for the aarch64 binary. Import names are
-          # host-independent. binutils ships objdump, the clang toolchain ships
-          # llvm-objdump; both print "DLL Name:" lines for PE files.
-          OBJDUMP="$(command -v objdump || command -v llvm-objdump || true)"
-          if [ -z "${OBJDUMP}" ]; then
-            echo "::error::neither objdump nor llvm-objdump found; cannot verify imports"
-            exit 1
-          fi
-
-          "${OBJDUMP}" -p .build-release/nvme.exe \
-            | awk -F'DLL Name:' '/DLL Name:/ {gsub(/[ \t\r]/, "", $2); print $2}' \
-            | sort -u > imports.txt
-
-          if [ ! -s imports.txt ]; then
-            echo "::error::could not read any DLL imports from nvme.exe"
-            exit 1
-          fi
-
-          echo "Imported DLLs:"
-          cat imports.txt
-
-          # A self-contained build imports only genuine Windows system DLLs.
-          # Any of these means the exe would need that runtime DLL shipped
-          # beside it, so fail rather than publish a zip that cannot run on a
-          # clean machine.
-          if grep -Eiq '^(libjson-c|libwinpthread|libgcc_s|libstdc\+\+|libc\+\+|libunwind|libatomic|libssp|libnvme|msys-)' imports.txt; then
-            echo "::error::nvme.exe imports MinGW/MSYS2 runtime DLLs (listed above); expected a self-contained binary"
-            exit 1
-          fi
-          echo "nvme.exe is self-contained."
+      # The check itself is .github/micron/scan_deps_pe.sh, not inline here, so it
+      # can be run against a local build and so its denylist can be tested
+      # against a known-bad import table -- see .github/micron/tests/. As inline
+      # YAML it ran once per release against one input, and its failing branch had
+      # never executed. It distinguishes exit 1 (a leak) from exit 2 (the import
+      # table could not be read), which the inline version conflated.
+      #
+      # --out writes the import list where the Report step below reads it, which
+      # is what the inline version's "sort -u > imports.txt" did. Report runs
+      # `cat imports.txt` under set -euo pipefail, so dropping the file would
+      # have turned the provenance step into a release failure.
+      - name: Verify no MinGW runtime deps
+        shell: msys2 {0}
+        run: bash .micron-ci/.github/micron/scan_deps_pe.sh --out imports.txt .build-release/nvme.exe
 
       - name: Package
         id: package
@@ -452,6 +440,44 @@ jobs:
             echo "zip=${ZIP}"
             echo "nvme_version=${NVME_VERSION}"
           } >> "$GITHUB_OUTPUT"
+
+      # Everything above ran inside the MSYS2 shell, where /ucrt64/bin is on
+      # PATH -- so a runtime DLL dependency would quietly resolve there. Unpack
+      # the asset we are about to publish and run it from plain Windows with a
+      # PATH holding only system directories, which is what a clean machine
+      # looks like. This complements the import-table check above: that reads
+      # the PE header, this catches anything the binary loads later with
+      # LoadLibrary.
+      - name: Sanity-run the packaged zip on a clean PATH
+        shell: pwsh
+        env:
+          ZIP: ${{ steps.package.outputs.zip }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $clean = Join-Path $env:RUNNER_TEMP 'clean-run'
+          Remove-Item -Recurse -Force $clean -ErrorAction SilentlyContinue
+          Expand-Archive -Path "dist/$env:ZIP" -DestinationPath $clean
+          $exe = Join-Path $clean 'nvme.exe'
+
+          $env:PATH = "$env:SystemRoot\system32;$env:SystemRoot"
+
+          # Deliberately no "2>&1": with $ErrorActionPreference = 'Stop',
+          # pwsh 7 turns a native command's redirected stderr into a
+          # terminating error, which would fail the step on a mere warning.
+          $out = & $exe version
+          $out | Out-Host
+          if ($LASTEXITCODE -ne 0) {
+              throw "nvme version exited $LASTEXITCODE outside MSYS2"
+          }
+          if (-not ($out -match [regex]::Escape("nvme version $env:VERSION (git "))) {
+              throw "packaged nvme.exe does not report version $env:VERSION"
+          }
+
+          & $exe list -o json | Out-Host
+          if ($LASTEXITCODE -ne 0) {
+              throw "nvme list exited $LASTEXITCODE outside MSYS2"
+          }
 
       - name: Report
         shell: msys2 {0}
@@ -691,7 +717,7 @@ jobs:
     steps:
       - name: Generate GitHub App token
         id: generate-token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ secrets.SYNC_APP_ID }}
           private-key: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
