@@ -62,6 +62,10 @@ test('nvme-discoverd - netif', test_netif)
 test_inventory = executable(
     'test-inventory',
     ['test-inventory.c', '../src/inventory.c', '../src/tid.c'],
+    c_args: [
+        '-DNBFT_TABLES="@0@"'.format(
+            meson.project_source_root() / 'libnvme/tests/nbft/tables'),
+    ],
     include_directories: discoverd_inc,
     dependencies: [
         ccan_dep,
@@ -73,3 +77,12 @@ test_inventory = executable(
 )
 
 test('nvme-discoverd - inventory', test_inventory)
+
+test('nvme-discoverd - --help', nvme_discoverd, args: ['--help'])
+test('nvme-discoverd - unknown option', nvme_discoverd,
+     args: ['--bogus'], should_fail: true)
+test('nvme-discoverd - missing --nvme-path', nvme_discoverd,
+     args: ['--nvme-path', '/nonexistent/nvme'], should_fail: true)
+test('nvme-discoverd - missing --config', nvme_discoverd,
+     args: ['--config', '/nonexistent/nvme-discoverd.conf'],
+     should_fail: true)

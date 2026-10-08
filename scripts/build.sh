@@ -222,6 +222,7 @@ config_meson_musl() {
         -Djson-c=disabled                       \
         -Dopenssl=disabled                      \
         -Dkeyutils=disabled                     \
+        -Dlibarchive=disabled                   \
         -Dpython=disabled                       \
         -Dnvme-discoverd=disabled               \
         "${BUILDDIR}"
@@ -327,6 +328,7 @@ config_meson_static() {
         -Dpython=disabled                       \
         -Dopenssl=disabled                      \
         -Dnvme-discoverd=disabled               \
+        -Dlibarchive=disabled                   \
         -Dtests=false                           \
         -Dexamples=false                        \
         "${BUILDDIR}"
@@ -370,6 +372,7 @@ config_meson_minimal_static() {
         -Dmi=disabled                           \
         -Djson-c=disabled                       \
         -Dopenssl=disabled                      \
+        -Dlibarchive=disabled                   \
         -Dtests=false                           \
         -Dexamples=false                        \
         "${BUILDDIR}"
@@ -386,6 +389,7 @@ config_meson_nofabrics() {
         -Dlibkmod=disabled                      \
         -Dopenssl=disabled                      \
         -Dkeyutils=disabled                     \
+        -Dlibarchive=disabled                   \
         "${BUILDDIR}"
 }
 
@@ -645,8 +649,18 @@ if [[ "${use_coverage}" -eq 1 ]]; then
     "${MESON}" setup --reconfigure "${BUILDDIR}" -Db_coverage=true
 fi
 fn_exists "build_${BUILDTOOL}_${CONFIG}" && "build_${BUILDTOOL}_${CONFIG}" || build_"${BUILDTOOL}"
-fn_exists "test_${BUILDTOOL}_${CONFIG}" && "test_${BUILDTOOL}_${CONFIG}" || test_"${BUILDTOOL}"
+if fn_exists "test_${BUILDTOOL}_${CONFIG}"; then
+    test_fn="test_${BUILDTOOL}_${CONFIG}"
+else
+    test_fn="test_${BUILDTOOL}"
+fi
+test_status=0
+"${test_fn}" || test_status=$?
+# Write the report also when a test fails.
 if [[ "${use_coverage}" -eq 1 ]]; then
     gcovr -r . "${BUILDDIR}" --xml-pretty -o coverage.xml
+fi
+if [[ "${test_status}" -ne 0 ]]; then
+    exit "${test_status}"
 fi
 fn_exists "install_${BUILDTOOL}_${CONFIG}" && "install_${BUILDTOOL}_${CONFIG}" || true;

@@ -175,6 +175,9 @@ NL_PORT_ID=8
 MAP_NQN=nqn.2026-10.org.nvmexpress.discoverd-wringer:mapped
 MAP_PORT=8016
 MAP_PORT_ID=9
+REF_NQN=nqn.2026-10.org.nvmexpress.discoverd-wringer:referral
+REF_PORT=8017
+REF_PORT_ID=10
 
 # mDNS phases only. Advertised through mDNS, on ${IFACE}'s address. The
 # port is opened and closed per phase, so a phase can advertise a DC whose
@@ -295,6 +298,21 @@ nvmet_add_port() {
 	       "${port_dir}/subsystems/${nqn}"
 }
 
+# Port $1 lists a referral to the discovery port $2, whose port ID is $3.
+nvmet_add_referral() {
+	local id="$1" trsvcid="$2" portid="$3"
+	local ref_dir="/sys/kernel/config/nvmet/ports/${id}/referrals/${trsvcid}"
+
+	log "nvmet: port ID ${id} refers to ${TRADDR}:${trsvcid}"
+	mkdir -p "${ref_dir}"
+	echo "${TRADDR}" > "${ref_dir}/addr_traddr"
+	echo tcp > "${ref_dir}/addr_trtype"
+	echo "${trsvcid}" > "${ref_dir}/addr_trsvcid"
+	echo ipv4 > "${ref_dir}/addr_adrfam"
+	echo "${portid}" > "${ref_dir}/addr_portid"
+	echo 1 > "${ref_dir}/enable"
+}
+
 nvmet_setup() {
 	modprobe -a nvmet nvmet-tcp nvme-tcp
 	nvmet_add_subsystem "${TARGET_NQN}"
@@ -309,15 +327,17 @@ nvmet_teardown() {
 	local id nqn
 
 	log "nvmet: tear down"
+	rmdir /sys/kernel/config/nvmet/ports/*/referrals/* 2>/dev/null
 	for id in "${DISC_PORT_ID}" "${FOREIGN_PORT_ID}" "${CONF_PORT_ID}" \
 		  "${V6_PORT_ID}" "${LL_PORT_ID}" "${REL_PORT_ID}" \
-		  "${MDNS_PORT_ID}" "${NL_PORT_ID}" "${MAP_PORT_ID}"; do
+		  "${MDNS_PORT_ID}" "${NL_PORT_ID}" "${MAP_PORT_ID}" \
+		  "${REF_PORT_ID}"; do
 		rm -f /sys/kernel/config/nvmet/ports/"${id}"/subsystems/*
 		rmdir "/sys/kernel/config/nvmet/ports/${id}" 2>/dev/null
 	done
 	for nqn in "${TARGET_NQN}" "${FOREIGN_NQN}" "${CONF_NQN}" \
 		   "${V6_NQN}" "${LL_NQN}" "${REL_NQN}" "${REL2_NQN}" \
-		   "${MDNS_NQN}" "${NL_NQN}" "${MAP_NQN}"; do
+		   "${MDNS_NQN}" "${NL_NQN}" "${MAP_NQN}" "${REF_NQN}"; do
 		local subsys_dir="/sys/kernel/config/nvmet/subsystems/${nqn}"
 
 		if [ -e "${subsys_dir}/namespaces/1/enable" ]; then
@@ -413,6 +433,7 @@ discoverd_stop() {
 	"${NVME_BIN}" disconnect -n "${REL2_NQN}" >/dev/null 2>&1 || true
 	"${NVME_BIN}" disconnect -n "${NL_NQN}" >/dev/null 2>&1 || true
 	"${NVME_BIN}" disconnect -n "${MAP_NQN}" >/dev/null 2>&1 || true
+	"${NVME_BIN}" disconnect -n "${REF_NQN}" >/dev/null 2>&1 || true
 }
 
 # Is any nvme-discoverd transient unit loaded?
@@ -600,18 +621,26 @@ journal_has() {
 	journalctl -t nvme-discoverd --since "$1" 2>/dev/null | grep -q -- "$2"
 }
 
-# Poll for up to $4 seconds (default 0) for the journal line.
+# Poll for up to $4 seconds (default 0) for the journal line. On a
+# terminal, a wait of 30 s or more shows the time left, as countdown()
+# does.
 assert_journal_has() {
 	local desc="$1" since="$2" pattern="$3" timeout="${4:-0}" waited=0
+	local show=false
 
+	[ -t 1 ] && [ "${timeout}" -ge 30 ] && show=true
 	until journal_has "${since}" "${pattern}"; do
 		if [ "${waited}" -ge "${timeout}" ]; then
+			[ "${show}" = true ] && printf "\r%*s\r" 24 ""
 			fail "${desc}"
 			return
 		fi
+		[ "${show}" = true ] &&
+			printf "\r    %3d s remaining " $((timeout - waited))
 		sleep 1
 		waited=$((waited + 1))
 	done
+	[ "${show}" = true ] && printf "\r%*s\r" 24 ""
 	pass "${desc}"
 }
 
@@ -849,6 +878,7 @@ disconnect_foreign
 "${NVME_BIN}" disconnect -n "${REL2_NQN}" >/dev/null 2>&1 || true
 "${NVME_BIN}" disconnect -n "${NL_NQN}" >/dev/null 2>&1 || true
 "${NVME_BIN}" disconnect -n "${MAP_NQN}" >/dev/null 2>&1 || true
+"${NVME_BIN}" disconnect -n "${REF_NQN}" >/dev/null 2>&1 || true
 # ... and left its desired controllers saved.
 rm -f "${DESIRED_FILE}"
 
@@ -1212,6 +1242,87 @@ fi
 assert_connected "the IOC is connected" "${NL_NQN}" 30
 assert_one_unit_per_device "every device has one unit"
 
+phase "a referral is followed"
+#
+# The configured DC's log page refers to a second DC. nvme-discoverd
+# connects that DC and the subsystem it lists.
+nvmet_add_subsystem "${REF_NQN}"
+nvmet_add_port "${REF_PORT_ID}" "${REF_PORT}" "${REF_NQN}"
+nvmet_add_referral "${DISC_PORT_ID}" "${REF_PORT}" "${REF_PORT_ID}"
+discoverd_stop_daemon_only
+discoverd_start
+assert_connected "connects the subsystem the referred DC lists" \
+	"${REF_NQN}" 30
+
+phase "an unreachable referred DC is given up"
+#
+# dc-giveup-timeout applies to a DC with no source of its own, such as a
+# referred DC. The poll interval is for the next phase.
+discoverd_stop_daemon_only
+printf '[Discovery]\nepcsd-poll-interval-minutes = 1\ndc-giveup-timeout = 3s\n' \
+	> "${ETC_NVME_DIR}/nvme-discoverd.conf"
+chmod a+r "${ETC_NVME_DIR}/nvme-discoverd.conf"
+log "nvmet: remove port ${REF_PORT}"
+rm -f "/sys/kernel/config/nvmet/ports/${REF_PORT_ID}/subsystems/${REF_NQN}"
+rmdir "/sys/kernel/config/nvmet/ports/${REF_PORT_ID}"
+P_START=$(date +%H:%M:%S)
+discoverd_start
+assert_journal_has "the referred DC was given up" "${P_START}" \
+	"${TRADDR}, ${REF_PORT}, .* - giving up after repeated failures" 30
+
+phase "a parked DC is polled"
+#
+# nvmet reports EPCSD=0, so the configured DC is disconnected after each
+# fetch. nvme-discoverd connects it again after
+# epcsd-poll-interval-minutes to check whether that changed.
+log "Wait up to 90 s for the poll"
+assert_journal_has "the parked DC was polled" "${P_START}" \
+	"${TRADDR}, ${DISC_PORT}, .* - EPCSD poll: reconnecting to re-check" 90
+
+log "Remove the referral and restore nvme-discoverd.conf"
+rmdir "/sys/kernel/config/nvmet/ports/${DISC_PORT_ID}/referrals/${REF_PORT}"
+rm -f "${ETC_NVME_DIR}/nvme-discoverd.conf"
+discoverd_stop_daemon_only
+discoverd_start
+
+phase "a damaged desired file is read"
+#
+# nvme-discoverd skips the lines of its saved desired set that it cannot
+# parse. A "discovered" line restores a DC found by mDNS or FC. The file
+# ends without a newline.
+discoverd_stop_daemon_only
+P_CANON=$(awk -F'\t' -v port="${DISC_PORT}" \
+	'$1 == "config" && index($2, port) { print $2; exit }' \
+	"${DESIRED_FILE}")
+if [ -n "${P_CANON}" ]; then
+	pass "setup: the configured DC is in the desired file"
+else
+	fail "setup: the configured DC is in the desired file"
+fi
+printf 'garbage\ndlp\tnot-a-tid\t-\ndiscovered\t%s\t-' "${P_CANON}" \
+	>> "${DESIRED_FILE}"
+discoverd_start
+if systemctl is-active --quiet "${DISCOVERD_UNIT}"; then
+	pass "nvme-discoverd is running"
+else
+	fail "nvme-discoverd is running"
+fi
+assert_one_unit_per_device "every device has one unit"
+
+phase "an excluded controller that drops is not reconnected"
+#
+# The exclusion is added without a reload, so nvme-discoverd still tracks
+# the IOC. When the IOC drops, the exclusion list is checked again.
+printf '[exclusions]\nexclusion = nqn=%s\n' "${NL_NQN}" \
+	> "${ETC_NVME_DIR}/exclusions.conf"
+P_START=$(date +%H:%M:%S)
+disconnect_out_of_band "${NL_NQN}"
+assert_journal_has "the drop was checked against the exclusions" \
+	"${P_START}" "${NL_NQN}.* - excluded, skipping" 10
+countdown 3 "give a reconnect time to start"
+assert_not_connected "the excluded IOC is not reconnected" "${NL_NQN}"
+: > "${ETC_NVME_DIR}/exclusions.conf"
+
 if [ -z "${IFACE}" ]; then
 	log "No <iface> given: mDNS phases not run"
 	results
@@ -1271,6 +1382,16 @@ publish_stop
 publish_start
 sleep 3
 assert_not_connected "no TXT record: not connected" "${MDNS_NQN}"
+
+phase "an advertised discovery NQN is used"
+#
+# The TXT record's nqn= key names the DC's discovery NQN. nvme-discoverd
+# connects with it when the kernel accepts the "discovery" option.
+mdns_phase_reset
+mdns_port_open
+publish_start "p=tcp" "nqn=nqn.2014-08.org.nvmexpress.discovery"
+assert_connected "connects the subsystem behind the advertised DC" \
+	"${MDNS_NQN}" 30
 
 phase "an rdma DC is not checked first"
 #
