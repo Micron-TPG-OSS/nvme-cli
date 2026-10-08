@@ -17,6 +17,7 @@ SYNOPSIS
 			[--output-file=<file> | -f <file>]
 			[--data-area=<da> | -a <da>]
 			[--telemetry-type=<type> | -t <type>]
+			[--host-generate=<gen> | -g <gen>]
 			[--no-uuid | -n]
 
 DESCRIPTION
@@ -24,6 +25,8 @@ DESCRIPTION
 Conditionally retrieves 07h Telemetry Host-Initiated log, C9h OCP Strings Log
 from an NVMe device or from user-specified file path. Takes retrieved logs and
 decodes (or) parses into human-readable output format specified by user.
+Without --output-format, the report is written as JSON to <file>.json, or as
+normal text to <file>.txt when nvme-cli is built without json-c.
 
 The <device> parameter is mandatory and may be either the NVMe
 character device (ex: /dev/nvme0), or a namespace block device (ex:
@@ -60,11 +63,19 @@ OPTIONS
 
 -t <type>::
 --telemetry-type=<type>::
-	Set the telemetry type to 'host', 'host0', 'host1' or 'controller'.
-	If set to host1, controller shall capture the Telemetry Host-Initiated data
-	representing the internal state of the controller at the time the associated
-	Get Log Page command is processed. If set to host0, controller shall not
-	update this data.
+	Set the telemetry type to 'host' or 'controller'. If this option is not
+	specified, the default value is 'host'. 'host0' and 'host1' are deprecated
+	and will be removed in the next major version; use 'host' with
+	--host-generate=0 in place of 'host0'.
+
+-g <gen>::
+--host-generate=<gen>::
+	If set to 1, the controller shall capture the Telemetry Host-Initiated
+	data representing the internal state of the controller at the time the
+	associated Get Log Page command is processed. If set to 0, the controller
+	shall not update this data before reading the log. Ignored with
+	--telemetry-type=controller. If this option is not specified, the default
+	value is 1.
 
 -n::
 --no-uuid::
@@ -76,12 +87,20 @@ include::global-options.txt[]
 EXAMPLES
 --------
 
-* Retrieve in both OCP String Log and Telemetry Host-Initiated Log from
-device. Decode default data-area(s) in default format and output to console.
+* Retrieve both OCP String Log and Telemetry Host-Initiated Log from device.
+Decode default data-area(s) and output to the default ./telemetry-log.json.
 +
 ----------------------------------
 # nvme ocp internal-log /dev/nvme0
 ----------------------------------
+
+* Retrieve the OCP String Log and the existing Telemetry Host-Initiated data
+without having the controller capture new data.  Decode default data-area(s)
+and output to the default ./telemetry-log.json.
++
+--------------------------------------------------------
+# nvme ocp internal-log /dev/nvme0 --host-generate=0
+--------------------------------------------------------
 
 * Retrieve Telemetry Host-Initiated data, reads in the OCP String Log locally.
 Decode default data-area(s) in default format.
