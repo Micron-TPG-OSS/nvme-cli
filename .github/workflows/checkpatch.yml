@@ -26,6 +26,11 @@ jobs:
     # --git checks each commit on its own. Piping a whole series in as
     # one patch makes the author's Signed-off-by in every commit after
     # the first a "Duplicate signature".
+    #
+    # scripts/checkpatch-filter.pl drops known false positives and sets
+    # the exit status. The shell does not use pipefail, so checkpatch's
+    # own exit status is ignored.
     - name: Run checkpatch review
       run: |
-        perl checkpatch.pl --git origin/${{ github.base_ref }}..HEAD
+        perl checkpatch.pl --git origin/${{ github.base_ref }}..HEAD 2>&1 |
+          perl scripts/checkpatch-filter.pl
