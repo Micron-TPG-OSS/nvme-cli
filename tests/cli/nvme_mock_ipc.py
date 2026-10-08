@@ -216,7 +216,7 @@ def make_mock_env(mock_lib, ipc_sock_path):
 
 
 def run_nvme(nvme_bin, env, sysfs_dir, base_dir, *args, encoding='utf-8',
-             stdin_data=None):
+             stdin_data=None, preexec_fn=None):
     """Runs `nvme_bin *args` under libmock_nvme.c. Returns the completed
     subprocess.Popen result, with stdout/stderr captured as text. Callers
     check .returncode/.stdout/.stderr themselves.
@@ -224,7 +224,8 @@ def run_nvme(nvme_bin, env, sysfs_dir, base_dir, *args, encoding='utf-8',
     Pass encoding=None to capture stdout/stderr as bytes instead, for
     commands whose output is not text ('-o binary'). Pass @stdin_data to
     feed it to stdin, e.g. to answer a confirmation prompt. Otherwise
-    stdin is /dev/null."""
+    stdin is /dev/null. @preexec_fn runs in the child before the exec,
+    e.g. to set resource limits nvme inherits."""
     cmd = [
         nvme_bin,
         '--set-options', f'test-sysfs-dir={sysfs_dir},test-base-dir={base_dir}',
@@ -249,6 +250,7 @@ def run_nvme(nvme_bin, env, sysfs_dir, base_dir, *args, encoding='utf-8',
                   else {'stdin': subprocess.DEVNULL})
     result = subprocess.run(wrapped_cmd, env=env,
                             **stdin_args,
+                            preexec_fn=preexec_fn,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
                             encoding=encoding)

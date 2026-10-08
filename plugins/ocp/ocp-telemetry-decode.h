@@ -790,6 +790,22 @@ static inline const char *telemetry_mctp_transport_protocol_to_string(int protoc
 }
 
 /**
+ * @brief checks that a string log table lies within the log buffer
+ *
+ * @param ofst_dw, input table start, in DWORDs from the start of the log
+ * @param size_dw, input table size, in DWORDs
+ * @param buf_len, input log buffer length, in bytes
+ *
+ * @return true if the whole table is inside the buffer
+ */
+static inline bool ocp_c9_table_fits(__u64 ofst_dw, __u64 size_dw, size_t buf_len)
+{
+	__u64 dwords = buf_len / 4;
+
+	return ofst_dw <= dwords && size_dw <= dwords - ofst_dw;
+}
+
+/**
  * @brief parse the ocp telemetry host or controller log binary file
  *        into json or text
  *

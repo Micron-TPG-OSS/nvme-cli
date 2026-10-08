@@ -180,11 +180,12 @@ class OCPMockTestBase(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         return tmp.name
 
-    def run_ocp(self, command, *args, device=None, encoding='utf-8'):
+    def run_ocp(self, command, *args, device=None, encoding='utf-8',
+                preexec_fn=None):
         return run_nvme(NVME_BIN, self.env, self.sysfs_dir, self.base_dir,
                         'ocp', command,
                         device if device is not None else self.DEVICE,
-                        *args, encoding=encoding)
+                        *args, encoding=encoding, preexec_fn=preexec_fn)
 
     def assertOk(self, result):
         self.assertEqual(
