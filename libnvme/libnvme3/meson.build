@@ -32,6 +32,7 @@ if want_python
         ],
         install: true,
         install_dir: [python3.get_install_dir(pure: false, subdir: libnvme_api_name), false],
+        install_tag: ['python-runtime', 'python-runtime'],
     )
     nvme_py = pymod_swig[0]
     nvme_wrap_c = pymod_swig[1]
@@ -42,6 +43,7 @@ if want_python
         dependencies: [config_dep, ccan_dep, libnvme_dep, py3_dep],
         include_directories: include_directories('.'),
         install: true,
+        install_tag: 'python-runtime',
         subdir: libnvme_api_name,
     )
 
@@ -63,29 +65,27 @@ if want_python
         },
     )
 
-    # Little hack to copy a list of files [__init__.py, etc.] to the build
-    # directory. This is needed to create the proper directory layout to run the
-    # tests. It's a hack because we don't really "configure" files and we could
-    # simply install directly from the source tree with:
-    #   python3.install_sources(files, pure:false, subdir:'libnvme')
-    # However, since we need these files in the build directory to run the tests
-    # we resort to this hack to copy them.
-    files = ['__init__.py', '_exceptions.py']
-    foreach file: files
+    # The tests import libnvme3 from the build directory, so the package
+    # files must be there next to _nvme.so.
+    py_sources = [
         configure_file(
-            input:  file,
-            output: file,
+            input:  '__init__.py',
+            output: '__init__.py',
             configuration: conf,
-            install_dir: python3.get_install_dir(pure: false,
-                                                 subdir: libnvme_api_name),
-        )
-    endforeach
+        ),
+        configure_file(
+            input:  '_exceptions.py',
+            output: '_exceptions.py',
+            copy:   true,
+        ),
+    ]
+    python3.install_sources(py_sources, pure: false, subdir: libnvme_api_name)
 
     # Set the PYTHONPATH so that we can run the 
     # tests directly from the build directory.
     test_env = environment()
     test_env.set('MALLOC_PERTURB_', '90')
-    test_env.prepend('PYTHONPATH', join_paths(meson.current_build_dir(), '..'))
+    test_env.prepend('PYTHONPATH', meson.current_build_dir() / '..')
     test_env.set('PYTHONMALLOC', 'malloc')
 
     # Test section
@@ -94,7 +94,7 @@ if want_python
     py_tests = [
         [ 'create-ctrl-object', [ files('tests/create-ctrl-obj.py'), ] ],
         [ 'sigsegv-during-gc', [ files('tests/gc.py'), ] ],
-        [ 'read-nbft-file', [ files('tests/test-nbft.py'), '--filename', join_paths(meson.current_source_dir(), 'tests', 'NBFT') ] ],
+        [ 'read-nbft-file', [ files('tests/test-nbft.py'), '--filename', meson.current_source_dir() / 'tests' / 'NBFT' ] ],
         [ 'object-properties-and-errors', [ files('tests/test-objects.py'), ] ],
         [ 'registry', [ files('tests/test-registry.py'), ] ],
         [ 'config', [ files('tests/test-config.py'), ] ],

@@ -421,10 +421,10 @@ adoc_includes = [
 ]
 
 if want_docs != 'false'
-    man1dir = join_paths(prefixdir, get_option('mandir'), 'man1')
-    man5dir = join_paths(prefixdir, get_option('mandir'), 'man5')
-    man8dir = join_paths(prefixdir, get_option('mandir'), 'man8')
-    htmldir = join_paths(prefixdir, get_option('htmldir'), 'nvme')
+    man1dir = prefixdir / get_option('mandir') / 'man1'
+    man5dir = prefixdir / get_option('mandir') / 'man5'
+    man8dir = prefixdir / get_option('mandir') / 'man8'
+    htmldir = prefixdir / get_option('htmldir') / 'nvme'
 
     man_sets = [
         {'sources': adoc_sources_man1,
@@ -485,6 +485,7 @@ if want_docs != 'false'
                             ],
                             install: true,
                             install_dir: man_set['dir'],
+                            install_tag: 'man',
                         )
                     endforeach
                 endforeach
@@ -515,6 +516,7 @@ if want_docs != 'false'
                         '@INPUT@'],
                     install: true,
                     install_dir: htmldir,
+                    install_tag: 'doc',
                 )
             endforeach
         endif
@@ -525,11 +527,11 @@ if want_docs != 'false'
             foreach adoc : man_set['sources']
                 if want_docs == 'all' or want_docs == 'man'
                     man = files(adoc + '.' + section)
-                    install_data(man, install_dir: man_set['dir'])
+                    install_data(man, install_dir: man_set['dir'], install_tag: 'man')
                 endif
                 if want_docs == 'all' or want_docs == 'html'
                     html = files(adoc + '.html')
-                    install_data(html, install_dir: htmldir)
+                    install_data(html, install_dir: htmldir, install_tag: 'doc')
                 endif
             endforeach
         endforeach

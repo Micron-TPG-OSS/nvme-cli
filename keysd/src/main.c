@@ -14,11 +14,7 @@
 #include <string.h>
 #include <sys/prctl.h>
 
-#include <systemd/sd-daemon.h>
-#include <systemd/sd-event.h>
-
 #include <daemon-util/log.h>
-#include <daemon-util/signals.h>
 #include <nvme/lib.h>
 
 #include "config.h"
@@ -30,8 +26,8 @@ struct keysd_ctx {
 	const char *fabrics_conf;            // NULL: libnvme's default
 	const char *creds_dir;               // encrypted credentials
 	struct keysd_config *cfg;            // parsed @conf_path
-	sd_event *event;                     // sd_event main loop
 	bool force_debug;                    // --debug forces DEBUG
+	bool should_start;                   // --should-start: test, exit
 };
 
 static struct keysd_ctx ctx;
@@ -44,20 +40,14 @@ static void apply_log_level(void)
 	libnvme_set_logging_level(ctx.nvme_ctx, level, false, false);
 }
 
-static void reload_config(void *user_data __attribute__((unused)))
+static bool should_start(void)
 {
-	struct keysd_config *new_cfg;
+	if (import_needed(ctx.nvme_ctx, ctx.fabrics_conf))
+		return true;
 
-	new_cfg = config_load(ctx.conf_path);
-	if (!new_cfg) {
-		log_err("failed to reload config");
-		return;
-	}
-	config_free(ctx.cfg);
-	ctx.cfg = new_cfg;
-	apply_log_level();
+	log_info("no entry with a key source, nothing to do");
 
-	import_keys(ctx.nvme_ctx, ctx.fabrics_conf, ctx.creds_dir);
+	return false;
 }
 
 static void usage(const char *prog)
@@ -70,6 +60,8 @@ static void usage(const char *prog)
 	       "                          (default: libnvme's default)\n"
 	       "  --creds-dir DIR         encrypted credentials\n"
 	       "                          (default: " KEYSD_CREDS_DIR ")\n"
+	       "  --should-start          exit 0 if there is work to do,\n"
+	       "                          1 otherwise\n"
 	       "  --debug, -d             enable debug logging (journal + libnvme)\n"
 	       "  --help, -h              show this help and exit\n",
 	       prog);
@@ -81,6 +73,7 @@ int main(int argc, char **argv)
 		{ "config",         required_argument, NULL, 'c' },
 		{ "fabrics-config", required_argument, NULL, 'J' },
 		{ "creds-dir",      required_argument, NULL, 'C' },
+		{ "should-start",   no_argument,       NULL, 'S' },
 		{ "debug",          no_argument,       NULL, 'd' },
 		{ "help",           no_argument,       NULL, 'h' },
 		{ NULL, 0,          NULL, 0 },
@@ -116,6 +109,9 @@ int main(int argc, char **argv)
 		case 'd':
 			ctx.force_debug = true;
 			break;
+		case 'S':
+			ctx.should_start = true;
+			break;
 		case 'J':
 			free(fabrics_path_abs);
 			fabrics_path_abs = realpath(optarg, NULL);
@@ -148,12 +144,6 @@ int main(int argc, char **argv)
 	if (ctx.force_debug)
 		dmn_log_set_level(DMN_LOG_DEBUG);
 
-	r = sd_event_default(&ctx.event);
-	if (r < 0) {
-		log_err("sd_event_default: %s", strerror(-r));
-		return 1;
-	}
-
 	ctx.nvme_ctx = libnvme_create_global_ctx();
 	if (!ctx.nvme_ctx) {
 		log_err("libnvme_create_global_ctx: failed");
@@ -167,24 +157,26 @@ int main(int argc, char **argv)
 	}
 	apply_log_level();
 
-	if (dmn_add_signal_handlers(ctx.event, reload_config, NULL) < 0)
-		return 1;
+	// Exit 1, never 255: systemd skips the unit on 1, but fails it on 255.
+	if (ctx.should_start) {
+		r = should_start() ? 0 : 1;
+		config_free(ctx.cfg);
+		libnvme_free_global_ctx(ctx.nvme_ctx);
+		free(config_path_abs);
+		free(fabrics_path_abs);
+		free(creds_path_abs);
+
+		return r;
+	}
 
 	import_keys(ctx.nvme_ctx, ctx.fabrics_conf, ctx.creds_dir);
-
-	sd_notify(0, "READY=1");
-	log_info("started");
-
-	r = sd_event_loop(ctx.event);
-	if (r < 0)
-		log_err("sd_event_loop: %s", strerror(-r));
+	log_info("keys imported, exiting");
 
 	config_free(ctx.cfg);
 	libnvme_free_global_ctx(ctx.nvme_ctx);
-	sd_event_unref(ctx.event);
 	free(config_path_abs);
 	free(fabrics_path_abs);
 	free(creds_path_abs);
 
-	return r < 0 ? 1 : 0;
+	return 0;
 }

@@ -15,7 +15,7 @@ keysd_sources = files(
 
 keysd_inc = include_directories('src')
 
-executable(
+nvme_keysd = executable(
     'nvme-keysd',
     keysd_sources,
     include_directories: keysd_inc,
@@ -28,6 +28,7 @@ executable(
     ],
     install: true,
     install_dir: sbindir,
+    install_tag: 'nvme-keysd',
 )
 
 if get_option('tests')
@@ -40,10 +41,15 @@ configure_file(
     configuration: substs,
     install: true,
     install_dir: systemddir,
+    install_tag: 'nvme-keysd',
 )
 
 # The encrypted credentials. Only root reads them.
-install_emptydir(sysconfdir / 'nvme' / 'creds', install_mode: 'rwx------')
+install_emptydir(
+    sysconfdir / 'nvme' / 'creds',
+    install_mode: 'rwx------',
+    install_tag: 'nvme-keysd',
+)
 
 configure_file(
     input: 'etc/nvme/nvme-keysd.conf.in',
@@ -51,4 +57,5 @@ configure_file(
     configuration: substs,
     install: true,
     install_dir: sysconfdir / 'nvme',
+    install_tag: 'nvme-keysd',
 )

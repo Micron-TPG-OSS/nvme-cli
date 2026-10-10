@@ -18,13 +18,6 @@ and [muon](https://github.com/annacrombie/muon). Both build tools have only a
 minimal dependency on the build environment. To ease this step, there is a build
 script which helps to setup a build environment.
 
-## Building on Windows
-
-nvme-cli can be built on Windows using the [msys2](https://www.msys2.org/)
-UCRT64 environment. After installing MSYS2 (`winget install MSYS2.MSYS2`), the
-`win-ucrt64-setup.sh` script can be run within the UCRT64 environment to install
-the required build system and nvme-cli dependencies.
-
 ## nvme-cli dependencies (3.x and later)
 
 Starting with nvme-cli 3.x, the libnvme library is fully integrated into the
@@ -93,6 +86,11 @@ At startup, nvme-discoverd checks that systemd-resolved provides
 `BrowseServices`. If it does not, the daemon logs a warning and runs
 without mDNS.
 
+## Kernel requirement
+
+libnvme depends on the `/sys/class/nvme-subsystem` interface which was
+introduced in Linux kernel v4.15. nvme-cli requires kernel v4.15 or later.
+
 ## Build with meson
 
 ### Configuring
@@ -112,30 +110,6 @@ dependencies should be resolved. The options are:
 ```
 
 Note for nvme-cli the 'default' is set to nofallback.
-
-### Building
-
-```shell
-$ meson compile -C .build
-```
-
-### Installing
-
-```shell
-# meson install -C .build
-```
-
-To build a static library instead of a shared one:
-
-```shell
-$ meson setup --default-library=static .build
-```
-
-### Running unit tests
-
-```shell
-$ meson test -C .build
-```
 
 ### Installation paths
 
@@ -161,6 +135,32 @@ optimizations for a production install:
 
 ```shell
 $ meson setup .build --prefix /usr --sysconfdir /etc --buildtype release
+```
+
+### Building
+
+```shell
+$ meson compile -C .build
+```
+
+### Running unit tests
+
+```shell
+$ meson test -C .build
+```
+
+### Installing
+
+```shell
+# meson install -C .build
+```
+
+To install only some groups of files, see [Install tags](#install-tags).
+
+To build a static library instead of a shared one:
+
+```shell
+$ meson setup --default-library=static .build
 ```
 
 ### Debug and sanitizer builds
@@ -282,11 +282,63 @@ To build without any vendor plugins:
 $ make PLUGINS=""
 ```
 
+## Building on Windows
+
+nvme-cli can be built on Windows using the [msys2](https://www.msys2.org/)
+UCRT64 environment. After installing MSYS2 (`winget install MSYS2.MSYS2`), the
+`win-ucrt64-setup.sh` script can be run within the UCRT64 environment to install
+the required build system and nvme-cli dependencies.
+
 ## Distro packaging
 
 nvme-cli is available on many popular distributions (Alpine, Arch, Debian, Fedora,
 FreeBSD, Gentoo, Ubuntu, Nix(OS), openSUSE, ...) and the usual package name is
 nvme-cli.
+
+### Install tags
+
+Every installed file has a meson install tag. A distribution can build
+everything once and then install each group of files into its own package
+with `meson install --tags`.
+
+| Tag | Files |
+|-----|-------|
+| `runtime` | `nvme`, the libnvme shared library, shell completions |
+| `devel` | libnvme headers, `libnvme3.so` link, pkg-config file |
+| `python-runtime` | libnvme Python bindings |
+| `man` | man pages |
+| `doc` | HTML and reST documentation |
+| `nvmf` | NVMe-oF files needed with the legacy autoconnect and with nvme-discoverd: registry and vendor udev rules, NBFT interface naming rule, `nvme-fabrics.conf.sample` |
+| `nvmf-autoconnect` | legacy NVMe-oF autoconnect: udev rules, systemd units, dracut config, NetworkManager dispatcher script |
+| `nvme-discoverd` | nvme-discoverd: binary, systemd unit, config file |
+| `nvme-keysd` | nvme-keysd: binary, systemd unit, config file, credential directory |
+
+A file can have only one tag. Some NVMe-oF files are needed with the
+legacy autoconnect and with nvme-discoverd. They have their own tag
+(`nvmf`), and both packages list it.
+
+Example: one build, separate packages.
+
+```shell
+$ meson setup .build --prefix /usr --sysconfdir /etc --buildtype release \
+      -Dnvme-discoverd=enabled -Dnvme-keysd=enabled -Ddocs=man
+$ meson compile -C .build
+$ meson install -C .build --destdir pkg/nvme-cli \
+      --tags runtime,man,nvmf,nvme-discoverd
+$ meson install -C .build --destdir pkg/nvme-keysd --tags nvme-keysd
+$ meson install -C .build --destdir pkg/libnvme-dev --tags devel
+$ meson install -C .build --destdir pkg/python3-libnvme --tags python-runtime
+```
+
+The legacy autoconnect files are built only with
+`-Dnvmf-autoconnect=enabled` when nvme-discoverd is also built. A package
+that uses the legacy autoconnect instead of nvme-discoverd uses
+`--tags runtime,man,nvmf,nvmf-autoconnect`.
+
+Without `--tags`, `meson install` installs all files. The
+`nvme-cli - install-tags` test fails if an installed file has no tag.
+Meson tags executables `runtime` by itself. So the test does not catch a
+new executable that belongs to another group. Set its `install_tag`.
 
 ### OpenEmbedded/Yocto
 
@@ -297,8 +349,3 @@ is available as part of the `meta-openembedded` layer collection.
 
 `nvme-cli` is available as a [buildroot](https://buildroot.org) package. The
 package is named `nvme`.
-
-## Kernel requirement
-
-libnvme depends on the `/sys/class/nvme-subsystem` interface which was
-introduced in Linux kernel v4.15. nvme-cli requires kernel v4.15 or later.
