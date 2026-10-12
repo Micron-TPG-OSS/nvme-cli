@@ -45,7 +45,7 @@
 #define obj_add_nprix64 json_object_add_nprix64
 #define obj_add_uint_0nx json_object_add_uint_0nx
 #define obj_add_0nprix64 json_object_add_0nprix64
-#define obj_add_str json_object_add_string
+#define obj_add_str json_object_add_value_string
 
 #define json_prop_cap(r, fld, val, ...) \
 	json_prop_field(r, prop_cap[fld][0], prop_cap[fld][1], val, \
@@ -281,14 +281,15 @@ static void json_nvme_id_ns_lbaf(struct nvme_id_ns *ns, int i, struct json_objec
 
 	if (verbose_mode()) {
 		obj_add_int(lbaf, "LBA Format", i);
-		obj_add_str(lbaf, "Metadata Size", "%d bytes",
-			    le16_to_cpu(ns->lbaf[i].ms));
-		obj_add_str(lbaf, "Data Size", "%d bytes", 1 << ns->lbaf[i].ds);
-		obj_add_str(lbaf, "Relative Performance", "0x%x %s",
-			    ns->lbaf[i].rp,
-			    ns->lbaf[i].rp == 3 ? "Degraded" :
-			    ns->lbaf[i].rp == 2 ? "Good" :
-			    ns->lbaf[i].rp == 1 ? "Better" : "Best");
+		json_object_add_string(lbaf, "Metadata Size", "%d bytes",
+				       le16_to_cpu(ns->lbaf[i].ms));
+		json_object_add_string(lbaf, "Data Size", "%d bytes",
+				       1 << ns->lbaf[i].ds);
+		json_object_add_string(lbaf, "Relative Performance", "0x%x %s",
+				       ns->lbaf[i].rp,
+				       ns->lbaf[i].rp == 3 ? "Degraded" :
+				       ns->lbaf[i].rp == 2 ? "Good" :
+				       ns->lbaf[i].rp == 1 ? "Better" : "Best");
 		obj_add_str(lbaf, "in use", i == flbas ? "yes" : "no");
 	} else {
 		obj_add_int(lbaf, "lbaf", i);
@@ -2006,15 +2007,15 @@ static void json_pevent_entry(void *pevent_log_info, __u8 action, __u32 size, co
 	struct json_object *valid_attrs;
 
 	for (i = 0; i < le32_to_cpu(pevent_log_head->tnev); i++) {
-		if (offset + sizeof(*pevent_entry_head) >= size)
+		if (offset + sizeof(*pevent_entry_head) > size)
 			break;
 
 		pevent_entry_head = pevent_log_info + offset;
 		vsil = le16_to_cpu(pevent_entry_head->vsil);
 		el = le16_to_cpu(pevent_entry_head->el);
 
-		if (offset + pevent_entry_head->ehl + 3 + el >=
-		    size)
+		if (vsil > el ||
+		    offset + pevent_entry_head->ehl + 3 + el > size)
 			break;
 
 		valid_attrs = json_create_object();
@@ -2097,7 +2098,7 @@ static void json_pevent_entry(void *pevent_log_info, __u8 action, __u32 size, co
 		}
 
 		array_add_obj(valid, valid_attrs);
-		offset += le16_to_cpu(pevent_entry_head->el);
+		offset += el - vsil;
 	}
 }
 
