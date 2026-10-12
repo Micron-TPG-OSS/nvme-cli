@@ -101,6 +101,7 @@ class PrintMockIPCServer(MockIPCServer):
         self.seed = 0
         self.header_len = {}
         self.logs = {}
+        self.id_ctrl = {}
 
     def handle_ioctl(self, conn, fd, request, opcode, nsid,
                      cdw10, cdw11, cdw12, cdw13, cdw14, cdw15, lpo, req_len):
@@ -120,6 +121,8 @@ class PrintMockIPCServer(MockIPCServer):
         elif opcode == _OPC_IDENTIFY and cdw10 & 0xff == _CNS_CTRL:
             for fmt, offset, value in _ID_CTRL_FIXUPS:
                 _put(buf, fmt, offset, value)
+            for offset, value in self.id_ctrl.items():
+                buf[offset:offset + len(value)] = value
         elif opcode == _OPC_IO_MGMT_RECV:
             _put(buf, '<H', 14, 2)      # reclaim unit handle status: nruhsd
         elif opcode == _OPC_RESV_REPORT:
@@ -269,6 +272,52 @@ class PrintCLITest(unittest.TestCase):
 
         for fmt in _FORMATS:
             self._run(['log', 'persistent-event', self.CTRL] + fmt)
+
+    def test_id_ctrl_strings(self):
+        # A '%' in a device string is not a format directive.
+        mn = '%s%s%s%s%s%s%s%s'
+        self.server.id_ctrl[24] = mn.encode().ljust(40)
+        result = run_nvme(_NVME_BIN, self.env, self.sysfs_dir, self.base_dir,
+                          'id-ctrl', self.CTRL)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn(mn, result.stdout)
+
+        if not _HAVE_JSON:
+            return
+        result = run_nvme(_NVME_BIN, self.env, self.sysfs_dir, self.base_dir,
+                          'id-ctrl', self.CTRL, '-o', 'json')
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)['mn'], mn)
+
+    def test_persistent_event_entries(self):
+        # Three Timestamp Change events. The first one has Vendor Specific
+        # Information, which EL includes. The last one ends at TLL.
+        vsi = b'\xaa' * 4
+        events = b''
+        for i, info in enumerate((vsi, b'', b'')):
+            data = info + struct.pack('<QQ', 0x1000 + i, 0)
+            # etype, etype_rev, ehl, ehai, cntlid, ets, pelpid, vsil, el
+            events += struct.pack('<BBBBHQH4xHH', 0x03, 0, 21, 0, 1, 0, 0,
+                                  len(info), len(data))
+            events += data
+        header = bytearray(512)
+        struct.pack_into('<B3xIQ', header, 0, _LID_PERSISTENT_EVENT, 3,
+                         len(header) + len(events))
+        self.server.logs[_LID_PERSISTENT_EVENT] = bytes(header) + events
+
+        result = run_nvme(_NVME_BIN, self.env, self.sysfs_dir, self.base_dir,
+                          'log', 'persistent-event', self.CTRL)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout.count('Event Number'), 3)
+
+        if not _HAVE_JSON:
+            return
+        result = run_nvme(_NVME_BIN, self.env, self.sysfs_dir, self.base_dir,
+                          'log', 'persistent-event', self.CTRL, '-o', 'json')
+        self.assertEqual(result.returncode, 0)
+        entries = json.loads(result.stdout)['list_of_event_entries']
+        self.assertEqual([e['prev_ts'] for e in entries],
+                         [0x1000, 0x1001, 0x1002])
 
     def test_supported_cap_config(self):
         def media_units(*muids):
