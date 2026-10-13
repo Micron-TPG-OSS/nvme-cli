@@ -264,6 +264,29 @@ __shr_public int libnvme_reread_partitions(struct libnvme_transport_handle *hdl)
 	return 0;
 }
 
+__shr_public int libnvme_read_regs(
+		__shr_unused struct libnvme_transport_handle *hdl,
+		__shr_unused __u32 offset, __shr_unused void *buf,
+		__shr_unused __u32 len)
+{
+	return -ENOTSUP;
+}
+
+__shr_public int libnvme_write_reg32(
+		__shr_unused struct libnvme_transport_handle *hdl,
+		__shr_unused __u32 offset, __shr_unused __u32 value)
+{
+	return -ENOTSUP;
+}
+
+__shr_public int libnvme_write_reg64(
+		__shr_unused struct libnvme_transport_handle *hdl,
+		__shr_unused __u32 offset, __shr_unused __u64 value,
+		__shr_unused bool mmio32)
+{
+	return -ENOTSUP;
+}
+
 /*
  * IOCTL_STORAGE_PROTOCOL_COMMAND supports a maximum transfer size of 512 pages.
  * However, the driver does not correctly enforce this limit and larger
@@ -2457,8 +2480,11 @@ __shr_public int libnvme_exec_io_passthru(
 
 	cmd->result = 0;
 
-	if (hdl->type == LIBNVME_TRANSPORT_HANDLE_TYPE_LOOPBACK)
+	if (hdl->type == LIBNVME_TRANSPORT_HANDLE_TYPE_LOOPBACK) {
+		if (hdl->ctx->dry_run)
+			return __libnvme_exec_dry_run(hdl, cmd);
 		return __libnvme_loopback_io_passthru(hdl, cmd);
+	}
 
 	switch (cmd->opcode) {
 	case nvme_cmd_flush:
@@ -2501,8 +2527,11 @@ __shr_public int libnvme_exec_admin_passthru(
 	if (!hdl || !cmd)
 		return -EINVAL;
 
-	if (hdl->type == LIBNVME_TRANSPORT_HANDLE_TYPE_LOOPBACK)
+	if (hdl->type == LIBNVME_TRANSPORT_HANDLE_TYPE_LOOPBACK) {
+		if (hdl->ctx->dry_run)
+			return __libnvme_exec_dry_run(hdl, cmd);
 		return __libnvme_loopback_admin_passthru(hdl, cmd);
+	}
 
 	if (hdl->type != LIBNVME_TRANSPORT_HANDLE_TYPE_DIRECT)
 		return -ENOTSUP;
