@@ -423,7 +423,7 @@ struct __packed vu_event_id_str_table_entry {
 };
 
 
-struct __packed ocp_telemetry_parse_options {
+struct ocp_telemetry_parse_options {
 	char *telemetry_log;
 	char *string_log;
 	char *output_file;
@@ -882,13 +882,13 @@ int parse_statistics(struct json_object *root, struct nvme_ocp_telemetry_offsets
  * @brief parses a single statistic data to text or json formats
  *
  * @param pstatistic_entry, statistic entry pointer
- * @param pstats_array, stats array pointer
+ * @param pstat_obj, JSON object which receives the statistic, or NULL
  * @param fp, input file pointer
  *
  * @return 0 success
  */
 int parse_statistic(struct nvme_ocp_telemetry_statistic_descriptor *pstatistic_entry,
-	struct json_object *pstats_array, FILE *fp);
+	struct json_object *pstat_obj, FILE *fp);
 
 /**
  * @brief parses event fifos data to text or json formats
