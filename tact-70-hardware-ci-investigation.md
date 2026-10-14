@@ -35,12 +35,12 @@ If you read nothing else, read the [TL;DR](#tldr) and [Part 5 (Recommendation)](
 - The upstream test rig exists to solve **one hard problem**: let an automated test grab a **real, physical NVMe SSD** and run destructive tests on it, inside a **disposable virtual machine** that can boot **any kernel version**, triggered automatically from a GitHub workflow — over and over, unattended, on shared hardware.
 - To do that at the scale of the whole Linux kernel community, they built a **Kubernetes cluster** (a fleet-management system) with roughly ten cooperating subsystems. **Most of that complexity is a consequence of scale and of kernel-development needs that Micron does not share.**
 - The genuinely essential core is small: dedicate a **real, physical SSD** to the tests, run them, wipe the drive, repeat. Everything beyond that is a cost-and-logistics choice — chiefly whether to use two machines (one per OS, bare metal) or consolidate onto one, which runs Linux on bare metal and Windows in a virtual machine with the SSD handed over via **PCIe passthrough** (requiring the platform's **IOMMU**, the I/O Memory Management Unit).
-- **Recommendation:** Micron almost certainly does **not** need the Kubernetes machinery. Start with the simplest thing that works and only add complexity if a concrete need forces it. Three configurations fit, all solid starting points (detailed in [Part 5](#part-5--recommended-approach-for-micron)):
-  1. **Two bare-metal boxes** — one Linux, one Windows, each with its own drive; tests run directly on each host.
+- **Recommendation:** Micron almost certainly does **not** need the Kubernetes machinery. Start with the simplest thing that works and only add complexity if a concrete need forces it. **Config 1 is the recommendation**; move to Config 2, then Config 3, if you need a single-machine footprint or want disposable-VM isolation (all detailed in [Part 5](#part-5--recommended-approach-for-micron)):
+  1. **Two bare-metal boxes (recommended)** — one Linux, one Windows, each with its own drive; tests run directly on each host. Simplest and highest fidelity; no VM or passthrough.
   2. **One consolidated host, one drive per OS** — Linux on bare metal, Windows in a VM, a drive each; runs go concurrently.
   3. **One consolidated host, shared drive** — Linux on bare metal, Windows in a VM, sharing a single drive; runs go sequentially.
 
-  The choice is a cost/fidelity/concurrency call for the infrastructure owner.
+  Configs 2 and 3 trade some fidelity and added VM/passthrough complexity for a smaller footprint and disposable-VM isolation of the Windows runs; their "a" variants (Part 5) extend that isolation to Linux too.
 - nvme-cli builds on Windows, and its end-to-end (e2e) test suite is already Windows-aware. The net-new engineering is **infrastructure**: a Windows test target with a real Micron drive and the CI wiring to run the existing suite against it.
 
 ---
@@ -270,9 +270,9 @@ The right configuration balances five factors:
 - **Fidelity** — running on bare hardware eliminates any behavior introduced by virtualization or drive passthrough; a VM gives up a little fidelity in exchange for isolation, reproducibility, or lower cost.
 - **Concurrency** — a shared drive forces the Linux and Windows runs to go sequentially; a drive per OS lets them run at the same time.
 
-The sections below give the **end-to-end configurations** these factors produce, in roughly increasing complexity. **Config 1, 2, or 3 is the right starting point; escalate only if a concrete need forces it.** Wherever Windows runs in a VM (Config 2/3), the VM host is Linux (KVM/libvirt); Config 4 is the exception.
+The sections below give the **end-to-end configurations** these factors produce, in roughly increasing complexity. **Config 1 (two bare-metal boxes) is the recommendation; move to Config 2, then Config 3, if a single-machine footprint or disposable-VM isolation is needed, and escalate beyond that only if a concrete need forces it.** Wherever Windows runs in a VM (Config 2/3), the VM host is Linux (KVM/libvirt); Config 4 is the exception.
 
-### <a name="config-1"></a>Config 1 — Two bare-metal boxes (simplest)
+### <a name="config-1"></a>Config 1 — Two bare-metal boxes (recommended)
 One Linux box and one Windows box, each with its own dedicated, sacrificial Micron SSD. Tests run **directly on each host** — no VM, no passthrough, no Kubernetes. Both boxes run the `nvme-cli` e2e suite against their physical drive; the Linux box additionally runs blktests, which is Linux-only.
 - **Machines / drives:** 2 machines, 1 drive each.
 - **Isolation:** none — fine when each box is dedicated and the code is trusted.
@@ -314,7 +314,13 @@ The Linux rig (bare-metal or single-VM) plus a **dedicated Windows Server** mach
 - **Cost:** a second, server-class machine plus a separate automation stack to maintain.
 
 ### <a name="config-5"></a>Config 5 — Full upstream cluster (only if scale demands)
-Adopt the upstream KubeVirt/Kubernetes stack only if **three conditions hold at once**: many drives or machines tested *concurrently*, a per-job *arbitrary-kernel* matrix, and isolation of *untrusted outside code*. Absent any one of them, this stack is far more machinery than the job requires. It also carries real security-review liability — privileged containers, an insecure internal registry, a self-signed certificate, and broad GitHub permissions.
+Adopt the upstream KubeVirt/Kubernetes stack only if **three conditions hold at once**: many drives or machines tested *concurrently*, a per-job *arbitrary-kernel* matrix, and isolation of *untrusted outside code*. Absent any one of them, this stack is far more machinery than the job requires.
+
+Beyond the operational cost, it carries security-review liabilities that Configs 1–4 avoid entirely:
+- **Privileged containers:** the stack runs the tests in containers with elevated host access, which strips away the isolation a container normally provides. That is a likely policy violation.
+- **Insecure internal registry:** the cluster's container registry runs over plain HTTP.
+- **Self-signed TLS interception:** it stands up its own in-cluster TLS interceptor with a self-signed certificate rather than trusting the corporate CA.
+- **Broad GitHub permissions:** the ARC runner integration needs wider GitHub access than a single-repo self-hosted runner.
 
 ---
 
@@ -343,8 +349,8 @@ Two independent resets happen per run, and they should not be conflated:
 
 This is the same model upstream uses — a KubeVirt **containerDisk** is a read-only base image with an ephemeral copy-on-write layer that KubeVirt discards when the VM is torn down. The only difference is distribution: upstream ships the base as a container image through a registry (needing [CDI](#cdi) and the private registry), whereas a single host keeps the golden image as a local qcow2 file and skips that plumbing entirely.
 
-### <a name="windows-device"></a>How is the drive identified to the test on Windows?
-The e2e suite takes the drive as explicit **`--controller` / `--ns1`** arguments rather than discovering it itself; the test harness supplies them. Upstream's Linux harness already does this (that is what its `BDEV0` plumbing feeds). A Windows harness, still to be designed, would work the same way. The only difference is the value: a Windows physical-disk path such as `\\.\PhysicalDriveN`, rather than a Linux device node such as `/dev/nvme0`.
+### <a name="windows-device"></a>Identifying the drive to the test (Windows)
+The e2e suite takes the drive as explicit **`--controller` / `--ns1`** arguments rather than discovering it itself; the test harness supplies them. Upstream's Linux harness already does this using the `BDEV0` environment variable. A Windows harness, still to be designed, would work the same way. The only difference is the value: a Windows physical-disk path such as `\\.\PhysicalDriveN`, rather than a Linux device node such as `/dev/nvme0`.
 
 ---
 
@@ -352,24 +358,52 @@ The e2e suite takes the drive as explicit **`--controller` / `--ns1`** arguments
 
 > ⚠️ **Draft estimates — to be validated with Kevin Kennedy and Micron IT.** These are order-of-magnitude, for the ART request.
 
-**Hardware ([Config 2](#config-2) / [Config 3](#config-3) — single consolidated host):**
-- 1 × server-class machine with a CPU/board supporting **[IOMMU](#iommu)** (Intel VT-d or AMD-Vi) — this is standard on server platforms.
-- 1+ × **dedicated/sacrificial Micron NVMe SSD(s)** for testing, in **non-boot** slots. (One per drive model you want covered; a ZNS model too if you test zoned. Config 2 needs at least two so Linux and Windows runs can go concurrently.)
-- A separate boot drive for the host OS.
-- No special networking or switch requirements at single-node scale. (Upstream's ConnectX-6 NICs and 3-node cluster are scale features you don't need.)
+BOMs for the three starting-point configs follow. [Config 4](#config-4) and [Config 5](#config-5) are escalations, itemized only if a concrete need forces them.
 
-> This BOM is for the **single consolidated host** ([Config 2](#config-2), one drive per OS; [Config 3](#config-3), one shared drive). **[Config 1](#config-1)** (two bare-metal boxes) instead uses two simpler machines, one Linux and one Windows, each with its own dedicated Micron drive, and needs no IOMMU/passthrough.
+**Note on test drives:** counts below assume one drive model under test. Add one test drive per additional model you want to cover (including a ZNS model, if you test zoned).
 
-**Software (all open-source, no license cost except Windows):**
-- Linux host OS; QEMU/KVM + libvirt (Config 2 / Config 3); a self-hosted CI runner.
-- **Windows Server license + activation** (KMS/MAK) for the Windows test VM under Config 2 / Config 3.
+**[Config 1](#config-1) — Two bare-metal boxes**
+
+Hardware:
+- 2 × machines (1 Linux, 1 Windows); no IOMMU or passthrough required
+- 2 × boot/OS drives (1 per machine)
+- 2 × dedicated/sacrificial Micron NVMe test SSDs in non-boot slots (1 per machine)
+
+Software:
+- Linux OS (Linux machine)
+- Windows OS + license/activation (Windows machine)
+- 1 × self-hosted CI runner per machine
+
+**[Config 2](#config-2) — Consolidated host, one drive per OS (concurrent)**
+
+Hardware:
+- 1 × server-class machine whose CPU/board supports **[IOMMU](#iommu)** (Intel VT-d or AMD-Vi)
+- 1 × boot/OS drive
+- 2 × dedicated/sacrificial Micron NVMe test SSDs in non-boot slots
+
+Software:
+- Linux host OS; QEMU/KVM + libvirt
+- Windows Server license + activation for the Windows test VM
+- 1 × self-hosted CI runner
+
+**[Config 3](#config-3) — Consolidated host, shared drive (sequential)**
+
+Hardware:
+- 1 × server-class machine whose CPU/board supports **[IOMMU](#iommu)** (Intel VT-d or AMD-Vi)
+- 1 × boot/OS drive
+- 1 × dedicated/sacrificial Micron NVMe test SSD in a non-boot slot
+
+Software:
+- Linux host OS; QEMU/KVM + libvirt
+- Windows Server license + activation for the Windows test VM
+- 1 × self-hosted CI runner
 
 **Rough effort (engineering):**
-- Config 1 bare-metal rig + wire up a self-hosted runner: **small** (days).
-- Config 2 / Config 3 passthrough + VM-launch script (salvaging upstream's host-binding + drive-prep logic): **small–medium** (≈1–2 weeks).
+- Config 1 bare-metal rig + self-hosted runner: **small** (days).
+- Config 2 / Config 3 passthrough + VM-launch script (salvaging upstream's host-binding and drive-prep logic): **small–medium** (≈2–3 weeks).
 - Build + maintain the **Windows test VM image** (drivers, unattended boot, OpenSSH, nvme-cli): **medium**.
-- Wire up the CI job that runs the existing Windows-aware e2e suite against the drive: **small**. (The test code already runs on Windows; a short gap-review confirms which commands stay skipped versus become testable.)
-- Approvals (ART architecture + security review, IT provisioning): **calendar time, not engineering time** — start early.
+- Wire up the CI job that runs the existing Windows-aware e2e suite against the drive: **small**.
+- Approvals (ART architecture + security review, IT provisioning): **calendar time, not engineering time**. Start early.
 
 ---
 
@@ -381,20 +415,18 @@ The e2e suite takes the drive as explicit **`--controller` / `--ns1`** arguments
 - The single-node vs cluster decision and why.
 
 **Security review will want to see (and these are the upstream red flags to explicitly *not* inherit):**
-- **Network isolation / attack surface:** the rig is a potential entry point into Micron's internal network — a compromised run could attempt lateral movement, not just wipe the test drive. How the machine is placed and segmented (dedicated/quarantined VLAN, east-west restrictions, egress policy) is a security-review and IT decision, not one this document makes; see Kevin Kennedy (IT MFG) and ART. Note that "Micron-managed" need not mean "on the flat internal network." *(This is the primary concern driving this review.)*
+- **Network placement / isolation:** how the machine is placed and segmented on Micron's network is an IT and security-review decision, not one this document makes. We assume IT can isolate it appropriately; see Kevin Kennedy (IT MFG) and ART.
 - **Untrusted-code isolation:** whether outside-contributor PRs can ever run on this hardware. If yes, the ephemeral-VM isolation and GitHub "require approval for outside collaborators" settings matter; if no, the risk drops sharply.
-- **Privileged containers:** upstream runs privileged Docker-in-Docker containers — a likely policy violation. Only the full upstream cluster (Config 5) brings these; Configs 1–4 avoid them entirely.
-- **Insecure internal registry:** upstream's registry runs over plain HTTP — avoid by not having one.
-- **TLS interception:** do **not** stand up a second in-cluster interceptor with a self-signed certificate; instead trust Micron's existing corporate CA and route through Micron's existing proxy.
+- **TLS interception:** trust Micron's existing corporate CA and route through Micron's existing proxy; don't introduce a separate interceptor.
 - **CI credential scope:** if using GitHub, the runner needs a GitHub App or token — scope it to the single repo with least privilege (the upstream README documents the exact minimal permission set).
 - **Supply chain:** where do container/VM base images come from; pin versions (no `:latest`); mirror or vet anything pulled from the public internet.
 
 **External dependencies / open questions for Micron (need Kevin Kennedy — IT MFG):**
 - <a name="firewall"></a>**Firewall/proxy:** the corporate CA certificate and proxy endpoint; whether the rig sits inside or outside the corporate firewall; whether outbound GitHub/registry access is permitted or must be mirrored internally.
 - **Git host:** GitHub.com vs a Micron-internal Git host (changes the runner setup).
-- **Bare-metal provisioning + reboot approval:** IT process for a dedicated lab machine and for the one-time reboot needed to enable passthrough.
-- **Windows licensing:** a Windows license + activation for whichever Windows test environment the chosen config uses (a KMS-activatable Windows Server image from IT for the Config 2 / Config 3 VM, or a license for the bare-metal/DDA Windows box under Config 1/Config 4).
-- **Whether an existing Micron VM farm or lab could host this** instead of new hardware.
+- **Bare-metal provisioning + reboot approval:** IT process for a dedicated lab machine and for the one-time reboot needed to enable passthrough. At bring-up, confirm the test NVMe sits in its own IOMMU group (routine on server-class hardware); if it shares a group with other devices, passthrough pulls those off the host too.
+- **Windows licensing:** a Windows license + activation for whichever Windows test environment the chosen config uses (a Windows Server image from IT for the Config 2 / Config 3 VM, or a license for the bare-metal/DDA Windows box under Config 1/Config 4).
+- **Whether an existing Micron VM farm or lab could host this** instead of new hardware — specifically, whether it can provide a dedicated bare-metal node (Config 1) or a host that supports PCIe passthrough (Config 2/3).
 - **Contribute-to-upstream question:** can Micron borrow capacity from / donate drives to the upstream cluster instead of building its own? Likely **no** for internal-only firmware, but worth confirming as it may cover *public* firmware testing cheaply.
 
 ---
@@ -460,7 +492,6 @@ The e2e suite takes the drive as explicit **`--controller` / `--ns1`** arguments
 | **runner (CI)** | The machine/process that executes a CI job. "Self-hosted" = one you provide. |
 | **StorageClass** | A named kind of storage a Kubernetes workload can request. |
 | **<a name="tls"></a>TLS (Transport Layer Security)-inspecting firewall** | A corporate firewall that decrypts, inspects, and re-encrypts internet traffic. |
-| **UEFI (Unified Extensible Firmware Interface)** | Modern boot firmware that replaces the legacy BIOS; Windows guests require it. |
 | **vfio-pci (Virtual Function I/O)** | The Linux driver that "parks" a device so a VM can claim it for passthrough. |
 | **VM (virtual machine)** | A complete fake computer running as software inside a real one. |
 | **VT-d (Virtualization Technology for Directed I/O)** | Intel's name for the [IOMMU](#iommu) feature. |
