@@ -33,6 +33,24 @@
  * kernel, the opcode bit 0 selects the data direction: host to controller
  * commands send the data and metadata buffers with the request, all other
  * commands get them back with the response.
+ *
+ * The other per-handle ops mirror the libnvme function of the same name.
+ * The helper calls the function on its handle and returns the return
+ * value as status.
+ *
+ * SED requests carry a struct libnvme_privsep_sed. The helper issues only
+ * the IOC_OPAL_* ioctls which libnvme uses. All of them pass a fixed size
+ * argument to the kernel and return nothing but the status.
+ *
+ * FABRICS is a transfer on /dev/nvme-fabrics and uses the handle id 0.
+ * The payload is the connect argument string without the terminating NUL,
+ * or empty to read the options the kernel accepts. The response payload
+ * is the text the kernel returned, shorter than LIBNVME_PRIVSEP_MAX_FABRICS.
+ * On failure, result is the step which failed.
+ *
+ * DELETE_CTRL disconnects a fabrics controller like
+ * libnvmf_disconnect_ctrl() and uses the handle id 0. The payload is the
+ * NUL-terminated controller name, nvmeX.
  */
 
 #define LIBNVME_PRIVSEP_VERSION		1
@@ -41,6 +59,8 @@
 #define LIBNVME_PRIVSEP_FD		3
 
 #define LIBNVME_PRIVSEP_MAX_NAME	64
+#define LIBNVME_PRIVSEP_MAX_REGS	4096
+#define LIBNVME_PRIVSEP_MAX_FABRICS	4096
 #define LIBNVME_PRIVSEP_MAX_DATA	(8 * 1024 * 1024)
 #define LIBNVME_PRIVSEP_MAX_PAYLOAD	(LIBNVME_PRIVSEP_MAX_DATA + 4096)
 
@@ -50,6 +70,18 @@ enum libnvme_privsep_op {
 	LIBNVME_PRIVSEP_OP_CLOSE	= 3,
 	LIBNVME_PRIVSEP_OP_ADMIN	= 4,
 	LIBNVME_PRIVSEP_OP_IO		= 5,
+	LIBNVME_PRIVSEP_OP_RESET_CTRL	= 6,
+	LIBNVME_PRIVSEP_OP_RESET_SUBSYSTEM = 7,
+	LIBNVME_PRIVSEP_OP_RESCAN_NS	= 8,
+	LIBNVME_PRIVSEP_OP_GET_NSID	= 9,	/* result: nsid */
+	LIBNVME_PRIVSEP_OP_REREAD_PARTITIONS = 10,
+	LIBNVME_PRIVSEP_OP_UPDATE_BLOCK_SIZE = 11,
+	LIBNVME_PRIVSEP_OP_READ_REGS	= 12,	/* response: the registers */
+	LIBNVME_PRIVSEP_OP_WRITE_REG32	= 13,
+	LIBNVME_PRIVSEP_OP_WRITE_REG64	= 14,
+	LIBNVME_PRIVSEP_OP_SED		= 15,
+	LIBNVME_PRIVSEP_OP_FABRICS	= 16,
+	LIBNVME_PRIVSEP_OP_DELETE_CTRL	= 17,
 };
 
 struct libnvme_privsep_req {
@@ -74,6 +106,34 @@ struct libnvme_privsep_open {
 /* OPEN response payload. */
 struct libnvme_privsep_open_resp {
 	__u32 mode;	/* S_IFCHR, S_IFBLK or 0 */
+	__u32 rsvd;
+};
+
+/* UPDATE_BLOCK_SIZE payload. */
+struct libnvme_privsep_block_size {
+	__s32 block_size;
+	__u32 rsvd;
+};
+
+/* FABRICS result: the step which failed. */
+enum libnvme_privsep_fabrics_step {
+	LIBNVME_PRIVSEP_FABRICS_OPEN	= 0,
+	LIBNVME_PRIVSEP_FABRICS_WRITE	= 1,
+	LIBNVME_PRIVSEP_FABRICS_READ	= 2,
+};
+
+/* READ_REGS, WRITE_REG32 and WRITE_REG64 payload. */
+struct libnvme_privsep_reg {
+	__u64 value;	/* WRITE_REG32 and WRITE_REG64 */
+	__u32 offset;
+	__u32 len;	/* READ_REGS, at most LIBNVME_PRIVSEP_MAX_REGS */
+	__u32 mmio32;	/* WRITE_REG64 */
+	__u32 rsvd;
+};
+
+/* SED payload: followed by the argument of the ioctl request. */
+struct libnvme_privsep_sed {
+	__u32 request;
 	__u32 rsvd;
 };
 

@@ -337,3 +337,129 @@ int __libnvme_privsep_io_passthru(struct libnvme_transport_handle *hdl,
 {
 	return privsep_passthru(hdl, LIBNVME_PRIVSEP_OP_IO, cmd);
 }
+
+int __libnvme_privsep_op(struct libnvme_transport_handle *hdl, __u32 op,
+		const void *arg, size_t arg_len, void *out, size_t out_len,
+		__u64 *result)
+{
+	struct libnvme_privsep *ps = hdl->privsep;
+	struct privsep_reply reply;
+	int ret;
+
+	ret = privsep_call(ps, op, hdl->privsep_id, arg, arg_len, NULL, 0,
+			   NULL, 0, &reply);
+	if (ret)
+		return ret;
+
+	/* The output is only returned on success. */
+	if (reply.status)
+		out_len = 0;
+	ret = privsep_check_len(ps, &reply, out_len);
+	if (!ret)
+		ret = privsep_recv_payload(ps, out, out_len);
+	if (ret)
+		return ret;
+
+	if (result)
+		*result = reply.result;
+	return reply.status;
+}
+
+int __libnvme_privsep_sed_ioctl(struct libnvme_transport_handle *hdl,
+		__u32 request, const void *arg, size_t size)
+{
+	struct libnvme_privsep *ps = hdl->privsep;
+	struct libnvme_privsep_sed sed = {
+		.request = request,
+	};
+	struct privsep_reply reply;
+	int ret;
+
+	ret = privsep_call(ps, LIBNVME_PRIVSEP_OP_SED, hdl->privsep_id,
+			   &sed, sizeof(sed), arg, size, NULL, 0, &reply);
+	if (!ret)
+		ret = privsep_check_len(ps, &reply, 0);
+
+	return ret ? ret : reply.status;
+}
+
+static int privsep_fabrics_step(__u64 result, enum libnvmf_dev_step *step)
+{
+	switch (result) {
+	case LIBNVME_PRIVSEP_FABRICS_OPEN:
+		*step = LIBNVMF_DEV_OPEN;
+		return 0;
+	case LIBNVME_PRIVSEP_FABRICS_WRITE:
+		*step = LIBNVMF_DEV_WRITE;
+		return 0;
+	case LIBNVME_PRIVSEP_FABRICS_READ:
+		*step = LIBNVMF_DEV_READ;
+		return 0;
+	}
+
+	return -EPROTO;
+}
+
+ssize_t __libnvme_privsep_fabrics(struct libnvme_privsep *ps,
+		const char *args, char *buf, size_t size,
+		enum libnvmf_dev_step *step)
+{
+	size_t len = args ? strlen(args) : 0;
+	struct privsep_reply reply;
+	int ret;
+
+	*step = LIBNVMF_DEV_WRITE;
+	if (args && (!len || len >= LIBNVME_PRIVSEP_MAX_FABRICS))
+		return -EINVAL;
+
+	*step = LIBNVMF_DEV_OPEN;
+	ret = privsep_call(ps, LIBNVME_PRIVSEP_OP_FABRICS, 0, args, len,
+			   NULL, 0, NULL, 0, &reply);
+	if (ret)
+		return ret;
+
+	if (reply.status) {
+		ret = privsep_check_len(ps, &reply, 0);
+		if (ret)
+			return ret;
+		if (reply.status > 0 ||
+		    privsep_fabrics_step(reply.result, step)) {
+			ps->broken = true;
+			return -EPROTO;
+		}
+		return reply.status;
+	}
+
+	*step = LIBNVMF_DEV_READ;
+	if (reply.len >= size) {
+		ps->broken = true;
+		return -EPROTO;
+	}
+	ret = privsep_recv_payload(ps, buf, reply.len);
+	if (ret)
+		return ret;
+	buf[reply.len] = '\0';
+
+	return reply.len;
+}
+
+int __libnvme_privsep_delete_ctrl(struct libnvme_privsep *ps,
+		const char *name)
+{
+	struct privsep_reply reply;
+	size_t len;
+	int ret;
+
+	if (!name)
+		return -EINVAL;
+	len = strlen(name) + 1;
+	if (len > LIBNVME_PRIVSEP_MAX_NAME)
+		return -ENAMETOOLONG;
+
+	ret = privsep_call(ps, LIBNVME_PRIVSEP_OP_DELETE_CTRL, 0, name, len,
+			   NULL, 0, NULL, 0, &reply);
+	if (!ret)
+		ret = privsep_check_len(ps, &reply, 0);
+
+	return ret ? ret : reply.status;
+}

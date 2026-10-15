@@ -459,6 +459,13 @@ bool __libnvme_decide_retry(struct libnvme_transport_handle *hdl,
 int __libnvme_exec_dry_run(struct libnvme_transport_handle *hdl,
 		struct libnvme_passthru_cmd *cmd);
 
+/* The steps of a /dev/nvme-fabrics transfer. */
+enum libnvmf_dev_step {
+	LIBNVMF_DEV_OPEN	= 0,
+	LIBNVMF_DEV_WRITE	= 1,
+	LIBNVMF_DEV_READ	= 2,
+};
+
 int __libnvme_transport_handle_open_privsep(
 		struct libnvme_transport_handle *hdl, const char *name,
 		int flags);
@@ -468,6 +475,16 @@ int __libnvme_privsep_admin_passthru(struct libnvme_transport_handle *hdl,
 		struct libnvme_passthru_cmd *cmd);
 int __libnvme_privsep_io_passthru(struct libnvme_transport_handle *hdl,
 		struct libnvme_passthru_cmd *cmd);
+int __libnvme_privsep_op(struct libnvme_transport_handle *hdl, __u32 op,
+		const void *arg, size_t arg_len, void *out, size_t out_len,
+		__u64 *result);
+int __libnvme_privsep_sed_ioctl(struct libnvme_transport_handle *hdl,
+		__u32 request, const void *arg, size_t size);
+ssize_t __libnvme_privsep_fabrics(struct libnvme_privsep *ps,
+		const char *args, char *buf, size_t size,
+		enum libnvmf_dev_step *step);
+int __libnvme_privsep_delete_ctrl(struct libnvme_privsep *ps,
+		const char *name);
 
 #ifdef CONFIG_MI
 struct nvme_mi_msg_hdr;

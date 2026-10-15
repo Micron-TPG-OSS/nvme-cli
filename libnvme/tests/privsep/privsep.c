@@ -8,6 +8,7 @@
  * Runs nvme-privsep-helper with mock-ioctl preloaded. Usage:
  * test-privsep HELPER MOCK_LIBRARY
  */
+#include <endian.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -20,8 +21,14 @@
 
 #include <ccan/array_size/array_size.h>
 
+#include <shared/fs-util.h>
+#include <shared/io-util.h>
+
 #include <libnvme.h>
 #include <libnvme-privsep.h>
+#ifdef TEST_SED
+#include <libnvme-sed.h>
+#endif
 
 #include "../ioctl/util.h"
 #include "mock.h"
@@ -218,7 +225,40 @@ static void test_no_fd(struct libnvme_transport_handle *hdl)
 {
 	check(libnvme_transport_handle_get_fd(hdl) == LIBNVME_INVALID_FD,
 	      "privsep handle exposes a file descriptor");
-	check(libnvme_reset_ctrl(hdl) < 0, "reset on a privsep handle");
+}
+
+static void test_device_ops(void)
+{
+	struct libnvme_transport_handle *c, *n;
+	__u32 nsid = 0;
+
+	check(!libnvme_open(ctx, "nvme0", O_RDONLY, &c), "open nvme0");
+	check(!libnvme_open(ctx, "/dev/nvme0n1", O_RDONLY, &n),
+	      "open nvme0n1");
+	check(libnvme_transport_handle_is_ctrl(c), "nvme0 is no controller");
+	check(libnvme_transport_handle_is_ns(n), "nvme0n1 is no namespace");
+
+	check(!libnvme_reset_ctrl(c), "reset failed");
+	check(libnvme_reset_ctrl(n) == -EINVAL, "reset on a namespace");
+	check(libnvme_reset_subsystem(c) == -EBUSY,
+	      "subsystem reset error not returned");
+	check(!libnvme_rescan_ns(c), "rescan failed");
+
+	check(!libnvme_get_nsid(n, &nsid), "get nsid failed");
+	check(nsid == MOCK_NSID, "nsid %u", nsid);
+	check(libnvme_get_nsid(c, &nsid) == -ENOTTY,
+	      "nsid of a controller");
+
+	check(!libnvme_reread_partitions(n), "reread partitions failed");
+	check(libnvme_reread_partitions(c) == -EINVAL,
+	      "reread partitions on a controller");
+	check(!libnvme_update_block_size(n, MOCK_BLOCK_SIZE),
+	      "update block size failed");
+	check(libnvme_update_block_size(n, 512) == -EINVAL,
+	      "invalid block size accepted");
+
+	libnvme_close(c);
+	libnvme_close(n);
 }
 
 static void test_dry_run(struct libnvme_transport_handle *hdl)
@@ -235,6 +275,250 @@ static void test_dry_run(struct libnvme_transport_handle *hdl)
 	libnvme_set_dry_run(ctx, false);
 	check(!data[1], "dry-run reached the helper");
 }
+
+static char resource0[64];
+
+/* Fills the BAR with the dwords 0x10000000 + byte offset. */
+static void create_resource0(void)
+{
+	__le32 bar[1024];
+	size_t i;
+	int fd;
+
+	for (i = 0; i < ARRAY_SIZE(bar); i++)
+		bar[i] = htole32(0x10000000 + i * 4);
+
+	snprintf(resource0, sizeof(resource0), "/tmp/test-privsep-XXXXXX");
+	fd = mkstemp(resource0);
+	check(fd >= 0, "mkstemp: %m");
+	check(!shr_write_all(fd, bar, sizeof(bar)), "write: %m");
+	close(fd);
+	check(!setenv("MOCK_RESOURCE0", resource0, 1), "setenv");
+}
+
+static __u64 bar_read(__u32 offset, size_t len)
+{
+	__le64 val = 0;
+	int fd;
+
+	fd = open(resource0, O_RDONLY);
+	check(fd >= 0, "open: %m");
+	check(pread(fd, &val, len, offset) == (ssize_t)len, "pread: %m");
+	close(fd);
+
+	return le64toh(val);
+}
+
+static void test_regs(void)
+{
+	struct libnvme_transport_handle *c, *n;
+	__le32 regs[4];
+	size_t i;
+
+	check(!libnvme_open(ctx, "nvme0", O_RDWR, &c), "open nvme0");
+	check(!libnvme_open(ctx, "nvme0n1", O_RDONLY, &n), "open nvme0n1");
+
+	memset(regs, 0, sizeof(regs));
+	check(!libnvme_read_regs(c, 0x20, regs, sizeof(regs)),
+	      "read regs failed");
+	for (i = 0; i < ARRAY_SIZE(regs); i++)
+		check(le32toh(regs[i]) == 0x10000020 + i * 4,
+		      "reg %#zx = %#x", 0x20 + i * 4, le32toh(regs[i]));
+
+	check(!libnvme_write_reg32(c, 0x14, 0xdeadbeef),
+	      "write reg32 failed");
+	check(bar_read(0x14, 4) == 0xdeadbeef, "reg32 not written");
+	check(bar_read(0x18, 4) == 0x10000018, "reg32 overwrote 0x18");
+
+	check(!libnvme_write_reg64(c, 0x28, 0x1122334455667788ULL, false),
+	      "write reg64 failed");
+	check(bar_read(0x28, 8) == 0x1122334455667788ULL,
+	      "reg64 not written");
+	check(!libnvme_write_reg64(c, 0x30, 0x8877665544332211ULL, true),
+	      "write reg64 as 2 x 32 bit failed");
+	check(bar_read(0x30, 8) == 0x8877665544332211ULL,
+	      "reg64 not written as 2 x 32 bit");
+
+	check(libnvme_read_regs(n, 0, regs, sizeof(regs)) == -EINVAL,
+	      "read regs of a namespace");
+	check(libnvme_write_reg32(n, 0x14, 0) == -EINVAL,
+	      "write reg32 of a namespace");
+
+	libnvme_close(c);
+	libnvme_close(n);
+}
+
+#ifdef TEST_SED
+static void test_sed(void)
+{
+	struct libnvme_sed_key key = {
+		.type = LIBNVME_SED_KEY_INCLUDED,
+		.len = strlen(MOCK_SED_PASSWORD),
+	};
+	struct libnvme_transport_handle *c, *n;
+
+	memcpy(key.key, MOCK_SED_PASSWORD, key.len);
+	check(!libnvme_open(ctx, "nvme0", O_RDONLY, &c), "open nvme0");
+	check(!libnvme_open(ctx, "nvme0n1", O_RDWR, &n), "open nvme0n1");
+
+	check(!libnvme_sed_take_ownership(n, &key), "take ownership failed");
+	check(!libnvme_sed_lock_unlock(n, &key, LIBNVME_SED_LOCK_RW),
+	      "unlock failed");
+	check(libnvme_sed_lock_unlock(n, &key, LIBNVME_SED_LOCK_LK) ==
+	      MOCK_TCG_INVALID_PARAM, "lock state not passed");
+	check(libnvme_sed_take_ownership(c, &key) == -EINVAL,
+	      "take ownership of a controller");
+
+	key.key[0] = 'P';
+	check(libnvme_sed_take_ownership(n, &key) == MOCK_TCG_NOT_AUTHORIZED,
+	      "TCG status not returned");
+
+	libnvme_close(c);
+	libnvme_close(n);
+}
+#else
+static void test_sed(void)
+{
+}
+#endif
+
+#ifdef TEST_FABRICS
+static char sysfs[64], connect_log[64], delete_ctrl[64];
+
+static void write_file(const char *dir, const char *name, const char *text)
+{
+	char path[256];
+	int fd;
+
+	snprintf(path, sizeof(path), "%s/%s", dir, name);
+	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	check(fd >= 0, "create %s: %m", path);
+	check(!shr_write_all(fd, text, strlen(text)), "write %s: %m", path);
+	close(fd);
+}
+
+/*
+ * The sysfs entries which libnvme_init_ctrl() reads for the controller
+ * the mock connects. The client process reads them, not the helper.
+ */
+static void create_sysfs(void)
+{
+	char path[256];
+	int fd;
+
+	snprintf(sysfs, sizeof(sysfs), "/tmp/test-privsep-sysfs-XXXXXX");
+	check(mkdtemp(sysfs), "mkdtemp: %m");
+
+	snprintf(path, sizeof(path), "%s/sys/class/nvme/nvme%d", sysfs,
+		 MOCK_INSTANCE);
+	check(!shr_mkdir_p(path, 0755), "mkdir %s", path);
+	write_file(path, "address", "traddr=192.168.1.1,trsvcid=4420\n");
+	write_file(path, "state", "live\n");
+	write_file(path, "subsysnqn", MOCK_NQN "\n");
+	write_file(path, "transport", "tcp\n");
+
+	snprintf(path, sizeof(path),
+		 "%s/sys/class/nvme-subsystem/nvme-subsys%d/nvme%d", sysfs,
+		 MOCK_INSTANCE, MOCK_INSTANCE);
+	check(!shr_mkdir_p(path, 0755), "mkdir %s", path);
+	snprintf(path, sizeof(path),
+		 "%s/sys/class/nvme-subsystem/nvme-subsys%d", sysfs,
+		 MOCK_INSTANCE);
+	write_file(path, "subsysnqn", MOCK_NQN "\n");
+
+	snprintf(connect_log, sizeof(connect_log),
+		 "/tmp/test-privsep-connect-XXXXXX");
+	fd = mkstemp(connect_log);
+	check(fd >= 0, "mkstemp: %m");
+	close(fd);
+	check(!setenv("MOCK_CONNECT_LOG", connect_log, 1), "setenv");
+
+	snprintf(delete_ctrl, sizeof(delete_ctrl),
+		 "/tmp/test-privsep-delete-XXXXXX");
+	fd = mkstemp(delete_ctrl);
+	check(fd >= 0, "mkstemp: %m");
+	close(fd);
+	check(!setenv("MOCK_DELETE_CTRL", delete_ctrl, 1), "setenv");
+}
+
+static void read_file(const char *path, char *buf, size_t size)
+{
+	ssize_t len;
+	int fd;
+
+	fd = open(path, O_RDONLY);
+	check(fd >= 0, "open %s: %m", path);
+	len = read(fd, buf, size - 1);
+	check(len >= 0, "read %s: %m", path);
+	buf[len] = '\0';
+	close(fd);
+}
+
+static int connect_ctrl(struct libnvme_host *h, const char *nqn,
+		struct libnvme_ctrl **cp)
+{
+	struct libnvmf_context *fctx;
+	int ret;
+
+	check(!libnvmf_context_create(ctx, NULL, NULL, NULL, NULL, &fctx),
+	      "create fabrics context");
+	check(!libnvmf_context_set_connection(fctx, nqn, "tcp",
+					      "192.168.1.1", "4420", NULL,
+					      NULL), "set connection");
+	check(!libnvmf_create_ctrl(ctx, fctx, cp), "create ctrl");
+	ret = libnvmf_add_ctrl(h, *cp);
+	libnvmf_context_free(fctx);
+
+	return ret;
+}
+
+static void test_fabrics(void)
+{
+	static const char hostnqn[] = "nqn.2026-10.io.example:host";
+	static const char hostid[] = "12345678-1234-1234-1234-123456789abc";
+	struct libnvme_ctrl *c, *refused;
+	struct libnvme_host *h;
+	char args[1024];
+	bool supported;
+	int ret;
+
+	/* The mock does not list tos, unlike current kernels. */
+	check(!libnvmf_kernel_option_supported(ctx, "ctrl_loss_tmo",
+					       &supported) && supported,
+	      "ctrl_loss_tmo not supported");
+	check(!libnvmf_kernel_option_supported(ctx, "tos", &supported) &&
+	      !supported, "options not read through the helper");
+
+	check(!libnvme_get_host(ctx, hostnqn, hostid, &h), "get host");
+
+	ret = connect_ctrl(h, MOCK_NQN, &c);
+	check(!ret, "connect failed: %d", ret);
+	check(!strcmp(libnvme_ctrl_get_name(c), "nvme5"), "ctrl name %s",
+	      libnvme_ctrl_get_name(c));
+
+	read_file(connect_log, args, sizeof(args));
+	check(strstr(args, "nqn=" MOCK_NQN) &&
+	      strstr(args, "transport=tcp") &&
+	      strstr(args, "traddr=192.168.1.1"),
+	      "connect arguments '%s'", args);
+
+	ret = connect_ctrl(h, MOCK_NQN_REFUSED, &refused);
+	check(ret == -ENVME_CONNECT_CONNREFUSED, "refused connect: %d", ret);
+	libnvme_free_ctrl(refused);
+
+	check(!libnvmf_disconnect_ctrl(c), "disconnect failed");
+	read_file(delete_ctrl, args, sizeof(args));
+	check(!strcmp(args, "1"), "delete_controller '%s'", args);
+}
+#else
+static void create_sysfs(void)
+{
+}
+
+static void test_fabrics(void)
+{
+}
+#endif
 
 static int retries;
 
@@ -278,6 +562,8 @@ int main(int argc, char **argv)
 
 	check(argc == 3, "usage: %s HELPER MOCK_LIBRARY", argv[0]);
 	check(!setenv("LD_PRELOAD", argv[2], 1), "setenv");
+	create_resource0();
+	create_sysfs();
 
 	test_spawn_failure();
 	test_closed_stdio(argv[1]);
@@ -286,6 +572,9 @@ int main(int argc, char **argv)
 	ctx = libnvme_create_global_ctx();
 	check(ctx, "create ctx");
 	libnvme_set_privsep(ctx, ps);
+#ifdef TEST_FABRICS
+	check(!libnvme_set_test_sysfs_dir(ctx, sysfs), "set sysfs dir");
+#endif
 
 	test_open_invalid();
 
@@ -300,10 +589,20 @@ int main(int argc, char **argv)
 	libnvme_close(hdl);
 
 	test_handles();
+	test_device_ops();
+	test_regs();
+	test_sed();
+	test_fabrics();
 	test_retry_broken();
 
 	libnvme_free_global_ctx(ctx);
 	libnvme_privsep_free(ps);
+	unlink(resource0);
+#ifdef TEST_FABRICS
+	shr_rmdir_recursive(sysfs);
+	unlink(connect_log);
+	unlink(delete_ctrl);
+#endif
 	printf("privsep tests passed\n");
 
 	return EXIT_SUCCESS;
