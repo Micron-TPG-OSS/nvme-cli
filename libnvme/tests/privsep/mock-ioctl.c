@@ -16,17 +16,55 @@
  * - opcode MOCK_OPC_EXIT terminates the helper
  * - buffers which are not page aligned fail with EINVAL, as the nvmet file
  *   backend does with direct I/O
+ *
+ * It also emulates the controller /dev/nvme0 and the namespace /dev/nvme0n1
+ * on top of /dev/null:
+ *
+ * - reset and rescan succeed, subsystem reset fails with EBUSY
+ * - the namespace has the nsid MOCK_NSID
+ * - BLKRRPART succeeds, BLKBSZSET accepts only MOCK_BLOCK_SIZE
+ * - the BAR of nvme0 is the file named by the MOCK_RESOURCE0 environment
+ *   variable
+ * - /dev/nvme-fabrics returns MOCK_FABRICS_OPTIONS, or after a connect
+ *   write MOCK_FABRICS_RESPONSE. A connect to MOCK_NQN_REFUSED fails with
+ *   ECONNREFUSED. The connect arguments are copied to the file named by the
+ *   MOCK_CONNECT_LOG environment variable.
+ * - the delete_controller attribute of nvme5 is the file named by the
+ *   MOCK_DELETE_CTRL environment variable; writes to the one of nvme6
+ *   return 0
+ * - IOC_OPAL_TAKE_OWNERSHIP and IOC_OPAL_LOCK_UNLOCK on the namespace
+ *   return the TCG status MOCK_TCG_NOT_AUTHORIZED unless the key is
+ *   MOCK_SED_PASSWORD; IOC_OPAL_LOCK_UNLOCK unlocks only to read-write
  */
+/*
+ * This file defines both open() and open64(), and both fstat() and
+ * fstat64(). Undefine the LFS and time64 macros, as libmock_nvme.c does,
+ * so that glibc does not rename the definitions.
+ */
+#undef _FILE_OFFSET_BITS
+#undef _TIME_BITS
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 
+#include <linux/fs.h>
 #include <linux/nvme_ioctl.h>
+#ifdef TEST_SED
+#include <linux/sed-opal.h>
+#endif
 
 #include "mock.h"
 
@@ -64,9 +102,286 @@ static int mock_passthru(struct nvme_passthru_cmd64 *cmd)
 	return cmd->opcode == MOCK_OPC_ERROR ? MOCK_STATUS : 0;
 }
 
+typedef int (*open_fn)(const char *path, int flags, ...);
+typedef int (*close_fn)(int fd);
+typedef int (*fstat_fn)(int fd, void *buf);
+typedef int (*ioctl_fn)(int fd, unsigned long request, ...);
+typedef ssize_t (*read_fn)(int fd, void *buf, size_t count);
+typedef ssize_t (*write_fn)(int fd, const void *buf, size_t count);
+
+/* The descriptors of the emulated devices, -1 if not open. */
+static int ctrl_fd = -1, ns_fd = -1, fabrics_fd = -1, short_fd = -1;
+static bool fabrics_connected;
+
+static int mock_ret(int err)
+{
+	if (!err)
+		return 0;
+	errno = err;
+	return -1;
+}
+
+static int mock_ctrl_ioctl(unsigned long request)
+{
+	switch (request) {
+	case NVME_IOCTL_RESET:
+	case NVME_IOCTL_RESCAN:
+		return 0;
+	case NVME_IOCTL_SUBSYS_RESET:
+		return mock_ret(EBUSY);
+	}
+
+	return mock_ret(ENOTTY);
+}
+
+#ifdef TEST_SED
+static bool mock_sed_key_valid(const struct opal_key *key)
+{
+	return key->key_len == strlen(MOCK_SED_PASSWORD) &&
+		!memcmp(key->key, MOCK_SED_PASSWORD, key->key_len);
+}
+
+static int mock_lock_unlock(const struct opal_lock_unlock *lu)
+{
+	if (!mock_sed_key_valid(&lu->session.opal_key))
+		return MOCK_TCG_NOT_AUTHORIZED;
+
+	return lu->l_state == OPAL_RW ? 0 : MOCK_TCG_INVALID_PARAM;
+}
+#endif
+
+static int mock_ns_ioctl(unsigned long request, void *arg)
+{
+	switch (request) {
+#ifdef TEST_SED
+	case IOC_OPAL_TAKE_OWNERSHIP:
+		return mock_sed_key_valid(arg) ? 0 : MOCK_TCG_NOT_AUTHORIZED;
+	case IOC_OPAL_LOCK_UNLOCK:
+		return mock_lock_unlock(arg);
+#endif
+	case NVME_IOCTL_ID:
+		return MOCK_NSID;
+	case BLKRRPART:
+		return 0;
+	case BLKBSZSET:
+		return mock_ret(*(int *)arg == MOCK_BLOCK_SIZE ? 0 : EINVAL);
+	}
+
+	return mock_ret(ENOTTY);
+}
+
+static int mock_open(const char *path, int flags, mode_t mode,
+		const char *sym)
+{
+	open_fn real_open = dlsym(RTLD_NEXT, sym);
+	bool ctrl = !strcmp(path, "/dev/nvme0");
+	bool ns = !strcmp(path, "/dev/nvme0n1");
+	bool fabrics = !strcmp(path, "/dev/nvme-fabrics");
+	bool short_write =
+		!strcmp(path, "/sys/class/nvme/nvme6/delete_controller");
+	int fd;
+
+	if (!real_open) {
+		errno = EIO;
+		return -1;
+	}
+	if (ctrl || ns || fabrics || short_write)
+		path = "/dev/null";
+	else if (!strcmp(path, "/sys/class/nvme/nvme0/device/resource0") &&
+		 getenv("MOCK_RESOURCE0"))
+		path = getenv("MOCK_RESOURCE0");
+	else if (!strcmp(path, "/sys/class/nvme/nvme5/delete_controller") &&
+		 getenv("MOCK_DELETE_CTRL"))
+		path = getenv("MOCK_DELETE_CTRL");
+
+	fd = real_open(path, flags, mode);
+	if (fd >= 0 && ctrl)
+		ctrl_fd = fd;
+	else if (fd >= 0 && ns)
+		ns_fd = fd;
+	else if (fd >= 0 && fabrics) {
+		fabrics_fd = fd;
+		fabrics_connected = false;
+	} else if (fd >= 0 && short_write)
+		short_fd = fd;
+
+	return fd;
+}
+
+int open(const char *path, int flags, ...)
+{
+	mode_t mode = 0;
+	va_list ap;
+
+	if (flags & (O_CREAT | O_TMPFILE)) {
+		va_start(ap, flags);
+		mode = va_arg(ap, mode_t);
+		va_end(ap);
+	}
+
+	return mock_open(path, flags, mode, "open");
+}
+
+int open64(const char *path, int flags, ...)
+{
+	mode_t mode = 0;
+	va_list ap;
+
+	if (flags & (O_CREAT | O_TMPFILE)) {
+		va_start(ap, flags);
+		mode = va_arg(ap, mode_t);
+		va_end(ap);
+	}
+
+	return mock_open(path, flags, mode, "open64");
+}
+
+int close(int fd)
+{
+	static close_fn real_close;
+
+	if (fd == ctrl_fd)
+		ctrl_fd = -1;
+	else if (fd == ns_fd)
+		ns_fd = -1;
+	else if (fd == fabrics_fd)
+		fabrics_fd = -1;
+	else if (fd == short_fd)
+		short_fd = -1;
+
+	if (!real_close)
+		real_close = dlsym(RTLD_NEXT, "close");
+	if (!real_close) {
+		errno = EIO;
+		return -1;
+	}
+
+	return real_close(fd);
+}
+
+ssize_t read(int fd, void *buf, size_t count)
+{
+	read_fn real_read = dlsym(RTLD_NEXT, "read");
+	const char *text;
+	size_t len;
+
+	if (fd < 0 || fd != fabrics_fd) {
+		if (!real_read) {
+			errno = EIO;
+			return -1;
+		}
+		return real_read(fd, buf, count);
+	}
+
+	text = fabrics_connected ? MOCK_FABRICS_RESPONSE : MOCK_FABRICS_OPTIONS;
+	len = strlen(text);
+	if (len > count)
+		len = count;
+	memcpy(buf, text, len);
+
+	return len;
+}
+
+static void mock_log_connect(write_fn real_write, const void *buf,
+		size_t count)
+{
+	const char *log = getenv("MOCK_CONNECT_LOG");
+	open_fn real_open = dlsym(RTLD_NEXT, "open");
+	int fd;
+
+	if (!log || !real_open)
+		return;
+	fd = real_open(log, O_WRONLY | O_TRUNC | O_CLOEXEC);
+	if (fd < 0)
+		return;
+	/* A truncated log fails the test. */
+	if (real_write(fd, buf, count) != (ssize_t)count)
+		unlink(log);
+	close(fd);
+}
+
+ssize_t write(int fd, const void *buf, size_t count)
+{
+	write_fn real_write = dlsym(RTLD_NEXT, "write");
+
+	if (!real_write) {
+		errno = EIO;
+		return -1;
+	}
+	if (fd >= 0 && fd == short_fd)
+		return 0;
+	if (fd < 0 || fd != fabrics_fd)
+		return real_write(fd, buf, count);
+
+	mock_log_connect(real_write, buf, count);
+	if (memmem(buf, count, "nqn=" MOCK_NQN_REFUSED,
+		   strlen("nqn=" MOCK_NQN_REFUSED)))
+		return mock_ret(ECONNREFUSED);
+	fabrics_connected = true;
+
+	return count;
+}
+
+/* Patches only st_mode, which works for every struct stat variant. */
+static int mock_fstat(int fd, void *buf, const char *sym)
+{
+	fstat_fn real_fstat = dlsym(RTLD_NEXT, sym);
+	int ret;
+
+	if (!real_fstat) {
+		errno = EIO;
+		return -1;
+	}
+
+	ret = real_fstat(fd, buf);
+	if (!ret && fd == ctrl_fd)
+		((struct stat *)buf)->st_mode = S_IFCHR | 0600;
+	else if (!ret && fd == ns_fd)
+		((struct stat *)buf)->st_mode = S_IFBLK | 0600;
+
+	return ret;
+}
+
+int fstat(int fd, struct stat *buf)
+{
+	return mock_fstat(fd, buf, "fstat");
+}
+
+int fstat64(int fd, struct stat64 *buf)
+{
+	return mock_fstat(fd, buf, "fstat64");
+}
+
+int __fstat64_time64(int fd, void *buf);
+int __fstat64_time64(int fd, void *buf)
+{
+	return mock_fstat(fd, buf, "__fstat64_time64");
+}
+
+static int mock_ioctl(int fd, unsigned long request, void *arg,
+		const char *sym)
+{
+	ioctl_fn real_ioctl;
+
+	if (fd == MOCK_FD && (request == NVME_IOCTL_ADMIN64_CMD ||
+			      request == NVME_IOCTL_IO64_CMD))
+		return mock_passthru(arg);
+	if (fd >= 0 && fd == ctrl_fd)
+		return mock_ctrl_ioctl(request);
+	if (fd >= 0 && fd == ns_fd)
+		return mock_ns_ioctl(request, arg);
+
+	real_ioctl = dlsym(RTLD_NEXT, sym);
+	if (!real_ioctl) {
+		errno = ENOTTY;
+		return -1;
+	}
+
+	return real_ioctl(fd, request, arg);
+}
+
 int ioctl(int fd, unsigned long request, ...)
 {
-	static int (*real_ioctl)(int, unsigned long, ...);
 	va_list ap;
 	void *arg;
 
@@ -74,16 +389,19 @@ int ioctl(int fd, unsigned long request, ...)
 	arg = va_arg(ap, void *);
 	va_end(ap);
 
-	if (fd == MOCK_FD && (request == NVME_IOCTL_ADMIN64_CMD ||
-			      request == NVME_IOCTL_IO64_CMD))
-		return mock_passthru(arg);
+	return mock_ioctl(fd, request, arg, "ioctl");
+}
 
-	if (!real_ioctl)
-		real_ioctl = dlsym(RTLD_NEXT, "ioctl");
-	if (!real_ioctl) {
-		errno = ENOTTY;
-		return -1;
-	}
+/* 32-bit architectures with a 64-bit time_t call this one. */
+int __ioctl_time64(int fd, unsigned long request, ...);
+int __ioctl_time64(int fd, unsigned long request, ...)
+{
+	va_list ap;
+	void *arg;
 
-	return real_ioctl(fd, request, arg);
+	va_start(ap, request);
+	arg = va_arg(ap, void *);
+	va_end(ap);
+
+	return mock_ioctl(fd, request, arg, "__ioctl_time64");
 }

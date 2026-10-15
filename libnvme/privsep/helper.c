@@ -20,8 +20,15 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+
+#if NVME_HAVE_SED_OPAL
+#include <linux/sed-opal.h>
+#endif
+
+#include <ccan/array_size/array_size.h>
 
 #include <libnvme.h>
 
@@ -82,6 +89,18 @@ static bool valid_name(const char *name)
 		return false;
 
 	return !*p;
+}
+
+/* Accepts the controller names nvmeX. */
+static bool valid_ctrl_name(const char *name)
+{
+	const char *p;
+
+	if (strncmp(name, "nvme", 4))
+		return false;
+	p = name + 4;
+
+	return parse_number(&p) && !*p;
 }
 
 struct reply {
@@ -226,6 +245,224 @@ static int handle_passthru(__u32 op, __u32 id, void *payload, __u32 len,
 	return 0;
 }
 
+static int handle_device_op(__u32 op, __u32 id, const void *payload,
+		__u32 len, struct reply *reply)
+{
+	struct libnvme_transport_handle *hdl = lookup(id);
+	const struct libnvme_privsep_block_size *bs = payload;
+	__u32 nsid;
+
+	if (!hdl)
+		return -EINVAL;
+	if (len != (op == LIBNVME_PRIVSEP_OP_UPDATE_BLOCK_SIZE ?
+		    sizeof(*bs) : 0))
+		return -EINVAL;
+
+	switch (op) {
+	case LIBNVME_PRIVSEP_OP_RESET_CTRL:
+		reply->status = libnvme_reset_ctrl(hdl);
+		break;
+	case LIBNVME_PRIVSEP_OP_RESET_SUBSYSTEM:
+		reply->status = libnvme_reset_subsystem(hdl);
+		break;
+	case LIBNVME_PRIVSEP_OP_RESCAN_NS:
+		reply->status = libnvme_rescan_ns(hdl);
+		break;
+	case LIBNVME_PRIVSEP_OP_GET_NSID:
+		reply->status = libnvme_get_nsid(hdl, &nsid);
+		if (!reply->status)
+			reply->result = nsid;
+		break;
+	case LIBNVME_PRIVSEP_OP_REREAD_PARTITIONS:
+		reply->status = libnvme_reread_partitions(hdl);
+		break;
+	case LIBNVME_PRIVSEP_OP_UPDATE_BLOCK_SIZE:
+		reply->status = libnvme_update_block_size(hdl,
+							  bs->block_size);
+		break;
+	}
+
+	return 0;
+}
+
+static int handle_regs(__u32 op, __u32 id, const void *payload, __u32 len,
+		struct reply *reply, struct xfer *xfer)
+{
+	struct libnvme_transport_handle *hdl = lookup(id);
+	const struct libnvme_privsep_reg *reg = payload;
+
+	if (!hdl || len != sizeof(*reg))
+		return -EINVAL;
+
+	switch (op) {
+	case LIBNVME_PRIVSEP_OP_READ_REGS:
+		if (!reg->len || reg->len > LIBNVME_PRIVSEP_MAX_REGS)
+			return -EINVAL;
+		xfer->data = libnvme_alloc(reg->len);
+		if (!xfer->data)
+			return -ENOMEM;
+		reply->status = libnvme_read_regs(hdl, reg->offset,
+						  xfer->data, reg->len);
+		if (!reply->status) {
+			reply->len = reg->len;
+			reply->payload = xfer->data;
+		}
+		break;
+	case LIBNVME_PRIVSEP_OP_WRITE_REG32:
+		if (reg->value > UINT32_MAX)
+			return -EINVAL;
+		reply->status = libnvme_write_reg32(hdl, reg->offset,
+						    reg->value);
+		break;
+	case LIBNVME_PRIVSEP_OP_WRITE_REG64:
+		reply->status = libnvme_write_reg64(hdl, reg->offset,
+						    reg->value, reg->mmio32);
+		break;
+	}
+
+	return 0;
+}
+
+#if NVME_HAVE_SED_OPAL
+/*
+ * The requests issued by sed-linux.c and the sizes of their arguments.
+ * _IOC_SIZE() is not available with every libc.
+ */
+static const struct {
+	unsigned long request;
+	size_t size;
+} sed_requests[] = {
+	{ IOC_OPAL_TAKE_OWNERSHIP, sizeof(struct opal_key) },
+	{ IOC_OPAL_ACTIVATE_LSP, sizeof(struct opal_lr_act) },
+	{ IOC_OPAL_LR_SETUP, sizeof(struct opal_user_lr_setup) },
+	{ IOC_OPAL_LOCK_UNLOCK, sizeof(struct opal_lock_unlock) },
+	{ IOC_OPAL_SET_PW, sizeof(struct opal_new_pw) },
+	{ IOC_OPAL_REVERT_TPR, sizeof(struct opal_key) },
+#ifdef IOC_OPAL_SET_SID_PW
+	{ IOC_OPAL_SET_SID_PW, sizeof(struct opal_new_pw) },
+#endif
+#ifdef IOC_OPAL_PSID_REVERT_TPR
+	{ IOC_OPAL_PSID_REVERT_TPR, sizeof(struct opal_key) },
+#endif
+#ifdef IOC_OPAL_REVERT_LSP
+	{ IOC_OPAL_REVERT_LSP, sizeof(struct opal_revert_lsp) },
+#endif
+};
+
+static int handle_sed(__u32 id, void *payload, __u32 len,
+		struct reply *reply)
+{
+	struct libnvme_transport_handle *hdl = lookup(id);
+	struct libnvme_privsep_sed *sed = payload;
+	size_t i;
+	int ret;
+
+	if (!hdl || len < sizeof(*sed))
+		return -EINVAL;
+
+	for (i = 0; i < ARRAY_SIZE(sed_requests); i++)
+		if (sed->request == sed_requests[i].request)
+			break;
+	if (i == ARRAY_SIZE(sed_requests) ||
+	    len != sizeof(*sed) + sed_requests[i].size)
+		return -EINVAL;
+
+	if (!libnvme_transport_handle_is_ns(hdl))
+		return -EINVAL;
+
+	ret = ioctl(libnvme_transport_handle_get_fd(hdl), sed->request,
+		    sed + 1);
+	reply->status = ret < 0 ? -errno : ret;
+
+	return 0;
+}
+#else
+static int handle_sed(__u32 id, void *payload, __u32 len,
+		struct reply *reply)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+
+static int handle_fabrics(__u32 id, const void *payload, __u32 len,
+		struct reply *reply, struct xfer *xfer)
+{
+	int fd, step;
+	ssize_t n;
+
+	if (id || len >= LIBNVME_PRIVSEP_MAX_FABRICS ||
+	    (len && memchr(payload, '\0', len)))
+		return -EINVAL;
+
+	xfer->data = libnvme_alloc(LIBNVME_PRIVSEP_MAX_FABRICS);
+	if (!xfer->data)
+		return -ENOMEM;
+
+	step = LIBNVME_PRIVSEP_FABRICS_OPEN;
+	fd = open("/dev/nvme-fabrics", (len ? O_RDWR : O_RDONLY) | O_CLOEXEC);
+	if (fd < 0)
+		goto err;
+
+	if (len) {
+		step = LIBNVME_PRIVSEP_FABRICS_WRITE;
+		n = write(fd, payload, len);
+		if (n < 0)
+			goto err_close;
+		if (n != len) {
+			errno = EIO;
+			goto err_close;
+		}
+	}
+
+	step = LIBNVME_PRIVSEP_FABRICS_READ;
+	n = read(fd, xfer->data, LIBNVME_PRIVSEP_MAX_FABRICS - 1);
+	if (n < 0)
+		goto err_close;
+	close(fd);
+
+	reply->len = n;
+	reply->payload = xfer->data;
+	return 0;
+
+err_close:
+	reply->status = -errno;
+	close(fd);
+	reply->result = step;
+	return 0;
+err:
+	reply->status = -errno;
+	reply->result = step;
+	return 0;
+}
+
+static int handle_delete_ctrl(__u32 id, const char *payload, __u32 len)
+{
+	char path[LIBNVME_PRIVSEP_MAX_NAME + 64];
+	ssize_t n;
+	int fd;
+
+	if (id || !len || len > LIBNVME_PRIVSEP_MAX_NAME ||
+	    payload[len - 1] || strlen(payload) != len - 1 ||
+	    !valid_ctrl_name(payload))
+		return -EINVAL;
+
+	if (snprintf(path, sizeof(path),
+		     "/sys/class/nvme/%s/delete_controller",
+		     payload) >= (int)sizeof(path))
+		return -EINVAL;
+	fd = open(path, O_WRONLY | O_CLOEXEC);
+	if (fd < 0)
+		return -errno;
+	n = write(fd, "1", 1);
+	if (n < 0)
+		n = -errno;
+	else if (n != 1)
+		n = -EIO;
+	close(fd);
+
+	return n < 0 ? n : 0;
+}
+
 static void close_handles(void)
 {
 	int i;
@@ -288,6 +525,28 @@ static int serve_one(struct libnvme_global_ctx *ctx, int sock, bool *hello)
 	case LIBNVME_PRIVSEP_OP_IO:
 		ret = handle_passthru(op, id, payload, len, &reply, &xfer);
 		break;
+	case LIBNVME_PRIVSEP_OP_RESET_CTRL:
+	case LIBNVME_PRIVSEP_OP_RESET_SUBSYSTEM:
+	case LIBNVME_PRIVSEP_OP_RESCAN_NS:
+	case LIBNVME_PRIVSEP_OP_GET_NSID:
+	case LIBNVME_PRIVSEP_OP_REREAD_PARTITIONS:
+	case LIBNVME_PRIVSEP_OP_UPDATE_BLOCK_SIZE:
+		ret = handle_device_op(op, id, payload, len, &reply);
+		break;
+	case LIBNVME_PRIVSEP_OP_READ_REGS:
+	case LIBNVME_PRIVSEP_OP_WRITE_REG32:
+	case LIBNVME_PRIVSEP_OP_WRITE_REG64:
+		ret = handle_regs(op, id, payload, len, &reply, &xfer);
+		break;
+	case LIBNVME_PRIVSEP_OP_SED:
+		ret = handle_sed(id, payload, len, &reply);
+		break;
+	case LIBNVME_PRIVSEP_OP_FABRICS:
+		ret = handle_fabrics(id, payload, len, &reply, &xfer);
+		break;
+	case LIBNVME_PRIVSEP_OP_DELETE_CTRL:
+		ret = handle_delete_ctrl(id, payload, len);
+		break;
 	default:
 		ret = -EOPNOTSUPP;
 		break;
@@ -309,6 +568,9 @@ static int serve_one(struct libnvme_global_ctx *ctx, int sock, bool *hello)
 		ret = libnvme_privsep_send(sock, reply.payload2, reply.len2);
 
 out:
+	/* SED requests carry passwords. */
+	if (op == LIBNVME_PRIVSEP_OP_SED && payload)
+		explicit_bzero(payload, len);
 	libnvme_free(xfer.data);
 	libnvme_free(xfer.metadata);
 	free(payload);

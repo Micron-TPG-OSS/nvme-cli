@@ -34,3 +34,30 @@ int __libnvme_privsep_io_passthru(struct libnvme_transport_handle *hdl,
 {
 	return -ENOTSUP;
 }
+
+int __libnvme_privsep_op(struct libnvme_transport_handle *hdl, __u32 op,
+		const void *arg, size_t arg_len, void *out, size_t out_len,
+		__u64 *result)
+{
+	return -ENOTSUP;
+}
+
+int __libnvme_privsep_sed_ioctl(struct libnvme_transport_handle *hdl,
+		__u32 request, const void *arg, size_t size)
+{
+	return -ENOTSUP;
+}
+
+ssize_t __libnvme_privsep_fabrics(struct libnvme_privsep *ps,
+		const char *args, char *buf, size_t size,
+		enum libnvmf_dev_step *step)
+{
+	*step = LIBNVMF_DEV_OPEN;
+	return -ENOTSUP;
+}
+
+int __libnvme_privsep_delete_ctrl(struct libnvme_privsep *ps,
+		const char *name)
+{
+	return -ENOTSUP;
+}
