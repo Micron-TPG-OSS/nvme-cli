@@ -1,7 +1,7 @@
 # TACT-70 — Real-Hardware CI for nvme-cli & blktests (Windows + Linux)
 
 **Status:** Draft for review · **Owner:** Jim Munn · **Type:** Investigation (no infrastructure changes under this ticket)
-**Purpose:** Feed a Micron ART (Architecture Request Tracker) architecture + security review. This document explains how the upstream linux-nvme community runs its automated real-hardware tests, why that stack is built the way it is, and what Micron would actually need to stand up an equivalent that also covers Windows.
+**Purpose:** Feed a Micron ART (Architecture Request Tracker) architecture + security review. This document explains how the upstream linux-nvme community runs its automated real-hardware tests, why that stack is built the way it is, and what Micron would actually need to do the same for its own drives, covering Windows as well as Linux.
 
 ---
 
@@ -9,8 +9,8 @@
 
 Stripped of all the upstream complexity, this work exists to satisfy **two requirements**:
 
-1. **Run the `nvme-cli` e2e/plugin tests on Linux against a real Micron drive.** Upstream already runs these on Linux, but against **WDC** drives. The Micron-specific code in the e2e suite and the `micron` plugin is therefore **never exercised on Micron hardware today**. A Linux runner with a Micron drive closes that gap.
-2. **Run the `nvme-cli` e2e/plugin tests on Windows against a real Micron drive.** nvme-cli's Windows code paths have **no real-hardware coverage anywhere**. Upstream is Linux-only. This is the net-new half of the work.
+1. **Run the `nvme-cli` e2e tests on Linux against a real Micron drive.** Upstream already runs these on Linux, but against **WDC** drives. The Micron-specific code in the e2e suite and the `micron` plugin is therefore **never exercised on Micron hardware today**. A Linux runner with a Micron drive closes that gap.
+2. **Run the `nvme-cli` e2e tests on Windows against a real Micron drive.** nvme-cli's Windows code paths have **no real-hardware coverage anywhere**. Upstream is Linux-only, so this half has to be built from scratch.
 
 Everything else in this document (the disposable-VM machinery, Kubernetes, and the rest of the upstream stack) is background for figuring out *how* to meet these two requirements as simply as possible.
 
@@ -41,6 +41,7 @@ If you read nothing else, read the [TL;DR](#tldr) and [Part 5 (Recommendation)](
   3. **One consolidated host, shared drive** — Linux on bare metal, Windows in a VM, sharing a single drive; runs go sequentially.
 
   Configs 2 and 3 trade some fidelity and added VM/passthrough complexity for a smaller footprint and disposable-VM isolation of the Windows runs; their "a" variants (Part 5) extend that isolation to Linux too.
+- **Run it from the internal (GHE) repo.** A self-hosted runner on real hardware is only safe where every trigger is trusted, so attach the CI to the private `Micron-TPG/nvme-cli` repo, not the public OSS fork or upstream. The only outside input is then the synced-in copy of upstream `master`, a bounded supply-chain risk. The final repo choice is Brandon Busacker's, via ART (see [Part 6](#repo)).
 - nvme-cli builds on Windows, and its end-to-end (e2e) test suite is already Windows-aware. The net-new engineering is **infrastructure**: a Windows test target with a real Micron drive and the CI wiring to run the existing suite against it.
 
 ---
@@ -183,7 +184,7 @@ The **private registry** ([see containers](#containers)) stores images inside th
 
 Many companies run a **[TLS](#tls)-inspecting firewall**: it intercepts encrypted internet traffic, decrypts it to inspect it, and re-encrypts it, using a company **[CA certificate](#ca)** that every internal machine is told to trust. Software that doesn't trust that certificate can't reach the internet. **mitmproxy** is a proxy upstream *optionally* deploys inside the cluster to make all the short-lived, auto-created VMs and pods route through one place and trust one certificate.
 
-*Why it's in the stack:* it's an *optional* feature (off by default) for sites behind such a firewall. **Micron is such a site. But Micron already owns a real corporate proxy and CA, so the right move is to trust the existing Micron certificate, not stand up a second interceptor.** (More in [Part 8](#firewall).)
+*Why it's in the stack:* it's an *optional* feature (off by default) for sites behind such a firewall. **Micron is such a site. But Micron already owns a real corporate proxy and CA, so the right move is to trust the existing Micron certificate, not stand up a second interceptor.** (More in [Part 9](#firewall).)
 
 ### <a name="kernel-pipeline"></a>Kernel-builder + kpd (patchwork automation)
 
@@ -324,7 +325,42 @@ Beyond the operational cost, it carries security-review liabilities that Configs
 
 ---
 
-## Part 6 — How a test run operates
+## <a name="repo"></a>Part 6 — Where the tests run from (repository and trust boundary)
+
+[Part 5](#part-5--recommended-approach-for-micron) covered *what* machine to build. A separate question, which the ticket also asks (Question 6: "self-hosted runner security, internal vs github.com git host"), is **which GitHub repository the CI job is attached to.** It matters because a self-hosted runner executes the workflow and the test code on Micron's own hardware, inside Micron's network, with direct access to a real drive. The whole security posture turns on one question: **can code Micron has not vetted ever trigger a run on that hardware?**
+
+Micron has three repositories in play, kept in sync by GitHub workflows:
+
+| Repository | Visibility | Who can trigger a run | Verdict |
+|---|---|---|---|
+| **GHE** `Micron-TPG/nvme-cli` | Internal / private | Authenticated Micron employees only | **Recommended host for the runner.** |
+| **OSS fork** `Micron-TPG-OSS/nvme-cli` | Public fork of upstream | Any outside contributor, via a fork PR | Avoid; public exposure. |
+| **Upstream** `linux-nvme/nvme-cli` | Public, not Micron-owned | Anyone; Micron cannot attach a runner without maintainer agreement | Out of scope, except the donate-to-the-upstream-cluster option in [Part 9](#approvals). |
+
+GitHub's own guidance is explicit: attach self-hosted runners only to private repositories, because on a public repo anyone can open a pull request whose test code, or whose modified workflow, runs on the runner. The fork-PR approval gate GitHub provides is first-contributor-only and does not make this safe.
+
+### Recommendation: host the CI on the GHE (internal) repository
+Three reasons:
+1. **It is where the test targets already live.** Internal and unreleased Micron firmware, and the Micron-specific plugin code, are internal artifacts.
+2. **It collapses the largest security red flag.** With triggers restricted to Micron employees, every code path that can start a run is trusted. That is the condition under which [Part 5](#part-5--recommended-approach-for-micron) and [Part 9](#approvals) say the untrusted-code risk drops away, and it is what keeps bare-metal [Config 1](#config-1) defensible instead of forcing disposable-VM isolation purely to contain untrusted PRs.
+3. **The public repositories reintroduce the problem.** Running on the OSS fork or upstream puts untrusted outside code back on the hardware, the exact exposure that justifies most of the upstream complexity.
+
+### The residual exposure is bounded, and it is a supply-chain risk
+On GHE, the one inbound flow from outside Micron is the sync that copies upstream's `master` branch in. That is not anonymous PR code. It is code the upstream maintainers reviewed and merged, which Micron then chooses to run, the same trust Micron already extends by shipping upstream nvme-cli at all. It is covered by the supply-chain guardrails already listed in [Part 9](#approvals): pin versions, and vet what is pulled in.
+
+### One live vector: synced-in workflow files
+The sync pulls upstream `master` wholesale, including upstream's `.github/workflows/`. A workflow that triggers on `push` could execute on the sync push itself, so upstream-authored workflow YAML could reach the self-hosted runner with no Micron reviewer in the loop. The mitigation pairs with the runner-isolation point above:
+- The nightly-test workflow and its self-hosted-runner labels are Micron-added and must stay **GHE-only**, never propagating to the public OSS fork.
+- Synced changes under `.github/workflows/` must not blind-auto-merge onto any branch or event that can reach the runner.
+
+Closing that gap is what makes "the only outside exposure is upstream `master`" true in practice rather than nearly true.
+
+### Who decides
+This document *recommends* GHE; it does not decide. The repository choice is **Brandon Busacker's to make**, ratified through the ART review he initiates ([Part 9](#approvals)). The job here is to hand that decision a clear recommendation and the trust-boundary reasoning behind it.
+
+---
+
+## Part 7 — How a test run operates
 
 [Part 5](#part-5--recommended-approach-for-micron) covered *what* to build. This part covers *how a run operates* on that hardware: resetting and handing off the drive under test, keeping a VM clean between runs, and identifying the device to the test. The Windows specifics are called out throughout, since that path has no upstream precedent and must be designed.
 
@@ -354,7 +390,7 @@ The e2e suite takes the drive as explicit **`--controller` / `--ns1`** arguments
 
 ---
 
-## Part 7 — Rough bill of materials & effort estimate
+## Part 8 — Rough bill of materials & effort estimate
 
 > ⚠️ **Draft estimates — to be validated with Kevin Kennedy and Micron IT.** These are order-of-magnitude, for the ART request.
 
@@ -407,7 +443,7 @@ Software:
 
 ---
 
-## Part 8 — External dependencies & approvals (what ART will want)
+## <a name="approvals"></a>Part 9 — External dependencies & approvals (what ART will want)
 
 **Architecture review will want to see:**
 - The chosen configuration (Config 1–5), with this document's justification.
@@ -423,7 +459,7 @@ Software:
 
 **External dependencies / open questions for Micron (need Kevin Kennedy — IT MFG):**
 - <a name="firewall"></a>**Firewall/proxy:** the corporate CA certificate and proxy endpoint; whether the rig sits inside or outside the corporate firewall; whether outbound GitHub/registry access is permitted or must be mirrored internally.
-- **Git host:** GitHub.com vs a Micron-internal Git host (changes the runner setup).
+- **Git host / repository:** which of the three Micron repos hosts the runner. This document recommends the internal GHE repo (see [Part 6](#repo)); the open items are confirming the Micron-TPG org permits self-hosted runners, and that the sync automation keeps the nightly-test workflow and runner labels GHE-only (never on the public OSS fork).
 - **Bare-metal provisioning + reboot approval:** IT process for a dedicated lab machine and for the one-time reboot needed to enable passthrough. At bring-up, confirm the test NVMe sits in its own IOMMU group (routine on server-class hardware); if it shares a group with other devices, passthrough pulls those off the host too.
 - **Windows licensing:** a Windows license + activation for whichever Windows test environment the chosen config uses (a Windows Server image from IT for the Config 2 / Config 3 VM, or a license for the bare-metal/DDA Windows box under Config 1/Config 4).
 - **Whether an existing Micron VM farm or lab could host this** instead of new hardware — specifically, whether it can provide a dedicated bare-metal node (Config 1) or a host that supports PCIe passthrough (Config 2/3).
@@ -431,7 +467,7 @@ Software:
 
 ---
 
-## Part 9 — Proposed follow-up JIRAs
+## Part 10 — Proposed follow-up JIRAs
 
 *(Investigation only under TACT-70; these are the build tickets.)*
 
