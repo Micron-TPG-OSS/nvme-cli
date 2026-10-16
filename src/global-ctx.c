@@ -7,7 +7,6 @@
  */
 #include <errno.h>
 #include <fcntl.h>
-#include <getopt.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,7 +26,7 @@
 
 static int check_arg_dev(int argc, char **argv)
 {
-	if (optind >= argc) {
+	if (!nvme_args.device) {
 		errno = EINVAL;
 		nvme_show_perror(argv[0]);
 		return -EINVAL;
@@ -46,7 +45,7 @@ static int get_transport_handle(struct libnvme_global_ctx *ctx, int argc,
 	if (ret)
 		return ret;
 
-	devname = argv[optind];
+	devname = nvme_args.device;
 
 	ret = libnvme_open(ctx, devname, flags, hdl);
 	if (ret)
@@ -179,6 +178,7 @@ static int __nvme_create_global_ctx(struct libnvme_global_ctx **pctx)
 	log_level = map_log_level(nvme_args.verbose, nvme_args.quiet);
 	libnvme_set_logging_file(ctx, stderr);
 	libnvme_set_logging_level(ctx, log_level, false, false);
+	libnvme_set_dry_run(ctx, nvme_args.dry_run);
 
 	if (!nvme_args.set_options)
 		goto out;
@@ -188,7 +188,7 @@ static int __nvme_create_global_ctx(struct libnvme_global_ctx **pctx)
 		return -ENOMEM;
 
 	p = buf;
-	while ((opt = strsep(&p, ",")) != NULL) {
+	while ((opt = shr_strsep(&p, ",")) != NULL) {
 		if (!*opt)
 			continue;
 		err = nvme_apply_option(ctx, opt);

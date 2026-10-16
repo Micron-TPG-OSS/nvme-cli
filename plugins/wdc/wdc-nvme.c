@@ -4431,7 +4431,7 @@ static int wdc_vs_internal_fw_log(int argc, char **argv, struct command *acmd,
 	struct config {
 		char *file;
 		__u32 xfer_size;
-		int data_area;
+		__u32 data_area;
 		__u64 file_size;
 		__u64 offset;
 		char *type;
@@ -8455,10 +8455,11 @@ static int wdc_vs_smart_add_log(int argc, char **argv, struct command *acmd,
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("interval",          'i', &cfg.interval,         interval),
+		OPT_BYTE("interval",          'i', &cfg.interval, interval),
 		OPT_BYTE("log-page-version",  'l', &cfg.log_page_version, log_page_version),
 		OPT_LIST("log-page-mask",     'p', &cfg.log_page_mask,    log_page_mask),
-		OPT_UINT("namespace-id",      'n', &cfg.namespace_id,     namespace_id));
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			 namespace_id, nvme_nsid_values));
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -8525,13 +8526,7 @@ static int wdc_vs_smart_add_log(int argc, char **argv, struct command *acmd,
 					"ERROR: WDC: Failure reading the C0 Log Page, ret = %d\n",
 					ret);
 		} else {
-			ret = validate_output_format(nvme_args.output_format,
-				&fmt);
-			if (ret < 0) {
-				nvme_show_error("Invalid output format: %s",
-					nvme_args.output_format);
-				goto out;
-			}
+			fmt = nvme_args.output_flags;
 
 			ret = nvme_get_print_ocp_cloud_smart_log(hdl,
 					0,
@@ -8582,7 +8577,7 @@ static int wdc_cu_smart_log(int argc, char **argv, struct command *acmd,
 	__u8 *data;
 
 	struct config {
-		int uuid_index;
+		__u32 uuid_index;
 	};
 
 	struct config cfg = {
@@ -8611,12 +8606,7 @@ static int wdc_cu_smart_log(int argc, char **argv, struct command *acmd,
 		if (!wdc_check_device(ctx, hdl))
 			return -1;
 
-		ret = validate_output_format(nvme_args.output_format, &fmt);
-
-		if (ret < 0) {
-			nvme_show_error("ERROR: WDC: invalid output format");
-			return ret;
-		}
+		fmt = nvme_args.output_flags;
 
 		/* verify the 0xCA log page is supported */
 		if (wdc_nvme_check_supported_log_page(ctx, hdl,
@@ -8702,7 +8692,8 @@ static int wdc_vs_cloud_log(int argc, char **argv, struct command *acmd,
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id",      'n', &cfg.namespace_id,     namespace_id));
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			 namespace_id, nvme_nsid_values));
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -8771,7 +8762,8 @@ static int wdc_vs_hw_rev_log(int argc, char **argv, struct command *acmd,
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id",      'n', &cfg.namespace_id,     namespace_id));
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			 namespace_id, nvme_nsid_values));
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -8861,7 +8853,8 @@ static int wdc_vs_device_waf(int argc, char **argv, struct command *acmd,
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id",      'n', &cfg.namespace_id,     namespace_id));
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			 namespace_id, nvme_nsid_values));
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -10647,7 +10640,7 @@ static int wdc_drive_resize(int argc, char **argv,
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("size", 's', &cfg.size, size));
+		OPT_LONG("size", 's', &cfg.size, size));
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -10695,7 +10688,8 @@ static int wdc_namespace_resize(int argc, char **argv,
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id),
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
+			 nvme_nsid_values),
 		OPT_UINT("op-option", 'O', &cfg.op_option, op_option));
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
@@ -10746,7 +10740,7 @@ static int wdc_reason_identifier(int argc, char **argv,
 
 
 	struct config {
-		int log_id;
+		__u32 log_id;
 		char *file;
 	};
 	struct config cfg = {
@@ -12458,7 +12452,8 @@ static int wdc_cloud_boot_SSD_version(int argc, char **argv, struct command *acm
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id",      'n', &cfg.namespace_id,     namespace_id));
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			 namespace_id, nvme_nsid_values));
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -12820,33 +12815,33 @@ int wdc_set_latency_monitor_feature(int argc, char **argv, struct command *acmd,
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("active_bucket_timer_threshold", 't',
+		OPT_SHRT("active_bucket_timer_threshold", 't',
 			&cfg.active_bucket_timer_threshold,
 			active_bucket_timer_threshold),
-		OPT_UINT("active_threshold_a", 'a', &cfg.active_threshold_a,
+		OPT_BYTE("active_threshold_a", 'a', &cfg.active_threshold_a,
 			active_threshold_a),
-		OPT_UINT("active_threshold_b", 'b', &cfg.active_threshold_b,
+		OPT_BYTE("active_threshold_b", 'b', &cfg.active_threshold_b,
 			active_threshold_b),
-		OPT_UINT("active_threshold_c", 'c', &cfg.active_threshold_c,
+		OPT_BYTE("active_threshold_c", 'c', &cfg.active_threshold_c,
 			active_threshold_c),
-		OPT_UINT("active_threshold_d", 'd', &cfg.active_threshold_d,
+		OPT_BYTE("active_threshold_d", 'd', &cfg.active_threshold_d,
 			active_threshold_d),
-		OPT_UINT("active_latency_config", 'f',
+		OPT_SHRT("active_latency_config", 'f',
 			&cfg.active_latency_config, active_latency_config),
-		OPT_UINT("active_latency_minimum_window", 'w',
+		OPT_BYTE("active_latency_minimum_window", 'w',
 			&cfg.active_latency_minimum_window,
 			active_latency_minimum_window),
-		OPT_UINT("debug_log_trigger_enable", 'r',
+		OPT_SHRT("debug_log_trigger_enable", 'r',
 			&cfg.debug_log_trigger_enable, debug_log_trigger_enable),
-		OPT_UINT("discard_debug_log", 'l', &cfg.discard_debug_log,
+		OPT_BYTE("discard_debug_log", 'l', &cfg.discard_debug_log,
 			discard_debug_log),
-		OPT_UINT("latency_monitor_feature_enable", 'e',
+		OPT_BYTE("latency_monitor_feature_enable", 'e',
 			&cfg.latency_monitor_feature_enable,
 			latency_monitor_feature_enable));
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 
-	if (ret < 0)
+	if (ret)
 		return ret;
 
 	/* get capabilities */

@@ -348,7 +348,8 @@ static int get_additional_smart_log(int argc, char **argv, struct command *acmd,
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace),
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace,
+			 nvme_nsid_values),
 		OPT_FLAG("raw-binary",	 'b', &cfg.raw_binary,	 raw),
 		OPT_FLAG_JSON("json",	 'j', &cfg.json,	 json));
 
@@ -356,11 +357,7 @@ static int get_additional_smart_log(int argc, char **argv, struct command *acmd,
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
+	flags = nvme_args.output_flags;
 
 	nvme_init_get_log(&cmd, cfg.namespace_id, 0xca, NVME_CSI_NVM,
 			  (void *)&smart_log, sizeof(smart_log));
@@ -912,7 +909,8 @@ static int sfx_set_feature(int argc, char **argv, struct command *acmd, struct p
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id",		'n',	&cfg.namespace_id,		namespace_id),
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			 namespace_id, nvme_nsid_values),
 		OPT_UINT("feature-id",			'f',	&cfg.feature_id,		feature_id),
 		OPT_UINT("value",			'V',	&cfg.value,			value),
 		OPT_FLAG("force",			's',	&cfg.force,			force));
@@ -999,7 +997,8 @@ static int sfx_get_feature(int argc, char **argv, struct command *acmd, struct p
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id",		'n',	&cfg.namespace_id,		namespace_id),
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			 namespace_id, nvme_nsid_values),
 		OPT_UINT("feature-id",			'f',	&cfg.feature_id,		feature_id));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
@@ -1550,11 +1549,7 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
+	flags = nvme_args.output_flags;
 
 	//Calculate formatted capacity, not concerned with errors, we may have a char device
 	if (libnvme_transport_handle_is_ns(hdl) &&

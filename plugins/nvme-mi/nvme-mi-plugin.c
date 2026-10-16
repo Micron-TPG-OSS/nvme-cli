@@ -71,7 +71,8 @@ static int libnvme_mi(int argc, char **argv, __u8 admin_opcode, const char *desc
 
 	NVME_ARGS(opts,
 		  OPT_BYTE("opcode", 'O', &cfg.opcode, opcode),
-		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_desired),
+		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			   namespace_desired, nvme_nsid_values),
 		  OPT_UINT("data-len", 'l', &cfg.data_len, data_len),
 		  OPT_UINT("nmimt", 'm', &cfg.nmimt, nmimt),
 		  OPT_UINT("nmd0", '0', &cfg.nmd0, nmd0),
@@ -82,7 +83,7 @@ static int libnvme_mi(int argc, char **argv, __u8 admin_opcode, const char *desc
 	if (err)
 		return err;
 
-	if (!argconfig_parse_seen(opts, "opcode")) {
+	if (!argconfig_given(opts, &cfg.opcode)) {
 		nvme_show_error("%s: opcode parameter required", *argv);
 		return -EINVAL;
 	}

@@ -271,18 +271,14 @@ int solidigm_get_additional_smart_log(int argc, char **argv, struct command *acm
 
 	NVME_ARGS(opts,
 		OPT_UINT("namespace-id",   'n', &cfg.namespace_id,
-			 "(optional) desired namespace"));
+			 "(optional) desired namespace",
+			 nvme_nsid_values));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format '%s'",
-			nvme_args.output_format);
-		return err;
-	}
+	flags = nvme_args.output_flags;
 
 	sldgm_get_uuid_index(hdl, &uuid_index);
 

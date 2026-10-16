@@ -35,6 +35,7 @@ static int fdp_configs(int argc, char **argv, struct command *acmd,
 	struct nvme_fdp_config_log hdr;
 	struct libnvme_passthru_cmd cmd;
 	nvme_print_flags_t flags;
+	__u32 size;
 	int err;
 
 	struct config {
@@ -49,7 +50,7 @@ static int fdp_configs(int argc, char **argv, struct command *acmd,
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("endgrp-id",      'e', &cfg.egid,           egid),
+		OPT_SHRT("endgrp-id",      'e', &cfg.egid,           egid),
 		OPT_FLAG("raw-binary",     'b', &cfg.raw_binary,     raw),
 		OPT_FLAG("human-readable", 'H', &cfg.human_readable, human_readable));
 
@@ -57,9 +58,7 @@ static int fdp_configs(int argc, char **argv, struct command *acmd,
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0)
-		return err;
+	flags = nvme_args.output_flags;
 
 	if (cfg.raw_binary)
 		flags = BINARY;
@@ -79,18 +78,19 @@ static int fdp_configs(int argc, char **argv, struct command *acmd,
 		return err;
 	}
 
-	log = malloc(hdr.size);
+	size = le32_to_cpu(hdr.size);
+	log = malloc(size);
 	if (!log)
 		return -ENOMEM;
 
-	nvme_init_get_log_fdp_configurations(&cmd, cfg.egid, 0, log, hdr.size);
-	err = libnvme_get_log(hdl, &cmd, false, hdr.size);
+	nvme_init_get_log_fdp_configurations(&cmd, cfg.egid, 0, log, size);
+	err = libnvme_get_log(hdl, &cmd, false, size);
 	if (err) {
 		nvme_show_status(errno);
 		return err;
 	}
 
-	nvme_show_fdp_configs(log, hdr.size, flags);
+	nvme_show_fdp_configs(log, size, flags);
 
 	return 0;
 }
@@ -122,16 +122,14 @@ static int fdp_usage(int argc, char **argv, struct command *acmd, struct plugin 
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("endgrp-id",    'e', &cfg.egid,          egid),
+		OPT_SHRT("endgrp-id",    'e', &cfg.egid,          egid),
 		OPT_FLAG("raw-binary",   'b', &cfg.raw_binary,    raw));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0)
-		return err;
+	flags = nvme_args.output_flags;
 
 	if (cfg.raw_binary)
 		flags = BINARY;
@@ -186,7 +184,7 @@ static int fdp_stats(int argc, char **argv, struct command *acmd, struct plugin 
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("endgrp-id",    'e', &cfg.egid,          egid),
+		OPT_SHRT("endgrp-id",    'e', &cfg.egid,          egid),
 		OPT_FLAG("raw-binary",   'b', &cfg.raw_binary,    raw));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
@@ -246,7 +244,7 @@ static int fdp_events(int argc, char **argv, struct command *acmd, struct plugin
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("endgrp-id",    'e', &cfg.egid,          egid),
+		OPT_SHRT("endgrp-id",    'e', &cfg.egid,          egid),
 		OPT_FLAG("host-events",  'E', &cfg.host_events,   host_events),
 		OPT_FLAG("raw-binary",   'b', &cfg.raw_binary,    raw));
 
@@ -254,9 +252,7 @@ static int fdp_events(int argc, char **argv, struct command *acmd, struct plugin
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0)
-		return err;
+	flags = nvme_args.output_flags;
 
 	if (cfg.raw_binary)
 		flags = BINARY;
@@ -306,16 +302,15 @@ static int fdp_status(int argc, char **argv, struct command *acmd, struct plugin
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id", 'n', &cfg.nsid,	namespace_id),
+		OPT_UINT("namespace-id", 'n', &cfg.nsid,	namespace_id,
+			 nvme_nsid_values),
 		OPT_FLAG("raw-binary",   'b', &cfg.raw_binary,	raw));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0)
-		return err;
+	flags = nvme_args.output_flags;
 
 	if (cfg.raw_binary)
 		flags = BINARY;
@@ -378,7 +373,8 @@ static int fdp_update(int argc, char **argv, struct command *acmd, struct plugin
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id",  'n', &cfg.nsid,	namespace_id),
+		OPT_UINT("namespace-id",  'n', &cfg.nsid,	namespace_id,
+			 nvme_nsid_values),
 		OPT_LIST("pids",          'p', &cfg.pids,	_pids));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
@@ -447,7 +443,8 @@ static int fdp_set_events(int argc, char **argv, struct command *acmd, struct pl
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id",     'n', &cfg.nsid,         nsid),
+		OPT_UINT("namespace-id",     'n', &cfg.nsid,         nsid,
+			 nvme_nsid_values),
 		OPT_SHRT("placement-handle", 'p', &cfg.ph,           ph),
 		OPT_FLAG("enable",           'e', &cfg.enable,       enable),
 		OPT_FLAG("save",             's', &cfg.sv,		     sv),
@@ -531,7 +528,7 @@ static int fdp_feature(int argc, char **argv, struct command *acmd, struct plugi
 	if (err)
 		return err;
 
-	enabling_conf_idx = argconfig_parse_seen(opts, "enable-conf-idx");
+	enabling_conf_idx = argconfig_given(opts, &cfg.fdpcidx);
 	if (enabling_conf_idx && cfg.disable) {
 		nvme_show_error("Cannot enable and disable at the same time");
 		return -EINVAL;

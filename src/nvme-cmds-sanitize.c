@@ -13,7 +13,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <getopt.h>
 #include <inttypes.h>
 #include <libgen.h>
 #include <locale.h>
@@ -182,7 +181,6 @@ static int device_self_test(int argc, char **argv, struct command *acmd, struct 
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	struct libnvme_passthru_cmd cmd;
-	nvme_print_flags_t flags;
 	int err;
 
 	struct config {
@@ -201,19 +199,14 @@ static int device_self_test(int argc, char **argv, struct command *acmd, struct 
 
 	NVME_ARGS(opts,
 		  OPT_FLAG("ish",            'I', &cfg.ish,          ish),
-		  OPT_UINT("namespace-id",   'n', &cfg.namespace_id, namespace_id),
+		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			   namespace_id, nvme_nsid_values),
 		  OPT_BYTE("self-test-code", 's', &cfg.stc,          self_test_code),
 		  OPT_FLAG("wait",           'w', &cfg.wait,         wait));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
-
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
 
 	if (cfg.stc == NVME_ST_CODE_RESERVED) {
 		__cleanup_libnvme_free struct nvme_self_test_log *log = NULL;
@@ -448,7 +441,6 @@ static int sanitize_cmd(int argc, char **argv, struct command *acmd, struct plug
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_libnvme_free struct nvme_id_ctrl *ctrl = NULL;
 	struct libnvme_passthru_cmd cmd;
-	nvme_print_flags_t flags;
 	int err;
 	bool sanitized;
 
@@ -504,12 +496,6 @@ static int sanitize_cmd(int argc, char **argv, struct command *acmd, struct plug
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
-
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
 
 	ctrl = identify_ctrl(hdl);
 	if (!ctrl)
@@ -619,7 +605,6 @@ static int sanitize_ns_cmd(int argc, char **argv, struct command *acmd,
 
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	struct libnvme_passthru_cmd cmd;
-	nvme_print_flags_t flags;
 	int err;
 
 	struct config {
@@ -657,12 +642,6 @@ static int sanitize_ns_cmd(int argc, char **argv, struct command *acmd,
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
-
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
 
 	switch (cfg.sanact) {
 	case NVME_SANITIZE_SANACT_EXIT_FAILURE:
@@ -773,7 +752,8 @@ static int format_cmd(int argc, char **argv, struct command *acmd, struct plugin
 
 	NVME_ARGS(opts,
 		  OPT_FLAG("ish",         'I', &cfg.ish,          ish),
-		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id_desired),
+		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			   namespace_id_desired, nvme_nsid_values),
 		  OPT_BYTE("lbaf",         'l', &cfg.lbaf,         lbaf),
 		  OPT_BYTE("ses",          's', &cfg.ses,          ses),
 		  OPT_BYTE("pi",           'i', &cfg.pi,           pi),
@@ -793,7 +773,8 @@ static int format_cmd(int argc, char **argv, struct command *acmd, struct plugin
 	err = open_exclusive(&ctx, &hdl, argc, argv, cfg.force, opts);
 	if (err) {
 		if (-err == EBUSY) {
-			nvme_show_error("Failed to open %s.", basename(argv[optind]));
+			nvme_show_error("Failed to open %s.",
+						basename(nvme_args.device));
 			nvme_show_error("Namespace is currently busy.");
 			if (!cfg.force)
 				nvme_show_error("Use the force [--force] option to ignore that.");
@@ -803,11 +784,7 @@ static int format_cmd(int argc, char **argv, struct command *acmd, struct plugin
 		return err;
 	}
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
+	flags = nvme_args.output_flags;
 
 	if (cfg.lbaf != 0xff && cfg.bs != 0) {
 		nvme_show_error(

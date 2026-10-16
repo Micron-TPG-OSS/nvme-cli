@@ -13,12 +13,35 @@ test_argconfig_parse = executable(
 
 test('nvme-cli - argconfig_parse', test_argconfig_parse)
 
-test_global_config = executable(
-    'test-global-config',
-    ['test-global-config.c', '../../../src/global-config.c'],
+test_argconfig_diff = executable(
+    'test-argconfig-diff',
+    [
+        'test-argconfig-diff.c',
+        'argconfig-getopt-ref.c',
+        '../../../src/argconfig.c',
+    ],
     dependencies: [
         config_dep,
         ccan_dep,
+        libnvme_dep,
+        shared_dep,
+    ],
+)
+
+test('nvme-cli - argconfig_diff', test_argconfig_diff)
+
+test_global_config = executable(
+    'test-global-config',
+    [
+        'test-global-config.c',
+        '../../../src/argconfig.c',
+        '../../../src/global-config.c',
+        '../../../src/global-options.c',
+    ],
+    dependencies: [
+        config_dep,
+        ccan_dep,
+        libnvme_dep,
         shared_dep,
     ],
 )

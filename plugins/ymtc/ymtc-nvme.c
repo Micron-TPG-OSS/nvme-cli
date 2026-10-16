@@ -132,13 +132,11 @@ static int ymtc_parse_options(struct libnvme_global_ctx **ctx,
 	int err;
 
 	err = parse_and_open(ctx, hdl, argc, argv, desc, opts);
-	if (err) {
-		nvme_show_error("open");
+	if (err)
 		return err;
-	}
 
 	if (model) {
-		if (sscanf(argv[optind], "/dev/nvme%d", &idx) != 1)
+		if (sscanf(nvme_args.device, "/dev/nvme%d", &idx) != 1)
 			idx = 0;
 		*model = GetSSDModel(idx);
 	}
@@ -415,7 +413,8 @@ static int get_additional_smart_log(int argc, char **argv, struct command *acmd,
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,  namespace),
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,  namespace,
+			 nvme_nsid_values),
 		OPT_FLAG("raw-binary",	 'b', &cfg.raw_binary,	  raw));
 
 	err = ymtc_parse_options(&ctx, &hdl, argc, argv, desc, opts,&model);

@@ -2834,7 +2834,7 @@ static void json_nvme_fdp_events(struct nvme_fdp_events_log *log)
 
 	obj_add_uint(r, "n", n);
 
-	for (unsigned int i = 0; i < n; i++) {
+	for (unsigned int i = 0; i < n && i < ARRAY_SIZE(log->events); i++) {
 		struct nvme_fdp_event *event = &log->events[i];
 
 		struct json_object *obj_event = json_create_object();
@@ -3693,7 +3693,7 @@ static void json_zns_changed(struct nvme_zns_changed_zone_log *log)
 		obj_add_result(r, "Too many zones have changed to fit into the log. Use report zones for changes.");
 	} else {
 		obj_add_uint(r, "nrzid", nrzid);
-		for (i = 0; i < nrzid; i++) {
+		for (i = 0; i < nrzid && i < ARRAY_SIZE(log->zid); i++) {
 			sprintf(json_str, "zid %03d", i);
 			obj_add_uint64(r, json_str, (uint64_t)le64_to_cpu(log->zid[i]));
 		}
@@ -4303,7 +4303,8 @@ static void json_feature_show_fields_fdp_events(struct json_object *r, unsigned 
 	struct nvme_fdp_supported_event_desc *d;
 	char json_str[STR_LEN];
 
-	for (i = 0; i < result; i++) {
+	// NOET is in bits 7:0; bits 31:8 are reserved.
+	for (i = 0; i < (result & 0xff); i++) {
 		d = &((struct nvme_fdp_supported_event_desc *)buf)[i];
 		sprintf(json_str, "%s", d->evta & 0x1 ? "Enabled" : "Not enabled");
 		obj_add_str(r, nvme_fdp_event_to_string(d->evt), json_str);
@@ -5464,32 +5465,41 @@ static void json_directive_show_fields_identify(__u8 doper, __u8 *field, struct 
 	}
 }
 
-static void json_directive_show_fields_streams(__u8 doper, unsigned int result, __u16 *field,
+static void json_directive_show_fields_streams(__u8 doper,
+					       unsigned int result, __u8 *field,
 					       struct json_object *r)
 {
+	struct nvme_streams_directive_params *params = (void *)field;
+	struct nvme_streams_directive_status *status = (void *)field;
 	int count;
 	int i;
 	char json_str[STR_LEN];
 
 	switch (doper) {
 	case NVME_DIRECTIVE_RECEIVE_STREAMS_DOPER_PARAM:
-		obj_add_uint(r, "Max Streams Limit (MSL)", le16_to_cpu(*field));
-		obj_add_uint(r, "NVM Subsystem Streams Available (NSSA)", le16_to_cpu(*(field + 2)));
-		obj_add_uint(r, "NVM Subsystem Streams Open (NSSO)", le16_to_cpu(*(field + 4)));
-		obj_add_uint(r, "NVM Subsystem Stream Capability (NSSC)", le16_to_cpu(*(field + 6)));
+		obj_add_uint(r, "Max Streams Limit (MSL)",
+			     le16_to_cpu(params->msl));
+		obj_add_uint(r, "NVM Subsystem Streams Available (NSSA)",
+			     le16_to_cpu(params->nssa));
+		obj_add_uint(r, "NVM Subsystem Streams Open (NSSO)",
+			     le16_to_cpu(params->nsso));
+		obj_add_uint(r, "NVM Subsystem Stream Capability (NSSC)",
+			     params->nssc);
 		obj_add_uint(r, "Stream Write Size (in unit of LB size) (SWS)",
-			     le16_to_cpu(*(__u32 *)(field + 16)));
+			     le32_to_cpu(params->sws));
 		obj_add_uint(r, "Stream Granularity Size (in unit of SWS) (SGS)",
-			     le16_to_cpu(*(field + 20)));
-		obj_add_uint(r, "Namespace Streams Allocated (NSA)", le16_to_cpu(*(field + 22)));
-		obj_add_uint(r, "Namespace Streams Open (NSO)", le16_to_cpu(*(field + 24)));
+			     le16_to_cpu(params->sgs));
+		obj_add_uint(r, "Namespace Streams Allocated (NSA)",
+			     le16_to_cpu(params->nsa));
+		obj_add_uint(r, "Namespace Streams Open (NSO)",
+			     le16_to_cpu(params->nso));
 		break;
 	case NVME_DIRECTIVE_RECEIVE_STREAMS_DOPER_STATUS:
-		count = *field;
-		obj_add_uint(r, "Open Stream Count", le16_to_cpu(*field));
+		count = le16_to_cpu(status->osc);
+		obj_add_uint(r, "Open Stream Count", count);
 		for (i = 0; i < count; i++) {
 			sprintf(json_str, "Stream Identifier %.6u", i + 1);
-			obj_add_uint(r, json_str, le16_to_cpu(*(field + (i + 1) * 2)));
+			obj_add_uint(r, json_str, le16_to_cpu(status->sid[i]));
 		}
 		break;
 	case NVME_DIRECTIVE_RECEIVE_STREAMS_DOPER_RESOURCE:
@@ -5510,7 +5520,7 @@ static void json_directive_show_fields(__u8 dtype, __u8 doper, unsigned int resu
 		json_directive_show_fields_identify(doper, field, r);
 		break;
 	case NVME_DIRECTIVE_DTYPE_STREAMS:
-		json_directive_show_fields_streams(doper, result, (__u16 *)field, r);
+		json_directive_show_fields_streams(doper, result, field, r);
 		break;
 	default:
 		obj_add_str(r, "Error", "invalid directive type");

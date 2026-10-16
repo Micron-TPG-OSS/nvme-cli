@@ -527,7 +527,8 @@ static int dapustor_additional_smart_log(int argc, char **argv, struct command *
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace),
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace,
+			 nvme_nsid_values),
 		OPT_FLAG("raw-binary",   'b', &cfg.raw_binary,   raw),
 		OPT_FLAG_JSON("json",    'j', &cfg.json,         json));
 
@@ -535,11 +536,7 @@ static int dapustor_additional_smart_log(int argc, char **argv, struct command *
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
+	flags = nvme_args.output_flags;
 
 	err = dapustor_additional_smart_log_data(hdl, &smart_log,
 						 &ext_smart_log, &has_ext);

@@ -48,9 +48,8 @@ _OPC_IDENTIFY = 0x06
 _OPC_IO_MGMT_RECV = 0x12
 _OPC_RESV_REPORT = 0x0e
 _OPC_DIR_RECV = 0x1a
+_DIR_STREAMS_PARAM = 0x0101      # directive type 1, operation 1
 _DIR_STREAMS_STATUS = 0x0102     # directive type 1, operation 2
-_OPC_GET_FEATURES = 0x0a
-_FID_FDP_EVENTS = 0x1e
 _LID_PERSISTENT_EVENT = 0x0d
 _LID_MEDIA_UNIT_STATUS = 0x10
 _LID_SUPPORTED_CAP_CONFIG = 0x11
@@ -78,13 +77,11 @@ _FIXUPS = {
     0x20: [('<H', 0, 0), ('<I', 4, 88),         # FDP configs: n, size,
            ('<H', 16, 72), ('<H', 24, 2)],      # config size, nruh
     0x21: [('<H', 0, 2)],                       # FDP RUH usage: nruh
-    0x23: [('<I', 0, 2)],                       # FDP events: n
     0x1b: [('<H', 8, 0)],                       # reachability assoc.: nrad
     0x25: [('<I', 4, None), ('<H', 12, 0)],     # power measurement: sze, nphd
     0x71: [('<Q', 8, 0), ('<I', 20, 1024)],     # host discovery: numrec, thdlpl
     0x72: [('<Q', 8, 0), ('<I', 20, 1024)],     # AVE discovery: numrec, tadlpl
     0x73: [('<I', 4, 8)],                       # pull model DDC: tpdrpl
-    0xbf: [('<H', 0, 2)],                       # changed zones: nrzid
 }
 
 
@@ -103,6 +100,7 @@ class PrintMockIPCServer(MockIPCServer):
         self.header_len = {}
         self.logs = {}
         self.id_ctrl = {}
+        self.dir_data = {}
 
     def handle_ioctl(self, conn, fd, request, opcode, nsid,
                      cdw10, cdw11, cdw12, cdw13, cdw14, cdw15, lpo, req_len):
@@ -128,11 +126,11 @@ class PrintMockIPCServer(MockIPCServer):
             _put(buf, '<H', 14, 2)      # reclaim unit handle status: nruhsd
         elif opcode == _OPC_RESV_REPORT:
             _put(buf, '<H', 5, 2)       # number of registered controllers
+        elif opcode == _OPC_DIR_RECV and cdw11 & 0xffff in self.dir_data:
+            buf = bytearray(self.dir_data[cdw11 & 0xffff].ljust(req_len, b'\0'))
         elif (opcode == _OPC_DIR_RECV and
               cdw11 & 0xffff == _DIR_STREAMS_STATUS):
             _put(buf, '<H', 0, 2)       # open stream count
-        elif opcode == _OPC_GET_FEATURES and cdw10 & 0xff == _FID_FDP_EVENTS:
-            result &= 0xff  # bits 31:8 are reserved
 
         self.send_response(conn, 0, result=result, payload=bytes(buf))
 
@@ -204,6 +202,9 @@ class PrintCLITest(unittest.TestCase):
         self.server.shutdown()
         self.server.join()
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
+        if self.server.errors:
+            self.fail('the mock server failed:\n' +
+                      ''.join(self.server.errors))
 
     def _run_all(self, commands):
         for seed in _SEEDS:
@@ -218,6 +219,9 @@ class PrintCLITest(unittest.TestCase):
         result = run_nvme(_NVME_BIN, self.env, self.sysfs_dir,
                           self.base_dir, *args,
                           encoding=None if binary else 'utf-8')
+        errors, self.server.errors = self.server.errors, []
+        if errors:
+            self.fail('the mock server failed:\n' + ''.join(errors))
         # A signal or a sanitizer abort, not an NVMe error status.
         self.assertGreaterEqual(result.returncode, 0)
         self.assertLess(result.returncode, 128)
@@ -344,6 +348,35 @@ class PrintCLITest(unittest.TestCase):
                           'log', 'persistent-event', self.CTRL, '-o', 'json')
         self.assertEqual(result.returncode, 0)
         self.assertIn('"signed_integer_data":-2', result.stdout.replace(' ', ''))
+
+    def test_streams_directive(self):
+        # msl, nssa, nsso, nssc, sws, sgs, nsa, nso
+        self.server.dir_data[_DIR_STREAMS_PARAM] = struct.pack(
+            '<HHHB9xIHHH6x', 1, 2, 3, 4, 0x10005, 6, 7, 8)
+        # osc, sid[]
+        self.server.dir_data[_DIR_STREAMS_STATUS] = struct.pack(
+            '<4H', 3, 11, 12, 13)
+        params = [1, 2, 3, 4, 0x10005, 6, 7, 8]
+        status = [3, 11, 12, 13]
+
+        def values(oper, *fmt):
+            result = run_nvme(_NVME_BIN, self.env, self.sysfs_dir,
+                              self.base_dir, 'dir', 'receive', self.NS,
+                              '-D', '1', '-O', oper, '-l', '64', '-v', *fmt)
+            self.assertEqual(result.returncode, 0)
+            if fmt:
+                obj = json.loads(result.stdout)
+                return [v for k, v in obj.items() if '(' in k or 'Stream' in k]
+            return [int(line.split(':')[1]) for line in
+                    result.stdout.splitlines()[1:] if ':' in line]
+
+        self.assertEqual(values('1'), params)
+        self.assertEqual(values('2'), status)
+
+        if not _HAVE_JSON:
+            return
+        self.assertEqual(values('1', '-o', 'json'), params)
+        self.assertEqual(values('2', '-o', 'json'), status)
 
     def test_supported_cap_config(self):
         def media_units(*muids):

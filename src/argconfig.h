@@ -32,7 +32,6 @@
  */
 #pragma once
 
-#include <getopt.h>
 #include <stdbool.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -56,40 +55,74 @@ enum argconfig_types {
 #define OPT_ARGS(n) \
 	struct argconfig_commandline_options n[]
 
+/*
+ * The option macros check the type of the variable they store to, so a
+ * mismatch is a compile error instead of a write of the wrong size or
+ * signedness. Every option needs a variable, which argconfig_given()
+ * takes.
+ */
+#define OPT_CHECK(v, T)		_Generic(v, T : (v))
+#define OPT_CHECK_2(v, T, U)	_Generic(v, T : (v), U : (v))
+/*
+ * uint64_t is unsigned long long on some ABIs only, and listing a type
+ * twice is an error. The inner selection falls back to a void expression,
+ * which only fails if it is selected.
+ */
+#define OPT_CHECK_64(v)							\
+	_Generic(v, uint64_t * : (v),					\
+		default :						\
+		_Generic(v, unsigned long long * : (v),			\
+			default :					\
+			(void)0))
+#define OPT_CHECK_STR(v)	OPT_CHECK_2(v, char **, const char **)
+#define OPT_CHECK_BOOL(v)	_Generic(v, bool * : (v))
+#define OPT_CHECK_DOUBLE(v)	_Generic(v, double * : (v))
+
 #define OPT_END() { NULL }
 
 #define OPT_GROUP(d) \
-	{"", 0, NULL, CFG_GROUP_SEPARATOR, NULL, no_argument, d, false, NULL}
+	{"", 0, NULL, CFG_GROUP_SEPARATOR, NULL, ARGCONFIG_ARG_NONE, d, false, \
+	 NULL}
 
 #define OPT_FLAG(l, s, v, d, ...) \
-	{l, s, NULL, CFG_FLAG, v, no_argument, d, false, __VA_ARGS__}
+	{l, s, NULL, CFG_FLAG, OPT_CHECK_BOOL(v), \
+	 ARGCONFIG_ARG_NONE, d, false, __VA_ARGS__}
 
 #define OPT_SUFFIX(l, s, v, d, ...) \
-	{l, s, "IONUM", CFG_LONG_SUFFIX, v, required_argument, d, false, __VA_ARGS__}
+	{l, s, "IONUM", CFG_LONG_SUFFIX, OPT_CHECK_64(v), \
+	 ARGCONFIG_ARG_REQUIRED, d, false, __VA_ARGS__}
 
 #define OPT_UINT(l, s, v, d, ...) \
-	{l, s, "NUM", CFG_POSITIVE, v, required_argument, d, false, __VA_ARGS__}
+	{l, s, "NUM", CFG_POSITIVE, OPT_CHECK(v, uint32_t *), \
+	 ARGCONFIG_ARG_REQUIRED, d, false, __VA_ARGS__}
 
 #define OPT_INT(l, s, v, d, ...) \
-	{l, s, "NUM", CFG_INT, v, required_argument, d, false, __VA_ARGS__}
+	{l, s, "NUM", CFG_INT, OPT_CHECK(v, int *), \
+	 ARGCONFIG_ARG_REQUIRED, d, false, __VA_ARGS__}
 
 #define OPT_LONG(l, s, v, d, ...) \
-	{l, s, "NUM", CFG_LONG, v, required_argument, d, false, __VA_ARGS__}
+	{l, s, "NUM", CFG_LONG, OPT_CHECK_64(v), \
+	 ARGCONFIG_ARG_REQUIRED, d, false, __VA_ARGS__}
 
 #define OPT_DOUBLE(l, s, v, d, ...) \
-	{l, s, "NUM", CFG_DOUBLE, v, required_argument, d, false, __VA_ARGS__}
+	{l, s, "NUM", CFG_DOUBLE, OPT_CHECK_DOUBLE(v), \
+	 ARGCONFIG_ARG_REQUIRED, d, false, __VA_ARGS__}
 
 #define OPT_BYTE(l, s, v, d, ...) \
-	{l, s, "NUM", CFG_BYTE, v, required_argument, d, false, __VA_ARGS__}
+	{l, s, "NUM", CFG_BYTE, OPT_CHECK(v, uint8_t *), \
+	 ARGCONFIG_ARG_REQUIRED, d, false, __VA_ARGS__}
 
 #define OPT_SHRT(l, s, v, d, ...) \
-	{l, s, "NUM", CFG_SHORT, v, required_argument, d, false, __VA_ARGS__}
+	{l, s, "NUM", CFG_SHORT, OPT_CHECK(v, uint16_t *), \
+	 ARGCONFIG_ARG_REQUIRED, d, false, __VA_ARGS__}
 
 #define OPT_INCR(l, s, v, d, ...) \
-	{l, s, "NUM", CFG_INCREMENT, v, no_argument, d, false, __VA_ARGS__}
+	{l, s, "NUM", CFG_INCREMENT, OPT_CHECK(v, int *), \
+	 ARGCONFIG_ARG_NONE, d, false, __VA_ARGS__}
 
 #define OPT_STRING(l, s, m, v, d, ...) \
-	{l, s, m, CFG_STRING, v, required_argument, d, false, __VA_ARGS__}
+	{l, s, m, CFG_STRING, OPT_CHECK_STR(v), \
+	 ARGCONFIG_ARG_REQUIRED, d, false, __VA_ARGS__}
 
 /*
  * Like OPT_STRING(), but the value is optional. getopt_long() only
@@ -99,7 +132,8 @@ enum argconfig_types {
  * "given with no value" (optarg is NULL).
  */
 #define OPT_STRING_OPTIONAL(l, s, m, v, d, ...) \
-	{l, s, m, CFG_STRING, v, optional_argument, d, false, __VA_ARGS__}
+	{l, s, m, CFG_STRING, OPT_CHECK_STR(v), \
+	 ARGCONFIG_ARG_OPTIONAL, d, false, __VA_ARGS__}
 
 #define OPT_FMT(l, s, v, d, ...)  OPT_STRING(l, s, "FMT", v, d, __VA_ARGS__)
 #define OPT_FILE(l, s, v, d, ...) OPT_STRING(l, s, "FILE", v, d, __VA_ARGS__)
@@ -109,7 +143,12 @@ enum argconfig_types {
 #ifdef CONFIG_JSONC
 #define OPT_FLAG_JSON(l, s, v, d, ...) OPT_FLAG(l, s, v, d, __VA_ARGS__)
 #else /* CONFIG_JSONC */
-#define OPT_FLAG_JSON(l, s, v, d, ...) OPT_END()
+/*
+ * A placeholder which does not end the table, the global options are
+ * appended after the command options. A separator is invisible in the
+ * help output unless options follow it.
+ */
+#define OPT_FLAG_JSON(...) OPT_GROUP("Options")
 #endif /* CONFIG_JSONC */
 
 #define OPT_VALS(n) \
@@ -124,7 +163,7 @@ enum argconfig_types {
 	{s, CFG_LONG_SUFFIX, .val.long_suffix = v}
 
 #define VAL_UINT(s, v) \
-	{s, CFG_POSITIVE, v}
+	{s, CFG_POSITIVE, .val.positive = v}
 
 #define VAL_INT(s, v) \
 	{s, CFG_INT, .val.int_val = v}
@@ -156,7 +195,7 @@ union argconfig_val {
 	uint16_t short_val;
 	uint32_t positive;
 	int increment;
-	unsigned long long_val;
+	uint64_t long_val;
 	uint64_t long_suffix;
 	double double_val;
 	bool flag;
@@ -168,13 +207,20 @@ struct argconfig_opt_val {
 	union argconfig_val val;
 };
 
+/* Whether an option takes a value */
+enum argconfig_argument {
+	ARGCONFIG_ARG_NONE,
+	ARGCONFIG_ARG_REQUIRED,
+	ARGCONFIG_ARG_OPTIONAL,
+};
+
 struct argconfig_commandline_options {
 	const char *option;
 	const char short_option;
 	const char *meta;
 	enum argconfig_types config_type;
 	void *default_value;
-	int argument_type;
+	enum argconfig_argument argument_type;
 	const char *help;
 	bool seen;
 	struct argconfig_opt_val *opt_val;
@@ -184,15 +230,28 @@ struct argconfig_commandline_options {
 void argconfig_append_usage(const char *str);
 void argconfig_print_help(const char *program_desc,
 			  struct argconfig_commandline_options *options);
+bool argconfig_help_requested(void);
 int argconfig_parse(int argc, char *argv[], const char *program_desc,
 		    struct argconfig_commandline_options *options);
+/* argconfig_parse_global(): -h or --help, -V or --version was given */
+#define ARGCONFIG_HELP		1
+#define ARGCONFIG_VERSION	2
+
 int argconfig_parse_global(int argc, char *argv[],
-			   struct argconfig_commandline_options *options);
+			   struct argconfig_commandline_options *options,
+			   int *argind);
+void argconfig_set_global_options(
+		struct argconfig_commandline_options *options);
+struct argconfig_commandline_options *argconfig_get_global_options(void);
+int argconfig_nr_operands(void);
+char *argconfig_operand(int i);
 
 typedef int (*argconfig_parse_hook_fn)(int argc, char *argv[],
 				       const char *program_desc,
 				       struct argconfig_commandline_options *options);
 void argconfig_set_parse_hook(argconfig_parse_hook_fn hook);
 
-bool argconfig_parse_seen(struct argconfig_commandline_options *options,
-			  const char *option);
+bool argconfig_given(struct argconfig_commandline_options *options,
+		     const void *value);
+bool argconfig_set_value_name(struct argconfig_commandline_options *option,
+			      const char *str);

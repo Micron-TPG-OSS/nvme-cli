@@ -14,6 +14,7 @@
 #include "argconfig.h"
 #include "args.h"
 #include "nvme-print.h"
+#include "plugin.h"
 
 struct nvme_args nvme_args = {
 	.output_format = "normal",
@@ -25,14 +26,65 @@ struct nvme_args nvme_args = {
 const char *uuid_index = "UUID index";
 const char *namespace_id_desired = "identifier of desired namespace";
 
-int parse_args(int argc, char *argv[], const char *desc,
-	       struct argconfig_commandline_options *opts)
+/*
+ * The operand of the current command: the device, or nothing. A missing
+ * or an extra operand is a usage error.
+ */
+static int check_device(char *argv[], const char *desc,
+			struct argconfig_commandline_options *opts)
+{
+	int max = nvme_args.device_operand == COMMAND_NO_DEVICE ? 0 : 1;
+	int nr = argconfig_nr_operands();
+
+	if (nvme_args.device_operand == COMMAND_DEVICE && !nr) {
+		nvme_show_error("%s: missing <device>", argv[0]);
+		goto usage;
+	}
+	if (nr > max) {
+		nvme_show_error("%s: unexpected argument '%s'", argv[0],
+				argconfig_operand(max));
+		goto usage;
+	}
+
+	nvme_args.device = argconfig_operand(0);
+	return 0;
+
+usage:
+	argconfig_print_help(desc, opts);
+	return -EINVAL;
+}
+
+int parse_cmdline(int argc, char *argv[], const char *desc,
+		  struct argconfig_commandline_options *opts)
 {
 	int ret;
 
 	ret = argconfig_parse(argc, argv, desc, opts);
 	if (ret)
 		return ret;
+
+	return check_device(argv, desc, opts);
+}
+
+int parse_args(int argc, char *argv[], const char *desc,
+	       struct argconfig_commandline_options *opts)
+{
+	int ret;
+
+	ret = parse_cmdline(argc, argv, desc, opts);
+	if (ret)
+		return ret;
+
+	if (nvme_args.supported_output_formats & OUTPUT_FORMATS_CUSTOM) {
+		nvme_args.output_flags = NORMAL;
+	} else {
+		ret = validate_output_format(nvme_args.output_format,
+					     &nvme_args.output_flags);
+		if (ret < 0) {
+			nvme_show_error("Invalid output format");
+			return ret;
+		}
+	}
 
 	nvme_show_init();
 

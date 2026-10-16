@@ -164,11 +164,7 @@ static int log_pages_supp(int argc, char **argv, struct command *acmd,
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
+	flags = nvme_args.output_flags;
 
 	err = nvme_get_log_simple(hdl, 0xc5, &logPageMap, sizeof(logPageMap));
 	if (!err) {
@@ -914,16 +910,10 @@ static int vs_smart_log(int argc, char **argv, struct command *acmd, struct plug
 	NVME_ARGS(opts);
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
-	if (err) {
-		nvme_show_error("Device not found");
-		return -1;
-	}
-
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
+	if (err)
 		return err;
-	}
+
+	flags = nvme_args.output_flags;
 
 	if (flags & JSON)
 		printf("Seagate Extended SMART Information :\n");
@@ -1094,16 +1084,10 @@ static int temp_stats(int argc, char **argv, struct command *acmd, struct plugin
 	NVME_ARGS(opts);
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
-	if (err) {
-		nvme_show_error("Device not found");
-		return -1;
-	}
-
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
+	if (err)
 		return err;
-	}
+
+	flags = nvme_args.output_flags;
 
 	if (!(flags & JSON))
 		printf("Seagate Temperature Stats Information :\n");
@@ -1257,16 +1241,10 @@ static int vs_pcie_error_log(int argc, char **argv, struct command *acmd, struct
 	NVME_ARGS(opts);
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
-	if (err) {
-		nvme_show_error("Device not found");
-		return -1;
-	}
-
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
+	if (err)
 		return err;
-	}
+
+	flags = nvme_args.output_flags;
 
 	if (!(flags & JSON))
 		printf("Seagate PCIe error counters Information :\n");
@@ -1394,16 +1372,10 @@ static int stx_vs_fw_activate_history(int argc, char **argv, struct command *acm
 	NVME_ARGS(opts);
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
-	if (err < 0) {
-		nvme_show_error("Device not found");
-		return -1;
-	}
-
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
+	if (err)
 		return err;
-	}
+
+	flags = nvme_args.output_flags;
 
 	if (!(flags & JSON))
 		printf("Seagate FW Activation History Information :\n");
@@ -1455,10 +1427,8 @@ static int clear_fw_activate_history(int argc, char **argv, struct command *acmd
 		OPT_FLAG("save", 's', &cfg.save, save));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
-	if (err < 0) {
-		nvme_show_error("Device not found");
-		return -1;
-	}
+	if (err)
+		return err;
 
 	nvme_init_identify_ctrl(&cmd, &ctrl);
 	err = libnvme_exec_admin_passthru(hdl, &cmd);
@@ -1515,10 +1485,8 @@ static int vs_clr_pcie_correctable_errs(int argc, char **argv, struct command *a
 		OPT_FLAG("save", 's', &cfg.save, save));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
-	if (err) {
-		nvme_show_error("Device not found");
-		return -1;
-	}
+	if (err)
+		return err;
 
 
 	nvme_init_identify_ctrl(&cmd, &ctrl);
@@ -1577,7 +1545,8 @@ static int get_host_tele(int argc, char **argv, struct command *acmd, struct plu
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id),
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
+			 nvme_nsid_values),
 		OPT_UINT("log_specific", 'i', &cfg.log_id,       log_specific),
 		OPT_FLAG("raw-binary",   'b', &cfg.raw_binary,   raw));
 
@@ -1682,7 +1651,8 @@ static int get_ctrl_tele(int argc, char **argv, struct command *acmd, struct plu
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id),
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
+			 nvme_nsid_values),
 		OPT_FLAG("raw-binary",   'b', &cfg.raw_binary,   raw));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
@@ -1795,7 +1765,8 @@ static int vs_internal_log(int argc, char **argv, struct command *acmd, struct p
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id),
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
+			 nvme_nsid_values),
 		OPT_FILE("dump-file",    'f', &cfg.file,         file));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
@@ -1972,14 +1943,14 @@ static struct command seagate_plugin_version_cmd = {
 	.name = "plugin-version",
 	.help = "Shows Seagate plugin's version information ",
 	.fn = seagate_plugin_version,
-	.no_device = true,
+	.device = COMMAND_NO_DEVICE,
 };
 
 static struct command stx_ocp_plugin_version_cmd = {
 	.name = "cloud-SSD-plugin-version",
 	.help = "Shows OCP Seagate plugin's version information ",
 	.fn = stx_ocp_plugin_version,
-	.no_device = true,
+	.device = COMMAND_NO_DEVICE,
 };
 
 static struct command *commands[] = {

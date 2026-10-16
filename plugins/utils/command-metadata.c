@@ -20,7 +20,6 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <getopt.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +30,7 @@
 #endif
 
 #include <shared/fs-util.h>
+#include <shared/string-util.h>
 
 #include "command-metadata.h"
 #include "nvme-json.h"
@@ -55,7 +55,7 @@
  * changes that keep existing keys stable do not require a bump. Consumers
  * should reject a major version they do not understand.
  */
-#define COMMAND_METADATA_SCHEMA_VERSION 1
+#define COMMAND_METADATA_SCHEMA_VERSION 2
 
 /*
  * The command currently being captured; set by capture_command()
@@ -334,6 +334,40 @@ static int copy_options(const struct argconfig_commandline_options *opts,
  * command's options into the model, then returns the sentinel so the parser
  * unwinds before the command opens a device.
  */
+/*
+ * The command's options followed by the registered global options, behind a
+ * "Global options" separator as json_command() expects. The caller frees
+ * the returned array; the entries alias the original tables.
+ */
+static struct argconfig_commandline_options *
+with_global_options(struct argconfig_commandline_options *options)
+{
+	struct argconfig_commandline_options *g, *all;
+	size_t n = 0, ng = 0, i;
+
+	g = argconfig_get_global_options();
+	while (options[n].option)
+		n++;
+	while (g && g[ng].option)
+		ng++;
+
+	all = calloc(n + ng + 2, sizeof(*all));
+	if (!all)
+		return NULL;
+
+	memcpy(all, options, n * sizeof(*all));
+	if (ng) {
+		struct argconfig_commandline_options sep =
+			OPT_GROUP("Global options");
+
+		memcpy(&all[n], &sep, sizeof(sep));
+		for (i = 0; i < ng; i++)
+			memcpy(&all[n + 1 + i], &g[i], sizeof(*all));
+	}
+
+	return all;
+}
+
 static int metadata_capture_hook(int argc, char **argv, const char *program_desc,
 				 struct argconfig_commandline_options *options)
 {
@@ -342,7 +376,12 @@ static int metadata_capture_hook(int argc, char **argv, const char *program_desc
 	(void)program_desc;
 
 	if (command_metadata_cur_command && !command_metadata_cur_command->captured) {
-		int err = copy_options(options,
+		__cleanup_free struct argconfig_commandline_options *all =
+			with_global_options(options);
+		int err = -ENOMEM;
+
+		if (all)
+			err = copy_options(all,
 				&command_metadata_cur_command->options,
 				&command_metadata_cur_command->num_options);
 		if (err)
@@ -366,6 +405,7 @@ static int capture_command(struct command_metadata_command *mc, struct command *
 	mc->name = cmd->name;
 	mc->alias = cmd->alias;
 	mc->help = cmd->help;
+	mc->device = cmd->device;
 	mc->captured = false;
 
 	/*
@@ -379,6 +419,7 @@ static int capture_command(struct command_metadata_command *mc, struct command *
 	command_metadata_capture_error = 0;
 	command_metadata_cur_command = mc;
 	capture_current_command = cmd->name;
+	command_prepare(cmd);
 	(void)cmd->fn(2, argv, cmd, plugin);
 	capture_current_command = NULL;
 	command_metadata_cur_command = NULL;
@@ -529,9 +570,9 @@ static bool opt_is_global_separator(const struct command_metadata_option *o)
 static const char *opt_argument(const struct command_metadata_option *o)
 {
 	switch (o->argument_type) {
-	case optional_argument:
+	case ARGCONFIG_ARG_OPTIONAL:
 		return "optional";
-	case no_argument:
+	case ARGCONFIG_ARG_NONE:
 		return "none";
 	default:
 		return "required";
@@ -540,7 +581,7 @@ static const char *opt_argument(const struct command_metadata_option *o)
 
 static bool opt_takes_value(const struct command_metadata_option *o)
 {
-	return o->argument_type != no_argument;
+	return o->argument_type != ARGCONFIG_ARG_NONE;
 }
 
 /*
@@ -564,24 +605,30 @@ static bool opt_is_emittable(const struct command_metadata_option *o)
  * caller owns the returned array.
  *
  * output-format is special-cased because its values are not represented via an
- * opt_val table; keep the hard-coded list below in sync with
- * validate_output_format() / DESC_OUTPUT_FORMAT. Since the whole command is
- * compiled out without json-c, "json" is always a valid value here. Every
- * other value set comes from the option's opt_val table, which is the set the
- * parser actually enforces; options whose value is unconstrained (e.g. any
- * OPT_UINT such as output-format-version) have no values array.
+ * opt_val table. Its help text lists the formats the command supports
+ * ("Output format: normal|json"), see nvme_args_set_output_formats(). Every
+ * other value set comes from the option's opt_val table: the names it
+ * accepts, a numeric option also takes a number. Options without names
+ * (e.g. output-format-version) have no values array.
  */
 static struct json_object *json_option_values(const struct command_metadata_option *o)
 {
+	static const char prefix[] = "Output format: ";
 	const struct argconfig_opt_val *v;
 	struct json_object *vals;
 
-	if (!strcmp(o->option, "output-format")) {
+	if (!strcmp(o->option, "output-format") && o->help &&
+	    !strncmp(o->help, prefix, strlen(prefix))) {
+		__cleanup_free char *formats = strdup(o->help + strlen(prefix));
+		char *p, *name;
+
+		if (!formats)
+			return NULL;
+
 		vals = json_create_array();
-		json_array_add_value_string(vals, "normal");
-		json_array_add_value_string(vals, "json");
-		json_array_add_value_string(vals, "binary");
-		json_array_add_value_string(vals, "tabular");
+		p = formats;
+		while ((name = shr_strsep(&p, "|")) != NULL)
+			json_array_add_value_string(vals, name);
 		return vals;
 	}
 	if (!o->opt_val)
@@ -625,6 +672,13 @@ static void json_option(struct json_object *arr, const struct command_metadata_o
 }
 
 /* Build one command as a json object: name, alias, description, and options. */
+/* The device operand of a command, see enum command_device */
+static const char * const device_names[] = {
+	[COMMAND_DEVICE] = "required",
+	[COMMAND_DEVICE_OPTIONAL] = "optional",
+	[COMMAND_NO_DEVICE] = "none",
+};
+
 static struct json_object *json_command(const struct command_metadata_command *c)
 {
 	struct json_object *jc, *opts;
@@ -637,6 +691,7 @@ static struct json_object *json_command(const struct command_metadata_command *c
 		json_object_add_value_string(jc, "alias", c->alias);
 	if (c->help)
 		json_object_add_value_string(jc, "description", c->help);
+	json_object_add_value_string(jc, "device", device_names[c->device]);
 
 	opts = json_create_array();
 	for (i = 0; i < c->num_options; i++) {

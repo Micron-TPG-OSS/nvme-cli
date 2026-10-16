@@ -1481,7 +1481,7 @@ void stdout_fdp_events(struct nvme_fdp_events_log *log)
 	uint32_t n = le32_to_cpu(log->n);
 	struct shr_table *t;
 
-	for (unsigned int i = 0; i < n; i++) {
+	for (unsigned int i = 0; i < n && i < ARRAY_SIZE(log->events); i++) {
 		struct nvme_fdp_event *event = &log->events[i];
 
 		ts = int48_to_long(event->ts.timestamp) / 1000;
@@ -1706,7 +1706,7 @@ void stdout_zns_changed(struct nvme_zns_changed_zone_log *log)
 		return;
 
 	stdout_kv_add(t, "nrzid", "%u", nrzid);
-	for (i = 0; i < nrzid; i++) {
+	for (i = 0; i < nrzid && i < ARRAY_SIZE(log->zid); i++) {
 		char name[16];
 
 		snprintf(name, sizeof(name), "zid %03d", i);
