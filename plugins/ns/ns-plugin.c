@@ -76,7 +76,6 @@ static int delete_ns(int argc, char **argv, struct command *acmd, struct plugin 
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	struct libnvme_passthru_cmd cmd;
-	nvme_print_flags_t flags;
 	int err;
 
 	struct config {
@@ -91,17 +90,12 @@ static int delete_ns(int argc, char **argv, struct command *acmd, struct plugin 
 
 	NVME_ARGS(opts,
 		  OPT_FLAG("ish",          'I', &cfg.ish,          ish),
-		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id));
+		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
+			   nvme_nsid_values));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
-
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
 
 	if (!cfg.namespace_id) {
 		err = libnvme_get_nsid(hdl, &cfg.namespace_id);
@@ -132,7 +126,6 @@ static int nvme_attach_ns(int argc, char **argv, int attach, const char *desc, s
 	__cleanup_libnvme_free struct nvme_ctrl_list *cntlist = NULL;
 	__u16 list[NVME_ID_CTRL_LIST_MAX];
 	struct libnvme_passthru_cmd cmd;
-	nvme_print_flags_t flags;
 	int err, num;
 
 	const char *namespace_id = "namespace to attach";
@@ -152,18 +145,13 @@ static int nvme_attach_ns(int argc, char **argv, int attach, const char *desc, s
 
 	NVME_ARGS(opts,
 		  OPT_FLAG("ish",          'I', &cfg.ish,     ish),
-		  OPT_UINT("namespace-id", 'n', &cfg.nsid,    namespace_id),
+		  OPT_UINT("namespace-id", 'n', &cfg.nsid,    namespace_id,
+			   nvme_nsid_values),
 		  OPT_LIST("controllers",  'c', &cfg.cntlist, cont));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
-
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
 
 	if (libnvme_transport_handle_is_ns(hdl)) {
 		nvme_show_error("%s: a namespace device opened (dev: %s, nsid: %d)", acmd->name,
@@ -186,7 +174,7 @@ static int nvme_attach_ns(int argc, char **argv, int attach, const char *desc, s
 	if (!cntlist)
 		return -ENOMEM;
 
-	if (argconfig_parse_seen(opts, "controllers")) {
+	if (argconfig_given(opts, &cfg.cntlist)) {
 		nvme_init_ctrl_list(cntlist, num, list);
 	} else {
 		struct nvme_id_ctrl ctrl = { 0 };
@@ -366,7 +354,6 @@ static int create_ns(int argc, char **argv, struct command *acmd, struct plugin 
 	__u64 align_ncap = align_nsze;
 	struct libnvme_passthru_cmd cmd;
 	uint16_t phndl[128] = { 0, };
-	nvme_print_flags_t flags;
 	uint16_t num_phandle;
 	int err = 0, i;
 	__u32 nsid;
@@ -442,12 +429,6 @@ static int create_ns(int argc, char **argv, struct command *acmd, struct plugin 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
-
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
 
 	if (cfg.flbas != 0xff && cfg.bs != 0x00) {
 		nvme_show_error(
@@ -606,19 +587,12 @@ static int get_ns_id(int argc, char **argv, struct command *acmd, struct plugin 
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	unsigned int nsid;
 	int err;
-	nvme_print_flags_t flags;
 
 	NVME_ARGS(opts);
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
-
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
 
 	err = libnvme_get_nsid(hdl, &nsid);
 	if (err < 0) {

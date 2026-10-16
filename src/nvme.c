@@ -14,7 +14,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <getopt.h>
 #include <inttypes.h>
 #include <libgen.h>
 #include <locale.h>
@@ -104,11 +103,7 @@ int __id_ctrl(int argc, char **argv, struct command *acmd, struct plugin *plugin
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
+	flags = nvme_args.output_flags;
 
 	if (cfg.raw_binary)
 		flags = BINARY;
@@ -182,6 +177,7 @@ int main(int argc, char **argv)
 		return 0;
 	}
 	setlocale(LC_ALL, "");
+	nvme_args_register();
 
 	err = nvme_load_global_config();
 	if (err)
@@ -196,6 +192,10 @@ int main(int argc, char **argv)
 		general_help(&builtin, NULL);
 
 	nvme_show_finish();
+
+	/* the command stopped after printing the help it was asked for */
+	if (argconfig_help_requested())
+		return 0;
 
 	return err ? 1 : 0;
 }

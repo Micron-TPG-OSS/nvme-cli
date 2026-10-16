@@ -13,7 +13,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <getopt.h>
 #include <inttypes.h>
 #include <libgen.h>
 #include <locale.h>
@@ -128,7 +127,8 @@ static int write_uncor(int argc, char **argv, struct command *acmd, struct plugi
 	};
 
 	NVME_ARGS(opts,
-		  OPT_UINT("namespace-id",  'n', &cfg.namespace_id, namespace_desired),
+		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			   namespace_desired, nvme_nsid_values),
 		  OPT_SUFFIX("start-block", 's', &cfg.start_block,  start_block),
 		  OPT_SHRT("block-count",   'c', &cfg.block_count,  block_count),
 		  OPT_BYTE("dir-type",      'T', &cfg.dtype,        dtype),
@@ -480,7 +480,8 @@ static int write_zeroes(int argc, char **argv,
 	};
 
 	NVME_ARGS(opts,
-		  OPT_UINT("namespace-id",      'n', &cfg.nsid,				 namespace_desired),
+		  OPT_UINT("namespace-id", 'n', &cfg.nsid,
+			   namespace_desired, nvme_nsid_values),
 		  OPT_SUFFIX("start-block",     's', &cfg.start_block,       start_block),
 		  OPT_SHRT("block-count",       'c', &cfg.block_count,       block_count),
 		  OPT_BYTE("dir-type",          'T', &cfg.dtype,             dtype),
@@ -577,7 +578,6 @@ static int dsm(int argc, char **argv, struct command *acmd, struct plugin *plugi
 	__u32 ctx_attrs[NVME_DSM_MAX_RANGES] = {0,};
 	__u32 nlbs[NVME_DSM_MAX_RANGES] = {0,};
 	__u64 slbas[NVME_DSM_MAX_RANGES] = {0,};
-	nvme_print_flags_t flags;
 	uint16_t nc, nb, ns;
 	int err;
 
@@ -604,7 +604,8 @@ static int dsm(int argc, char **argv, struct command *acmd, struct plugin *plugi
 	};
 
 	NVME_ARGS(opts,
-		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id_desired),
+		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			   namespace_id_desired, nvme_nsid_values),
 		  OPT_LIST("ctx-attrs",    'a', &cfg.ctx_attrs,    context_attrs),
 		  OPT_LIST("blocks",       'b', &cfg.blocks,       blocks),
 		  OPT_LIST("slbs",         's', &cfg.slbas,        starting_blocks),
@@ -621,17 +622,11 @@ static int dsm(int argc, char **argv, struct command *acmd, struct plugin *plugi
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
-
 	nc = shr_parse_csv_u32(cfg.ctx_attrs, ctx_attrs, ARRAY_SIZE(ctx_attrs));
 	nb = shr_parse_csv_u32(cfg.blocks, nlbs, ARRAY_SIZE(nlbs));
 	ns = shr_parse_csv_u64(cfg.slbas, slbas, ARRAY_SIZE(slbas));
 	if ((nb != ns) ||
-	    (argconfig_parse_seen(opts, "ctx-attrs") && nb != nc)) {
+	    (argconfig_given(opts, &cfg.ctx_attrs) && nb != nc)) {
 		nvme_show_error("No valid range definition provided");
 		return -EINVAL;
 	}
@@ -769,7 +764,8 @@ static int copy_cmd(int argc, char **argv, struct command *acmd, struct plugin *
 	};
 
 	NVME_ARGS(opts,
-		  OPT_UINT("namespace-id",           'n', &cfg.nsid,		namespace_id_desired),
+		  OPT_UINT("namespace-id", 'n', &cfg.nsid,
+			   namespace_id_desired, nvme_nsid_values),
 		  OPT_SUFFIX("sdlba",                'd', &cfg.sdlba,		d_sdlba),
 		  OPT_LIST("slbs",                   's', &cfg.slbas,		d_slbas),
 		  OPT_LIST("blocks",                 'b', &cfg.nlbs,		d_nlbs),
@@ -907,7 +903,8 @@ static int flush_cmd(int argc, char **argv, struct command *acmd, struct plugin 
 	};
 
 	NVME_ARGS(opts,
-		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id_desired));
+		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			   namespace_id_desired, nvme_nsid_values));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -1027,7 +1024,8 @@ static int submit_io(int opcode, char *command, const char *desc, int argc, char
 	};
 
 	NVME_ARGS(opts,
-		  OPT_UINT("namespace-id",      'n', &cfg.nsid,				 namespace_id_desired),
+		  OPT_UINT("namespace-id", 'n', &cfg.nsid,
+			   namespace_id_desired, nvme_nsid_values),
 		  OPT_SUFFIX("start-block",     's', &cfg.start_block,       start_block_addr),
 		  OPT_SHRT("block-count",       'c', &cfg.block_count,       block_count),
 		  OPT_SHRT("block-size",        'b', &cfg.block_size,        block_size),
@@ -1061,7 +1059,8 @@ static int submit_io(int opcode, char *command, const char *desc, int argc, char
 		err = open_exclusive(&ctx, &hdl, argc, argv, cfg.force, opts);
 		if (err) {
 			if (err == -EBUSY) {
-				nvme_show_error("Failed to open %s.", basename(argv[optind]));
+				nvme_show_error("Failed to open %s.",
+						basename(nvme_args.device));
 				nvme_show_error("Namespace is currently busy.");
 				if (!cfg.force)
 					nvme_show_error(
@@ -1164,7 +1163,7 @@ static int submit_io(int opcode, char *command, const char *desc, int argc, char
 	else
 		buffer_size = cfg.data_size;
 
-	if (argconfig_parse_seen(opts, "block-count")) {
+	if (argconfig_given(opts, &cfg.block_count)) {
 		/* Use the value provided */
 		nblocks = cfg.block_count;
 	} else {
@@ -1350,7 +1349,8 @@ static int verify_cmd(int argc, char **argv, struct command *acmd, struct plugin
 	};
 
 	NVME_ARGS(opts,
-		  OPT_UINT("namespace-id",      'n', &cfg.nsid,				 namespace_desired),
+		  OPT_UINT("namespace-id", 'n', &cfg.nsid,
+			   namespace_desired, nvme_nsid_values),
 		  OPT_SUFFIX("start-block",     's', &cfg.start_block,       start_block),
 		  OPT_SHRT("block-count",       'c', &cfg.block_count,       block_count),
 		  OPT_FLAG("limited-retry",     'l', &cfg.limited_retry,     limited_retry),
@@ -1447,7 +1447,8 @@ static int get_lba_status(int argc, char **argv, struct command *acmd,
 
 	NVME_ARGS(opts,
 		  OPT_FLAG("ish",          'I', &cfg.ish,           ish),
-		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id,  namespace_desired),
+		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			   namespace_desired, nvme_nsid_values),
 		  OPT_SUFFIX("start-lba",  's', &cfg.slba,          slba),
 		  OPT_UINT("max-dw",       'm', &cfg.mndw,          mndw),
 		  OPT_BYTE("action",       'a', &cfg.atype,         atype),
@@ -1457,11 +1458,7 @@ static int get_lba_status(int argc, char **argv, struct command *acmd,
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
+	flags = nvme_args.output_flags;
 
 	if (!cfg.atype) {
 		nvme_show_error("action type (--action) has to be given");
@@ -1509,7 +1506,6 @@ static int capacity_mgmt(int argc, char **argv, struct command *acmd, struct plu
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	struct libnvme_passthru_cmd cmd;
 	int err = -1;
-	nvme_print_flags_t flags;
 
 	struct config {
 		bool	ish;
@@ -1537,12 +1533,6 @@ static int capacity_mgmt(int argc, char **argv, struct command *acmd, struct plu
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
-
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
 
 	if (cfg.operation > 0xf) {
 		nvme_show_error("invalid operation field: %u", cfg.operation);

@@ -13,7 +13,6 @@
  * than sending a specific NVMe command to a controller.
  */
 #include <errno.h>
-#include <getopt.h>
 #include <libgen.h>
 #include <stdio.h>
 #include <string.h>
@@ -31,6 +30,12 @@
 #include "nvme-cmds-common.h"
 #include "nvme-print.h"
 #include "plugin.h"
+
+#ifdef CONFIG_JSONC
+#define TOPOLOGY_OUTPUT_FORMATS (NORMAL | JSON | TABULAR)
+#else /* CONFIG_JSONC */
+#define TOPOLOGY_OUTPUT_FORMATS (NORMAL | TABULAR)
+#endif /* CONFIG_JSONC */
 
 static int list_subsys(int argc, char **argv, struct command *acmd,
 		struct plugin *plugin)
@@ -50,14 +55,10 @@ static int list_subsys(int argc, char **argv, struct command *acmd,
 		return err;
 
 	devname = NULL;
-	if (optind < argc)
-		devname = basename(argv[optind++]);
+	if (nvme_args.device)
+		devname = basename(nvme_args.device);
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0 || (flags != JSON && flags != NORMAL)) {
-		nvme_show_error("Invalid output format");
-		return -EINVAL;
-	}
+	flags = nvme_args.output_flags;
 
 	if (nvme_args.verbose)
 		flags |= VERBOSE;
@@ -102,14 +103,6 @@ static int show_topology_cmd(int argc, char **argv, struct command *acmd, struct
 	enum nvme_cli_topo_ranking rank;
 	int err;
 
-#ifdef CONFIG_JSONC
-	nvme_print_flags_t supported_formats = (NORMAL | JSON | TABULAR);
-	const char *supported_formats_desc = "Output format: normal|json|tabular";
-#else /* CONFIG_JSONC */
-	nvme_print_flags_t supported_formats = (NORMAL | TABULAR);
-	const char *supported_formats_desc = "Output format: normal|tabular";
-#endif /* CONFIG_JSONC */
-
 	struct config {
 		char	*ranking;
 	};
@@ -118,18 +111,14 @@ static int show_topology_cmd(int argc, char **argv, struct command *acmd, struct
 		.ranking	= "namespace",
 	};
 
-	NVME_ARGS_OUTPUT_FORMATS(opts, supported_formats, supported_formats_desc,
+	NVME_ARGS(opts,
 		  OPT_FMT("ranking",       'r', &cfg.ranking,       ranking));
 
 	err = parse_args(argc, argv, desc, opts);
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
+	flags = nvme_args.output_flags;
 
 	if (nvme_args.verbose)
 		flags |= VERBOSE;
@@ -149,8 +138,8 @@ static int show_topology_cmd(int argc, char **argv, struct command *acmd, struct
 	if (err)
 		return err;
 
-	if (optind < argc)
-		devname = basename(argv[optind++]);
+	if (nvme_args.device)
+		devname = basename(nvme_args.device);
 
 	if (devname) {
 		int subsys_id, nsid;
@@ -199,11 +188,7 @@ static int top(int argc, char **argv, struct command *acmd,
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0 || flags != NORMAL) {
-		nvme_show_error("Invalid output format");
-		return -EINVAL;
-	}
+	flags = nvme_args.output_flags;
 
 	if (cfg.delay < 1) {
 		nvme_show_error("delay must be greater than or equal to 1");
@@ -235,11 +220,7 @@ static int list(int argc, char **argv, struct command *acmd, struct plugin *plug
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0 || (flags != JSON && flags != NORMAL)) {
-		nvme_show_error("Invalid output format");
-		return -EINVAL;
-	}
+	flags = nvme_args.output_flags;
 
 	if (nvme_args.verbose)
 		flags |= VERBOSE;
@@ -261,14 +242,16 @@ static struct command list_cmd = {
 	.name = "list",
 	.help = "List all NVMe devices and namespaces on machine",
 	.fn = list,
-	.no_device = true,
+	.output_formats = NORMAL | JSON,
+	.device = COMMAND_NO_DEVICE,
 };
 
 static struct command list_subsys_cmd = {
 	.name = "list-subsys",
 	.help = "List nvme subsystems",
 	.fn = list_subsys,
-	.no_device = true,
+	.output_formats = NORMAL | JSON,
+	.device = COMMAND_DEVICE_OPTIONAL,
 };
 
 #ifdef CONFIG_TOP
@@ -277,7 +260,8 @@ static struct command top_cmd = {
 	.name = "top",
 	.help = "nvme top",
 	.fn = top,
-	.no_device = true,
+	.output_formats = OUTPUT_FORMATS_NORMAL,
+	.device = COMMAND_NO_DEVICE,
 };
 
 #endif /* CONFIG_TOP */
@@ -286,7 +270,8 @@ static struct command show_topology_cmd_cmd = {
 	.name = "show-topology",
 	.help = "Show the topology",
 	.fn = show_topology_cmd,
-	.no_device = true,
+	.output_formats = TOPOLOGY_OUTPUT_FORMATS,
+	.device = COMMAND_DEVICE_OPTIONAL,
 };
 
 static struct command *commands[] = {

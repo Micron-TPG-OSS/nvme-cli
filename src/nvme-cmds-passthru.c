@@ -13,7 +13,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <getopt.h>
 #include <inttypes.h>
 #include <libgen.h>
 #include <locale.h>
@@ -113,7 +112,6 @@ static int passthru(int argc, char **argv, bool admin,
 	int err = 0;
 	const char *cmd_name = NULL;
 	struct timeval start_time, end_time;
-	nvme_print_flags_t flags_t;
 
 	struct passthru_config cfg = {
 		.opcode		= 0,
@@ -145,7 +143,8 @@ static int passthru(int argc, char **argv, bool admin,
 		  OPT_BYTE("flags",        'f', &cfg.flags,        cflags),
 		  OPT_BYTE("prefill",      'p', &cfg.prefill,      prefill),
 		  OPT_SHRT("rsvd",         'R', &cfg.rsvd,         rsvd),
-		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_desired),
+		  OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			   namespace_desired, nvme_nsid_values),
 		  OPT_UINT("data-len",     'l', &cfg.data_len,     data_len),
 		  OPT_UINT("metadata-len", 'm', &cfg.metadata_len, metadata_len),
 		  OPT_UINT("cdw2",         '2', &cfg.cdw2,         cdw2),
@@ -168,13 +167,7 @@ static int passthru(int argc, char **argv, bool admin,
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags_t);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
-
-	if (!argconfig_parse_seen(opts, "opcode")) {
+	if (!argconfig_given(opts, &cfg.opcode)) {
 		nvme_show_error("%s: opcode parameter required", acmd->name);
 		return -EINVAL;
 	}

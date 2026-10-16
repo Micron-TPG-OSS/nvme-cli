@@ -5,6 +5,44 @@
 
 ### Feature removals and incompatible changes
 
+* nvme-cli parses its command line itself instead of with getopt, so
+  it behaves the same with every C library. Long options now need two
+  dashes and their full name: single-dash long options such as
+  `-verbose` and abbreviations such as `--namespace` for
+  `--namespace-id` are no longer accepted. A single dash always starts
+  short options, so `-verbose` is read as `-v -e -r -b -o -s -e`.
+  Options and arguments can still be given in any order.
+
+* Every command rejects an invalid `--output-format` value now, before
+  it opens the device. Before, the commands which don't use the output
+  format accepted any value.
+
+* `nvme <command> --help` (also `-h` and `-?`) prints the help to stdout
+  and exits with status 0. Before, it printed to stderr and exited
+  with 1, like a usage error, which still does.
+
+* Every command checks its operand: a command which takes a device
+  fails without one, and an extra operand is an error. Before, extra
+  operands were silently ignored, e.g. a device given to a command which
+  takes none, or the value of `--persistent force`, which has to be
+  given as `--persistent=force`.
+
+* Options which take an unsigned number reject negative numbers now.
+  Before, `-1` wrapped around to the largest value. The values which
+  have a special meaning got names instead: every namespace id option
+  accepts `all` for 0xffffffff and `--timeout` (also in
+  `nvme-cli.conf`) accepts `infinite`. Both still accept `-1`. The
+  help lists the names of an option. `lm migration-recv` requires
+  `--sel` now, like the other lm commands.
+
+* Number options reject text after the number. Before, the rest was
+  ignored: `--timeout=10s` set a timeout of 10 milliseconds.
+
+* The deprecated `tls-key` command parses its options like every other
+  command: it has a help, and abbreviated options such as `--keyr` are
+  no longer accepted. It, `gen-dhchap-key` and `check-dhchap-key`
+  reject extra operands now instead of dropping them.
+
 * The human-readable stdout output of `id-ctrl`, `id-ns`, and most
   other identify/log-page/feature commands is now rendered through a
   computed-width table instead of hand-aligned `printf()` calls.
@@ -100,6 +138,35 @@
 
 ### nvme-cli
 
+* `nvme help <command>` finds the command like `nvme <command>` does,
+  also by a unique prefix, and `nvme help <plugin> <command>` shows the
+  man page of a plugin's command.
+
+* The shell completions offer a device only to commands which take
+  one. The command metadata (`nvme utils dump-command-metadata`) reports
+  the device operand of each command as schema version 2.
+
+* The global options (`--verbose`, `--output-format`, `--dry-run`, ...)
+  are accepted by every command. `config validate`, `config status`,
+  `config convert`, `intel lat-stats-tracking`, `memblaze lat-stats`,
+  `memblaze smart-log-add-x`, `sndk vs-internal-log`,
+  `wdc vs-internal-log` and the `sed` commands did not accept them.
+
+* The help and the shell completions of `--output-format` list the
+  formats the command supports. Before, the completions offered
+  `tabular` everywhere, and some commands listed formats they rejected.
+
+* `--dry-run` now also skips `nvme reset`, `nvme subsystem-reset`,
+  `nvme ns-rescan`, the `nvme sed` operations which change the drive,
+  and the fabrics connects and disconnects. Before, only NVMe commands
+  were skipped: these still reset the controller or subsystem,
+  rescanned the namespaces, connected and disconnected controllers, and
+  with `dry-run` set in nvme-cli.conf the sed operations still ran.
+  `nvme connect --dry-run -vv` shows the connect arguments instead.
+  `nvme discover` and `nvme connect-all` stop before connecting the
+  Discovery Controller, as there is nothing to discover without a
+  connection.
+
 * `nvme discover` and `nvme connect-all` now send the keep-alive
   timeout to a persistent Discovery Controller. Before, the value was
   set too late. The DC got no keep-alive timeout, so it was never
@@ -140,6 +207,10 @@
   mode that only root could write to.
 
 ### Plugins
+
+* `nvme feat num-queues --nsqr=N` without `--ncqr` keeps the current
+  number of completion queues now. Before, it requested a single
+  completion queue and a wrong number of submission queues.
 
 * Fixed root command injection in WDC (`vs-internal-log`,
   `drive-essentials`, SN730 capture) and SanDisk (telemetry capture):
@@ -200,6 +271,13 @@
   again, first after 1 s, then less often, up to every 5 minutes.
   Before, the connection was skipped until the next reload. While the
   first lookups run, nvme-discoverd does not release any controller.
+
+* nvme-discoverd handles the events of a Discovery Controller that has
+  no owner, for example one connected with
+  `nvme discover --persistent`. It runs `nvme connect-all` for it, as
+  `70-nvmf-autoconnect.rules` does. The new connections have no owner
+  either. Before, nothing handled these events when the legacy udev
+  rules were not installed.
 
 ### libnvme
 

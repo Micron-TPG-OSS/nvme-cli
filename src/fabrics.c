@@ -21,7 +21,6 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <getopt.h>
 #include <inttypes.h>
 #include <libgen.h>
 #include <net/if.h>
@@ -54,6 +53,7 @@
 #include <shared/io-util.h>
 #include <shared/net-util.h>
 #include <shared/sig-util.h>
+#include <shared/string-util.h>
 
 #include "cleanup.h"
 #include "config-convert.h"
@@ -542,7 +542,7 @@ static void consume_conn(const struct libnvmf_config_conn *conn,
 	} else {
 		err = libnvmf_connect(st->ctx, fctx);
 	}
-	if (err == -ENVME_CONNECT_ALREADY)
+	if (err == -ENVME_CONNECT_ALREADY || err == -ENVME_CONNECT_DRY_RUN)
 		err = 0;
 
 record_err:
@@ -554,10 +554,9 @@ record_err:
 	}
 }
 
-const char *nvmf_resolve_persistent_arg(
-		struct argconfig_commandline_options *opts, const char *arg)
+const char *nvmf_resolve_persistent_arg(bool given, const char *arg)
 {
-	if (!argconfig_parse_seen(opts, "persistent"))
+	if (!given)
 		return "auto";
 
 	return arg ? arg : "auto";
@@ -567,7 +566,8 @@ const char *nvmf_resolve_persistent_arg(
  * Parse one discovery.conf line -- the same argv-style syntax 'nvme
  * discover'/'connect-all' accept, reusing NVMF_ARGS so every short and long
  * form works identically to real usage -- and hand the parsed arguments to
- * nvme_config_convert_discovery_args(). @line is modified in place (strsep()).
+ * nvme_config_convert_discovery_args(). @line is modified in place
+ * (shr_strsep()).
  *
  * A blank line, a comment, or one with neither transport nor traddr is
  * silently skipped (0, nothing added), tolerating a discovery.conf that
@@ -606,7 +606,8 @@ int nvmf_convert_discovery_line(struct libnvmf_config_emitter *emitter,
 	 * getopt_long() parses '=' within a single token natively for
 	 * every option shape, so splitting it out here is never required.
 	 */
-	while ((ptr = strsep(&p, "\n ")) != NULL && argc < MAX_DISC_ARGS - 1)
+	while ((ptr = shr_strsep(&p, "\n ")) != NULL &&
+	       argc < MAX_DISC_ARGS - 1)
 		argv[argc++] = ptr;
 	argv[argc] = NULL;
 
@@ -618,7 +619,9 @@ int nvmf_convert_discovery_line(struct libnvmf_config_emitter *emitter,
 		return 0;
 
 	return nvme_config_convert_discovery_args(emitter, &fa,
-		nvmf_resolve_persistent_arg(opts, persistent_arg));
+		nvmf_resolve_persistent_arg(
+			argconfig_given(opts, &persistent_arg),
+			persistent_arg));
 }
 
 static int setup_common_context(struct libnvmf_context *fctx,
@@ -815,9 +818,10 @@ static int fabrics_discovery_config(struct libnvme_global_ctx *ctx,
 /*
  * A controller's ownership extends to everything done through it, so the
  * caller's operation may not proceed unless the invoking owner matches
- * (mirrors disconnect_all_match()'s registry check). No ownerless
- * exemption -- a mismatched or missing --owner is skipped the same way;
- * the escape hatch is passing the owner's own identity.
+ * (mirrors disconnect_all_match()'s registry check). A controller with
+ * no owner proceeds for any caller. A controller with an owner is
+ * skipped unless --owner names that owner; a missing --owner does not
+ * match.
  *
  * --no-reuse skips the check entirely: it means the caller will never
  * reuse an existing controller, so there is nothing to check ownership
@@ -896,13 +900,10 @@ int fabrics_discover(const char *desc, int argc, char **argv, bool connect)
 
 	load_nvme_fabrics_module();
 
-	ret = validate_output_format(nvme_args.output_format, &flags);
-	if (ret < 0) {
-		nvme_show_error("Invalid output format");
-		return ret;
-	}
+	flags = nvme_args.output_flags;
 
-	persistent = nvmf_resolve_persistent_arg(opts, persistent_arg);
+	persistent = nvmf_resolve_persistent_arg(
+			argconfig_given(opts, &persistent_arg), persistent_arg);
 
 	if (!strcmp(config_file, "none"))
 		config_file = NULL;
@@ -994,6 +995,11 @@ int fabrics_discover(const char *desc, int argc, char **argv, bool connect)
 			return 0;
 
 		ret = libnvmf_discover(ctx, fctx);
+		if (ret == -ENVME_CONNECT_DRY_RUN) {
+			nvme_show_error(
+				"dry-run: the discovery needs a connection to the discovery controller, nothing discovered");
+			ret = 0;
+		}
 	}
 
 	return ret;
@@ -1090,11 +1096,7 @@ int fabrics_connect(const char *desc, int argc, char **argv)
 
 	load_nvme_fabrics_module();
 
-	ret = validate_output_format(nvme_args.output_format, &flags);
-	if (ret < 0) {
-		nvme_show_error("Invalid output format");
-		return ret;
-	}
+	flags = nvme_args.output_flags;
 
 	if (config_file && !strcmp(config_file, "none"))
 		config_file = NULL;
@@ -1196,6 +1198,8 @@ do_connect:
 	ret = libnvmf_connect(ctx, fctx);
 	if (ret == -ENVME_CONNECT_ALREADY && idempotent)
 		ret = 0;
+	if (ret == -ENVME_CONNECT_DRY_RUN)
+		ret = 0;
 	if (ret) {
 		/*
 		 * hook_already_connected() already reported the specific
@@ -1255,7 +1259,7 @@ static int nvmf_disconnect_nqn(struct libnvme_global_ctx *ctx, char *nqn)
 	struct libnvme_subsystem *s;
 	struct libnvme_ctrl *c;
 
-	while ((p = strsep(&n, ",")) != NULL) {
+	while ((p = shr_strsep(&n, ",")) != NULL) {
 		if (!strlen(p))
 			continue;
 		libnvme_for_each_host(ctx, h) {
@@ -1345,7 +1349,7 @@ static int disconnect_by_device(struct libnvme_global_ctx *ctx,
 	char *p;
 	int err;
 
-	while ((p = strsep(&device, ",")) != NULL) {
+	while ((p = shr_strsep(&device, ",")) != NULL) {
 		if (!strncmp(p, "/dev/", 5))
 			p += 5;
 
@@ -1420,7 +1424,7 @@ static int disconnect_by_nqn(struct libnvme_global_ctx *ctx, const char *nqn,
 			return -ENOMEM;
 
 		t = excl;
-		while ((p = strsep(&t, ",")) != NULL) {
+		while ((p = shr_strsep(&t, ",")) != NULL) {
 			if (!*p)
 				continue;
 
@@ -1667,11 +1671,7 @@ int fabrics_config_show(const char *desc, int argc, char **argv)
 	if (ret)
 		return ret;
 
-	ret = validate_output_format(nvme_args.output_format, &flags);
-	if (ret < 0) {
-		nvme_show_error("Invalid output format");
-		return ret;
-	}
+	flags = nvme_args.output_flags;
 
 	ret = nvme_create_global_ctx(&ctx);
 	if (ret)
@@ -1777,7 +1777,7 @@ int fabrics_dim(const char *desc, int argc, char **argv)
 		struct libnvme_subsystem *s;
 		char *n = cfg.nqn;
 
-		while ((p = strsep(&n, ",")) != NULL) {
+		while ((p = shr_strsep(&n, ",")) != NULL) {
 			if (!strlen(p))
 				continue;
 			libnvme_for_each_host(ctx, h) {
@@ -1794,7 +1794,7 @@ int fabrics_dim(const char *desc, int argc, char **argv)
 	if (cfg.device) {
 		char *d = cfg.device;
 
-		while ((p = strsep(&d, ",")) != NULL) {
+		while ((p = shr_strsep(&d, ",")) != NULL) {
 			if (!strncmp(p, "/dev/", 5))
 				p += 5;
 			ret = libnvme_scan_ctrl(ctx, p, &c);

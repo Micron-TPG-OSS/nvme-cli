@@ -363,7 +363,8 @@ static int get_additional_smart_log(int argc, char **argv, struct command *acmd,
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace),
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace,
+			 nvme_nsid_values),
 		OPT_FLAG("raw-binary",   'b', &cfg.raw_binary,   raw),
 		OPT_FLAG_JSON("json",    'j', &cfg.json,         json));
 
@@ -371,11 +372,7 @@ static int get_additional_smart_log(int argc, char **argv, struct command *acmd,
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
+	flags = nvme_args.output_flags;
 
 	err = nvme_get_log_simple(hdl, 0xca, &smart_log, sizeof(smart_log));
 	if (!err) {
@@ -1067,11 +1064,7 @@ static int get_lat_stats_log(int argc, char **argv, struct command *acmd, struct
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
+	flags = nvme_args.output_flags;
 
 	/* For optate, latency stats are deleted every time their LID is pulled.
 	 * Therefore, we query the longest lat_stats log page first.
@@ -1387,7 +1380,8 @@ static int get_internal_log(int argc, char **argv, struct command *acmd,
 		OPT_UINT("log",          'l', &cfg.log,          log),
 		OPT_INT("region",        'r', &cfg.core,         core),
 		OPT_INT("nlognum",       'm', &cfg.lnum,         nlognum),
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id),
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
+			 nvme_nsid_values),
 		OPT_FILE("output-file",  'O', &cfg.file,         file),
 		OPT_FLAG("verbose-nlog", 'V', &cfg.verbose,      verbose));
 
@@ -1564,11 +1558,9 @@ static int enable_lat_stats_tracking(int argc, char **argv,
 		.disable = false,
 	};
 
-	struct argconfig_commandline_options opts[] = {
-		{"enable", 'e', "", CFG_FLAG, &cfg.enable, no_argument, enable_desc},
-		{"disable", 'd', "", CFG_FLAG, &cfg.disable, no_argument, disable_desc},
-		{NULL}
-	};
+	NVME_ARGS(opts,
+		  OPT_FLAG("enable",  'e', &cfg.enable,  enable_desc),
+		  OPT_FLAG("disable", 'd', &cfg.disable, disable_desc));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 

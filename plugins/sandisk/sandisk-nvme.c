@@ -414,7 +414,7 @@ static int sndk_vs_internal_fw_log(int argc, char **argv,
 	struct config {
 		char *file;
 		__u32 xfer_size;
-		int data_area;
+		__u32 data_area;
 		__u64 file_size;
 		__u64 offset;
 		char *type;
@@ -620,10 +620,11 @@ static int sndk_vs_smart_add_log(int argc, char **argv,
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("interval",          'i', &cfg.interval,         interval),
+		OPT_BYTE("interval",          'i', &cfg.interval, interval),
 		OPT_BYTE("log-page-version",  'l', &cfg.log_page_version, log_page_version),
 		OPT_LIST("log-page-mask",     'p', &cfg.log_page_mask,    log_page_mask),
-		OPT_UINT("namespace-id",      'n', &cfg.namespace_id,     namespace_id));
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
+			 namespace_id, nvme_nsid_values));
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -789,7 +790,7 @@ static int sndk_drive_resize(int argc, char **argv,
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("size", 's', &cfg.size, size));
+		OPT_LONG("size", 's', &cfg.size, size));
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)

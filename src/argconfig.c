@@ -29,14 +29,15 @@
  *
  */
 
+#include <ctype.h>
 #include <errno.h>
-#include <getopt.h>
 #include <locale.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <libnvme.h>
 
@@ -53,12 +54,62 @@ static bool is_null_or_empty(const char *s)
 
 static const char *append_usage_str = "";
 
+/*
+ * Options every command accepts, registered once instead of being added to
+ * each command's table. The command's own options are looked up first, so
+ * a command can still use a short or long name of a global option.
+ */
+static struct argconfig_commandline_options *global_options;
+
+void argconfig_set_global_options(struct argconfig_commandline_options *options)
+{
+	global_options = options;
+}
+
+struct argconfig_commandline_options *argconfig_get_global_options(void)
+{
+	return global_options;
+}
+
+/* The global options, unless they are the table itself */
+static struct argconfig_commandline_options *
+argconfig_globals(struct argconfig_commandline_options *options)
+{
+	return options == global_options ? NULL : global_options;
+}
+
 void argconfig_append_usage(const char *str)
 {
 	append_usage_str = str;
 }
 
-static void show_option(const struct argconfig_commandline_options *option)
+/* The names an option accepts, below its description */
+static void show_value_names(FILE *out, const struct argconfig_opt_val *v)
+{
+	__cleanup_free char *names = NULL;
+	size_t len = sizeof("\nNames:");
+	const struct argconfig_opt_val *n;
+	char *p;
+
+	if (!v || !v->str)
+		return;
+
+	for (n = v; n->str; n++)
+		len += strlen(n->str) + 2;
+
+	names = malloc(len);
+	if (!names)
+		return;
+
+	p = names + sprintf(names, "\nNames:");
+	for (n = v; n->str; n++)
+		p += sprintf(p, " %s%s", n->str, n[1].str ? "," : "");
+
+	shr_print_word_wrapped(names, 44, 44, out);
+}
+
+static void show_option(FILE *out,
+			const struct argconfig_commandline_options *option)
 {
 	char buffer[0x1000];
 	char *b = buffer;
@@ -66,58 +117,90 @@ static void show_option(const struct argconfig_commandline_options *option)
 	b += sprintf(b, "  [ ");
 	if (option->option) {
 		b += sprintf(b, " --%s", option->option);
-		if (option->argument_type == optional_argument)
+		if (option->argument_type == ARGCONFIG_ARG_OPTIONAL)
 			b += sprintf(b, "[=<%s>]", option->meta ? option->meta : "arg");
-		if (option->argument_type == required_argument)
+		if (option->argument_type == ARGCONFIG_ARG_REQUIRED)
 			b += sprintf(b, "=<%s>", option->meta ? option->meta : "arg");
 		if (option->short_option)
 			b += sprintf(b, ",");
 	}
 	if (option->short_option) {
 		b += sprintf(b, " -%c", option->short_option);
-		if (option->argument_type == optional_argument)
+		if (option->argument_type == ARGCONFIG_ARG_OPTIONAL)
 			b += sprintf(b, " [<%s>]", option->meta ? option->meta : "arg");
-		if (option->argument_type == required_argument)
+		if (option->argument_type == ARGCONFIG_ARG_REQUIRED)
 			b += sprintf(b, " <%s>", option->meta ? option->meta : "arg");
 	}
 	b += sprintf(b, " ] ");
 
-	fprintf(stderr, "%s", buffer);
+	fprintf(out, "%s", buffer);
 	if (option->help) {
-		shr_print_word_wrapped("--- ", 40, b - buffer, stderr);
-		shr_print_word_wrapped(option->help, 44, 44, stderr);
+		shr_print_word_wrapped("--- ", 40, b - buffer, out);
+		shr_print_word_wrapped(option->help, 44, 44, out);
+		show_value_names(out, option->opt_val);
 	}
-	fprintf(stderr, "\n");
+	fprintf(out, "\n");
 }
 
-void argconfig_print_help(const char *program_desc,
-			  struct argconfig_commandline_options *s)
+/* A heading, in bold on a terminal */
+static void print_heading(FILE *out, const char *fmt, const char *text)
 {
-	const char *pending_header = "Options";
+	bool tty = isatty(fileno(out));
+
+	fputs(tty ? "\033[1m" : "", out);
+	fprintf(out, fmt, text);
+	fputs(tty ? "\033[0m" : "", out);
+}
+
+/* A group header is printed before the first option which follows it */
+static void print_options(FILE *out, struct argconfig_commandline_options *s,
+			  const char *header)
+{
 	bool header_printed = false;
 
-	fprintf(stderr, "\033[1mUsage: %s\033[0m\n\n",
-		append_usage_str);
-
-	shr_print_word_wrapped(program_desc, 0, 0, stderr);
-	fprintf(stderr, "\n");
-
-	if (!s || !s->option)
-		return;
-
-	for (; s->option; s++) {
+	for (; s && s->option; s++) {
 		if (s->config_type == CFG_GROUP_SEPARATOR) {
-			pending_header = s->help;
+			header = s->help;
 			header_printed = false;
 			continue;
 		}
 		if (!header_printed) {
-			fprintf(stderr, "\n\033[1m%s:\033[0m\n", pending_header);
+			fputc('\n', out);
+			print_heading(out, "%s:", header);
+			fputc('\n', out);
 			header_printed = true;
 		}
 		if (!s->hidden)
-			show_option(s);
+			show_option(out, s);
 	}
+}
+
+static void show_help(FILE *out, const char *program_desc,
+		      struct argconfig_commandline_options *s)
+{
+	print_heading(out, "Usage: %s", append_usage_str);
+	fputs("\n\n", out);
+
+	shr_print_word_wrapped(program_desc, 0, 0, out);
+	fputc('\n', out);
+
+	print_options(out, s, "Options");
+	print_options(out, argconfig_globals(s), "Global options");
+}
+
+/* The help after a usage error, on stderr */
+void argconfig_print_help(const char *program_desc,
+			  struct argconfig_commandline_options *s)
+{
+	show_help(stderr, program_desc, s);
+}
+
+static bool help_requested;
+
+/* True once argconfig_parse() printed the help -h or --help asked for */
+bool argconfig_help_requested(void)
+{
+	return help_requested;
 }
 
 static int argconfig_error(char *type, const char *opt, const char *arg)
@@ -126,7 +209,20 @@ static int argconfig_error(char *type, const char *opt, const char *arg)
 	return -EINVAL;
 }
 
-static int argconfig_parse_type(struct argconfig_commandline_options *s)
+/*
+ * strtoul() accepts a sign and negates the result, so "-1" would become the
+ * largest value. The value tables of an option can name such a value.
+ */
+static bool argconfig_negative(const char *arg)
+{
+	while (isspace((unsigned char)*arg))
+		arg++;
+
+	return *arg == '-';
+}
+
+static int argconfig_parse_type(struct argconfig_commandline_options *s,
+				char *arg)
 {
 	void *value = s->default_value;
 	char *endptr;
@@ -135,37 +231,51 @@ static int argconfig_parse_type(struct argconfig_commandline_options *s)
 	errno = 0;    /* To distinguish success/failure after strtol/stroul call */
 
 	switch (s->config_type) {
+	case CFG_BYTE:
+	case CFG_SHORT:
+	case CFG_POSITIVE:
+	case CFG_LONG:
+	case CFG_LONG_SUFFIX:
+		if (argconfig_negative(arg))
+			return argconfig_error("non-negative number", s->option,
+					       arg);
+		break;
+	default:
+		break;
+	}
+
+	switch (s->config_type) {
 	case CFG_STRING:
-		*(char **)value = optarg;
+		*(char **)value = arg;
 		break;
 	case CFG_INT:
-		*(int *)value = strtol(optarg, &endptr, 0);
-		if (errno || optarg == endptr)
-			ret = argconfig_error("integer", s->option, optarg);
+		*(int *)value = strtol(arg, &endptr, 0);
+		if (errno || arg == endptr || *endptr)
+			ret = argconfig_error("integer", s->option, arg);
 		break;
 	case CFG_BYTE: {
-		unsigned long tmp = strtoul(optarg, &endptr, 0);
+		unsigned long tmp = strtoul(arg, &endptr, 0);
 
-		if (errno || tmp >= 1 << 8 || optarg == endptr)
-			ret = argconfig_error("byte", s->option, optarg);
+		if (errno || tmp >= 1 << 8 || arg == endptr || *endptr)
+			ret = argconfig_error("byte", s->option, arg);
 		else
 			*(uint8_t *)value = tmp;
 		break;
 	}
 	case CFG_SHORT: {
-		unsigned long tmp = strtoul(optarg, &endptr, 0);
+		unsigned long tmp = strtoul(arg, &endptr, 0);
 
-		if (errno || tmp >= 1 << 16 || optarg == endptr)
-			ret = argconfig_error("short", s->option, optarg);
+		if (errno || tmp >= 1 << 16 || arg == endptr || *endptr)
+			ret = argconfig_error("short", s->option, arg);
 		else
 			*(uint16_t *)value = tmp;
 		break;
 	}
 	case CFG_POSITIVE: {
-		uint32_t tmp = strtoul(optarg, &endptr, 0);
+		unsigned long long tmp = strtoull(arg, &endptr, 0);
 
-		if (errno || optarg == endptr)
-			ret = argconfig_error("word", s->option, optarg);
+		if (errno || tmp > UINT32_MAX || arg == endptr || *endptr)
+			ret = argconfig_error("word", s->option, arg);
 		else
 			*(uint32_t *)value = tmp;
 		break;
@@ -174,19 +284,20 @@ static int argconfig_parse_type(struct argconfig_commandline_options *s)
 		*(int *)value += 1;
 		break;
 	case CFG_LONG:
-		*(unsigned long *)value = strtoul(optarg, &endptr, 0);
-		if (errno || optarg == endptr)
-			ret = argconfig_error("long integer", s->option, optarg);
+		*(uint64_t *)value = strtoull(arg, &endptr, 0);
+		if (errno || arg == endptr || *endptr)
+			ret = argconfig_error("long integer", s->option, arg);
 		break;
 	case CFG_LONG_SUFFIX:
-		ret = shr_suffix_binary_parse(optarg, &endptr, (uint64_t *)value);
+		ret = shr_suffix_binary_parse(arg, &endptr, (uint64_t *)value);
 		if (ret)
-			argconfig_error("long suffixed integer", s->option, optarg);
+			argconfig_error("long suffixed integer", s->option,
+					arg);
 		break;
 	case CFG_DOUBLE:
-		*(double *)value = strtod(optarg, &endptr);
-		if (errno || optarg == endptr)
-			ret = argconfig_error("float", s->option, optarg);
+		*(double *)value = strtod(arg, &endptr);
+		if (errno || arg == endptr || *endptr)
+			ret = argconfig_error("float", s->option, arg);
 		break;
 	case CFG_FLAG:
 		*(bool *)value = true;
@@ -214,7 +325,7 @@ static void argconfig_set_opt_val(enum argconfig_types type, union argconfig_val
 		*(int *)val = opt_val->int_val;
 		break;
 	case CFG_LONG:
-		*(unsigned long *)val = opt_val->long_val;
+		*(uint64_t *)val = opt_val->long_val;
 		break;
 	case CFG_DOUBLE:
 		*(double *)val = opt_val->double_val;
@@ -258,28 +369,310 @@ argconfig_match_val(struct argconfig_opt_val *v, const char *str)
 	return match;
 }
 
-static int argconfig_parse_val(struct argconfig_commandline_options *s)
+/*
+ * Store the value which @str names in the value table of @s. False if
+ * the option has no value of that name.
+ */
+bool argconfig_set_value_name(struct argconfig_commandline_options *s,
+			      const char *str)
 {
 	struct argconfig_opt_val *v = s->opt_val;
 
 	if (v)
-		v = argconfig_match_val(v, optarg);
+		v = argconfig_match_val(v, str);
 	if (!v)
-		return argconfig_parse_type(s);
+		return false;
 
 	argconfig_set_opt_val(v->type, &v->val, s->default_value);
-	return 0;
+	return true;
 }
 
+static int argconfig_parse_val(struct argconfig_commandline_options *s,
+			       char *arg)
+{
+	if (argconfig_set_value_name(s, arg))
+		return 0;
+
+	return argconfig_parse_type(s, arg);
+}
+
+/* --verbose counts, a command may have a flag of the same name */
 static bool argconfig_check_verbose(struct argconfig_commandline_options *s)
 {
+	struct argconfig_commandline_options *g = argconfig_globals(s);
+
 	for (; s && s->option; s++) {
 		if (!strcmp(s->option, "verbose") &&
 		    s->config_type == CFG_INCREMENT)
 			return s->seen;
 	}
+	for (; g && g->option; g++) {
+		if (!strcmp(g->option, "verbose") &&
+		    g->config_type == CFG_INCREMENT)
+			return g->seen;
+	}
 
 	return false;
+}
+
+/* The non-option arguments of the last successful argconfig_parse() */
+static struct {
+	char **argv;
+	int argc;
+} operands;
+
+int argconfig_nr_operands(void)
+{
+	return operands.argc;
+}
+
+char *argconfig_operand(int i)
+{
+	if (i < 0 || i >= operands.argc)
+		return NULL;
+
+	return operands.argv[i];
+}
+
+/*
+ * The state of one parse. argv is not modified: the operands are collected
+ * in their own array, in the order they are given.
+ */
+struct argconfig_parser {
+	int argc;
+	char **argv;
+	int ind;
+	struct argconfig_commandline_options *options;
+	/*
+	 * Global options stop at the first operand, the subcommand. Their
+	 * implicit -h, --help, -V and --version are recorded and the parse
+	 * goes on.
+	 */
+	bool global;
+	bool help;
+	bool version;
+	char **operands;
+	int nr_operands;
+};
+
+/*
+ * Internal result of argconfig_parse_args(): an option was malformed. Like
+ * ARGCONFIG_HELP, it prints the help of a command.
+ */
+#define ARGCONFIG_USAGE	4
+
+/*
+ * The parse errors use the wording of glibc's getopt, which printed them
+ * before argconfig had its own parser.
+ */
+static int argconfig_parse_error(struct argconfig_parser *p,
+				 const char *fmt, ...)
+{
+	va_list ap;
+
+	fprintf(stderr, "%s: ", p->argv[0]);
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	fprintf(stderr, "\n");
+
+	return ARGCONFIG_USAGE;
+}
+
+static struct argconfig_commandline_options *
+argconfig_find_long(struct argconfig_commandline_options *s,
+		    const char *name, size_t len)
+{
+	for (; s->option; s++) {
+		if (s->config_type == CFG_GROUP_SEPARATOR ||
+		    is_null_or_empty(s->option))
+			continue;
+		if (strlen(s->option) == len && !strncmp(s->option, name, len))
+			return s;
+	}
+
+	return NULL;
+}
+
+static struct argconfig_commandline_options *
+argconfig_find_short(struct argconfig_commandline_options *s, char c)
+{
+	for (; s->option; s++) {
+		if (s->config_type == CFG_GROUP_SEPARATOR)
+			continue;
+		if (s->short_option == c)
+			return s;
+	}
+
+	return NULL;
+}
+
+static int argconfig_apply(struct argconfig_commandline_options *s,
+			   char *arg)
+{
+	s->seen = true;
+
+	if (!s->default_value)
+		return 0;
+
+	return argconfig_parse_val(s, arg);
+}
+
+/* The value of a required argument which is not attached to the option */
+static char *argconfig_next_arg(struct argconfig_parser *p)
+{
+	if (p->ind + 1 >= p->argc)
+		return NULL;
+
+	return p->argv[++p->ind];
+}
+
+/* "--name", "--name=value" or "--name value" */
+static int argconfig_parse_long(struct argconfig_parser *p, char *arg)
+{
+	struct argconfig_commandline_options *s;
+	char *name = arg + 2, *value = NULL;
+	char *eq = strchr(name, '=');
+	size_t len = eq ? (size_t)(eq - name) : strlen(name);
+
+	s = argconfig_find_long(p->options, name, len);
+	if (!s && argconfig_globals(p->options))
+		s = argconfig_find_long(argconfig_globals(p->options), name,
+					len);
+	if (!s) {
+		bool help = len == 4 && !strncmp(name, "help", 4);
+		bool version = len == 7 && !strncmp(name, "version", 7);
+
+		if (help && !p->global)
+			return ARGCONFIG_HELP;
+		if (!p->global || (!help && !version))
+			return argconfig_parse_error(p,
+				"unrecognized option '%s'", arg);
+		if (eq)
+			return argconfig_parse_error(p,
+				"option '--%.*s' doesn't allow an argument",
+				(int)len, name);
+		p->help |= help;
+		p->version |= version;
+		return 0;
+	}
+
+	switch (s->argument_type) {
+	case ARGCONFIG_ARG_NONE:
+		if (eq)
+			return argconfig_parse_error(p,
+				"option '--%s' doesn't allow an argument",
+				s->option);
+		break;
+	case ARGCONFIG_ARG_REQUIRED:
+		value = eq ? eq + 1 : argconfig_next_arg(p);
+		if (!value)
+			return argconfig_parse_error(p,
+				"option '--%s' requires an argument",
+				s->option);
+		break;
+	case ARGCONFIG_ARG_OPTIONAL:
+		/* Only an attached value, "--name value" is an operand */
+		if (eq)
+			value = eq + 1;
+		break;
+	}
+
+	return argconfig_apply(s, value);
+}
+
+/* "-a", "-abc", "-ovalue", "-o value" */
+static int argconfig_parse_short(struct argconfig_parser *p, char *arg)
+{
+	struct argconfig_commandline_options *s;
+	char *c, *value;
+	int ret;
+
+	for (c = arg + 1; *c; c++) {
+		if (!p->global && (*c == 'h' || *c == '?'))
+			return ARGCONFIG_HELP;
+
+		s = argconfig_find_short(p->options, *c);
+		if (!s && argconfig_globals(p->options))
+			s = argconfig_find_short(argconfig_globals(p->options),
+						 *c);
+		if (!s && p->global && (*c == 'h' || *c == 'V')) {
+			p->help |= *c == 'h';
+			p->version |= *c == 'V';
+			continue;
+		}
+		if (!s)
+			return argconfig_parse_error(p,
+				"invalid option -- '%c'", *c);
+
+		value = NULL;
+		switch (s->argument_type) {
+		case ARGCONFIG_ARG_NONE:
+			break;
+		case ARGCONFIG_ARG_REQUIRED:
+			value = c[1] ? c + 1 : argconfig_next_arg(p);
+			if (!value)
+				return argconfig_parse_error(p,
+					"option requires an argument -- '%c'",
+					*c);
+			break;
+		case ARGCONFIG_ARG_OPTIONAL:
+			if (c[1])
+				value = c + 1;
+			break;
+		}
+
+		ret = argconfig_apply(s, value);
+		if (ret || s->argument_type != ARGCONFIG_ARG_NONE)
+			return ret;
+	}
+
+	return 0;
+}
+
+/*
+ * Options and operands may be given in any order, "--" ends the options.
+ * Returns 0, ARGCONFIG_HELP, ARGCONFIG_USAGE or a negative errno from the
+ * value conversion.
+ */
+static int argconfig_parse_args(struct argconfig_parser *p)
+{
+	struct argconfig_commandline_options *s;
+	char *arg;
+	int ret;
+
+	for (s = p->options; s->option; s++)
+		s->seen = false;
+
+	for (p->ind = 1; p->ind < p->argc; p->ind++) {
+		arg = p->argv[p->ind];
+
+		if (!strcmp(arg, "--")) {
+			p->ind++;
+			if (p->global)
+				return 0;
+			while (p->ind < p->argc)
+				p->operands[p->nr_operands++] =
+					p->argv[p->ind++];
+			return 0;
+		}
+
+		if (arg[0] != '-' || !arg[1]) {
+			if (p->global)
+				return 0;
+			p->operands[p->nr_operands++] = arg;
+			continue;
+		}
+
+		if (arg[1] == '-')
+			ret = argconfig_parse_long(p, arg);
+		else
+			ret = argconfig_parse_short(p, arg);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 static argconfig_parse_hook_fn argconfig_parse_hook;
@@ -292,82 +685,46 @@ void argconfig_set_parse_hook(argconfig_parse_hook_fn hook)
 int argconfig_parse(int argc, char *argv[], const char *program_desc,
 		    struct argconfig_commandline_options *options)
 {
-	__cleanup_free char *short_opts = NULL;
-	__cleanup_free struct option *long_opts = NULL;
-	__cleanup_free int *long_opt_map = NULL;
-	struct argconfig_commandline_options *s;
-	int c, long_opt_index = 0, opt_index = 0, short_index = 0, options_count = 0;
-	int ret = 0;
+	static char **operand_buf;
+	struct argconfig_parser p = {
+		.argc = argc,
+		.argv = argv,
+		.options = options,
+	};
+	int ret;
+
+	free(operand_buf);
+	operand_buf = NULL;
+	operands.argv = NULL;
+	operands.argc = 0;
 
 	if (argconfig_parse_hook)
 		return argconfig_parse_hook(argc, argv, program_desc, options);
 
-	errno = 0;
-	for (s = options; s->option; s++)
-		options_count++;
+	p.operands = calloc(argc > 0 ? argc : 1, sizeof(*p.operands));
+	if (!p.operands)
+		return -ENOMEM;
 
-	long_opts = calloc(options_count + 2, sizeof(struct option));
-	short_opts = calloc(options_count * 3 + 3, sizeof(*short_opts));
-	long_opt_map = calloc(options_count + 2, sizeof(*long_opt_map));
-
-	if (!long_opts || !short_opts || !long_opt_map) {
-		fprintf(stderr, "failed to allocate memory for opts: %s\n", libnvme_strerror(errno));
-		return -errno;
-	}
-
-	for (s = options, opt_index = 0; s->option; s++, opt_index++) {
-		s->seen = false;
-		if (s->config_type == CFG_GROUP_SEPARATOR)
-			continue;
-		if (s->short_option) {
-			short_opts[short_index++] = s->short_option;
-			if (s->argument_type == required_argument ||
-			    s->argument_type == optional_argument)
-				short_opts[short_index++] = ':';
-			if (s->argument_type == optional_argument)
-				short_opts[short_index++] = ':';
+	ret = argconfig_parse_args(&p);
+	if (ret) {
+		/*
+		 * The help that was asked for goes to stdout, the one after a
+		 * malformed option to stderr. A bad value prints no help.
+		 * The command stops either way: it gets ARGCONFIG_HELP or an
+		 * error.
+		 */
+		if (ret == ARGCONFIG_HELP) {
+			show_help(stdout, program_desc, options);
+			help_requested = true;
+		} else if (ret > 0) {
+			argconfig_print_help(program_desc, options);
+			ret = -EINVAL;
 		}
-		if (!is_null_or_empty(s->option)) {
-			long_opts[long_opt_index].name = s->option;
-			long_opts[long_opt_index].has_arg = s->argument_type;
-			long_opt_map[long_opt_index] = opt_index;
-			long_opt_index++;
-		}
-	}
-
-	long_opts[long_opt_index].name = "help";
-	long_opts[long_opt_index].val = 'h';
-
-	short_opts[short_index++] = '?';
-	short_opts[short_index] = 'h';
-
-	optind = 0;
-	while ((c = getopt_long_only(argc, argv, short_opts, long_opts, &long_opt_index)) != -1) {
-		if (c) {
-			if (c == '?' || c == 'h') {
-				argconfig_print_help(program_desc, options);
-				ret = -EINVAL;
-				break;
-			}
-			for (opt_index = 0; opt_index < options_count; opt_index++) {
-				if (c == options[opt_index].short_option)
-					break;
-			}
-			if (opt_index == options_count)
-				continue;
-		} else {
-			opt_index = long_opt_map[long_opt_index];
-		}
-
-		s = &options[opt_index];
-		s->seen = true;
-
-		if (!s->default_value)
-			continue;
-
-		ret = argconfig_parse_val(s);
-		if (ret)
-			break;
+		free(p.operands);
+	} else {
+		operand_buf = p.operands;
+		operands.argv = p.operands;
+		operands.argc = p.nr_operands;
 	}
 
 	if (!argconfig_check_verbose(options))
@@ -380,100 +737,54 @@ int argconfig_parse(int argc, char *argv[], const char *program_desc,
  * Parse global (pre-subcommand) options from argc/argv. Stops at the first
  * non-option argument (i.e. the subcommand name) so that subcommand-specific
  * options are left in place for the subcommand dispatcher. After a successful
- * call, optind points to the first non-option argument (the subcommand).
+ * call, *argind is the index of the first non-option argument (the
+ * subcommand), or argc if there is none.
  *
- * Returns 0 on success, negative errno on failure.
+ * Unless the table has its own, -h, --help, -V and --version are accepted
+ * like a global option. Returns ARGCONFIG_HELP and ARGCONFIG_VERSION for
+ * them, 0 otherwise, or a negative errno on failure. @options may be NULL.
  */
 int argconfig_parse_global(int argc, char *argv[],
-			   struct argconfig_commandline_options *options)
+			   struct argconfig_commandline_options *options,
+			   int *argind)
 {
-	__cleanup_free char *short_opts = NULL;
-	__cleanup_free struct option *long_opts = NULL;
-	__cleanup_free int *long_opt_map = NULL;
-	struct argconfig_commandline_options *s;
-	int c, long_opt_index = 0, opt_index = 0;
-	int short_index = 0, options_count = 0;
-	int ret = 0;
+	static struct argconfig_commandline_options no_options[] = {
+		OPT_END()
+	};
+	struct argconfig_parser p = {
+		.argc = argc,
+		.argv = argv,
+		.options = options ? options : no_options,
+		.global = true,
+	};
+	int ret;
 
-	errno = 0;
-	for (s = options; s->option; s++)
-		options_count++;
+	ret = argconfig_parse_args(&p);
+	*argind = p.ind;
+	if (ret)
+		return ret > 0 ? -EINVAL : ret;
 
-	long_opts = calloc(options_count + 2, sizeof(struct option));
-	/* '+' prefix: stop at the first non-option argument (the subcommand) */
-	short_opts = calloc(options_count * 3 + 4, sizeof(*short_opts));
-	long_opt_map = calloc(options_count + 2, sizeof(*long_opt_map));
-
-	if (!long_opts || !short_opts || !long_opt_map) {
-		fprintf(stderr, "failed to allocate memory for opts: %s\n",
-			libnvme_strerror(errno));
-		return -errno;
-	}
-
-	short_opts[short_index++] = '+';
-
-	for (s = options, opt_index = 0; s->option; s++, opt_index++) {
-		s->seen = false;
-		if (s->config_type == CFG_GROUP_SEPARATOR)
-			continue;
-		if (s->short_option) {
-			short_opts[short_index++] = s->short_option;
-			if (s->argument_type == required_argument ||
-			    s->argument_type == optional_argument)
-				short_opts[short_index++] = ':';
-			if (s->argument_type == optional_argument)
-				short_opts[short_index++] = ':';
-		}
-		if (!is_null_or_empty(s->option)) {
-			long_opts[long_opt_index].name = s->option;
-			long_opts[long_opt_index].has_arg = s->argument_type;
-			long_opt_map[long_opt_index] = opt_index;
-			long_opt_index++;
-		}
-	}
-
-	optind = 0;
-	while ((c = getopt_long(argc, argv, short_opts,
-			long_opts, &long_opt_index)) != -1) {
-		 if (c == '?' || c == ':') {
- 			ret = -EINVAL;
- 			break;
- 		}
-		if (c) {
-			for (opt_index = 0; opt_index < options_count;
-					opt_index++) {
-				if (c == options[opt_index].short_option)
-					break;
-			}
- 			if (opt_index == options_count) {
- 				ret = -EINVAL;
- 				break;
-			}
-		} else {
-			opt_index = long_opt_map[long_opt_index];
-		}
-
-		s = &options[opt_index];
-		s->seen = true;
-
-		if (!s->default_value)
-			continue;
-
-		ret = argconfig_parse_val(s);
-		if (ret)
-			break;
-	}
-
-	return ret;
+	return (p.help ? ARGCONFIG_HELP : 0) |
+	       (p.version ? ARGCONFIG_VERSION : 0);
 }
 
-bool argconfig_parse_seen(struct argconfig_commandline_options *s,
-			  const char *option)
+/*
+ * True if an option which stores to @value was given, in the table or in
+ * the global options. Aliases share the variable, so any of them counts.
+ */
+bool argconfig_given(struct argconfig_commandline_options *s,
+		     const void *value)
 {
-	for (; s && s->option; s++) {
-		if (!strcmp(s->option, option))
-			return s->seen;
-	}
+	struct argconfig_commandline_options *g = argconfig_globals(s);
+	bool given = false;
 
-	return false;
+	if (!value)
+		return false;
+
+	for (; s && s->option; s++)
+		given |= s->default_value == value && s->seen;
+	for (; g && g->option; g++)
+		given |= g->default_value == value && g->seen;
+
+	return given;
 }

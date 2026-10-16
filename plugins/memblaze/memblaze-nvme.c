@@ -439,7 +439,8 @@ static int mb_get_additional_smart_log(int argc, char **argv, struct command *ac
 	};
 
 	NVME_ARGS(opts,
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,  namespace),
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,  namespace,
+			 nvme_nsid_values),
 		OPT_FLAG("raw-binary",	 'b', &cfg.raw_binary,	  raw));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
@@ -1064,11 +1065,9 @@ static int mb_set_lat_stats(int argc, char **argv, struct command *acmd, struct 
 		.disable = false,
 	};
 
-	struct argconfig_commandline_options opts[] = {
-		{"enable", 'e', "", CFG_FLAG, &cfg.enable, no_argument, enable_desc},
-		{"disable", 'd', "", CFG_FLAG, &cfg.disable, no_argument, disable_desc},
-		{NULL}
-	};
+	NVME_ARGS(opts,
+		  OPT_FLAG("enable",  'e', &cfg.enable,  enable_desc),
+		  OPT_FLAG("disable", 'd', &cfg.disable, disable_desc));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 
@@ -1795,7 +1794,7 @@ static int mb_get_performance_stats(int argc, char **argv, struct command *acmd,
 	// Get the configuration
 
 	struct config {
-		int  duration;
+		__u32 duration;
 		bool raw_binary;
 	};
 

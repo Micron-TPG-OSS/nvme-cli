@@ -934,6 +934,12 @@ static int netapp_nvme_filter(const struct dirent *d)
 	return 0;
 }
 
+#ifdef CONFIG_JSONC
+#define NETAPP_OUTPUT_FORMAT_DESC "Output format: normal|column|json"
+#else /* CONFIG_JSONC */
+#define NETAPP_OUTPUT_FORMAT_DESC "Output format: normal|column"
+#endif /* CONFIG_JSONC */
+
 static int netapp_output_format(char *format)
 {
 	if (!format)
@@ -966,7 +972,7 @@ static int netapp_smdevices(int argc, char **argv, struct command *acmd,
 	NVME_ARGS(opts);
 
 	ret = parse_args(argc, argv, desc, opts);
-	if (ret < 0)
+	if (ret)
 		return ret;
 
 	ret = nvme_create_global_ctx(&ctx);
@@ -986,8 +992,8 @@ static int netapp_smdevices(int argc, char **argv, struct command *acmd,
 		return devs.num;
 	}
 
-	if (optind < argc)
-		devname = basename(argv[optind++]);
+	if (nvme_args.device)
+		devname = basename(nvme_args.device);
 
 	if (devname) {
 		int subsys_num, nsid;
@@ -1063,7 +1069,7 @@ static int netapp_ontapdevices(int argc, char **argv, struct command *acmd,
 	NVME_ARGS(opts);
 
 	ret = parse_args(argc, argv, desc, opts);
-	if (ret < 0)
+	if (ret)
 		return ret;
 
 	ret = nvme_create_global_ctx(&ctx);
@@ -1077,8 +1083,8 @@ static int netapp_ontapdevices(int argc, char **argv, struct command *acmd,
 		return -EINVAL;
 	}
 
-	if (optind < argc)
-		devname = basename(argv[optind++]);
+	if (nvme_args.device)
+		devname = basename(nvme_args.device);
 
 	if (devname) {
 		int subsys_num, nsid;
@@ -1148,14 +1154,18 @@ static struct command netapp_smdevices_cmd = {
 	.name = "smdevices",
 	.help = "NetApp SMdevices",
 	.fn = netapp_smdevices,
-	.no_device = true,
+	.output_formats = OUTPUT_FORMATS_CUSTOM,
+	.output_format_desc = NETAPP_OUTPUT_FORMAT_DESC,
+	.device = COMMAND_DEVICE_OPTIONAL,
 };
 
 static struct command netapp_ontapdevices_cmd = {
 	.name = "ontapdevices",
 	.help = "NetApp ONTAPdevices",
 	.fn = netapp_ontapdevices,
-	.no_device = true,
+	.output_formats = OUTPUT_FORMATS_CUSTOM,
+	.output_format_desc = NETAPP_OUTPUT_FORMAT_DESC,
+	.device = COMMAND_DEVICE_OPTIONAL,
 };
 
 static struct command *commands[] = {

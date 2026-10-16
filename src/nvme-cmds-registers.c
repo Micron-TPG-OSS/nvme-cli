@@ -13,7 +13,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <getopt.h>
 #include <inttypes.h>
 #include <libgen.h>
 #include <locale.h>
@@ -162,11 +161,7 @@ static int show_registers(int argc, char **argv, struct command *acmd, struct pl
 		return -EINVAL;
 	}
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
+	flags = nvme_args.output_flags;
 
 	if (nvme_args.verbose)
 		flags |= VERBOSE;
@@ -256,11 +251,14 @@ static bool is_reg_selected(struct get_reg_config *cfg, int offset)
 	return false;
 }
 
-static int get_register_properties(struct libnvme_transport_handle *hdl, void **pbar, struct get_reg_config *cfg)
+static int get_register_properties(struct libnvme_transport_handle *hdl,
+				   struct argconfig_commandline_options *opts,
+				   void **pbar, struct get_reg_config *cfg)
 {
 	struct libnvme_passthru_cmd cmd;
 	int offset = NVME_REG_CRTO;
 	__u64 value;
+	bool given = argconfig_given(opts, &cfg->offset);
 	int size;
 	int err;
 	void *bar;
@@ -271,7 +269,8 @@ static int get_register_properties(struct libnvme_transport_handle *hdl, void **
 		return -ENOMEM;
 
 	for (offset = NVME_REG_CAP; offset <= NVME_REG_CRTO; offset += get_reg_size(offset)) {
-		if ((cfg->offset != offset && !is_reg_selected(cfg, offset)) ||
+		if ((!(given && cfg->offset == offset) &&
+		     !is_reg_selected(cfg, offset)) ||
 		    !nvme_is_fabrics_reg(offset))
 			continue;
 
@@ -337,17 +336,22 @@ bool nvme_is_ctrl_reg(int offset)
 	return false;
 }
 
-static bool get_register_offset(void *bar, bool fabrics, struct get_reg_config *cfg,
+static bool get_register_offset(struct argconfig_commandline_options *opts,
+				void *bar, bool fabrics,
+				struct get_reg_config *cfg,
 				nvme_print_flags_t flags)
 {
-	bool offset_matched = cfg->offset >= 0;
+	bool given = argconfig_given(opts, &cfg->offset);
+	bool offset_matched = given;
 	int offset;
 
 	if (offset_matched)
 		nvme_show_ctrl_register(bar, fabrics, cfg->offset, flags);
 
 	for (offset = NVME_REG_CAP; offset <= NVME_REG_PMRMSCU; offset += get_reg_size(offset)) {
-		if (!nvme_is_ctrl_reg(offset) || offset == cfg->offset || !is_reg_selected(cfg, offset))
+		if (!nvme_is_ctrl_reg(offset) ||
+		    (given && offset == cfg->offset) ||
+		    !is_reg_selected(cfg, offset))
 			continue;
 		nvme_show_ctrl_register(bar, fabrics, offset, flags);
 		if (!offset_matched)
@@ -391,7 +395,7 @@ static int get_register(int argc, char **argv, struct command *acmd, struct plug
 	void *bar;
 
 	struct get_reg_config cfg = {
-		.offset = -1,
+		.offset = 0,
 	};
 
 	NVME_ARGS(opts,
@@ -434,24 +438,20 @@ static int get_register(int argc, char **argv, struct command *acmd, struct plug
 		return -EINVAL;
 	}
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
+	flags = nvme_args.output_flags;
 
 	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
 	bar = read_registers(hdl);
 	if (!bar) {
-		err = get_register_properties(hdl, &bar, &cfg);
+		err = get_register_properties(hdl, opts, &bar, &cfg);
 		if (err)
 			return err;
 		fabrics = true;
 	}
 
-	if (!get_register_offset(bar, fabrics, &cfg, flags)) {
+	if (!get_register_offset(opts, bar, fabrics, &cfg, flags)) {
 		nvme_show_error("offset required param");
 		err = -EINVAL;
 	}
@@ -508,63 +508,65 @@ static int nvme_set_register(struct libnvme_transport_handle *hdl, int offset,
 	return 0;
 }
 
-static inline int set_register_names_check(struct argconfig_commandline_options *opts, int offset)
+static inline int
+set_register_names_check(struct argconfig_commandline_options *opts,
+			 struct set_reg_config *cfg, int offset)
 {
 	switch (offset) {
 	case NVME_REG_INTMS:
-		if (argconfig_parse_seen(opts, "intms"))
+		if (argconfig_given(opts, &cfg->intms))
 			return -EINVAL;
 		break;
 	case NVME_REG_INTMC:
-		if (argconfig_parse_seen(opts, "intmc"))
+		if (argconfig_given(opts, &cfg->intmc))
 			return -EINVAL;
 		break;
 	case NVME_REG_CC:
-		if (argconfig_parse_seen(opts, "cc"))
+		if (argconfig_given(opts, &cfg->cc))
 			return -EINVAL;
 		break;
 	case NVME_REG_CSTS:
-		if (argconfig_parse_seen(opts, "csts"))
+		if (argconfig_given(opts, &cfg->csts))
 			return -EINVAL;
 		break;
 	case NVME_REG_NSSR:
-		if (argconfig_parse_seen(opts, "nssr"))
+		if (argconfig_given(opts, &cfg->nssr))
 			return -EINVAL;
 		break;
 	case NVME_REG_AQA:
-		if (argconfig_parse_seen(opts, "aqa"))
+		if (argconfig_given(opts, &cfg->aqa))
 			return -EINVAL;
 		break;
 	case NVME_REG_ASQ:
-		if (argconfig_parse_seen(opts, "asq"))
+		if (argconfig_given(opts, &cfg->asq))
 			return -EINVAL;
 		break;
 	case NVME_REG_ACQ:
-		if (argconfig_parse_seen(opts, "acq"))
+		if (argconfig_given(opts, &cfg->acq))
 			return -EINVAL;
 		break;
 	case NVME_REG_BPRSEL:
-		if (argconfig_parse_seen(opts, "bprsel"))
+		if (argconfig_given(opts, &cfg->bprsel))
 			return -EINVAL;
 		break;
 	case NVME_REG_CMBMSC:
-		if (argconfig_parse_seen(opts, "cmbmsc"))
+		if (argconfig_given(opts, &cfg->cmbmsc))
 			return -EINVAL;
 		break;
 	case NVME_REG_NSSD:
-		if (argconfig_parse_seen(opts, "nssd"))
+		if (argconfig_given(opts, &cfg->nssd))
 			return -EINVAL;
 		break;
 	case NVME_REG_PMRCTL:
-		if (argconfig_parse_seen(opts, "pmrctl"))
+		if (argconfig_given(opts, &cfg->pmrctl))
 			return -EINVAL;
 		break;
 	case NVME_REG_PMRMSCL:
-		if (argconfig_parse_seen(opts, "pmrmscl"))
+		if (argconfig_given(opts, &cfg->pmrmscl))
 			return -EINVAL;
 		break;
 	case NVME_REG_PMRMSCU:
-		if (argconfig_parse_seen(opts, "pmrmscu"))
+		if (argconfig_given(opts, &cfg->pmrmscu))
 			return -EINVAL;
 		break;
 	default:
@@ -580,12 +582,12 @@ static int set_register_offset(struct libnvme_transport_handle *hdl,
 {
 	int err;
 
-	if (!argconfig_parse_seen(opts, "value")) {
+	if (!argconfig_given(opts, &cfg->value)) {
 		nvme_show_error("value required param");
 		return -EINVAL;
 	}
 
-	err = set_register_names_check(opts, cfg->offset);
+	err = set_register_names_check(opts, cfg, cfg->offset);
 	if (err) {
 		nvme_show_error("offset duplicated param");
 		return err;
@@ -604,98 +606,98 @@ static int set_register_names(struct libnvme_transport_handle *hdl,
 {
 	int err;
 
-	if (argconfig_parse_seen(opts, "intms")) {
+	if (argconfig_given(opts, &cfg->intms)) {
 		err = nvme_set_register(hdl, NVME_REG_INTMS, cfg->intms,
 					cfg->mmio32);
 		if (err)
 			return err;
 	}
 
-	if (argconfig_parse_seen(opts, "intmc")) {
+	if (argconfig_given(opts, &cfg->intmc)) {
 		err = nvme_set_register(hdl, NVME_REG_INTMC, cfg->intmc,
 					cfg->mmio32);
 		if (err)
 			return err;
 	}
 
-	if (argconfig_parse_seen(opts, "cc")) {
+	if (argconfig_given(opts, &cfg->cc)) {
 		err = nvme_set_register(hdl, NVME_REG_CC, cfg->cc,
 					cfg->mmio32);
 		if (err)
 			return err;
 	}
 
-	if (argconfig_parse_seen(opts, "csts")) {
+	if (argconfig_given(opts, &cfg->csts)) {
 		err = nvme_set_register(hdl, NVME_REG_CSTS, cfg->csts,
 					cfg->mmio32);
 		if (err)
 			return err;
 	}
 
-	if (argconfig_parse_seen(opts, "nssr")) {
+	if (argconfig_given(opts, &cfg->nssr)) {
 		err = nvme_set_register(hdl, NVME_REG_NSSR, cfg->nssr,
 					cfg->mmio32);
 		if (err)
 			return err;
 	}
 
-	if (argconfig_parse_seen(opts, "aqa")) {
+	if (argconfig_given(opts, &cfg->aqa)) {
 		err = nvme_set_register(hdl, NVME_REG_AQA, cfg->aqa,
 					cfg->mmio32);
 		if (err)
 			return err;
 	}
 
-	if (argconfig_parse_seen(opts, "asq")) {
+	if (argconfig_given(opts, &cfg->asq)) {
 		err = nvme_set_register(hdl, NVME_REG_ASQ, cfg->asq,
 					cfg->mmio32);
 		if (err)
 			return err;
 	}
 
-	if (argconfig_parse_seen(opts, "acq")) {
+	if (argconfig_given(opts, &cfg->acq)) {
 		err = nvme_set_register(hdl, NVME_REG_ACQ, cfg->acq,
 					cfg->mmio32);
 		if (err)
 			return err;
 	}
 
-	if (argconfig_parse_seen(opts, "bprsel")) {
+	if (argconfig_given(opts, &cfg->bprsel)) {
 		err = nvme_set_register(hdl, NVME_REG_BPRSEL, cfg->bprsel,
 					cfg->mmio32);
 		if (err)
 			return err;
 	}
 
-	if (argconfig_parse_seen(opts, "cmbmsc")) {
+	if (argconfig_given(opts, &cfg->cmbmsc)) {
 		err = nvme_set_register(hdl, NVME_REG_CMBMSC, cfg->cmbmsc,
 					cfg->mmio32);
 		if (err)
 			return err;
 	}
 
-	if (argconfig_parse_seen(opts, "nssd")) {
+	if (argconfig_given(opts, &cfg->nssd)) {
 		err = nvme_set_register(hdl, NVME_REG_NSSD, cfg->nssd,
 					cfg->mmio32);
 		if (err)
 			return err;
 	}
 
-	if (argconfig_parse_seen(opts, "pmrctl")) {
+	if (argconfig_given(opts, &cfg->pmrctl)) {
 		err = nvme_set_register(hdl, NVME_REG_PMRCTL, cfg->pmrctl,
 					cfg->mmio32);
 		if (err)
 			return err;
 	}
 
-	if (argconfig_parse_seen(opts, "pmrmscl")) {
+	if (argconfig_given(opts, &cfg->pmrmscl)) {
 		err = nvme_set_register(hdl, NVME_REG_PMRMSCL, cfg->pmrmscl,
 					cfg->mmio32);
 		if (err)
 			return err;
 	}
 
-	if (argconfig_parse_seen(opts, "pmrmscu")) {
+	if (argconfig_given(opts, &cfg->pmrmscu)) {
 		err = nvme_set_register(hdl, NVME_REG_PMRMSCU, cfg->pmrmscu,
 					cfg->mmio32);
 		if (err)
@@ -716,7 +718,7 @@ static int set_register(int argc, char **argv, struct command *acmd, struct plug
 	int err;
 
 	struct set_reg_config cfg = {
-		.offset = -1,
+		.offset = 0,
 	};
 
 	NVME_ARGS(opts,
@@ -748,7 +750,7 @@ static int set_register(int argc, char **argv, struct command *acmd, struct plug
 		return -EINVAL;
 	}
 
-	if (argconfig_parse_seen(opts, "offset"))
+	if (argconfig_given(opts, &cfg.offset))
 		err = set_register_offset(hdl, opts, &cfg);
 
 	if (!err)
@@ -771,7 +773,7 @@ static int get_property(int argc, char **argv, struct command *acmd, struct plug
 	nvme_print_flags_t flags = NORMAL;
 
 	struct get_reg_config cfg = {
-		.offset		= -1,
+		.offset		= 0,
 		.fabrics	= true,
 	};
 
@@ -782,13 +784,9 @@ static int get_property(int argc, char **argv, struct command *acmd, struct plug
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
+	flags = nvme_args.output_flags;
 
-	if (cfg.offset == -1) {
+	if (!argconfig_given(opts, &cfg.offset)) {
 		nvme_show_error("offset required param");
 		return -EINVAL;
 	}
@@ -813,32 +811,25 @@ static int set_property(int argc, char **argv, struct command *acmd, struct plug
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	int err;
-	nvme_print_flags_t flags;
 
 	struct set_reg_config cfg = {
-		.offset	= -1,
-		.value	= -1,
+		.offset	= 0,
+		.value	= 0,
 	};
 
 	NVME_ARGS(opts,
 		  OPT_UINT("offset", 'O', &cfg.offset, offset),
-		  OPT_UINT("value",  'V', &cfg.value,  value));
+		  OPT_SUFFIX("value",  'V', &cfg.value,  value));
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
 
-	err = validate_output_format(nvme_args.output_format, &flags);
-	if (err < 0) {
-		nvme_show_error("Invalid output format");
-		return err;
-	}
-
-	if (cfg.offset == -1) {
+	if (!argconfig_given(opts, &cfg.offset)) {
 		nvme_show_error("offset required param");
 		return -EINVAL;
 	}
-	if (cfg.value == -1) {
+	if (!argconfig_given(opts, &cfg.value)) {
 		nvme_show_error("value required param");
 		return -EINVAL;
 	}
