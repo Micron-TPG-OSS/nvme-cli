@@ -10,7 +10,7 @@
  * shell-completion generators, documentation, and drift checks.
  *
  * The model is captured by walking the live plugin/command tree and, for each
- * command, intercepting the options array it builds on its stack via NVME_ARGS.
+ * command, intercepting the options array it builds on its stack.
  * Capture installs a hook in argconfig_parse() (see argconfig_set_parse_hook):
  * when a command calls into the parser, the hook copies the options array into
  * the model and returns a sentinel so the command unwinds before opening any
@@ -267,6 +267,8 @@ static void free_option_fields(struct command_metadata_option *o)
 	free((char *)o->option);
 	free((char *)o->meta);
 	free((char *)o->help);
+	free((char *)o->deprecated);
+	free((char *)o->old_name);
 	if (o->opt_val) {
 		const struct argconfig_opt_val *v;
 
@@ -310,6 +312,8 @@ static int copy_options(const struct argconfig_commandline_options *opts,
 		if (dup_field(opts[i].option, &dst[i].option) ||
 		    dup_field(opts[i].meta, &dst[i].meta) ||
 		    dup_field(opts[i].help, &dst[i].help) ||
+		    dup_field(opts[i].deprecated, &dst[i].deprecated) ||
+		    dup_field(opts[i].old_name, &dst[i].old_name) ||
 		    copy_opt_val(opts[i].opt_val, &dst[i].opt_val)) {
 			size_t j;
 
@@ -321,7 +325,7 @@ static int copy_options(const struct argconfig_commandline_options *opts,
 		dst[i].short_option = opts[i].short_option;
 		dst[i].config_type = opts[i].config_type;
 		dst[i].argument_type = opts[i].argument_type;
-		dst[i].hidden = opts[i].hidden;
+		dst[i].hidden = opts[i].deprecated;
 	}
 
 	*out = dst;
@@ -329,47 +333,67 @@ static int copy_options(const struct argconfig_commandline_options *opts,
 	return 0;
 }
 
+/* The entries of @opts with the included tables in place, see flat_copy() */
+static size_t flat_count(struct argconfig_commandline_options *opts)
+{
+	size_t n = 0;
+
+	for (; opts->option; opts++) {
+		if (opts->config_type == CFG_INCLUDE)
+			n += flat_count(opts->default_value);
+		n++;
+	}
+
+	return n;
+}
+
+/* Copy @opts to @dst, an included table behind a group of its heading */
+static size_t flat_copy(struct argconfig_commandline_options *dst,
+			struct argconfig_commandline_options *opts)
+{
+	size_t n = 0;
+
+	for (; opts->option; opts++) {
+		if (opts->config_type == CFG_INCLUDE) {
+			struct argconfig_commandline_options sep =
+				OPT_GROUP(opts->help);
+
+			memcpy(&dst[n++], &sep, sizeof(sep));
+			n += flat_copy(&dst[n], opts->default_value);
+			continue;
+		}
+		memcpy(&dst[n++], opts, sizeof(*opts));
+	}
+
+	return n;
+}
+
 /*
- * argconfig_parse() hook installed by build_model(): copies the current
- * command's options into the model, then returns the sentinel so the parser
- * unwinds before the command opens a device.
- */
-/*
- * The command's options followed by the registered global options, behind a
- * "Global options" separator as json_command() expects. The caller frees
- * the returned array; the entries alias the original tables.
+ * The options of @root, the included tables behind a group of their
+ * heading: json_command() takes the options after "Global options" for the
+ * global ones. The caller frees the returned array; the entries alias the
+ * original tables.
  */
 static struct argconfig_commandline_options *
-with_global_options(struct argconfig_commandline_options *options)
+flatten(struct argconfig_commandline_options *root)
 {
-	struct argconfig_commandline_options *g, *all;
-	size_t n = 0, ng = 0, i;
+	struct argconfig_commandline_options *all;
 
-	g = argconfig_get_global_options();
-	while (options[n].option)
-		n++;
-	while (g && g[ng].option)
-		ng++;
-
-	all = calloc(n + ng + 2, sizeof(*all));
-	if (!all)
-		return NULL;
-
-	memcpy(all, options, n * sizeof(*all));
-	if (ng) {
-		struct argconfig_commandline_options sep =
-			OPT_GROUP("Global options");
-
-		memcpy(&all[n], &sep, sizeof(sep));
-		for (i = 0; i < ng; i++)
-			memcpy(&all[n + 1 + i], &g[i], sizeof(*all));
-	}
+	all = calloc(flat_count(root) + 1, sizeof(*all));
+	if (all)
+		flat_copy(all, root);
 
 	return all;
 }
 
+/*
+ * argconfig_parse() hook installed by build_model(): copies the current
+ * command's options, the global ones included, into the model, then
+ * returns the sentinel so the parser unwinds before the command opens a
+ * device.
+ */
 static int metadata_capture_hook(int argc, char **argv, const char *program_desc,
-				 struct argconfig_commandline_options *options)
+				 struct argconfig_commandline_options *root)
 {
 	(void)argc;
 	(void)argv;
@@ -377,7 +401,7 @@ static int metadata_capture_hook(int argc, char **argv, const char *program_desc
 
 	if (command_metadata_cur_command && !command_metadata_cur_command->captured) {
 		__cleanup_free struct argconfig_commandline_options *all =
-			with_global_options(options);
+			flatten(root);
 		int err = -ENOMEM;
 
 		if (all)
@@ -406,6 +430,9 @@ static int capture_command(struct command_metadata_command *mc, struct command *
 	mc->alias = cmd->alias;
 	mc->help = cmd->help;
 	mc->device = cmd->device;
+	mc->deprecated = cmd->deprecated;
+	mc->replacement_plugin = cmd->replacement.plugin;
+	mc->replacement_command = cmd->replacement.command;
 	mc->captured = false;
 
 	/*
@@ -663,6 +690,10 @@ static void json_option(struct json_object *arr, const struct command_metadata_o
 		json_object_add_value_bool(jo, "global", true);
 	if (o->hidden)
 		json_object_add_value_bool(jo, "hidden", true);
+	if (o->deprecated)
+		json_object_add_value_string(jo, "deprecated", o->deprecated);
+	if (o->old_name)
+		json_object_add_value_string(jo, "old_name", o->old_name);
 
 	vals = json_option_values(o);
 	if (vals)
@@ -692,12 +723,21 @@ static struct json_object *json_command(const struct command_metadata_command *c
 	if (c->help)
 		json_object_add_value_string(jc, "description", c->help);
 	json_object_add_value_string(jc, "device", device_names[c->device]);
+	if (c->deprecated)
+		json_object_add_value_bool(jc, "deprecated", true);
+	if (c->replacement_plugin && c->replacement_command) {
+		char replacement[0x80];
+
+		snprintf(replacement, sizeof(replacement), "%s %s",
+			 c->replacement_plugin, c->replacement_command);
+		json_object_add_value_string(jc, "replacement", replacement);
+	}
 
 	opts = json_create_array();
 	for (i = 0; i < c->num_options; i++) {
 		/*
-		 * Options after the "Global options" separator are the shared
-		 * NVME_ARGS globals; flag them so generators can group them.
+		 * Options after the "Global options" separator are the
+		 * global options; flag them so generators can group them.
 		 */
 		if (opt_is_global_separator(&c->options[i])) {
 			global = true;

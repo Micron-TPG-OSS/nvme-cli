@@ -394,7 +394,6 @@ static int sndk_vs_internal_fw_log(int argc, char **argv,
 		"  HOST - Host-initiated telemetry.\n" \
 		"  CONTROLLER - Controller-initiated telemetry.\n" \
 		"  BOTH - Both HOST and CONTROLLER telemetry packaged in tar file.";
-	const char *verbose = "Display more debug messages.";
 	const char *file_size =
 		"Output file size. Deprecated, see man page for supported devices.";
 	const char *offset =
@@ -411,14 +410,21 @@ static int sndk_vs_internal_fw_log(int argc, char **argv,
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 
+	struct argconfig_opt_val types[] = {
+		VAL_ENUM("NONE", SNDK_TELEMETRY_TYPE_NONE),
+		VAL_ENUM("HOST", SNDK_TELEMETRY_TYPE_HOST),
+		VAL_ENUM("CONTROLLER", SNDK_TELEMETRY_TYPE_CONTROLLER),
+		VAL_ENUM("BOTH", SNDK_TELEMETRY_TYPE_BOTH),
+		VAL_END()
+	};
+
 	struct config {
 		char *file;
 		__u32 xfer_size;
 		__u32 data_area;
 		__u64 file_size;
 		__u64 offset;
-		char *type;
-		bool verbose;
+		int type;
 	};
 
 	struct config cfg = {
@@ -427,19 +433,18 @@ static int sndk_vs_internal_fw_log(int argc, char **argv,
 		.data_area = 0,
 		.file_size = 0,
 		.offset = 0,
-		.type = NULL,
-		.verbose = false,
+		.type = SNDK_TELEMETRY_TYPE_NONE,
 	};
 
-	NVME_ARGS(opts,
+	OPT_ARGS(opts) = {
 		OPT_FILE("output-file",   'O', &cfg.file,      file),
 		OPT_UINT("transfer-size", 's', &cfg.xfer_size, size),
 		OPT_UINT("data-area",     'd', &cfg.data_area, data_area),
-		OPT_FILE("type",          't', &cfg.type,      type),
-		OPT_FLAG("verbose",       'V', &cfg.verbose,   verbose),
+		OPT_ENUM("type",          't', &cfg.type,      type, types),
 		OPT_LONG("file-size",     'f', &cfg.file_size, file_size),
 		OPT_LONG("offset",        'e', &cfg.offset,    offset),
-		OPT_END());
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -506,24 +511,11 @@ static int sndk_vs_internal_fw_log(int argc, char **argv,
 		}
 	}
 
-	if (!cfg.type || !strcmp(cfg.type, "NONE") || !strcmp(cfg.type, "none")) {
-		telemetry_type = SNDK_TELEMETRY_TYPE_NONE;
+	telemetry_type = cfg.type;
+	if (telemetry_type == SNDK_TELEMETRY_TYPE_NONE)
 		telemetry_data_area = 0;
-	} else if (!strcmp(cfg.type, "HOST") || !strcmp(cfg.type, "host")) {
-		telemetry_type = SNDK_TELEMETRY_TYPE_HOST;
+	else
 		telemetry_data_area = cfg.data_area;
-	} else if (!strcmp(cfg.type, "CONTROLLER") || !strcmp(cfg.type, "controller")) {
-		telemetry_type = SNDK_TELEMETRY_TYPE_CONTROLLER;
-		telemetry_data_area = cfg.data_area;
-	} else if (!strcmp(cfg.type, "BOTH") || !strcmp(cfg.type, "both")) {
-		telemetry_type = SNDK_TELEMETRY_TYPE_BOTH;
-		telemetry_data_area = cfg.data_area;
-	} else {
-		nvme_show_error(
-			"ERROR: SNDK: Invalid type - Must be NONE, HOST, CONTROLLER, or BOTH\n");
-		ret = -1;
-		goto out;
-	}
 
 	capabilities = sndk_get_drive_capabilities(ctx, hdl);
 
@@ -569,7 +561,7 @@ static int sndk_vs_internal_fw_log(int argc, char **argv,
 			ret = -1;
 			goto out;
 		}
-		ret = sndk_do_cap_udui(hdl, f, xfer_size, cfg.verbose);
+		ret = sndk_do_cap_udui(hdl, f, xfer_size, nvme_args.verbose);
 		goto out;
 	}
 
@@ -619,12 +611,16 @@ static int sndk_vs_smart_add_log(int argc, char **argv,
 		.namespace_id = NVME_NSID_ALL,
 	};
 
-	NVME_ARGS(opts,
-		OPT_BYTE("interval",          'i', &cfg.interval, interval),
-		OPT_BYTE("log-page-version",  'l', &cfg.log_page_version, log_page_version),
-		OPT_LIST("log-page-mask",     'p', &cfg.log_page_mask,    log_page_mask),
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
-			 namespace_id, nvme_nsid_values));
+	OPT_ARGS(opts) = {
+		OPT_BYTE("interval",         'i', &cfg.interval,     interval),
+		OPT_BYTE("log-page-version", 'l', &cfg.log_page_version,
+			 log_page_version),
+		OPT_LIST("log-page-mask", 'p', &cfg.log_page_mask,
+			 log_page_mask),
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
+			 nvme_nsid_values),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -789,8 +785,10 @@ static int sndk_drive_resize(int argc, char **argv,
 		.size = 0,
 	};
 
-	NVME_ARGS(opts,
-		OPT_LONG("size", 's', &cfg.size, size));
+	OPT_ARGS(opts) = {
+		OPT_LONG("size", 's', &cfg.size, size),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -1136,7 +1134,9 @@ static int sndk_vs_fw_activate_history(int argc, char **argv,
 		.output_format = "normal",
 	};
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -1184,7 +1184,9 @@ static int sndk_clear_fw_activate_history(int argc, char **argv,
 	__u64 capabilities = 0;
 	int ret;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -1254,7 +1256,9 @@ static int sndk_capabilities(int argc, char **argv,
 	uint64_t capabilities = 0;
 	int ret;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)

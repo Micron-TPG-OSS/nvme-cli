@@ -7,6 +7,7 @@
 
 #include <libnvme.h>
 
+#include <shared/string-util.h>
 #include <shared/wrap-util.h>
 
 #include "argconfig.h"
@@ -233,6 +234,14 @@ static void print_device_desc(void)
 #endif
 }
 
+/* The title of a command group, in bold on a terminal */
+static void print_group_title(const char *title)
+{
+	putchar('\n');
+	argconfig_print_heading(stdout, "%s:", title);
+	putchar('\n');
+}
+
 void general_help(struct plugin *plugin, char *str)
 {
 	struct program *prog = plugin->parent;
@@ -301,7 +310,7 @@ void general_help(struct plugin *plugin, char *str)
 				if (str && !strstr(command->name, str))
 					continue;
 				if (!header_printed && group->title) {
-					printf("\n\033[1m%s:\033[0m\n", group->title);
+					print_group_title(group->title);
 					header_printed = true;
 				}
 				printf("  %-*s %s\n", padding, command->name, command->help);
@@ -324,7 +333,7 @@ void general_help(struct plugin *plugin, char *str)
 					if (str && !strstr(extension->name, str))
 						continue;
 					if (!header_printed) {
-						printf("\n\033[1m%s:\033[0m\n", group->title);
+						print_group_title(group->title);
 						header_printed = true;
 					}
 					printf("  %-*s %s\n", padding, extension->name,
@@ -424,6 +433,17 @@ void general_help(struct plugin *plugin, char *str)
 	}
 }
 
+/* Where the commands of @plugin are listed, after an error */
+static void commands_hint(struct plugin *plugin)
+{
+	if (plugin->name)
+		fprintf(stderr, "See '%s %s --help' for the commands.\n",
+			plugin->parent->name, plugin->name);
+	else
+		fprintf(stderr, "See '%s --help' for the commands.\n",
+			plugin->parent->name);
+}
+
 /* Apply the output formats and the operand of a command before it runs */
 void command_prepare(struct command *cmd)
 {
@@ -437,13 +457,25 @@ void command_prepare(struct command *cmd)
 static int run_command(int argc, char **argv, struct plugin *plugin,
 		       struct command *cmd)
 {
-	char use[0x100];
+	char use[0x100], path[0x80];
+	int err;
 
 	build_command_usage(use, sizeof(use), plugin->parent, plugin, cmd);
+	if (plugin->name)
+		snprintf(path, sizeof(path), "%s %s", plugin->name, cmd->name);
+	else
+		snprintf(path, sizeof(path), "%s", cmd->name);
 	argconfig_append_usage(use);
+	argconfig_set_command(plugin->parent->name, path);
 	command_prepare(cmd);
 
-	return cmd->fn(argc, argv, cmd, plugin);
+	err = cmd->fn(argc, argv, cmd, plugin);
+
+	/* use and path go out of scope */
+	argconfig_append_usage("");
+	argconfig_set_command(NULL, NULL);
+
+	return err;
 }
 
 /*
@@ -461,7 +493,11 @@ static int run_joined_command(int argc, char **argv, struct plugin *plugin)
 			break;
 	}
 	if (!extension) {
-		fprintf(stderr, "ERROR: Invalid sub-command '%s'\n", argv[0]);
+		__cleanup_free char *e = shr_escape(argv[0]);
+
+		fprintf(stderr, "ERROR: Invalid sub-command '%s'\n",
+			e ? e : "");
+		commands_hint(plugin);
 		return -ENOTTY;
 	}
 
@@ -500,8 +536,9 @@ int run_replacement_command(struct plugin *plugin, struct command *cmd,
 		return -ENOTTY;
 	}
 
+	argconfig_print_warning();
 	fprintf(stderr,
-		"WARNING: '%s' is deprecated and will be removed in the next major version, use 'nvme %s %s' instead\n",
+		" '%s' is deprecated and will be removed in the next major version, use 'nvme %s %s' instead\n",
 		cmd->name, name, command);
 
 	/*
@@ -570,7 +607,7 @@ int handle_plugin(int argc, char **argv, struct plugin *plugin)
 	 */
 	err = argconfig_parse_global(argc, argv, NULL, &argind);
 	if (err < 0) {
-		general_help(plugin, NULL);
+		commands_hint(plugin);
 		return err;
 	}
 
@@ -598,9 +635,12 @@ int handle_plugin(int argc, char **argv, struct plugin *plugin)
 
 	/* Only the built-in plugin has extensions */
 	if (plugin->name) {
+		__cleanup_free char *e = shr_escape(argv[0]);
+
 		fprintf(stderr,
 			"ERROR: Invalid sub-command '%s' for plugin %s\n",
-			argv[0], plugin->name);
+			e ? e : "", plugin->name);
+		commands_hint(plugin);
 		return -ENOTTY;
 	}
 

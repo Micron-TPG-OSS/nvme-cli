@@ -24,8 +24,14 @@
 * Every command checks its operand: a command which takes a device
   fails without one, and an extra operand is an error. Before, extra
   operands were silently ignored, e.g. a device given to a command which
-  takes none, or the value of `--persistent force`, which has to be
-  given as `--persistent=force`.
+  takes none.
+
+* `--persistent force` fails now. The value of an option which takes an
+  optional value has to be attached to it: `--persistent=force` or
+  `-pforce`. A separate value was never applied: `--persistent force`
+  connected in mode `auto` and dropped `force` without a word, as the
+  man pages of `discover`, `connect-all` and `config create` said.
+  Now it is an extra argument, which is an error.
 
 * Options which take an unsigned number reject negative numbers now.
   Before, `-1` wrapped around to the largest value. The values which
@@ -37,6 +43,82 @@
 
 * Number options reject text after the number. Before, the rest was
   ignored: `--timeout=10s` set a timeout of 10 milliseconds.
+
+* Numbers on the command line and in `nvme-cli.conf` are parsed
+  strictly: leading whitespace and a `+` are rejected, a signed option
+  rejects a value out of its range instead of wrapping around, and a
+  floating point option takes a `.` as decimal point in any locale and
+  rejects `nan` and `inf`. Sizes with a suffix (`4Ki`, `1.5G`) reject a
+  value which overflows, take the digits after a `.` in decimal
+  (`1.09k` was rejected as octal, `1.500k` was 1000), and use a `.` in
+  any locale as well. An empty value no longer selects a value name.
+
+* Errors and warnings which repeat a command line argument or a line of
+  a config file write its control characters as `\xNN`, so it can't
+  send escape sequences to the terminal.
+
+* Global options mean the same for every command now: they are looked
+  up before the options of a command, and no command uses their names
+  any more.
+  - The own `--human-readable` (`-H`) of `fdp configs`,
+    `lm migration-recv`, `shannon get-additional-feature` and
+    `zns id-ns`, and the own `--verbose` (`-V`) of `sndk` and
+    `wdc vs-internal-log`, `sed discover` and `zns report-zones` are
+    gone; the global `--verbose` (`-v`) does their job. `-V` is no
+    longer accepted by these commands.
+  - These options lost their short name, which a global option uses:
+    `config convert --output` and `rpmb read-data`/`write-data
+    --address` (`-o`), `feat arbitration --hpw`, `feat temp-thresh
+    --thsel`, `feat host-behavior-support --hdisns`, `lm set-cdq --hp`,
+    `nbft show --hfi` and `samsung vs-internal-log --hide-progress`
+    (`-H`).
+  - `--human-readable` and `-H`, the old spelling of `--verbose`, print
+    a deprecation warning.
+
+* A usage error prints the error, the synopsis and where to find the
+  help instead of the whole help, which buried the error. A bad value
+  names the option as it was given and the values it takes:
+
+      fw commit: invalid value 'x' for -s: expected a number from 0 to 255
+      Usage: nvme fw commit <device> [OPTIONS]
+      Try 'nvme fw commit --help' for more information.
+
+  The other errors of a command start with its name as well, e.g.
+  `id ns: /dev/nvme0: Permission denied`, and a device which can't be
+  opened prints no help any more. An unknown command and a bad global
+  option point to `nvme --help` instead of printing the general help,
+  which also followed a command that failed with ENOTTY. On a terminal,
+  that name is red and the WARNING of a warning yellow. Set `NO_COLOR`
+  to a non-empty value to turn colors off (https://no-color.org/).
+
+* Options which take one of a few words check the word while parsing
+  the command line, in any case and as a unique prefix like every
+  value name, and the help and the completions list the words:
+  `show-topology --ranking`, `memblaze select-download --select`,
+  `micron select-download --select`, the `--option` of the micron
+  `vs-smbus-option`, `latency-tracking` and
+  `vs-telemetry-controller-option`, the micron `--command` of
+  `latency-tracking` and `latency-stats`, `micron vs-internal-log
+  --type`, `ocp internal-log --telemetry-type`, the `--type` of the
+  `sndk` and `wdc` `vs-internal-log` and `solidigm internal-log
+  --type`. An unknown word is a usage error which lists the words.
+  `ocp internal-log` with an unknown telemetry type failed with status
+  0 before.
+
+* The help of `connect`, `discover`, `connect-all`, `disconnect` and
+  `config create` lists the fabrics options they share under "Fabrics
+  options", and the help of the `feat` commands `--save` and `--sel`
+  under "Feature options".
+
+* The command metadata (`nvme utils dump-command-metadata`) marks
+  deprecated commands with the command which replaces them, deprecated
+  options with the option which replaces them, and renamed options
+  with their old name.
+
+* The old option names `--dhchap-secret`, `--dhchap-ctrl-secret` and
+  `--fast_io_fail_tmo` of the fabrics commands and `--force` of
+  `discover` and `connect-all` print a deprecation warning which names
+  the option to use instead.
 
 * The deprecated `tls-key` command parses its options like every other
   command: it has a help, and abbreviated options such as `--keyr` are
@@ -206,6 +288,27 @@
 * The wdc plugin no longer creates its dump directories with a broken
   mode that only root could write to.
 
+* A device, or a fabrics target, which returns log pages whose lengths
+  and counts don't add up no longer makes nvme-cli read past its
+  buffers, loop for minutes or leak memory. This covers id-ctrl and the
+  FDP, host and AVE discovery, pull model DDC request, power
+  measurement, reachability, dispersed namespace, LBA status, changed
+  namespace list and persistent event logs. Found by fuzzing the device
+  data.
+
+* `nvme log host-discovery`, `ave-discovery` and `pull-model-ddc-req`
+  read the records which follow the header now. Before, they printed
+  zeros instead. `host-discovery --all-host-entries` reads the header
+  of the right page as well.
+
+* `nvme log reachability-groups` and `reachability-associations` decode
+  every descriptor now. Before, only the first one was read from the
+  right place. Their JSON output lists the IDs of a descriptor in an
+  array, `nsid` and `rgid`. Before, all but the last ID were lost.
+
+* `nvme log persistent-event` fails for a log larger than 4 GiB, which
+  it can't read, instead of printing a part of it as the whole log.
+
 ### Plugins
 
 * `nvme feat num-queues --nsqr=N` without `--ncqr` keeps the current
@@ -216,6 +319,14 @@
   `drive-essentials`, SN730 capture) and SanDisk (telemetry capture):
   a caller-controlled string reached a shell (`system()`), so a
   crafted input could run arbitrary commands as root.
+
+* `nvme seagate vs-smart-add-log` prints the SMART logs of a drive
+  once. Before, it printed those of legacy drives twice and those of
+  other drives followed by logs which aren't theirs, and its JSON
+  output could crash.
+
+* The dera, ibm, memblaze, ocp, seagate, solidigm and wdc plugins handle
+  unexpected values from the device and free the memory they used.
 
 * WDC, SanDisk, Micron, Solidigm and Samsung plugins no longer spawn
   external `tar`, `zip`, `cat`, `lsmod`, `uname` or `dmesg` processes;

@@ -11,8 +11,11 @@
 
 #include <libnvme.h>
 
+#include <shared/string-util.h>
+
 #include "argconfig.h"
 #include "args.h"
+#include "cleanup.h"
 #include "nvme-print.h"
 #include "plugin.h"
 
@@ -30,28 +33,22 @@ const char *namespace_id_desired = "identifier of desired namespace";
  * The operand of the current command: the device, or nothing. A missing
  * or an extra operand is a usage error.
  */
-static int check_device(char *argv[], const char *desc,
-			struct argconfig_commandline_options *opts)
+static int check_device(void)
 {
 	int max = nvme_args.device_operand == COMMAND_NO_DEVICE ? 0 : 1;
 	int nr = argconfig_nr_operands();
+	__cleanup_free char *e = NULL;
 
-	if (nvme_args.device_operand == COMMAND_DEVICE && !nr) {
-		nvme_show_error("%s: missing <device>", argv[0]);
-		goto usage;
-	}
+	if (nvme_args.device_operand == COMMAND_DEVICE && !nr)
+		return argconfig_usage_error("missing <device>");
 	if (nr > max) {
-		nvme_show_error("%s: unexpected argument '%s'", argv[0],
-				argconfig_operand(max));
-		goto usage;
+		e = shr_escape(argconfig_operand(max));
+		return argconfig_usage_error("unexpected argument '%s'",
+					     e ? e : "");
 	}
 
 	nvme_args.device = argconfig_operand(0);
 	return 0;
-
-usage:
-	argconfig_print_help(desc, opts);
-	return -EINVAL;
 }
 
 int parse_cmdline(int argc, char *argv[], const char *desc,
@@ -63,7 +60,7 @@ int parse_cmdline(int argc, char *argv[], const char *desc,
 	if (ret)
 		return ret;
 
-	return check_device(argv, desc, opts);
+	return check_device();
 }
 
 int parse_args(int argc, char *argv[], const char *desc,

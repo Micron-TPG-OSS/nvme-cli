@@ -122,6 +122,16 @@ static struct toval_test toval_tests[] = {
 	VAL_TEST("--int=1x", int_val, 0, true, -EINVAL),
 	VAL_TEST("--double=1.5x", double_val, 0, true, -EINVAL),
 	VAL_TEST("--double=1.5", double_val, 1.5, true, 0),
+	VAL_TEST("--int=4294967296", int_val, 0, true, -EINVAL),
+	VAL_TEST("--int=-2147483649", int_val, 0, true, -EINVAL),
+	VAL_TEST("--int=-2147483648", int_val, INT32_MIN, true, 0),
+	VAL_TEST("--int= 1", int_val, 0, true, -EINVAL),
+	VAL_TEST("--uint= 1", uint, 0, true, -EINVAL),
+	VAL_TEST("--uint=+1", uint, 0, true, -EINVAL),
+	VAL_TEST("--double=nan", double_val, 0, true, -EINVAL),
+	VAL_TEST("--double=inf", double_val, 0, true, -EINVAL),
+	VAL_TEST("--double=1e999", double_val, 0, true, -EINVAL),
+	VAL_TEST("--double= 1", double_val, 0, true, -EINVAL),
 	VAL_TEST("--val=12x", val, 0, true, -EINVAL),
 	VAL_TEST("--int=-1", int_val, -1, true, 0),
 	VAL_TEST("--int=1", int_val, 1, true, 0),
@@ -383,7 +393,7 @@ static void operands_test(void)
 
 /*
  * Options registered with argconfig_set_global_options() are accepted by
- * every command after the command's own options, which take precedence.
+ * every command and take precedence over its options of the same name.
  * Their seen flags are kept across parses: the global options may already
  * have been given before the command name.
  */
@@ -403,7 +413,7 @@ static void global_options_test(void)
 	};
 	OPT_ARGS(opts) = {
 		OPT_FLAG("flag", 'f', &cfg.flag, "flag"),
-		/* shadows -d of the global options */
+		/* -d is the global --dry-run */
 		OPT_UINT("uint", 'd', &cfg.uint, "uint"),
 		OPT_END()
 	};
@@ -426,21 +436,22 @@ static void global_options_test(void)
 	}
 
 	{
-		char **argv = (char *[]){ "list", "-f", "--verbose", "-d", "7",
-					  "-o", "json", "dev", NULL };
+		char **argv = (char *[]){ "list", "-f", "--verbose", "-d",
+					  "--uint=7", "-o", "json", "dev",
+					  NULL };
 
 		cfg.flag = false;
 		cfg.uint = 0;
 		ret = argconfig_parse(argv_len(argv), argv, desc, opts);
 		if (ret || !cfg.flag || cfg.uint != 7 || verbose != 2 ||
-		    dry_run || !format || strcmp(format, "json") ||
+		    !dry_run || !format || strcmp(format, "json") ||
 		    argconfig_nr_operands() != 1) {
 			printf("ERROR: global options: command parse failed\n");
 			test_rc = 1;
 		}
 		if (!argconfig_given(opts, &format) ||
 		    !argconfig_given(opts, &verbose) ||
-		    argconfig_given(opts, &dry_run)) {
+		    !argconfig_given(opts, &dry_run)) {
 			printf("ERROR: global options: seen mismatch\n");
 			test_rc = 1;
 		}
@@ -463,6 +474,225 @@ static void global_options_test(void)
 }
 
 /*
+ * A table includes another one: its options are found, reset for each
+ * parse and given like the own ones.
+ */
+static void include_test(void)
+{
+	const char *desc = "Test include";
+	static bool shared_flag;
+	static __u32 shared_uint;
+	static struct argconfig_commandline_options shared[] = {
+		OPT_FLAG("shared-flag", 'S', &shared_flag, "shared flag"),
+		OPT_UINT("shared-uint", 0, &shared_uint, "shared uint"),
+		OPT_END()
+	};
+	bool own = false;
+	int ret;
+
+	OPT_ARGS(opts) = {
+		OPT_INCLUDE(shared, "Shared options"),
+		OPT_FLAG("own", 'o', &own, "own flag"),
+		OPT_END()
+	};
+
+	{
+		char *argv[5] = { "prog", "-S", "--shared-uint=3", "-o", NULL };
+
+		ret = argconfig_parse(4, argv, desc, opts);
+		if (ret || !shared_flag || shared_uint != 3 || !own ||
+		    !argconfig_given(opts, &shared_flag) ||
+		    !argconfig_given(opts, &shared_uint)) {
+			printf("ERROR: include: options not applied\n");
+			test_rc = 1;
+		}
+	}
+
+	{
+		/* a later parse starts over with the included options */
+		char *argv[2] = { "prog", NULL };
+
+		ret = argconfig_parse(1, argv, desc, opts);
+		if (ret || argconfig_given(opts, &shared_flag) ||
+		    argconfig_given(opts, &shared_uint)) {
+			printf("ERROR: include: seen not reset\n");
+			test_rc = 1;
+		}
+	}
+
+	{
+		char *argv[3] = { "prog", "--bogus", NULL };
+
+		ret = argconfig_parse(2, argv, desc, opts);
+		if (ret != -EINVAL) {
+			printf("ERROR: include: unknown option accepted\n");
+			test_rc = 1;
+		}
+	}
+}
+
+/* A double takes a decimal point in any locale */
+static void double_locale_test(void)
+{
+	const char *desc = "Test double";
+	char *argv[3] = { "prog", "--d=1.5", NULL };
+	double d = 0;
+	int ret;
+
+	OPT_ARGS(opts) = {
+		OPT_DOUBLE("d", 0, &d, "double"),
+		OPT_END()
+	};
+
+	if (!setlocale(LC_NUMERIC, "de_DE.UTF-8"))
+		return;	/* not installed */
+
+	ret = argconfig_parse(2, argv, desc, opts);
+	if (ret || d != 1.5) {
+		printf("ERROR: double: '1.5' in de_DE gave %d/%f\n", ret, d);
+		test_rc = 1;
+	}
+	setlocale(LC_NUMERIC, "C");
+}
+
+/* An empty value names nothing, even with a single name */
+static void empty_name_test(void)
+{
+	const char *desc = "Test empty name";
+	struct argconfig_opt_val only[] = {
+		VAL_ENUM("only", 7),
+		VAL_END()
+	};
+	char *argv[3] = { "prog", "--e=", NULL };
+	int e = 0, ret;
+
+	OPT_ARGS(opts) = {
+		OPT_ENUM("e", 0, &e, "enum", only),
+		OPT_END()
+	};
+
+	ret = argconfig_parse(2, argv, desc, opts);
+	if (ret != -EINVAL || e) {
+		printf("ERROR: empty name: gave %d/%d\n", ret, e);
+		test_rc = 1;
+	}
+}
+
+/* A template table bound to another struct stores into that one */
+static void bind_test(void)
+{
+	const char *desc = "Test bind";
+	struct pair {
+		bool flag;
+		__u32 uint;
+	};
+	static struct pair tmpl_pair;
+	static struct argconfig_commandline_options tmpl[] = {
+		OPT_FLAG("flag", 'f', &tmpl_pair.flag, "flag"),
+		OPT_UINT("uint", 'u', &tmpl_pair.uint, "uint"),
+		OPT_END()
+	};
+	struct pair local = { 0 };
+	struct argconfig_commandline_options *bound;
+	char *argv[4] = { "prog", "-f", "--uint=5", NULL };
+	int ret;
+
+	bound = argconfig_bind(tmpl, &tmpl_pair, sizeof(tmpl_pair), &local);
+	if (!bound) {
+		printf("ERROR: bind: no table\n");
+		test_rc = 1;
+		return;
+	}
+
+	{
+		OPT_ARGS(opts) = {
+			OPT_INCLUDE(bound, "Bound options"),
+			OPT_END()
+		};
+
+		ret = argconfig_parse(3, argv, desc, opts);
+		if (ret || !local.flag || local.uint != 5 ||
+		    tmpl_pair.flag || tmpl_pair.uint ||
+		    !argconfig_given(opts, &local.uint)) {
+			printf("ERROR: bind: values not in the bound struct\n");
+			test_rc = 1;
+		}
+	}
+	free(bound);
+}
+
+/* An enum takes only its names, in any case and as a unique prefix */
+static void enum_test(void)
+{
+	const char *desc = "Test enum";
+	struct argconfig_opt_val names[] = {
+		VAL_ENUM("host", 1),
+		VAL_ENUM("controller", 2),
+		VAL_ENUM("ctrl-init", 3),
+		VAL_END()
+	};
+	static const struct {
+		const char *arg;
+		int ret;
+		int val;
+	} tests[] = {
+		{ "--type=host", 0, 1 },
+		{ "--type=HOST", 0, 1 },
+		{ "--type=controller", 0, 2 },
+		{ "--type=ctrl-", 0, 3 },
+		{ "--type=c", -EINVAL, 0 },
+		{ "--type=1", -EINVAL, 0 },
+		{ "--type=bogus", -EINVAL, 0 },
+	};
+	unsigned int i;
+	int type, ret;
+
+	OPT_ARGS(opts) = {
+		OPT_ENUM("type", 't', &type, "type", names),
+		OPT_END()
+	};
+
+	for (i = 0; i < ARRAY_SIZE(tests); i++) {
+		char *argv[3] = { "prog", (char *)tests[i].arg, NULL };
+
+		type = 0;
+		ret = argconfig_parse(2, argv, desc, opts);
+		if (ret != tests[i].ret || type != tests[i].val) {
+			printf("ERROR: enum: {%s} gave %d/%d\n", tests[i].arg,
+			       ret, type);
+			test_rc = 1;
+		}
+	}
+	if (strcmp(argconfig_value_name(names, 2), "controller") ||
+	    argconfig_value_name(names, 4)) {
+		printf("ERROR: enum: value names\n");
+		test_rc = 1;
+	}
+}
+
+/* An option also takes its old name, the option itself is given then */
+static void old_name_test(void)
+{
+	const char *desc = "Test old name";
+	bool flag = false;
+	__u32 val = 0;
+	char **argv = (char *[]){ "prog", "--old-flag", "--old-uint=7", NULL };
+	int ret;
+
+	OPT_ARGS(opts) = {
+		OPT_FLAG("flag", 'f', &flag, "flag", .old_name = "old-flag"),
+		OPT_UINT("uint", 'u', &val, "uint", .old_name = "old-uint"),
+		OPT_END()
+	};
+
+	ret = argconfig_parse(argv_len(argv), argv, desc, opts);
+	if (ret || !flag || val != 7 || !argconfig_given(opts, &flag)) {
+		printf("ERROR: old name: unexpected result\n");
+		test_rc = 1;
+	}
+}
+
+/*
  * argconfig_given() finds an option by the variable it stores to, also an
  * alias of it or a global option, and NULL is never given.
  */
@@ -481,7 +711,7 @@ static void given_test(void)
 	};
 	OPT_ARGS(opts) = {
 		OPT_FLAG("flag", 'f', &alias, "flag"),
-		OPT_FLAG("old-flag", 0, &alias, NULL, NULL, true),
+		OPT_FLAG("old-flag", 0, &alias, NULL),
 		OPT_UINT("uint", 'u', &cfg.uint, "uint"),
 		OPT_END()
 	};
@@ -933,6 +1163,12 @@ int main(void)
 	operands_test();
 	global_options_test();
 	given_test();
+	old_name_test();
+	enum_test();
+	include_test();
+	bind_test();
+	double_locale_test();
+	empty_name_test();
 	special_values_test();
 
 	for (i = 0; i < ARRAY_SIZE(comma_sep_array_tests); i++)
