@@ -158,7 +158,9 @@ static int log_pages_supp(int argc, char **argv, struct command *acmd,
 	nvme_print_flags_t flags;
 	int fmt;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -897,17 +899,20 @@ static int vs_smart_log(int argc, char **argv, struct command *acmd, struct plug
 	STX_EXT_SMART_LOG_PAGE_C0   ehExtSmart;
 	EXTENDED_SMART_INFO_T   ExtdSMARTInfo;
 	vendor_log_page_CF      logPageCF;
-	struct json_object *root = json_create_object();
-	struct json_object *lbafs = json_create_array();
+	__cleanup_json_object struct json_object *root = NULL;
+	struct json_object *lbafs = NULL;
 	struct json_object *lbafs_ExtSmart, *lbafs_DramSmart;
 
 	const char *desc = "Retrieve the Firmware Activation History for Seagate NVMe drives";
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	nvme_print_flags_t flags;
+	bool found = false;
 	int err, index = 0;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -915,9 +920,12 @@ static int vs_smart_log(int argc, char **argv, struct command *acmd, struct plug
 
 	flags = nvme_args.output_flags;
 
-	if (flags & JSON)
+	if (flags & JSON) {
 		printf("Seagate Extended SMART Information :\n");
-
+		root = json_create_object();
+		lbafs = json_create_array();
+		json_object_add_value_array(root, "SMART-Attributes", lbafs);
+	}
 
 	/**
 	 * Here we should identify if the drive is a Panthor or Jaguar.
@@ -937,6 +945,7 @@ static int vs_smart_log(int argc, char **argv, struct command *acmd, struct plug
 	if (!stx_is_jag_pan(modelNo)) {
 		err = nvme_get_log_simple(hdl, 0xC4, &ExtdSMARTInfo, sizeof(ExtdSMARTInfo));
 		if (!err) {
+			found = true;
 			if (!(flags & JSON)) {
 				printf("%-39s %-15s %-19s\n", "Description", "Ext-Smart-Id", "Ext-Smart-Value");
 				for (index = 0; index < 80; index++)
@@ -945,11 +954,9 @@ static int vs_smart_log(int argc, char **argv, struct command *acmd, struct plug
 				for (index = 0; index < NUMBER_EXTENDED_SMART_ATTRIBUTES; index++)
 					print_smart_log(ExtdSMARTInfo.Version, ExtdSMARTInfo.vendorData[index], index == (NUMBER_EXTENDED_SMART_ATTRIBUTES - 1));
 
-			} else if (flags & JSON){
+			} else {
 				lbafs_ExtSmart = json_create_object();
 				json_print_smart_log(lbafs_ExtSmart, &ExtdSMARTInfo);
-
-				json_object_add_value_array(root, "SMART-Attributes", lbafs);
 				json_array_add_value_object(lbafs, lbafs_ExtSmart);
 			}
 
@@ -961,16 +968,11 @@ static int vs_smart_log(int argc, char **argv, struct command *acmd, struct plug
 			if (!err) {
 				if (!(flags & JSON)) {
 					print_smart_log_CF(&logPageCF);
-				} else if (flags & JSON) {
+				} else {
 					lbafs_DramSmart = json_create_object();
 					json_print_smart_log_CF(lbafs_DramSmart, &logPageCF);
 					json_array_add_value_object(lbafs, lbafs_DramSmart);
-					json_print_object(root, NULL);
 				}
-			} else if (flags & JSON) {
-				json_print_object(root, NULL);
-				printf("\n");
-				json_free_object(root);
 			}
 		} else if (err > 0) {
 			nvme_show_status(err);
@@ -979,18 +981,13 @@ static int vs_smart_log(int argc, char **argv, struct command *acmd, struct plug
 		err = nvme_get_log_simple(hdl, 0xC0, &ehExtSmart, sizeof(ehExtSmart));
 
 		if (!err) {
+			found = true;
 			if (!(flags & JSON)) {
 				print_stx_smart_log_C0(&ehExtSmart);
-			} else if (flags & JSON){
+			} else {
 				lbafs_ExtSmart = json_create_object();
 				json_print_stx_smart_log_C0(lbafs_ExtSmart, &ehExtSmart);
-
-				json_object_add_value_array(root, "SMART-Attributes", lbafs);
 				json_array_add_value_object(lbafs, lbafs_ExtSmart);
-
-				json_print_object(root, NULL);
-				printf("\n");
-				json_free_object(root);
 			}
 		}
 
@@ -998,45 +995,9 @@ static int vs_smart_log(int argc, char **argv, struct command *acmd, struct plug
 			nvme_show_status(err);
 	}
 
-	err = nvme_get_log_simple(hdl, 0xC4,
-				  &ExtdSMARTInfo, sizeof(ExtdSMARTInfo));
-	if (!err) {
-		if (!(flags & JSON)) {
-			printf("%-39s %-15s %-19s\n", "Description", "Ext-Smart-Id", "Ext-Smart-Value");
-			for (index = 0; index < 80; index++)
-				printf("-");
-			printf("\n");
-			for (index = 0; index < NUMBER_EXTENDED_SMART_ATTRIBUTES; index++)
-				print_smart_log(ExtdSMARTInfo.Version, ExtdSMARTInfo.vendorData[index], index == (NUMBER_EXTENDED_SMART_ATTRIBUTES - 1));
-
-		} else if (flags & JSON) {
-			lbafs_ExtSmart = json_create_object();
-			json_print_smart_log(lbafs_ExtSmart, &ExtdSMARTInfo);
-
-			json_object_add_value_array(root, "SMART-Attributes", lbafs);
-			json_array_add_value_object(lbafs, lbafs_ExtSmart);
-		}
-
-		/**
-		 * Next get Log Page 0xCF
-		 */
-
-		err = nvme_get_log_simple(hdl, 0xCF,
-					  &logPageCF, sizeof(logPageCF));
-		if (!err) {
-			if (!(flags & JSON)) {
-				print_smart_log_CF(&logPageCF);
-			} else if (flags & JSON) {
-				lbafs_DramSmart = json_create_object();
-				json_print_smart_log_CF(lbafs_DramSmart, &logPageCF);
-				json_array_add_value_object(lbafs, lbafs_DramSmart);
-				json_print_object(root, NULL);
-			}
-		} else if (flags & JSON) {
-			json_print_object(root, NULL);
-		}
-	} else if (err > 0) {
-		nvme_show_status(err);
+	if (found && (flags & JSON)) {
+		json_print_object(root, NULL);
+		printf("\n");
 	}
 
 	return err;
@@ -1051,7 +1012,7 @@ static void json_temp_stats(__u32 temperature, __u32 PcbTemp, __u32 SocTemp,
 			    __u32 maxTemperature, __u32 MaxSocTemp,
 			    __u32 cf_err, __u32 scCurrentTemp, __u32 scMaxTem)
 {
-	struct json_object *root = json_create_object();
+	__cleanup_json_object struct json_object *root = json_create_object();
 
 	json_object_add_value_int(root, "Current temperature", temperature);
 	json_object_add_value_int(root, "Current PCB temperature", PcbTemp);
@@ -1081,7 +1042,9 @@ static int temp_stats(int argc, char **argv, struct command *acmd, struct plugin
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -1193,7 +1156,7 @@ static void print_vs_pcie_error_log(pcie_error_log_page pcieErrorLog)
 
 static void json_vs_pcie_error_log(pcie_error_log_page pcieErrorLog)
 {
-	struct json_object *root = json_create_object();
+	__cleanup_json_object struct json_object *root = json_create_object();
 	__u32 correctPcieEc = pcieErrorLog.BadDllpErrCnt + pcieErrorLog.BadTlpErrCnt +
 			      pcieErrorLog.RcvrErrCnt + pcieErrorLog.ReplayTOErrCnt +
 			      pcieErrorLog.ReplayNumRolloverErrCnt;
@@ -1238,7 +1201,9 @@ static int vs_pcie_error_log(int argc, char **argv, struct command *acmd, struct
 	int err;
 	nvme_print_flags_t flags;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -1369,7 +1334,9 @@ static int stx_vs_fw_activate_history(int argc, char **argv, struct command *acm
 	int err;
 	nvme_print_flags_t flags;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -1423,8 +1390,10 @@ static int clear_fw_activate_history(int argc, char **argv, struct command *acmd
 		.save         = 0,
 	};
 
-	NVME_ARGS(opts,
-		OPT_FLAG("save", 's', &cfg.save, save));
+	OPT_ARGS(opts) = {
+		OPT_FLAG("save", 's', &cfg.save, save),
+		OPT_END()
+	};
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -1481,8 +1450,10 @@ static int vs_clr_pcie_correctable_errs(int argc, char **argv, struct command *a
 		.save         = 0,
 	};
 
-	NVME_ARGS(opts,
-		OPT_FLAG("save", 's', &cfg.save, save));
+	OPT_ARGS(opts) = {
+		OPT_FLAG("save", 's', &cfg.save, save),
+		OPT_END()
+	};
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -1544,11 +1515,13 @@ static int get_host_tele(int argc, char **argv, struct command *acmd, struct plu
 		.log_id       = 0,
 	};
 
-	NVME_ARGS(opts,
+	OPT_ARGS(opts) = {
 		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
 			 nvme_nsid_values),
 		OPT_UINT("log_specific", 'i', &cfg.log_id,       log_specific),
-		OPT_FLAG("raw-binary",   'b', &cfg.raw_binary,   raw));
+		OPT_FLAG("raw-binary",   'b', &cfg.raw_binary,   raw),
+		OPT_END()
+	};
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -1650,10 +1623,12 @@ static int get_ctrl_tele(int argc, char **argv, struct command *acmd, struct plu
 		.namespace_id = 0xffffffff,
 	};
 
-	NVME_ARGS(opts,
+	OPT_ARGS(opts) = {
 		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
 			 nvme_nsid_values),
-		OPT_FLAG("raw-binary",   'b', &cfg.raw_binary,   raw));
+		OPT_FLAG("raw-binary",   'b', &cfg.raw_binary,   raw),
+		OPT_END()
+	};
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -1764,10 +1739,12 @@ static int vs_internal_log(int argc, char **argv, struct command *acmd, struct p
 		.file         = "",
 	};
 
-	NVME_ARGS(opts,
+	OPT_ARGS(opts) = {
 		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
 			 nvme_nsid_values),
-		OPT_FILE("dump-file",    'f', &cfg.file,         file));
+		OPT_FILE("dump-file",    'f', &cfg.file,         file),
+		OPT_END()
+	};
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -1847,7 +1824,9 @@ static int seagate_plugin_version(int argc, char **argv, struct command *acmd, s
 	const char *desc = "Prints the Seagate plugin version.";
 	int err;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	err = parse_args(argc, argv, desc, opts);
 	if (err)
@@ -1866,7 +1845,9 @@ static int stx_ocp_plugin_version(int argc, char **argv, struct command *acmd, s
 	const char *desc = "Prints the Seagate OCP plugin version.";
 	int err;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	err = parse_args(argc, argv, desc, opts);
 	if (err)

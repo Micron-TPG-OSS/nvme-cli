@@ -1,34 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
+ * This file is part of nvme-cli.
+ * Copyright (c) 2014 PMC-Sierra, Inc.
+ * Copyright (c) 2026 SUSE Software Solutions
  *
- * Copyright 2014 PMC-Sierra, Inc.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
- *
- */
-
-/*
- *
- *   Author: Logan Gunthorpe <logang@deltatee.com>
- *           Logan Gunthorpe
- *
- *   Date:   Oct 23 2014
- *
- *   Description:
- *     Header file for argconfig.c
- *
+ * Authors: Logan Gunthorpe <logang@deltatee.com>
+ *          Daniel Wagner <dwagner@suse.de>
  */
 #pragma once
 
@@ -49,7 +26,9 @@ enum argconfig_types {
 	CFG_SHORT,
 	CFG_POSITIVE,
 	CFG_INCREMENT,
+	CFG_ENUM,
 	CFG_GROUP_SEPARATOR,
+	CFG_INCLUDE,
 };
 
 #define OPT_ARGS(n) \
@@ -80,6 +59,13 @@ enum argconfig_types {
 
 #define OPT_END() { NULL }
 
+/*
+ * The options of the table @t at this place, under the heading @d. They
+ * are parsed, reset and given like the own options of the table.
+ */
+#define OPT_INCLUDE(t, d) \
+	{"", 0, NULL, CFG_INCLUDE, t, ARGCONFIG_ARG_NONE, d, false, NULL}
+
 #define OPT_GROUP(d) \
 	{"", 0, NULL, CFG_GROUP_SEPARATOR, NULL, ARGCONFIG_ARG_NONE, d, false, \
 	 NULL}
@@ -99,6 +85,11 @@ enum argconfig_types {
 #define OPT_INT(l, s, v, d, ...) \
 	{l, s, "NUM", CFG_INT, OPT_CHECK(v, int *), \
 	 ARGCONFIG_ARG_REQUIRED, d, false, __VA_ARGS__}
+
+/* One of the names of the value table @n, VAL_ENUM() entries */
+#define OPT_ENUM(l, s, v, d, n, ...) \
+	{l, s, "NAME", CFG_ENUM, OPT_CHECK(v, int *), \
+	 ARGCONFIG_ARG_REQUIRED, d, false, n, __VA_ARGS__}
 
 #define OPT_LONG(l, s, v, d, ...) \
 	{l, s, "NUM", CFG_LONG, OPT_CHECK_64(v), \
@@ -168,6 +159,9 @@ enum argconfig_types {
 #define VAL_INT(s, v) \
 	{s, CFG_INT, .val.int_val = v}
 
+#define VAL_ENUM(s, v) \
+	{s, CFG_ENUM, .val.int_val = v}
+
 #define VAL_LONG(s, v) \
 	{s, CFG_LONG, .val.long_val = v}
 
@@ -224,12 +218,29 @@ struct argconfig_commandline_options {
 	const char *help;
 	bool seen;
 	struct argconfig_opt_val *opt_val;
-	bool hidden;
+	/*
+	 * The option which replaces a deprecated one. A deprecated option
+	 * is warned about on use and left out of the help.
+	 */
+	const char *deprecated;
+	/* the long name of earlier versions, accepted with a warning */
+	const char *old_name;
 };
 
 void argconfig_append_usage(const char *str);
-void argconfig_print_help(const char *program_desc,
-			  struct argconfig_commandline_options *options);
+#define ARGCONFIG_BOLD		"\033[1m"
+#define ARGCONFIG_RED		"\033[31m"
+#define ARGCONFIG_YELLOW	"\033[33m"
+#define ARGCONFIG_RESET		"\033[0m"
+
+const char *argconfig_esc(FILE *out, const char *seq);
+void argconfig_print_warning(void);
+void argconfig_print_error_label(void);
+void argconfig_print_heading(FILE *out, const char *fmt, const char *text);
+void argconfig_set_command(const char *prog, const char *path);
+void argconfig_print_usage(void);
+int argconfig_usage_error(const char *fmt, ...)
+	__attribute__((format(printf, 1, 2)));
 bool argconfig_help_requested(void);
 int argconfig_parse(int argc, char *argv[], const char *program_desc,
 		    struct argconfig_commandline_options *options);
@@ -246,12 +257,21 @@ struct argconfig_commandline_options *argconfig_get_global_options(void);
 int argconfig_nr_operands(void);
 char *argconfig_operand(int i);
 
+/*
+ * Called by argconfig_parse() instead of parsing. @root includes the table
+ * of the command and the global options, under the headings of the help.
+ */
 typedef int (*argconfig_parse_hook_fn)(int argc, char *argv[],
-				       const char *program_desc,
-				       struct argconfig_commandline_options *options);
+		const char *program_desc,
+		struct argconfig_commandline_options *root);
 void argconfig_set_parse_hook(argconfig_parse_hook_fn hook);
 
 bool argconfig_given(struct argconfig_commandline_options *options,
 		     const void *value);
 bool argconfig_set_value_name(struct argconfig_commandline_options *option,
 			      const char *str);
+const char *argconfig_value_name(const struct argconfig_opt_val *values,
+				 int val);
+struct argconfig_commandline_options *
+argconfig_bind(const struct argconfig_commandline_options *tmpl,
+	       const void *tmpl_base, size_t size, void *base);

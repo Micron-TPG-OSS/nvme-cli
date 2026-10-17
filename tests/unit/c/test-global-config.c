@@ -138,6 +138,52 @@ static bool test_value_names(void)
 	return pass;
 }
 
+static bool test_strict_numbers_and_buf(void)
+{
+	bool pass = true;
+
+	printf("test_strict_numbers_and_buf:\n");
+
+	nvme_args.timeout = 42;
+	nvme_load_global_config_buf("[Global]\ntimeout = +5\n", "buf");
+	if (nvme_args.timeout != 42) {
+		printf(" - '+5' rejected [FAIL]\n");
+		pass = false;
+	} else {
+		printf(" - '+5' rejected [PASS]\n");
+	}
+
+	nvme_load_global_config_buf("[Global]\ntimeout = 0x10\n", "buf");
+	if (nvme_args.timeout != 16) {
+		printf(" - '0x10' taken from a buffer [FAIL]\n");
+		pass = false;
+	} else {
+		printf(" - '0x10' taken from a buffer [PASS]\n");
+	}
+
+	return pass;
+}
+
+static bool test_repeated_string(void)
+{
+	bool pass = true;
+
+	printf("test_repeated_string:\n");
+
+	nvme_load_global_config_buf("[Global]\noutput-format = json\n"
+				    "output-format = binary\n", "buf");
+	if (strcmp(nvme_args.output_format, "binary")) {
+		printf(" - the last value counts [FAIL]\n");
+		pass = false;
+	} else {
+		printf(" - the last value counts [PASS]\n");
+	}
+	nvme_global_config_free();
+	nvme_args.output_format = "normal";
+
+	return pass;
+}
+
 static bool test_malformed_value_skipped(void)
 {
 	char *path;
@@ -252,6 +298,8 @@ int main(void)
 	pass &= test_valid_keys();
 	pass &= test_unknown_key_ignored();
 	pass &= test_value_names();
+	pass &= test_strict_numbers_and_buf();
+	pass &= test_repeated_string();
 	pass &= test_malformed_value_skipped();
 	pass &= test_hidden_and_out_of_range();
 	pass &= test_keys_outside_global_ignored();

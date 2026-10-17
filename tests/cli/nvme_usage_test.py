@@ -19,6 +19,28 @@ import unittest
 _NVME_BIN = sys.argv[1] if len(sys.argv) > 1 else 'nvme'
 
 
+def run_tty(*args, env=None):
+    """Run nvme with stderr on a terminal and return what it wrote
+    there."""
+    import pty
+    master, slave = pty.openpty()
+    subprocess.run([_NVME_BIN] + list(args), stdin=subprocess.DEVNULL,
+                   stdout=subprocess.DEVNULL, stderr=slave, env=env,
+                   check=False)
+    os.close(slave)
+    out = b''
+    try:
+        while True:
+            data = os.read(master, 4096)
+            if not data:
+                break
+            out += data
+    except OSError:
+        pass
+    os.close(master)
+    return out.decode()
+
+
 def run(*args):
     return subprocess.run([_NVME_BIN] + list(args), capture_output=True,
                           text=True, stdin=subprocess.DEVNULL, check=False)
@@ -37,13 +59,109 @@ class HelpTest(unittest.TestCase):
     def test_usage_error_on_stderr_and_failure(self):
         result = run('id', 'ctrl', '--bogus')
         self.assertEqual(result.returncode, 1)
-        self.assertIn("unrecognized option '--bogus'", result.stderr)
-        self.assertIn('Usage: nvme id ctrl <device>', result.stderr)
+        self.assertIn("id ctrl: unrecognized option '--bogus'", result.stderr)
         self.assertEqual(result.stdout, '')
 
+    def test_usage_error_shows_synopsis_and_hint(self):
+        # the error must not drown in the full help
+        for args in (('id', 'ctrl', '--bogus'),
+                     ('id', 'ctrl'),
+                     ('id', 'ns', '/dev/nvme0', '-n', '1x')):
+            with self.subTest(args=args):
+                result = run(*args)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('Usage: nvme id ', result.stderr)
+                self.assertRegex(result.stderr,
+                                 r"Try 'nvme id c?\w+ --help' for more "
+                                 r"information\.")
+                self.assertNotIn('Options:', result.stderr)
+
+    def test_error_labelled_with_the_command(self):
+        result = run('id', 'ns', '/dev/nvme-does-not-exist')
+        self.assertIn('id ns: /dev/nvme-does-not-exist', result.stderr)
+
+    def test_open_failure_is_no_usage_error(self):
+        result = run('id', 'ns', '/dev/nvme-does-not-exist')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('/dev/nvme-does-not-exist', result.stderr)
+        self.assertNotIn('Usage:', result.stderr)
+        result = run('id', 'ns', '/dev/nvme-does-not-exist', '-o', 'json')
+        self.assertNotIn('Usage:', result.stdout + result.stderr)
+
+    def test_value_error_names_the_spelling(self):
+        result = run('id', 'ns', '/dev/nvme0', '-n', '1x')
+        self.assertIn("id ns: invalid value '1x' for -n: expected a number "
+                      "from 0 to 4294967295 or one of: all, -1",
+                      result.stderr)
+        result = run('id', 'ns', '/dev/nvme0', '--namespace-id=1x')
+        self.assertIn("invalid value '1x' for --namespace-id",
+                      result.stderr)
+
     def test_no_escape_sequences_when_not_a_terminal(self):
-        result = run('id', 'ctrl', '--help')
-        self.assertNotIn('\033[', result.stdout)
+        for args in (('id', 'ctrl', '--help'), ('help',), ('id', 'help')):
+            with self.subTest(args=args):
+                result = run(*args)
+                self.assertNotIn('\033[', result.stdout + result.stderr)
+
+
+class ColorTest(unittest.TestCase):
+    """Errors are red and warnings yellow on a terminal, unless NO_COLOR
+    is set to a non-empty value (https://no-color.org/)."""
+
+    def setUp(self):
+        try:
+            import pty  # noqa: F401
+        except ImportError:
+            self.skipTest('no pty on this platform')
+        self.env = dict(os.environ)
+        self.env.pop('NO_COLOR', None)
+
+    def test_error_in_red(self):
+        out = run_tty('id', 'ctrl', '--bogus', env=self.env)
+        self.assertIn("\033[31mid ctrl:\033[0m unrecognized option "
+                      "'--bogus'", out)
+
+    def test_warning_in_yellow(self):
+        out = run_tty('list', '-H', env=self.env)
+        self.assertIn('\033[33mWARNING:\033[0m', out)
+
+    def test_no_color(self):
+        self.env['NO_COLOR'] = '1'
+        self.assertNotIn('\033[', run_tty('id', 'ctrl', '--bogus',
+                                           env=self.env))
+        self.env['NO_COLOR'] = ''
+        self.assertIn('\033[31m', run_tty('id', 'ctrl', '--bogus',
+                                           env=self.env))
+
+
+class DeprecatedOptionTest(unittest.TestCase):
+    """--human-readable and -H still raise the verbose level, with a
+    warning which names the replacement."""
+
+    def test_human_readable(self):
+        for opt in ('-H', '--human-readable'):
+            with self.subTest(opt=opt):
+                result = run('list', opt)
+                self.assertIn(f"WARNING: '{opt}' is deprecated", result.stderr)
+                self.assertIn("use '--verbose/-v' instead", result.stderr)
+
+    def test_old_option_name(self):
+        # discover takes the old spelling of --fast-io-fail-tmo
+        if run('discover', '--help').returncode:
+            self.skipTest('no fabrics commands in this build')
+        result = run('discover', '--fast_io_fail_tmo=1', '--help')
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("WARNING: '--fast_io_fail_tmo' is deprecated",
+                      result.stderr)
+        self.assertIn("use '--fast-io-fail-tmo' instead", result.stderr)
+        self.assertNotIn('fast_io_fail_tmo', result.stdout)
+
+    def test_warns_once(self):
+        result = run('list', '-HH')
+        self.assertEqual(result.stderr.count('WARNING'), 1)
+
+    def test_verbose_does_not_warn(self):
+        self.assertNotIn('WARNING', run('list', '-v').stderr)
 
 
 class SpecialValuesTest(unittest.TestCase):
@@ -52,6 +170,51 @@ class SpecialValuesTest(unittest.TestCase):
         result = run('id', 'ns', '--help')
         self.assertIn('Names: all, -1', result.stdout)
         self.assertIn('Names: infinite, -1', result.stdout)
+
+
+class EchoTest(unittest.TestCase):
+    """Input which is echoed in an error can't drive the terminal: its
+    control characters are written as \\xNN."""
+
+    def assert_escaped(self, result):
+        self.assertNotIn('\033', result.stderr)
+        self.assertIn('\\x1b', result.stderr)
+
+    def test_unknown_option(self):
+        self.assert_escaped(run('id', 'ctrl', '--bo\033[31mgus'))
+
+    def test_bad_value(self):
+        self.assert_escaped(run('id', 'ns', '/dev/nvme0', '-n', '1\033[2J'))
+
+    def test_extra_argument(self):
+        self.assert_escaped(run('list', '\033]0;title\007'))
+
+    def test_unknown_command(self):
+        self.assert_escaped(run('bo\033[31mgus'))
+        self.assert_escaped(run('id', 'bo\033[31mgus'))
+
+
+class UnknownCommandTest(unittest.TestCase):
+    """An unknown command or plugin command and a bad global option
+    print the error and where the commands are listed, not the whole
+    general help."""
+
+    def assert_hint(self, result, message, hint):
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(message, result.stderr)
+        self.assertIn(hint, result.stderr)
+        self.assertNotIn('usage:', result.stdout + result.stderr)
+
+    def test_unknown_command(self):
+        self.assert_hint(run('bogus-cmd'), "'bogus-cmd'",
+                         "See 'nvme --help'")
+
+    def test_unknown_plugin_command(self):
+        self.assert_hint(run('id', 'bogus'), "'bogus'",
+                         "See 'nvme id --help'")
+
+    def test_bad_global_option(self):
+        self.assert_hint(run('--bogus'), "'--bogus'", "See 'nvme --help'")
 
 
 class OperandTest(unittest.TestCase):

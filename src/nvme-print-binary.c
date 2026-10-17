@@ -315,9 +315,10 @@ static void binary_rotational_media_info_log(struct nvme_rotational_media_info_l
 	d_raw((unsigned char *)info, sizeof(*info));
 }
 
-static void binary_dispersed_ns_psub_log(struct nvme_dispersed_ns_participating_nss_log *log)
+static void binary_dispersed_ns_psub_log(
+		struct nvme_dispersed_ns_participating_nss_log *log, __u64 len)
 {
-	d_raw((unsigned char *)log, sizeof(*log) + le64_to_cpu(log->numpsub) * NVME_NQN_LENGTH);
+	d_raw((unsigned char *)log, len);
 }
 
 static void binary_reachability_groups_log(struct nvme_reachability_groups_log *log, __u64 len)
@@ -331,19 +332,22 @@ static void binary_reachability_associations_log(struct nvme_reachability_associ
 	d_raw((unsigned char *)log, len);
 }
 
-static void binary_host_discovery_log(struct nvme_host_discovery_log *log)
+static void binary_host_discovery_log(struct nvme_host_discovery_log *log,
+				      __u64 len)
 {
-	d_raw((unsigned char *)log, le32_to_cpu(log->thdlpl));
+	d_raw((unsigned char *)log, len);
 }
 
-static void binary_ave_discovery_log(struct nvme_ave_discovery_log *log)
+static void binary_ave_discovery_log(struct nvme_ave_discovery_log *log,
+				     __u64 len)
 {
-	d_raw((unsigned char *)log, le32_to_cpu(log->tadlpl));
+	d_raw((unsigned char *)log, len);
 }
 
-static void binary_pull_model_ddc_req_log(struct nvme_pull_model_ddc_req_log *log)
+static void binary_pull_model_ddc_req_log(
+		struct nvme_pull_model_ddc_req_log *log, __u64 len)
 {
-	d_raw((unsigned char *)log, le32_to_cpu(log->tpdrpl));
+	d_raw((unsigned char *)log, len);
 }
 
 static void binary_power_meas_log(struct nvme_power_meas_log *log, __u32 size)

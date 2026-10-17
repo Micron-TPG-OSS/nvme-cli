@@ -3888,9 +3888,11 @@ static int wdc_cap_diag(int argc, char **argv, struct command *acmd,
 		.xfer_size = 0x10000
 	};
 
-	NVME_ARGS(opts,
+	OPT_ARGS(opts) = {
 		OPT_FILE("output-file",   'O', &cfg.file,      file),
-		OPT_UINT("transfer-size", 's', &cfg.xfer_size, size));
+		OPT_UINT("transfer-size", 's', &cfg.xfer_size, size),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -4409,7 +4411,6 @@ static int wdc_vs_internal_fw_log(int argc, char **argv, struct command *acmd,
 		"  NONE - Default, capture without using NVMe telemetry.\n" \
 		"  HOST - Host-initiated telemetry.\n" \
 		"  CONTROLLER - Controller-initiated telemetry.";
-	const char *verbose = "Display more debug messages.";
 	const char *file_size =
 		"Output file size. Deprecated, see man page for supported devices.";
 	const char *offset =
@@ -4428,14 +4429,20 @@ static int wdc_vs_internal_fw_log(int argc, char **argv, struct command *acmd,
 	char file_path[PATH_MAX/2] = {0};
 	int ret = -1;
 
+	struct argconfig_opt_val types[] = {
+		VAL_ENUM("NONE", WDC_TELEMETRY_TYPE_NONE),
+		VAL_ENUM("HOST", WDC_TELEMETRY_TYPE_HOST),
+		VAL_ENUM("CONTROLLER", WDC_TELEMETRY_TYPE_CONTROLLER),
+		VAL_END()
+	};
+
 	struct config {
 		char *file;
 		__u32 xfer_size;
 		__u32 data_area;
 		__u64 file_size;
 		__u64 offset;
-		char *type;
-		bool verbose;
+		int type;
 	};
 
 	struct config cfg = {
@@ -4444,19 +4451,18 @@ static int wdc_vs_internal_fw_log(int argc, char **argv, struct command *acmd,
 		.data_area = 0,
 		.file_size = 0,
 		.offset = 0,
-		.type = NULL,
-		.verbose = false,
+		.type = WDC_TELEMETRY_TYPE_NONE,
 	};
 
-	NVME_ARGS(opts,
+	OPT_ARGS(opts) = {
 		OPT_FILE("output-file",   'O', &cfg.file,      file),
 		OPT_UINT("transfer-size", 's', &cfg.xfer_size, size),
 		OPT_UINT("data-area",     'd', &cfg.data_area, data_area),
-		OPT_FILE("type",          't', &cfg.type,      type),
-		OPT_FLAG("verbose",       'V', &cfg.verbose,   verbose),
+		OPT_ENUM("type",          't', &cfg.type,      type, types),
 		OPT_LONG("file-size",     'f', &cfg.file_size, file_size),
 		OPT_LONG("offset",        'e', &cfg.offset,    offset),
-		OPT_END());
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -4522,21 +4528,11 @@ static int wdc_vs_internal_fw_log(int argc, char **argv, struct command *acmd,
 			}
 		}
 
-		if (!cfg.type || !strcmp(cfg.type, "NONE") || !strcmp(cfg.type, "none")) {
-			telemetry_type = WDC_TELEMETRY_TYPE_NONE;
-			data_area = 0;
-		} else if (!strcmp(cfg.type, "HOST") || !strcmp(cfg.type, "host")) {
-			telemetry_type = WDC_TELEMETRY_TYPE_HOST;
+		telemetry_type = cfg.type;
+		if (telemetry_type == WDC_TELEMETRY_TYPE_NONE)
+			telemetry_data_area = 0;
+		else
 			telemetry_data_area = cfg.data_area;
-		} else if (!strcmp(cfg.type, "CONTROLLER") || !strcmp(cfg.type, "controller")) {
-			telemetry_type = WDC_TELEMETRY_TYPE_CONTROLLER;
-			telemetry_data_area = cfg.data_area;
-		} else {
-			nvme_show_error(
-				"ERROR: WDC: Invalid type - Must be NONE, HOST or CONTROLLER\n");
-			ret = -1;
-			goto out;
-		}
 	} else {
 		if (cfg.file) {
 			strncpy(fb, cfg.file, PATH_MAX/2 - 8);
@@ -4818,8 +4814,10 @@ static int wdc_drive_log(int argc, char **argv, struct command *acmd,
 		.file = NULL
 	};
 
-	NVME_ARGS(opts,
-		OPT_FILE("output-file", 'O', &cfg.file, file));
+	OPT_ARGS(opts) = {
+		OPT_FILE("output-file", 'O', &cfg.file, file),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -4864,8 +4862,10 @@ static int wdc_get_crash_dump(int argc, char **argv, struct command *acmd,
 		.file = NULL,
 	};
 
-	NVME_ARGS(opts,
-		OPT_FILE("output-file", 'O', &cfg.file, file));
+	OPT_ARGS(opts) = {
+		OPT_FILE("output-file", 'O', &cfg.file, file),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -4905,8 +4905,10 @@ static int wdc_get_pfail_dump(int argc, char **argv, struct command *acmd,
 		.file = NULL,
 	};
 
-	NVME_ARGS(opts,
-		OPT_FILE("output-file", 'O', &cfg.file, file));
+	OPT_ARGS(opts) = {
+		OPT_FILE("output-file", 'O', &cfg.file, file),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -4985,7 +4987,9 @@ static int wdc_purge(int argc, char **argv,
 	char *err_str;
 	int ret;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -5037,7 +5041,9 @@ static int wdc_purge_monitor(int argc, char **argv,
 	__u64 capabilities;
 	int ret;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -8454,12 +8460,16 @@ static int wdc_vs_smart_add_log(int argc, char **argv, struct command *acmd,
 		.namespace_id = NVME_NSID_ALL,
 	};
 
-	NVME_ARGS(opts,
-		OPT_BYTE("interval",          'i', &cfg.interval, interval),
-		OPT_BYTE("log-page-version",  'l', &cfg.log_page_version, log_page_version),
-		OPT_LIST("log-page-mask",     'p', &cfg.log_page_mask,    log_page_mask),
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
-			 namespace_id, nvme_nsid_values));
+	OPT_ARGS(opts) = {
+		OPT_BYTE("interval",         'i', &cfg.interval,     interval),
+		OPT_BYTE("log-page-version", 'l', &cfg.log_page_version,
+			 log_page_version),
+		OPT_LIST("log-page-mask", 'p', &cfg.log_page_mask,
+			 log_page_mask),
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
+			 nvme_nsid_values),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -8584,8 +8594,10 @@ static int wdc_cu_smart_log(int argc, char **argv, struct command *acmd,
 		.uuid_index = 0,
 	};
 
-	NVME_ARGS(opts,
-		OPT_UINT("uuid-index",        'u', &cfg.uuid_index,       uuid_index));
+	OPT_ARGS(opts) = {
+		OPT_UINT("uuid-index", 'u', &cfg.uuid_index, uuid_index),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -8691,9 +8703,11 @@ static int wdc_vs_cloud_log(int argc, char **argv, struct command *acmd,
 		.namespace_id = NVME_NSID_ALL,
 	};
 
-	NVME_ARGS(opts,
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
-			 namespace_id, nvme_nsid_values));
+	OPT_ARGS(opts) = {
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
+			 nvme_nsid_values),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -8746,10 +8760,11 @@ static int wdc_vs_hw_rev_log(int argc, char **argv, struct command *acmd,
 	const char *namespace_id = "desired namespace id";
 	nvme_print_flags_t fmt;
 	__u64 capabilities = 0;
-	struct libnvme_transport_handle *hdl;
+	__cleanup_nvme_transport_handle
+		struct libnvme_transport_handle *hdl = NULL;
+	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
+	__cleanup_free __u8 *data = NULL;
 	int ret;
-	__u8 *data = NULL;
-	struct libnvme_global_ctx *ctx;
 
 	struct config {
 		char *output_format;
@@ -8761,9 +8776,11 @@ static int wdc_vs_hw_rev_log(int argc, char **argv, struct command *acmd,
 		.namespace_id = NVME_NSID_ALL,
 	};
 
-	NVME_ARGS(opts,
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
-			 namespace_id, nvme_nsid_values));
+	OPT_ARGS(opts) = {
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
+			 nvme_nsid_values),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -8792,7 +8809,7 @@ static int wdc_vs_hw_rev_log(int argc, char **argv, struct command *acmd,
 		ret = validate_output_format(cfg.output_format, &fmt);
 		if (ret < 0) {
 			nvme_show_error("ERROR: WDC %s: invalid output format", __func__);
-			goto free_buf;
+			goto out;
 		}
 
 		if (!data) {
@@ -8814,9 +8831,6 @@ static int wdc_vs_hw_rev_log(int argc, char **argv, struct command *acmd,
 		nvme_show_error("ERROR: WDC: Unable to read Hardware Revision Log Page data");
 		ret = -1;
 	}
-
-free_buf:
-	free(data);
 
 out:
 	return ret;
@@ -8852,9 +8866,11 @@ static int wdc_vs_device_waf(int argc, char **argv, struct command *acmd,
 		.namespace_id = NVME_NSID_ALL,
 	};
 
-	NVME_ARGS(opts,
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
-			 namespace_id, nvme_nsid_values));
+	OPT_ARGS(opts) = {
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
+			 nvme_nsid_values),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -8960,7 +8976,9 @@ static int wdc_get_latency_monitor_log(int argc, char **argv, struct command *ac
 		.output_format = "normal",
 	};
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -9004,7 +9022,9 @@ static int wdc_get_error_recovery_log(int argc, char **argv, struct command *acm
 		.output_format = "normal",
 	};
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -9049,7 +9069,9 @@ static int wdc_get_dev_capabilities_log(int argc, char **argv, struct command *a
 		.output_format = "normal",
 	};
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -9094,7 +9116,9 @@ static int wdc_get_unsupported_reqs_log(int argc, char **argv, struct command *a
 		.output_format = "normal",
 	};
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -9172,7 +9196,9 @@ static int wdc_clear_pcie_correctable_errors(int argc, char **argv, struct comma
 	__u64 capabilities = 0;
 	int ret;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -9218,7 +9244,9 @@ static int wdc_drive_status(int argc, char **argv, struct command *acmd,
 	__u64 capabilities = 0;
 	struct nvme_id_uuid_list uuid_list;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -9362,7 +9390,9 @@ static int wdc_clear_assert_dump(int argc, char **argv, struct command *acmd,
 	__u64 capabilities = 0;
 	struct libnvme_passthru_cmd admin_cmd;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -9585,7 +9615,9 @@ static int wdc_vs_fw_activate_history(int argc, char **argv, struct command *acm
 		.output_format = "normal",
 	};
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -9670,7 +9702,9 @@ static int wdc_clear_fw_activate_history(int argc, char **argv, struct command *
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	int ret;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -9724,10 +9758,12 @@ static int wdc_vs_telemetry_controller_option(int argc, char **argv, struct comm
 		.status = false,
 	};
 
-	NVME_ARGS(opts,
-		OPT_FLAG("disable",       'd', &cfg.disable,   disable),
-		OPT_FLAG("enable",        'e', &cfg.enable,    enable),
-		OPT_FLAG("status",        's', &cfg.status,    status));
+	OPT_ARGS(opts) = {
+		OPT_FLAG("disable", 'd', &cfg.disable, disable),
+		OPT_FLAG("enable",  'e', &cfg.enable,  enable),
+		OPT_FLAG("status",  's', &cfg.status,  status),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -10542,8 +10578,10 @@ static int wdc_drive_essentials(int argc, char **argv, struct command *acmd,
 		.dirName = NULL,
 	};
 
-	NVME_ARGS(opts,
-		OPT_STRING("dir-name", 'd', "DIRECTORY", &cfg.dirName, dirName));
+	OPT_ARGS(opts) = {
+		OPT_STRING("dir-name", 'd', "DIRECTORY", &cfg.dirName, dirName),
+		OPT_END()
+	};
 
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
@@ -10639,8 +10677,10 @@ static int wdc_drive_resize(int argc, char **argv,
 		.size = 0,
 	};
 
-	NVME_ARGS(opts,
-		OPT_LONG("size", 's', &cfg.size, size));
+	OPT_ARGS(opts) = {
+		OPT_LONG("size", 's', &cfg.size, size),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -10687,10 +10727,12 @@ static int wdc_namespace_resize(int argc, char **argv,
 		.op_option = 0xF,
 	};
 
-	NVME_ARGS(opts,
+	OPT_ARGS(opts) = {
 		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
 			 nvme_nsid_values),
-		OPT_UINT("op-option", 'O', &cfg.op_option, op_option));
+		OPT_UINT("op-option",    'O', &cfg.op_option,    op_option),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -10748,9 +10790,11 @@ static int wdc_reason_identifier(int argc, char **argv,
 		.file = NULL,
 	};
 
-	NVME_ARGS(opts,
+	OPT_ARGS(opts) = {
 		OPT_UINT("log-id", 'i', &cfg.log_id, log_id),
-		OPT_FILE("file",   'O', &cfg.file,   fname));
+		OPT_FILE("file",   'O', &cfg.file,   fname),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 
@@ -11008,7 +11052,9 @@ static int wdc_log_page_directory(int argc, char **argv, struct command *acmd,
 		.output_format = "normal",
 	};
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -11773,7 +11819,9 @@ static int wdc_vs_nand_stats(int argc, char **argv, struct command *acmd,
 		.output_format = "normal",
 	};
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -11852,7 +11900,9 @@ static int wdc_vs_pcie_stats(int argc, char **argv, struct command *acmd,
 		.output_format = "normal",
 	};
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -11942,7 +11992,9 @@ static int wdc_vs_drive_info(int argc, char **argv,
 		.output_format = "normal",
 	};
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -12196,7 +12248,9 @@ static int wdc_vs_temperature_stats(int argc, char **argv,
 		.output_format = "normal",
 	};
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -12302,7 +12356,9 @@ static int wdc_capabilities(int argc, char **argv, struct command *acmd, struct 
 	uint64_t capabilities = 0;
 	int ret;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -12407,7 +12463,9 @@ static int wdc_cloud_ssd_plugin_version(int argc, char **argv, struct command *a
 	uint64_t capabilities = 0;
 	int ret;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -12451,9 +12509,11 @@ static int wdc_cloud_boot_SSD_version(int argc, char **argv, struct command *acm
 		.namespace_id = NVME_NSID_ALL,
 	};
 
-	NVME_ARGS(opts,
-		OPT_UINT("namespace-id", 'n', &cfg.namespace_id,
-			 namespace_id, nvme_nsid_values));
+	OPT_ARGS(opts) = {
+		OPT_UINT("namespace-id", 'n', &cfg.namespace_id, namespace_id,
+			 nvme_nsid_values),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (ret)
@@ -12517,10 +12577,12 @@ static int wdc_enc_get_log(int argc, char **argv, struct command *acmd, struct p
 		.log_id = 0xffffffff,
 	};
 
-	NVME_ARGS(opts,
-		OPT_FILE("output-file",   'O', &cfg.file,  file),
+	OPT_ARGS(opts) = {
+		OPT_FILE("output-file",   'O', &cfg.file,      file),
 		OPT_UINT("transfer-size", 's', &cfg.xfer_size, size),
-		OPT_UINT("log-id",        'l', &cfg.log_id, log));
+		OPT_UINT("log-id",        'l', &cfg.log_id,    log),
+		OPT_END()
+	};
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
@@ -12814,30 +12876,33 @@ int wdc_set_latency_monitor_feature(int argc, char **argv, struct command *acmd,
 		.latency_monitor_feature_enable = 0x7,
 	};
 
-	NVME_ARGS(opts,
+	OPT_ARGS(opts) = {
 		OPT_SHRT("active_bucket_timer_threshold", 't',
-			&cfg.active_bucket_timer_threshold,
-			active_bucket_timer_threshold),
+			 &cfg.active_bucket_timer_threshold,
+			 active_bucket_timer_threshold),
 		OPT_BYTE("active_threshold_a", 'a', &cfg.active_threshold_a,
-			active_threshold_a),
+			 active_threshold_a),
 		OPT_BYTE("active_threshold_b", 'b', &cfg.active_threshold_b,
-			active_threshold_b),
+			 active_threshold_b),
 		OPT_BYTE("active_threshold_c", 'c', &cfg.active_threshold_c,
-			active_threshold_c),
+			 active_threshold_c),
 		OPT_BYTE("active_threshold_d", 'd', &cfg.active_threshold_d,
-			active_threshold_d),
+			 active_threshold_d),
 		OPT_SHRT("active_latency_config", 'f',
-			&cfg.active_latency_config, active_latency_config),
+			 &cfg.active_latency_config, active_latency_config),
 		OPT_BYTE("active_latency_minimum_window", 'w',
-			&cfg.active_latency_minimum_window,
-			active_latency_minimum_window),
+			 &cfg.active_latency_minimum_window,
+			 active_latency_minimum_window),
 		OPT_SHRT("debug_log_trigger_enable", 'r',
-			&cfg.debug_log_trigger_enable, debug_log_trigger_enable),
+			 &cfg.debug_log_trigger_enable,
+			 debug_log_trigger_enable),
 		OPT_BYTE("discard_debug_log", 'l', &cfg.discard_debug_log,
-			discard_debug_log),
+			 discard_debug_log),
 		OPT_BYTE("latency_monitor_feature_enable", 'e',
-			&cfg.latency_monitor_feature_enable,
-			latency_monitor_feature_enable));
+			 &cfg.latency_monitor_feature_enable,
+			 latency_monitor_feature_enable),
+		OPT_END()
+	};
 
 	ret = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 

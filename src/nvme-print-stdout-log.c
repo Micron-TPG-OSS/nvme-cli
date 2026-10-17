@@ -1420,7 +1420,9 @@ void stdout_fdp_configs(struct nvme_fdp_config_log *log, size_t len)
 
 void stdout_fdp_usage(struct nvme_fdp_ruhu_log *log, size_t len)
 {
-	uint16_t nruh = le16_to_cpu(log->nruh);
+	uint16_t nruh = nvme_log_nr_entries(le16_to_cpu(log->nruh), len,
+					    sizeof(*log),
+					    sizeof(log->ruhus[0]));
 	struct shr_table *t;
 
 	t = stdout_kv_table_create();
@@ -2712,12 +2714,13 @@ void stdout_discovery_log(const struct nvmf_discovery_log *log, int numrec)
 	}
 }
 
-void stdout_host_discovery_log(struct nvme_host_discovery_log *log)
+void stdout_host_discovery_log(struct nvme_host_discovery_log *log, __u64 len)
 {
-	__u32 i;
+	__u64 i;
 	__u16 j;
 	struct nvme_host_ext_discovery_log *hedlpe;
 	struct nvmf_ext_attr *exat;
+	void *p;
 	__u32 thdlpl = le32_to_cpu(log->thdlpl);
 	__u32 tel;
 	__u16 numexat;
@@ -2736,9 +2739,9 @@ void stdout_host_discovery_log(struct nvme_host_discovery_log *log)
 
 	stdout_kv_table_finish(t, "host-discovery-log");
 
-	for (i = sizeof(*log); i < le32_to_cpu(log->thdlpl); i += tel) {
+	for (i = sizeof(*log);
+	     (hedlpe = nvme_host_discovery_record(log, len, i)); i += tel) {
 		printf("hedlpe: %d\n", n++);
-		hedlpe = (void *)log + i;
 		tel = le32_to_cpu(hedlpe->tel);
 		numexat = le16_to_cpu(hedlpe->numexat);
 
@@ -2749,12 +2752,14 @@ void stdout_host_discovery_log(struct nvme_host_discovery_log *log)
 		stdout_kv_add(t, "trtype", "%s",
 			      libnvmf_trtype_str(hedlpe->trtype));
 		stdout_kv_add(t, "adrfam", "%s",
-			      strlen(hedlpe->traddr) ?
+			      hedlpe->traddr[0] ?
 			      libnvmf_adrfam_str(hedlpe->adrfam) : "");
 		stdout_kv_add(t, "eflags", "%s",
 			      libnvmf_eflags_str(le16_to_cpu(hedlpe->eflags)));
-		stdout_kv_add(t, "hostnqn", "%s", hedlpe->hostnqn);
-		stdout_kv_add(t, "traddr", "%s", hedlpe->traddr);
+		stdout_kv_add(t, "hostnqn", "%-.*s",
+			      (int)sizeof(hedlpe->hostnqn), hedlpe->hostnqn);
+		stdout_kv_add(t, "traddr", "%-.*s",
+			      (int)sizeof(hedlpe->traddr), hedlpe->traddr);
 		switch (hedlpe->trtype) {
 		case NVMF_TRTYPE_RDMA:
 			stdout_kv_add(t, "tsas.prtype", "%s",
@@ -2787,8 +2792,9 @@ void stdout_host_discovery_log(struct nvme_host_discovery_log *log)
 			d((unsigned char *)hedlpe->tsas.common,
 			  sizeof(hedlpe->tsas.common), 16, 1);
 
-		exat = hedlpe->exat;
-		for (j = 0; j < numexat; j++) {
+		p = hedlpe->exat;
+		for (j = 0; j < numexat &&
+		     (exat = nvme_host_discovery_exat(hedlpe, p)); j++) {
 			printf("exat: %d\n", j);
 
 			t = stdout_kv_table_create();
@@ -2805,7 +2811,7 @@ void stdout_host_discovery_log(struct nvme_host_discovery_log *log)
 			printf("exatval:\n");
 			d((unsigned char *)exat->exatval,
 			  le16_to_cpu(exat->exatlen), 16, 1);
-			exat = libnvmf_exat_ptr_next(exat);
+			p = libnvmf_exat_ptr_next(exat);
 		}
 	}
 }
@@ -2832,9 +2838,9 @@ static void stdout_kv_add_traddr(struct shr_table *t, const char *field,
 		stdout_kv_add(t, field, "%s", dst);
 }
 
-void stdout_ave_discovery_log(struct nvme_ave_discovery_log *log)
+void stdout_ave_discovery_log(struct nvme_ave_discovery_log *log, __u64 len)
 {
-	__u32 i;
+	__u64 i;
 	__u8 j;
 	struct nvme_ave_discovery_log_entry *adlpe;
 	struct nvme_ave_tr_record *atr;
@@ -2855,9 +2861,9 @@ void stdout_ave_discovery_log(struct nvme_ave_discovery_log *log)
 
 	stdout_kv_table_finish(t, "ave-discovery-log");
 
-	for (i = sizeof(*log); i < le32_to_cpu(log->tadlpl); i += tel) {
+	for (i = sizeof(*log);
+	     (adlpe = nvme_ave_discovery_record(log, len, i)); i += tel) {
 		printf("adlpe: %d\n", n++);
-		adlpe = (void *)log + i;
 		tel = le32_to_cpu(adlpe->tel);
 		numatr = adlpe->numatr;
 
@@ -2866,11 +2872,15 @@ void stdout_ave_discovery_log(struct nvme_ave_discovery_log *log)
 			return;
 
 		stdout_kv_add(t, "tel", "%u", tel);
-		stdout_kv_add(t, "avenqn", "%s", adlpe->avenqn);
+		stdout_kv_add(t, "avenqn", "%-.*s",
+			      (int)sizeof(adlpe->avenqn), adlpe->avenqn);
 		stdout_kv_add(t, "numatr", "%u", numatr);
 
 		stdout_kv_table_finish(t, "ave-discovery-log");
 
+		/* the transport records must fit the record */
+		numatr = nvme_log_nr_entries(numatr, tel, sizeof(*adlpe),
+					     sizeof(*atr));
 		atr = adlpe->atr;
 		for (j = 0; j < numatr; j++) {
 			printf("atr: %d\n", j);
@@ -2958,11 +2968,11 @@ void stdout_rotational_media_info_log(
 }
 
 void stdout_dispersed_ns_psub_log(
-	struct nvme_dispersed_ns_participating_nss_log *log)
+	struct nvme_dispersed_ns_participating_nss_log *log, __u64 len)
 {
 	__u64 numpsub = le64_to_cpu(log->numpsub);
 	struct shr_table *t;
-	__u64 i;
+	__u64 i, n;
 
 	t = stdout_kv_table_create();
 	if (!t)
@@ -2971,7 +2981,8 @@ void stdout_dispersed_ns_psub_log(
 	stdout_kv_add(t, "genctr", "%"PRIu64, le64_to_cpu(log->genctr));
 	stdout_kv_add(t, "numpsub", "%"PRIu64, (uint64_t)numpsub);
 
-	for (i = 0; i < numpsub; i++) {
+	n = nvme_log_nr_entries(numpsub, len, sizeof(*log), NVME_NQN_LENGTH);
+	for (i = 0; i < n; i++) {
 		char name[40];
 
 		snprintf(name, sizeof(name), "participating_nss %"PRIu64,
@@ -2986,7 +2997,10 @@ void stdout_dispersed_ns_psub_log(
 void stdout_reachability_groups_log(struct nvme_reachability_groups_log *log,
 				    __u64 len)
 {
+	struct nvme_reachability_group_desc rgd;
+	__u64 off = sizeof(*log);
 	struct shr_table *t;
+	__le32 *nsid;
 	__u16 i;
 	__u32 j;
 
@@ -2999,18 +3013,19 @@ void stdout_reachability_groups_log(struct nvme_reachability_groups_log *log,
 	stdout_kv_add(t, "chngc", "%"PRIu64, le64_to_cpu(log->chngc));
 	stdout_kv_add(t, "nrgd", "%u", le16_to_cpu(log->nrgd));
 
-	for (i = 0; i < le16_to_cpu(log->nrgd); i++) {
-		stdout_kv_add(t, "rgid", "%u", le32_to_cpu(log->rgd[i].rgid));
-		stdout_kv_add(t, "nnid", "%u", le32_to_cpu(log->rgd[i].nnid));
-		stdout_kv_add(t, "chngc", "%"PRIu64,
-			      le64_to_cpu(log->rgd[i].chngc));
-		for (j = 0; j < le32_to_cpu(log->rgd[i].nnid); j++) {
+	for (i = 0; i < le16_to_cpu(log->nrgd) &&
+	     nvme_reachability_group(log, len, off, &rgd); i++) {
+		stdout_kv_add(t, "rgid", "%u", le32_to_cpu(rgd.rgid));
+		stdout_kv_add(t, "nnid", "%u", le32_to_cpu(rgd.nnid));
+		stdout_kv_add(t, "chngc", "%"PRIu64, le64_to_cpu(rgd.chngc));
+		nsid = nvme_reachability_ids(log, off, sizeof(rgd));
+		for (j = 0; j < le32_to_cpu(rgd.nnid); j++) {
 			char name[16];
 
 			snprintf(name, sizeof(name), "nsid%u", j);
-			stdout_kv_add(t, name, "%u",
-				      le32_to_cpu(log->rgd[i].nsid[j]));
+			stdout_kv_add(t, name, "%u", le32_to_cpu(nsid[j]));
 		}
+		off = nvme_reachability_group_next(&rgd, off);
 	}
 
 	stdout_kv_table_finish(t, "reachability-groups");
@@ -3019,7 +3034,10 @@ void stdout_reachability_groups_log(struct nvme_reachability_groups_log *log,
 void stdout_reachability_associations_log(
 	struct nvme_reachability_associations_log *log, __u64 len)
 {
+	struct nvme_reachability_association_desc rad;
+	__u64 off = sizeof(*log);
 	struct shr_table *t;
+	__le32 *rgid;
 	__u16 i;
 	__u32 j;
 
@@ -3032,29 +3050,30 @@ void stdout_reachability_associations_log(
 	stdout_kv_add(t, "chngc", "%"PRIu64, le64_to_cpu(log->chngc));
 	stdout_kv_add(t, "nrad", "%u", le16_to_cpu(log->nrad));
 
-	for (i = 0; i < le16_to_cpu(log->nrad); i++) {
-		stdout_kv_add(t, "rasid", "%u", le32_to_cpu(log->rad[i].rasid));
-		stdout_kv_add(t, "nrid", "%u", le32_to_cpu(log->rad[i].nrid));
-		stdout_kv_add(t, "chngc", "%"PRIu64,
-			      le64_to_cpu(log->rad[i].chngc));
-		stdout_kv_add(t, "rac", "%u", log->rad[i].rac);
-		for (j = 0; j < le32_to_cpu(log->rad[i].nrid); j++) {
+	for (i = 0; i < le16_to_cpu(log->nrad) &&
+	     nvme_reachability_association(log, len, off, &rad); i++) {
+		stdout_kv_add(t, "rasid", "%u", le32_to_cpu(rad.rasid));
+		stdout_kv_add(t, "nrid", "%u", le32_to_cpu(rad.nrid));
+		stdout_kv_add(t, "chngc", "%"PRIu64, le64_to_cpu(rad.chngc));
+		stdout_kv_add(t, "rac", "%u", rad.rac);
+		rgid = nvme_reachability_ids(log, off, sizeof(rad));
+		for (j = 0; j < le32_to_cpu(rad.nrid); j++) {
 			char name[16];
 
 			snprintf(name, sizeof(name), "rgid%u", j);
-			stdout_kv_add(t, name, "%u",
-				      le32_to_cpu(log->rad[i].rgid[j]));
+			stdout_kv_add(t, name, "%u", le32_to_cpu(rgid[j]));
 		}
+		off = nvme_reachability_association_next(&rad, off);
 	}
 
 	stdout_kv_table_finish(t, "reachability-associations");
 }
 
-void stdout_pull_model_ddc_req_log(struct nvme_pull_model_ddc_req_log *log)
+void stdout_pull_model_ddc_req_log(struct nvme_pull_model_ddc_req_log *log,
+				   __u64 len)
 {
 	__u32 tpdrpl = le32_to_cpu(log->tpdrpl);
-	__u32 osp_len =
-		tpdrpl - offsetof(struct nvme_pull_model_ddc_req_log, osp);
+	__u32 osp_len = nvme_pull_model_ddc_req_osp_len(log, len);
 	struct shr_table *t;
 
 	t = stdout_kv_table_create();
@@ -3178,6 +3197,9 @@ void stdout_power_meas_log(struct nvme_power_meas_log *log, __u32 size)
 
 	stdout_kv_table_finish(t, "power-meas-log");
 
+	/* the descriptors the buffer holds */
+	nphd = nvme_log_nr_entries(nphd, size, sizeof(*log),
+				   sizeof(log->descs[0]));
 	if (verbose) {
 		for (i = 0; i < nphd; i++) {
 			__u32 phblt = le32_to_cpu(log->descs[i].phblt);

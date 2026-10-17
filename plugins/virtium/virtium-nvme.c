@@ -326,7 +326,7 @@ vt_update_vtview_log_header(struct libnvme_transport_handle *hdl, const char *pa
 	int ret = 0;
 
 	vt_initialize_header_buffer(&header);
-	if (strlen(path) > sizeof(header.path)) {
+	if (strlen(path) >= sizeof(header.path)) {
 		nvme_show_error("filename too long");
 		errno = EINVAL;
 		return -1;
@@ -336,7 +336,7 @@ vt_update_vtview_log_header(struct libnvme_transport_handle *hdl, const char *pa
 	if (!cfg->test_name) {
 		strcpy(header.test_name, DEFAULT_TEST_NAME);
 	} else {
-		if (strlen(cfg->test_name) > sizeof(header.test_name)) {
+		if (strlen(cfg->test_name) >= sizeof(header.test_name)) {
 			nvme_show_error("test name too long");
 			errno = EINVAL;
 			return -1;
@@ -966,11 +966,13 @@ static int vt_save_smart_to_vtview_log(int argc, char **argv,
 		.test_name = NULL,
 	};
 
-	NVME_ARGS(opts,
-		OPT_DOUBLE("run-time",  'r', &cfg.run_time_hrs,             run_time),
-		OPT_DOUBLE("freq",      'f', &cfg.log_record_frequency_hrs, freq),
-		OPT_FILE("output-file", 'O', &cfg.output_file,              output_file),
-		OPT_STRING("test-name", 'n', "NAME", &cfg.test_name,        test_name));
+	OPT_ARGS(opts) = {
+		OPT_DOUBLE("run-time",  'r', &cfg.run_time_hrs, run_time),
+		OPT_DOUBLE("freq", 'f', &cfg.log_record_frequency_hrs, freq),
+		OPT_FILE("output-file", 'O', &cfg.output_file,  output_file),
+		OPT_STRING("test-name", 'n', "NAME", &cfg.test_name, test_name),
+		OPT_END()
+	};
 
 	vt_generate_vtview_log_file_name(vt_default_log_file_name);
 
@@ -1030,7 +1032,9 @@ static int vt_show_identify(int argc, char **argv, struct command *acmd, struct 
 	struct libnvme_passthru_cmd cmd;
 	int ret, err = 0;
 
-	NVME_ARGS(opts);
+	OPT_ARGS(opts) = {
+		OPT_END()
+	};
 
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
