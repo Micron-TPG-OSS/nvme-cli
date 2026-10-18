@@ -446,7 +446,8 @@ static int ocp_get_latency_monitor_feature(int argc, char **argv, struct command
 	};
 
 	OPT_ARGS(opts) = {
-		OPT_BYTE("sel",          's', &cfg.sel,      sel),
+		OPT_BYTE("sel",          's', &cfg.sel,      sel,
+			 nvme_sel_values, .max = NVME_SEL_MAX),
 		OPT_UINT("namespace-id", 'n', &cfg.nsid, nsid,
 			 nvme_nsid_values),
 		OPT_FLAG("no-uuid",      'u', &no_uuid_flag, no_uuid),
@@ -595,7 +596,8 @@ static int eol_plp_failure_mode(int argc, char **argv, struct command *acmd,
 	OPT_ARGS(opts) = {
 		OPT_BYTE("mode",    'm', &cfg.mode,     mode),
 		OPT_FLAG("save",    's', &cfg.save,     save),
-		OPT_BYTE("sel",     'S', &cfg.sel,      sel),
+		OPT_BYTE("sel",     'S', &cfg.sel,      sel,
+			 nvme_sel_values, .max = NVME_SEL_MAX),
 		OPT_FLAG("no-uuid", 'n', &no_uuid_flag, no_uuid),
 		OPT_END()
 	};
@@ -1003,9 +1005,9 @@ static int ocp_telemetry_log(int argc, char **argv, struct command *acmd, struct
 	bool host_behavior_changed = false;
 
 	OPT_ARGS(opts) = {
-		OPT_STR("telemetry-log", 'l', &opt.telemetry_log,
-			telemetry_log),
-		OPT_STR("string-log",      's', &opt.string_log,  string_log),
+		OPT_FILE("telemetry-log",  'l', &opt.telemetry_log,
+			 telemetry_log),
+		OPT_FILE("string-log",     's', &opt.string_log,  string_log),
 		OPT_FILE("output-file",    'f', &opt.output_file, output_file),
 		OPT_INT("data-area",       'a', &opt.data_area,   data_area),
 		OPT_ENUM("telemetry-type", 't', &tele_type, telemetry_type,
@@ -1077,7 +1079,8 @@ static int ocp_telemetry_log(int argc, char **argv, struct command *acmd, struct
 		}
 
 		/* Pull the Telemetry log */
-		sprintf(file_path_telemetry, "%s-%s", opt.output_file, tele_log_suffix);
+		snprintf(file_path_telemetry, sizeof(file_path_telemetry),
+			 "%s-%s", opt.output_file, tele_log_suffix);
 		err = get_telemetry_log_page_data(hdl,
 				tele_type,
 				!!host_gen,
@@ -1103,7 +1106,8 @@ static int ocp_telemetry_log(int argc, char **argv, struct command *acmd, struct
 		nvme_show_result("Missing string-log. Fetching from drive...\n");
 
 		/* Pull String log */
-		sprintf(file_path_string, "%s-%s", opt.output_file, string_suffix);
+		snprintf(file_path_string, sizeof(file_path_string), "%s-%s",
+			 opt.output_file, string_suffix);
 		err = get_c9_log_page_data(hdl, 0, 1, (const char *)file_path_string,
 					   NULL, NULL, NULL,
 					   !no_uuid_flag);
@@ -1553,7 +1557,8 @@ static int ocp_get_telemetry_profile_feature(int argc, char **argv, struct comma
 	};
 
 	OPT_ARGS(opts) = {
-		OPT_BYTE("sel",          's', &cfg.sel,      sel),
+		OPT_BYTE("sel",          's', &cfg.sel,      sel,
+			 nvme_sel_values, .max = NVME_SEL_MAX),
 		OPT_UINT("namespace-id", 'n', &cfg.nsid, nsid,
 			 nvme_nsid_values),
 		OPT_FLAG("no-uuid",      'u', &no_uuid_flag, no_uuid),
@@ -1729,7 +1734,8 @@ static int get_dssd_power_state_feature(int argc, char **argv, struct command *a
 	};
 
 	OPT_ARGS(opts) = {
-		OPT_BYTE("sel",     'S', &cfg.sel,      sel),
+		OPT_BYTE("sel",     'S', &cfg.sel,      sel,
+			 nvme_sel_values, .max = NVME_SEL_MAX),
 		OPT_FLAG("all",     'a', &all_flag,     all),
 		OPT_FLAG("no-uuid", 'n', &no_uuid_flag, no_uuid),
 		OPT_END()
@@ -1842,7 +1848,8 @@ static int get_plp_health_check_interval(int argc, char **argv, struct command *
 	};
 
 	OPT_ARGS(opts) = {
-		OPT_BYTE("sel", 'S', &cfg.sel, sel),
+		OPT_BYTE("sel", 'S', &cfg.sel, sel,
+			 nvme_sel_values, .max = NVME_SEL_MAX),
 		OPT_END()
 	};
 
@@ -1946,7 +1953,8 @@ static int get_dssd_async_event_config(int argc, char **argv, struct command *ac
 	};
 
 	OPT_ARGS(opts) = {
-		OPT_BYTE("sel", 'S', &cfg.sel, sel),
+		OPT_BYTE("sel", 'S', &cfg.sel, sel,
+			 nvme_sel_values, .max = NVME_SEL_MAX),
 		OPT_END()
 	};
 
@@ -2041,9 +2049,11 @@ static int ocp_telemetry_str_log_format(int argc, char **argv, struct command *a
 		return ret;
 
 	if (cfg.output_file != NULL)
-		sprintf(file_path, "%s-%s", cfg.output_file, string_suffix);
+		snprintf(file_path, sizeof(file_path), "%s-%s", cfg.output_file,
+			 string_suffix);
 	else
-		sprintf(file_path, "%s", DEFAULT_STRING_BIN);
+		snprintf(file_path, sizeof(file_path), "%s",
+			 DEFAULT_STRING_BIN);
 
 	ret = get_c9_log_page(hdl, cfg.output_format, file_path,
 			      !no_uuid_flag);
@@ -2263,7 +2273,8 @@ static int get_error_injection(int argc, char **argv, struct command *acmd, stru
 
 
 	OPT_ARGS(opts) = {
-		OPT_BYTE("sel",     's', &cfg.sel,      sel),
+		OPT_BYTE("sel",     's', &cfg.sel,      sel,
+			 nvme_sel_values, .max = NVME_SEL_MAX),
 		OPT_FLAG("no-uuid", 'n', &no_uuid_flag, no_uuid),
 		OPT_FLAG("all-ns",  'a', &all_ns_flag,  all_ns),
 		OPT_END()
@@ -2431,7 +2442,8 @@ static int get_enable_ieee1667_silo(int argc, char **argv, struct command *acmd,
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 
 	OPT_ARGS(opts) = {
-		OPT_BYTE("sel",     's', &cfg.sel,      sel),
+		OPT_BYTE("sel",     's', &cfg.sel,      sel,
+			 nvme_sel_values, .max = NVME_SEL_MAX),
 		OPT_FLAG("no-uuid", 'n', &no_uuid_flag, no_uuid),
 		OPT_END()
 	};
@@ -2663,7 +2675,8 @@ static int ocp_get_idle_wakeup_time_config_feature(int argc, char **argv,
 	};
 
 	OPT_ARGS(opts) = {
-		OPT_BYTE("sel",          's', &cfg.sel,      sel),
+		OPT_BYTE("sel",          's', &cfg.sel,      sel,
+			 nvme_sel_values, .max = NVME_SEL_MAX),
 		OPT_UINT("namespace-id", 'n', &cfg.nsid, nsid,
 			 nvme_nsid_values),
 		OPT_FLAG("no-uuid",      'u', &no_uuid_flag, no_uuid),

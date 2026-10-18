@@ -27,6 +27,10 @@ enum argconfig_types {
 	CFG_POSITIVE,
 	CFG_INCREMENT,
 	CFG_ENUM,
+	CFG_ENUM_LIST,
+	/* strings which name a file or a directory */
+	CFG_FILE,
+	CFG_DIR,
 	CFG_GROUP_SEPARATOR,
 	CFG_INCLUDE,
 };
@@ -91,6 +95,15 @@ enum argconfig_types {
 	{l, s, "NAME", CFG_ENUM, OPT_CHECK(v, int *), \
 	 ARGCONFIG_ARG_REQUIRED, d, false, n, __VA_ARGS__}
 
+/*
+ * Names of the value table @n separated by commas. The VAL_ENUM() entries
+ * are bits, which are ORed into the variable, also when the option is
+ * given more than once.
+ */
+#define OPT_ENUM_LIST(l, s, v, d, n, ...) \
+	{l, s, "NAME,...", CFG_ENUM_LIST, OPT_CHECK(v, uint32_t *), \
+	 ARGCONFIG_ARG_REQUIRED, d, false, n, __VA_ARGS__}
+
 #define OPT_LONG(l, s, v, d, ...) \
 	{l, s, "NUM", CFG_LONG, OPT_CHECK_64(v), \
 	 ARGCONFIG_ARG_REQUIRED, d, false, __VA_ARGS__}
@@ -126,8 +139,15 @@ enum argconfig_types {
 	{l, s, m, CFG_STRING, OPT_CHECK_STR(v), \
 	 ARGCONFIG_ARG_OPTIONAL, d, false, __VA_ARGS__}
 
+#define OPT_FILE(l, s, v, d, ...) \
+	{l, s, "FILE", CFG_FILE, OPT_CHECK_STR(v), \
+	 ARGCONFIG_ARG_REQUIRED, d, false, __VA_ARGS__}
+
+#define OPT_DIR(l, s, v, d, ...) \
+	{l, s, "DIRECTORY", CFG_DIR, OPT_CHECK_STR(v), \
+	 ARGCONFIG_ARG_REQUIRED, d, false, __VA_ARGS__}
+
 #define OPT_FMT(l, s, v, d, ...)  OPT_STRING(l, s, "FMT", v, d, __VA_ARGS__)
-#define OPT_FILE(l, s, v, d, ...) OPT_STRING(l, s, "FILE", v, d, __VA_ARGS__)
 #define OPT_LIST(l, s, v, d, ...) OPT_STRING(l, s, "LIST", v, d, __VA_ARGS__)
 #define OPT_STR(l, s, v, d, ...) OPT_STRING(l, s, "STRING", v, d, __VA_ARGS__)
 
@@ -225,6 +245,12 @@ struct argconfig_commandline_options {
 	const char *deprecated;
 	/* the long name of earlier versions, accepted with a warning */
 	const char *old_name;
+	/*
+	 * The range of an unsigned number, unless max is 0. The named values
+	 * are taken as they are.
+	 */
+	uint64_t min;
+	uint64_t max;
 };
 
 void argconfig_append_usage(const char *str);
@@ -268,6 +294,8 @@ void argconfig_set_parse_hook(argconfig_parse_hook_fn hook);
 
 bool argconfig_given(struct argconfig_commandline_options *options,
 		     const void *value);
+bool argconfig_in_range(const struct argconfig_commandline_options *s,
+			uint64_t u);
 bool argconfig_set_value_name(struct argconfig_commandline_options *option,
 			      const char *str);
 const char *argconfig_value_name(const struct argconfig_opt_val *values,

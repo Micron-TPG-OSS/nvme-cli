@@ -22,6 +22,15 @@ struct argconfig_opt_val nvme_nsid_values[] = {
 	VAL_END()
 };
 
+/* The Select field of Get Features, see the NVM Express specification */
+struct argconfig_opt_val nvme_sel_values[] = {
+	VAL_BYTE("current", NVME_GET_FEATURES_SEL_CURRENT),
+	VAL_BYTE("default", NVME_GET_FEATURES_SEL_DEFAULT),
+	VAL_BYTE("saved", NVME_GET_FEATURES_SEL_SAVED),
+	VAL_BYTE("supported", NVME_GET_FEATURES_SEL_SUPPORTED),
+	VAL_END()
+};
+
 /* No timeout: the largest timeout the kernel takes */
 struct argconfig_opt_val nvme_timeout_values[] = {
 	VAL_UINT("infinite", UINT32_MAX),
@@ -47,7 +56,7 @@ static struct argconfig_commandline_options global_options[] = {
 	OPT_FLAG("no-ioctl-probing", 0, &nvme_args.no_ioctl_probing,
 		 "disable 64-bit IOCTL support probing"),
 	OPT_UINT("output-format-version", 0, &nvme_args.output_format_ver,
-		 "output format version: 1|2"),
+		 "output format version: 1|2", .min = 1, .max = 2),
 	/* the spelling of --verbose of older versions */
 	OPT_INCR("human-readable", 'H', &nvme_args.verbose, NULL,
 		 .deprecated = "--verbose/-v"),

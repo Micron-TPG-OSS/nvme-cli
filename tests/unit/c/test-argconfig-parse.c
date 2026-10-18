@@ -31,6 +31,7 @@ union val {
 	char *string;
 	char *fmt;
 	char *file;
+	char *dir;
 	char *list;
 	char *str;
 	__u8 val;
@@ -82,6 +83,7 @@ struct cfg {
 	char *string;
 	char *fmt;
 	char *file;
+	char *dir;
 	char *list;
 	char *str;
 	__u8 val;
@@ -106,6 +108,12 @@ static struct toval_test toval_tests[] = {
 	VAL_TEST("--suffix=32Gii", suffix, 0, true, -EINVAL),
 	VAL_TEST("--uint=1", uint, 1, true, 0),
 	VAL_TEST("--uint=4294967295", uint, 4294967295, true, 0),
+	/* no octal: a leading 0 is rejected, 0 and 0x are fine */
+	VAL_TEST("--uint=010", uint, 0, true, -EINVAL),
+	VAL_TEST("--uint=0", uint, 0, true, 0),
+	VAL_TEST("--uint=0x10", uint, 16, true, 0),
+	VAL_TEST("--int=-010", int_val, 0, true, -EINVAL),
+	VAL_TEST("--suffix=010Ki", suffix, 0, true, -EINVAL),
 	VAL_TEST("--uint=4294967296", uint, 0, true, -EINVAL),
 	/* unsigned options reject negative numbers, signed ones don't */
 	VAL_TEST("--uint=-1", uint, 0, true, -EINVAL),
@@ -147,6 +155,8 @@ static struct toval_test toval_tests[] = {
 	VAL_TEST("--string=string", string, "string", false, 0),
 	VAL_TEST("--fmt=fmt", fmt, "fmt", false, 0),
 	VAL_TEST("--file=file", file, "file", false, 0),
+	VAL_TEST("--dir=dir", dir, "dir", false, 0),
+	VAL_TEST("--file", file, NULL, false, -EINVAL),
 	VAL_TEST("--list=list", list, "list", false, 0),
 	VAL_TEST("--str=str", str, "str", false, 0),
 	VAL_TEST("--val=", val, 0, true, -EINVAL),
@@ -224,6 +234,7 @@ void toval_test(struct toval_test *test)
 		OPT_STRING("string", 't', "STRING", &cfg.string, "string"),
 		OPT_FMT("fmt", 'F', &cfg.fmt, "fmt"),
 		OPT_FILE("file", 'L', &cfg.file, "file"),
+		OPT_DIR("dir", 'D', &cfg.dir, "dir"),
 		OPT_LIST("list", 'T', &cfg.list, "list"),
 		OPT_STR("str", 'r', &cfg.str, "str"),
 		OPT_BYTE("val", 'v', &cfg.val, "val", opt_vals),
@@ -771,6 +782,111 @@ static void special_values_test(void)
 	}
 }
 
+/*
+ * A list of names is ORed into a bitmask, also over several uses of the
+ * option. Every name of the list has to be known, an empty one too.
+ */
+static void enum_list_test(void)
+{
+	struct argconfig_opt_val names[] = {
+		VAL_ENUM("host0", 1 << 0),
+		VAL_ENUM("host1", 1 << 1),
+		VAL_ENUM("ctlr", 1 << 2),
+		VAL_ENUM("controller", 1 << 2),
+		VAL_END()
+	};
+	static const struct {
+		const char *arg1, *arg2;
+		int ret;
+		__u32 val;
+	} tests[] = {
+		{ "--types=host0", NULL, 0, 0x1 },
+		{ "--types=host1,ctlr", NULL, 0, 0x6 },
+		{ "--types=HOST0,co", NULL, 0, 0x5 },
+		{ "-thost0", "-tcontroller", 0, 0x5 },
+		{ "--types=ctlr,controller", NULL, 0, 0x4 },
+		{ "--types=host", NULL, -EINVAL, 0 },
+		{ "--types=host0,", NULL, -EINVAL, 0 },
+		{ "--types=,host0", NULL, -EINVAL, 0 },
+		{ "--types=host0,,ctlr", NULL, -EINVAL, 0 },
+		{ "--types=", NULL, -EINVAL, 0 },
+		{ "--types=1", NULL, -EINVAL, 0 },
+		{ "--types=host0,bogus", NULL, -EINVAL, 0 },
+	};
+	unsigned int i;
+	__u32 types;
+	int ret;
+
+	OPT_ARGS(opts) = {
+		OPT_ENUM_LIST("types", 't', &types, "types", names),
+		OPT_END()
+	};
+
+	for (i = 0; i < ARRAY_SIZE(tests); i++) {
+		char *argv[4] = { "prog", (char *)tests[i].arg1,
+				  (char *)tests[i].arg2, NULL };
+
+		types = 0;
+		ret = argconfig_parse(tests[i].arg2 ? 3 : 2, argv, "test",
+				      opts);
+		if (ret != tests[i].ret || (!ret && types != tests[i].val)) {
+			printf("ERROR: enum list: {%s} gave %d/%u\n",
+			       tests[i].arg1, ret, types);
+			test_rc = 1;
+		}
+	}
+}
+
+/*
+ * A number outside the range of an option is rejected, a named value is
+ * taken as it is.
+ */
+static void range_test(void)
+{
+	static const struct {
+		const char *arg;
+		int ret;
+		__u32 value;
+	} tests[] = {
+		{ "--ranged=1", 0, 1 },
+		{ "--ranged=3", 0, 3 },
+		{ "--ranged=0", -EINVAL, 0 },
+		{ "--ranged=4", -EINVAL, 0 },
+		{ "--ranged=0x100000000", -EINVAL, 0 },
+		{ "--ranged=big", 0, 100 },
+		{ "--size=4Ki", 0, 4096 },
+		{ "--size=8Ki", -EINVAL, 0 },
+	};
+	OPT_VALS(values) = {
+		VAL_UINT("big", 100),
+		VAL_END()
+	};
+	__u64 size;
+	__u32 ranged;
+	unsigned int i;
+	int ret;
+
+	OPT_ARGS(opts) = {
+		OPT_UINT("ranged", 'r', &ranged, "ranged", values,
+			 .min = 1, .max = 3),
+		OPT_SUFFIX("size", 's', &size, "size", .max = 4096),
+		OPT_END()
+	};
+
+	for (i = 0; i < ARRAY_SIZE(tests); i++) {
+		char **argv = (char *[]){ "prog", (char *)tests[i].arg, NULL };
+
+		ranged = 0;
+		size = 0;
+		ret = argconfig_parse(argv_len(argv), argv, "test", opts);
+		if (ret != tests[i].ret ||
+		    (!ret && ranged + size != tests[i].value)) {
+			printf("ERROR: range: %s\n", tests[i].arg);
+			test_rc = 1;
+		}
+	}
+}
+
 #define COMMA_SEP_ARRAY_MAX_VALUES 4
 
 struct comma_sep_array_test {
@@ -1165,11 +1281,13 @@ int main(void)
 	given_test();
 	old_name_test();
 	enum_test();
+	enum_list_test();
 	include_test();
 	bind_test();
 	double_locale_test();
 	empty_name_test();
 	special_values_test();
+	range_test();
 
 	for (i = 0; i < ARRAY_SIZE(comma_sep_array_tests); i++)
 		comma_sep_array_test(&comma_sep_array_tests[i]);

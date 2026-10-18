@@ -240,6 +240,25 @@ _nvme () {
 		return 1
 	}
 
+	# Like _nvme_opt_vals, for an option which takes a comma-separated list
+	# of its values.
+	_nvme_opt_list() {
+		local -a names
+		local name
+		while (( $# >= 2 )); do
+			names=(${=1})
+			for name in "${names[@]}"; do
+				if [[ ${words[CURRENT]} == ${name}=* ]] || \
+				   [[ ${words[CURRENT-1]} == "${name}" ]]; then
+					_values -s , '' ${=2}
+					return 0
+				fi
+			done
+			shift 2
+		done
+		return 1
+	}
+
 	# Complete an option's value as a filename, in both the attached
 	# ('--opt=path', '-o=path') and separate-word ('--opt path', '-o path') forms.
 	# Each argument is a space-separated spelling list ('--fw -f'); if the word
@@ -1290,7 +1309,7 @@ _nvme () {
 				(arbitration)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_arbitration
 					_feat_arbitration=(
@@ -1327,7 +1346,7 @@ _nvme () {
 				(async-event-conf)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_async_event_conf
 					_feat_async_event_conf=(
@@ -1360,7 +1379,7 @@ _nvme () {
 					_nvme_opt_vals "--nsid -n" "all -1" \
 					               "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_err_recovery
 					_feat_err_recovery=(
@@ -1396,7 +1415,7 @@ _nvme () {
 				(hctm)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_hctm
 					_feat_hctm=(
@@ -1430,7 +1449,7 @@ _nvme () {
 				(host-behavior-support)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_host_behavior_support
 					_feat_host_behavior_support=(
@@ -1469,7 +1488,7 @@ _nvme () {
 				(int-coalesce)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_int_coalesce
 					_feat_int_coalesce=(
@@ -1503,7 +1522,7 @@ _nvme () {
 				(int-vector-config)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_int_vector_config
 					_feat_int_vector_config=(
@@ -1537,7 +1556,7 @@ _nvme () {
 				(keep-alive-timer)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_keep_alive_timer
 					_feat_keep_alive_timer=(
@@ -1570,7 +1589,7 @@ _nvme () {
 					_nvme_opt_vals "--nsid -n" "all -1" \
 					               "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_lba_range_type
 					_feat_lba_range_type=(
@@ -1614,7 +1633,7 @@ _nvme () {
 				(num-queues)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_num_queues
 					_feat_num_queues=(
@@ -1649,7 +1668,7 @@ _nvme () {
 					_nvme_opt_vals "--namespace-id -n" "all -1" \
 					               "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					_nvme_opt_files "--vs-data -V" && return
 					local _feat_perf_characteristics
@@ -1694,7 +1713,7 @@ _nvme () {
 				(power-limit)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_power_limit
 					_feat_power_limit=(
@@ -1730,7 +1749,7 @@ _nvme () {
 				(power-meas)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_power_meas
 					_feat_power_meas=(
@@ -1765,7 +1784,7 @@ _nvme () {
 				(power-mgmt)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_power_mgmt
 					_feat_power_mgmt=(
@@ -1799,7 +1818,7 @@ _nvme () {
 				(power-thresh)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_power_thresh
 					_feat_power_thresh=(
@@ -1839,7 +1858,7 @@ _nvme () {
 				(temp-thresh)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_temp_thresh
 					_feat_temp_thresh=(
@@ -1876,7 +1895,7 @@ _nvme () {
 				(timestamp)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_timestamp
 					_feat_timestamp=(
@@ -1908,7 +1927,7 @@ _nvme () {
 				(volatile-wc)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_volatile_wc
 					_feat_volatile_wc=(
@@ -1940,7 +1959,7 @@ _nvme () {
 				(write-atom-normal)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _feat_write_atom_normal
 					_feat_write_atom_normal=(
@@ -3350,6 +3369,7 @@ _nvme () {
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
 					               "--timeout" "infinite -1" && return
+					_nvme_opt_files "--keyfile -f" && return
 					local _keys_export
 					_keys_export=(
 						--dry-run':show command instead of executing'
@@ -3408,6 +3428,7 @@ _nvme () {
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
 					               "--timeout" "infinite -1" && return
+					_nvme_opt_files "--keyfile -f" && return
 					local _keys_gen_tls_psk
 					_keys_gen_tls_psk=(
 						--compat':Use non-RFC 8446 compliant algorithm for deriving the retained PSK and the TLS PSK for older implementations.'
@@ -3452,6 +3473,7 @@ _nvme () {
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
 					               "--timeout" "infinite -1" && return
+					_nvme_opt_files "--keyfile -f" && return
 					local _keys_import
 					_keys_import=(
 						--dry-run':show command instead of executing'
@@ -3484,6 +3506,7 @@ _nvme () {
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
 					               "--timeout" "infinite -1" && return
+					_nvme_opt_files "--keyfile -f" && return
 					local _keys_insert_tls_psk
 					_keys_insert_tls_psk=(
 						--compat':Use non-RFC 8446 compliant algorithm for deriving the retained PSK and the TLS PSK for older implementations.'
@@ -3662,7 +3685,6 @@ _nvme () {
 				(migration-recv)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -s" "0 1 2 3" \
 					               "--timeout" "infinite -1" && return
 					_nvme_opt_files "--output-file -f" && return
 					local _lm_migration_recv
@@ -3705,7 +3727,6 @@ _nvme () {
 				(migration-send)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -s" "0 1 2 3" \
 					               "--timeout" "infinite -1" && return
 					_nvme_opt_files "--input-file -f" && return
 					local _lm_migration_send
@@ -3784,7 +3805,6 @@ _nvme () {
 				(track-send)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -s" "0 1 2 3" \
 					               "--timeout" "infinite -1" && return
 					local _lm_track_send
 					_lm_track_send=(
@@ -6056,6 +6076,7 @@ _nvme () {
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
 					               "--timeout" "infinite -1" && return
+					_nvme_opt_files "--nbft-path" && return
 					local _nbft_show
 					_nbft_show=(
 						--discovery':show NBFT discovery controllers'
@@ -6631,7 +6652,7 @@ _nvme () {
 				(eol-plp-failure-mode)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _ocp_eol_plp_failure_mode
 					_ocp_eol_plp_failure_mode=(
@@ -6718,7 +6739,7 @@ _nvme () {
 					_nvme_opt_vals "--namespace-id -n" "all -1" \
 					               "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -s" "0 1 2 3" \
+					               "--sel -s" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _ocp_get_clear_pcie_correctable_errors
 					_ocp_get_clear_pcie_correctable_errors=(
@@ -6750,7 +6771,7 @@ _nvme () {
 				(get-dssd-async-event-config)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _ocp_get_dssd_async_event_config
 					_ocp_get_dssd_async_event_config=(
@@ -6778,7 +6799,7 @@ _nvme () {
 				(get-dssd-power-state-feature)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _ocp_get_dssd_power_state_feature
 					_ocp_get_dssd_power_state_feature=(
@@ -6810,7 +6831,7 @@ _nvme () {
 				(get-enable-ieee1667-silo)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -s" "0 1 2 3" \
+					               "--sel -s" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _ocp_get_enable_ieee1667_silo
 					_ocp_get_enable_ieee1667_silo=(
@@ -6840,7 +6861,7 @@ _nvme () {
 				(get-error-injection)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -s" "0 1 2 3" \
+					               "--sel -s" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _ocp_get_error_injection
 					_ocp_get_error_injection=(
@@ -6873,7 +6894,7 @@ _nvme () {
 					_nvme_opt_vals "--namespace-id -n" "all -1" \
 					               "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -s" "0 1 2 3" \
+					               "--sel -s" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _ocp_get_idle_wakeup_time
 					_ocp_get_idle_wakeup_time=(
@@ -6906,7 +6927,7 @@ _nvme () {
 					_nvme_opt_vals "--namespace-id -n" "all -1" \
 					               "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -s" "0 1 2 3" \
+					               "--sel -s" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _ocp_get_latency_monitor
 					_ocp_get_latency_monitor=(
@@ -6938,7 +6959,7 @@ _nvme () {
 				(get-plp-health-check-interval)
 					_nvme_opt_vals "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -S" "0 1 2 3" \
+					               "--sel -S" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _ocp_get_plp_health_check_interval
 					_ocp_get_plp_health_check_interval=(
@@ -6967,7 +6988,7 @@ _nvme () {
 					_nvme_opt_vals "--namespace-id -n" "all -1" \
 					               "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -s" "0 1 2 3" \
+					               "--sel -s" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _ocp_get_telemetry_profile
 					_ocp_get_telemetry_profile=(
@@ -7031,7 +7052,9 @@ _nvme () {
 					               "--output-format-version" "1 2" \
 					               "--telemetry-type -t" "host controller host0 host1" \
 					               "--timeout" "infinite -1" && return
-					_nvme_opt_files "--output-file -f" && return
+					_nvme_opt_files "--output-file -f" \
+					                "--string-log -s" \
+					                "--telemetry-log -l" && return
 					local _ocp_internal_log
 					_ocp_internal_log=(
 						--data-area=':Telemetry Data Area; 1, 2, 3, or 4; e.g. '\''-a 1 for Data Area 1.'\'' e.g. '\''-a 2 for Data Areas 1 and 2.'\'' e.g. '\''-a 3 for Data Areas 1, 2, and 3.'\'' e.g. '\''-a 4 for Data Areas 1, 2, 3, and 4.'\'';'
@@ -8025,6 +8048,7 @@ _nvme () {
 					_nvme_opt_vals "--output-format -o" "normal" \
 					               "--output-format-version" "1 2" \
 					               "--timeout" "infinite -1" && return
+					_nvme_opt_list "--dump-type -t" "host0 host1 ctlr controller vendor" && return
 					_nvme_opt_files "--output-file -O" && return
 					local _samsung_vs_internal_log
 					_samsung_vs_internal_log=(
@@ -9051,7 +9075,7 @@ _nvme () {
 					_nvme_opt_vals "--namespace-id -n" "all -1" \
 					               "--output-format -o" "normal json binary" \
 					               "--output-format-version" "1 2" \
-					               "--sel -s" "0 1 2 3" \
+					               "--sel -s" "0 1 2 3 current default saved supported" \
 					               "--timeout" "infinite -1" && return
 					local _shannon_get_additional_feature
 					_shannon_get_additional_feature=(
@@ -13022,6 +13046,7 @@ _nvme () {
 			               "--output-format-version" "1 2" \
 			               "--timeout" "infinite -1" && return
 			_nvme_opt_files "--config -J" \
+			                "--nbft-path" \
 			                "--raw -r" && return
 			local _connect_all
 			_connect_all=(
@@ -13563,6 +13588,7 @@ _nvme () {
 			               "--output-format-version" "1 2" \
 			               "--timeout" "infinite -1" && return
 			_nvme_opt_files "--config -J" \
+			                "--nbft-path" \
 			                "--raw -r" && return
 			local _discover
 			_discover=(
@@ -14109,6 +14135,7 @@ _nvme () {
 			_nvme_opt_vals "--output-format -o" "normal json binary" \
 			               "--output-format-version" "1 2" \
 			               "--timeout" "infinite -1" && return
+			_nvme_opt_files "--keyfile -f" && return
 			local _gen_tls_key
 			_gen_tls_key=(
 				--compat':Use non-RFC 8446 compliant algorithm for deriving the retained PSK and the TLS PSK for older implementations.'
@@ -14154,7 +14181,7 @@ _nvme () {
 			               "--namespace-id -n" "all -1" \
 			               "--output-format -o" "normal json binary" \
 			               "--output-format-version" "1 2" \
-			               "--sel -s" "0 1 2 3" \
+			               "--sel -s" "0 1 2 3 current default saved supported" \
 			               "--timeout" "infinite -1" && return
 			local _get_feature
 			_get_feature=(
@@ -16449,6 +16476,7 @@ _nvme () {
 			_nvme_opt_vals "--output-format -o" "normal json binary" \
 			               "--output-format-version" "1 2" \
 			               "--timeout" "infinite -1" && return
+			_nvme_opt_files "--keyfile -f" && return
 			local _tls_key
 			_tls_key=(
 				--dry-run':show command instead of executing'
