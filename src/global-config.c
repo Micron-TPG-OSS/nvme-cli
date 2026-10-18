@@ -126,11 +126,15 @@ static int apply_kv(struct global_config_ctx *gc, const char *key,
 		break;
 	case CFG_POSITIVE:
 		err = parse_uint(value, UINT32_MAX, &uval);
+		if (!err && !argconfig_in_range(s, uval))
+			err = -EINVAL;
 		if (err)
 			goto bad_value;
 		*(uint32_t *)s->default_value = uval;
 		break;
 	case CFG_STRING:
+	case CFG_FILE:
+	case CFG_DIR:
 		err = set_string(s, value);
 		if (err)
 			return err;

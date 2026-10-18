@@ -10,6 +10,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <locale.h>
 #include <stdarg.h>
@@ -163,24 +164,6 @@ static void show_value_names(FILE *out, const struct argconfig_opt_val *v)
 	shr_print_word_wrapped(names, 44, 44, out);
 }
 
-/* Append to @buf of @size, whose @len stays below @size when it is full */
-static void buf_add(char *buf, size_t size, size_t *len, const char *fmt, ...)
-{
-	va_list ap;
-	int n;
-
-	if (*len >= size - 1)
-		return;
-
-	va_start(ap, fmt);
-	n = vsnprintf(buf + *len, size - *len, fmt, ap);
-	va_end(ap);
-
-	if (n < 0)
-		return;
-	*len = *len + n < size ? *len + n : size - 1;
-}
-
 static void show_option(FILE *out,
 			const struct argconfig_commandline_options *option)
 {
@@ -190,25 +173,30 @@ static void show_option(FILE *out,
 	size_t len = 0;
 
 	buffer[0] = '\0';
-	buf_add(buffer, sizeof(buffer), &len, "  [ ");
+	shr_snprintf_append(buffer, sizeof(buffer), &len, "  [ ");
 	if (option->option) {
-		buf_add(buffer, sizeof(buffer), &len, " --%s", option->option);
+		shr_snprintf_append(buffer, sizeof(buffer), &len, " --%s",
+				    option->option);
 		if (arg == ARGCONFIG_ARG_OPTIONAL)
-			buf_add(buffer, sizeof(buffer), &len, "[=<%s>]", meta);
+			shr_snprintf_append(buffer, sizeof(buffer), &len,
+					    "[=<%s>]", meta);
 		if (arg == ARGCONFIG_ARG_REQUIRED)
-			buf_add(buffer, sizeof(buffer), &len, "=<%s>", meta);
+			shr_snprintf_append(buffer, sizeof(buffer), &len,
+					    "=<%s>", meta);
 		if (option->short_option)
-			buf_add(buffer, sizeof(buffer), &len, ",");
+			shr_snprintf_append(buffer, sizeof(buffer), &len, ",");
 	}
 	if (option->short_option) {
-		buf_add(buffer, sizeof(buffer), &len, " -%c",
-			option->short_option);
+		shr_snprintf_append(buffer, sizeof(buffer), &len, " -%c",
+				    option->short_option);
 		if (arg == ARGCONFIG_ARG_OPTIONAL)
-			buf_add(buffer, sizeof(buffer), &len, " [<%s>]", meta);
+			shr_snprintf_append(buffer, sizeof(buffer), &len,
+					    " [<%s>]", meta);
 		if (arg == ARGCONFIG_ARG_REQUIRED)
-			buf_add(buffer, sizeof(buffer), &len, " <%s>", meta);
+			shr_snprintf_append(buffer, sizeof(buffer), &len,
+					    " <%s>", meta);
 	}
-	buf_add(buffer, sizeof(buffer), &len, " ] ");
+	shr_snprintf_append(buffer, sizeof(buffer), &len, " ] ");
 
 	fprintf(out, "%s", buffer);
 	if (option->help) {
@@ -297,6 +285,55 @@ bool argconfig_help_requested(void)
 	return help_requested;
 }
 
+static bool argconfig_is_string(enum argconfig_types type)
+{
+	return type == CFG_STRING || type == CFG_FILE || type == CFG_DIR;
+}
+
+/* @u is in the range of @s, if it has one */
+bool argconfig_in_range(const struct argconfig_commandline_options *s,
+			uint64_t u)
+{
+	return !s->max || (u >= s->min && u <= s->max);
+}
+
+static struct argconfig_opt_val *
+argconfig_match_val(struct argconfig_opt_val *v, const char *str);
+
+/* The bits the names in the comma-separated list @arg stand for */
+static int argconfig_parse_enum_list(struct argconfig_commandline_options *s,
+				     const char *arg, uint32_t *bits)
+{
+	__cleanup_free char *list = strdup(arg);
+	struct argconfig_opt_val *v;
+	char *p = list, *name;
+
+	if (!list)
+		return -ENOMEM;
+
+	*bits = 0;
+	while ((name = shr_strsep(&p, ",")) != NULL) {
+		v = s->opt_val ? argconfig_match_val(s->opt_val, name) : NULL;
+		if (!v)
+			return -EINVAL;
+		*bits |= (uint32_t)v->val.int_val;
+	}
+
+	return 0;
+}
+
+/* An unsigned number up to @max, in the range of @s */
+static int argconfig_parse_u64(struct argconfig_commandline_options *s,
+			       const char *arg, uint64_t max, uint64_t *u)
+{
+	int ret = shr_parse_u64(arg, max, u);
+
+	if (!ret && !argconfig_in_range(s, *u))
+		return -ERANGE;
+
+	return ret;
+}
+
 static int argconfig_parse_type(struct argconfig_commandline_options *s,
 				char *arg)
 {
@@ -307,12 +344,14 @@ static int argconfig_parse_type(struct argconfig_commandline_options *s,
 	int ret = 0;
 
 	/* only a string option can do without a value */
-	if (!arg && s->config_type != CFG_STRING &&
+	if (!arg && !argconfig_is_string(s->config_type) &&
 	    s->config_type != CFG_FLAG && s->config_type != CFG_INCREMENT)
 		return -EINVAL;
 
 	switch (s->config_type) {
 	case CFG_STRING:
+	case CFG_FILE:
+	case CFG_DIR:
 		*(char **)value = arg;
 		break;
 	case CFG_INT:
@@ -321,17 +360,17 @@ static int argconfig_parse_type(struct argconfig_commandline_options *s,
 			*(int *)value = i;
 		break;
 	case CFG_BYTE:
-		ret = shr_parse_u64(arg, UINT8_MAX, &u);
+		ret = argconfig_parse_u64(s, arg, UINT8_MAX, &u);
 		if (!ret)
 			*(uint8_t *)value = u;
 		break;
 	case CFG_SHORT:
-		ret = shr_parse_u64(arg, UINT16_MAX, &u);
+		ret = argconfig_parse_u64(s, arg, UINT16_MAX, &u);
 		if (!ret)
 			*(uint16_t *)value = u;
 		break;
 	case CFG_POSITIVE:
-		ret = shr_parse_u64(arg, UINT32_MAX, &u);
+		ret = argconfig_parse_u64(s, arg, UINT32_MAX, &u);
 		if (!ret)
 			*(uint32_t *)value = u;
 		break;
@@ -342,8 +381,16 @@ static int argconfig_parse_type(struct argconfig_commandline_options *s,
 		/* only the names, which argconfig_parse_val() looked up */
 		ret = -EINVAL;
 		break;
+	case CFG_ENUM_LIST: {
+		uint32_t bits;
+
+		ret = argconfig_parse_enum_list(s, arg, &bits);
+		if (!ret)
+			*(uint32_t *)value |= bits;
+		break;
+	}
 	case CFG_LONG:
-		ret = shr_parse_u64(arg, UINT64_MAX, &u);
+		ret = argconfig_parse_u64(s, arg, UINT64_MAX, &u);
 		if (!ret)
 			*(uint64_t *)value = u;
 		break;
@@ -354,6 +401,8 @@ static int argconfig_parse_type(struct argconfig_commandline_options *s,
 		if (!isdigit((unsigned char)*arg))
 			return -EINVAL;
 		ret = shr_suffix_binary_parse(arg, &endptr, &u);
+		if (!ret && !argconfig_in_range(s, u))
+			ret = -ERANGE;
 		if (!ret)
 			*(uint64_t *)value = u;
 		break;
@@ -406,8 +455,11 @@ static void argconfig_set_opt_val(enum argconfig_types type, union argconfig_val
 		*(int *)val = opt_val->increment;
 		break;
 	case CFG_STRING:
+	case CFG_FILE:
+	case CFG_DIR:
 		*(char **)val = opt_val->string;
 		break;
+	case CFG_ENUM_LIST:
 	case CFG_GROUP_SEPARATOR:
 	case CFG_INCLUDE:
 		break;
@@ -461,7 +513,9 @@ bool argconfig_set_value_name(struct argconfig_commandline_options *s,
 static int argconfig_parse_val(struct argconfig_commandline_options *s,
 			       char *arg)
 {
-	if (arg && argconfig_set_value_name(s, arg))
+	/* the names of a list are looked up one by one */
+	if (arg && s->config_type != CFG_ENUM_LIST &&
+	    argconfig_set_value_name(s, arg))
 		return 0;
 
 	return argconfig_parse_type(s, arg);
@@ -608,6 +662,14 @@ argconfig_find_short_any(struct argconfig_commandline_options *root, char c)
 /* What a value of @s has to look like */
 static const char *argconfig_expected(struct argconfig_commandline_options *s)
 {
+	static char range[64];
+
+	if (s->max) {
+		snprintf(range, sizeof(range), "a number from %" PRIu64
+			 " to %" PRIu64, s->min, s->max);
+		return range;
+	}
+
 	switch (s->config_type) {
 	case CFG_BYTE:
 		return "a number from 0 to 255";
@@ -629,6 +691,7 @@ static int argconfig_value_error(struct argconfig_commandline_options *s,
 				 char c, const char *arg)
 {
 	__cleanup_free char *e = arg ? shr_escape(arg) : NULL;
+	bool list = s->config_type == CFG_ENUM_LIST;
 	const struct argconfig_opt_val *v;
 	int n = 0;
 
@@ -639,7 +702,9 @@ static int argconfig_value_error(struct argconfig_commandline_options *s,
 	else
 		fprintf(stderr, "--%s", s->option);
 	fprintf(stderr, ": expected ");
-	if (s->config_type != CFG_ENUM)
+	if (list)
+		fprintf(stderr, "a comma-separated list of ");
+	else if (s->config_type != CFG_ENUM)
 		fprintf(stderr, "%s%s", argconfig_expected(s),
 			s->opt_val ? " or " : "");
 
@@ -647,11 +712,24 @@ static int argconfig_value_error(struct argconfig_commandline_options *s,
 	for (v = s->opt_val; v && v->str; v++)
 		n++;
 	if (n > 8)
-		fprintf(stderr, "one of the names in the help");
+		fprintf(stderr, "%sthe names in the help",
+			list ? "" : "one of ");
 	for (v = s->opt_val; n <= 8 && v && v->str; v++)
-		fprintf(stderr, "%s%s", v == s->opt_val ? "one of: " : ", ",
-			v->str);
+		fprintf(stderr, "%s%s", v != s->opt_val ? ", " :
+			list ? "" : "one of: ", v->str);
 	fprintf(stderr, "\n");
+
+	/* "010" was octal once, say what to write instead */
+	if (arg && !list && s->config_type != CFG_ENUM &&
+	    shr_has_leading_zero(arg)) {
+		const char *d = arg;
+
+		while (d[0] == '0' && d[1])
+			d++;
+		fprintf(stderr,
+			"a number must not start with 0: write %s, or 0x%s for hexadecimal\n",
+			d, d);
+	}
 
 	return ARGCONFIG_USAGE;
 }

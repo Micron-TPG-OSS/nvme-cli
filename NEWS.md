@@ -41,6 +41,14 @@
   help lists the names of an option. `lm migration-recv` requires
   `--sel` now, like the other lm commands.
 
+* `--sel` of `get-feature`, the `feat` commands and the `ocp` and
+  `shannon` commands which get a feature rejects numbers above 3 and
+  accepts the names `current`, `default`, `saved` and `supported`.
+  Before, it sent the reserved values 4 to 7 and truncated larger
+  values. `--output-format-version` (also in `nvme-cli.conf`) rejects
+  versions other than 1 and 2. Before, every version but 2 printed
+  version 1.
+
 * Number options reject text after the number. Before, the rest was
   ignored: `--timeout=10s` set a timeout of 10 milliseconds.
 
@@ -52,6 +60,12 @@
   value which overflows, take the digits after a `.` in decimal
   (`1.09k` was rejected as octal, `1.500k` was 1000), and use a `.` in
   any locale as well. An empty value no longer selects a value name.
+
+* Numbers no longer take a leading zero, on the command line, in
+  `nvme-cli.conf` and in the lists of numbers. Before, a leading zero
+  made a number octal: `--namespace-id=010` was namespace 8 and `08`
+  was rejected. Write `10`, or `0x10` for hexadecimal; `0` itself is
+  fine.
 
 * Errors and warnings which repeat a command line argument or a line of
   a config file write its control characters as `\xNN`, so it can't
@@ -103,7 +117,10 @@
   `sndk` and `wdc` `vs-internal-log` and `solidigm internal-log
   --type`. An unknown word is a usage error which lists the words.
   `ocp internal-log` with an unknown telemetry type failed with status
-  0 before.
+  0 before. `samsung vs-internal-log --dump-type` checks its list of
+  dump types the same way, before it opens the device, and may be given
+  more than once; the completions complete the type after the last
+  comma.
 
 * The help of `connect`, `discover`, `connect-all`, `disconnect` and
   `config create` lists the fabrics options they share under "Fabrics
@@ -233,6 +250,14 @@
   `config convert`, `intel lat-stats-tracking`, `memblaze lat-stats`,
   `memblaze smart-log-add-x`, `sndk vs-internal-log`,
   `wdc vs-internal-log` and the `sed` commands did not accept them.
+
+* The command metadata reports the type of the value of each option and
+  the range of numbers an option takes. The shell completions use them:
+  they complete paths for every option which names a file or directory,
+  now also the `--keyfile` of the keys commands, `--nbft-path` and the
+  logs of `ocp internal-log`, and offer the values of `--sel`. They no
+  longer offer 0 to 3 for the `--sel` of the `lm` commands, which means
+  something else there.
 
 * The help and the shell completions of `--output-format` list the
   formats the command supports. Before, the completions offered
