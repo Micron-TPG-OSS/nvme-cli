@@ -35,6 +35,27 @@ cc = meson.get_compiler('c')
 cxx_available = add_languages('cpp', required: false, native: false)
 host_system = host_machine.system()
 
+# Sanitizer and fuzzing builds fail late, with misleading linker errors,
+# in some setups. Catch them here.
+if get_option('b_sanitize') != 'none' or get_option('fuzzing')
+    # The C++ tests link with the C++ compiler. With a different toolchain
+    # than the C compiler, the sanitizer runtimes do not match.
+    if cxx_available
+        cxx_id = meson.get_compiler('cpp').get_id()
+        if cxx_id != cc.get_id()
+            error('The C compiler is @0@, but the C++ compiler is @1@. '.format(
+                      cc.get_id(), cxx_id) +
+                  'Sanitizer and fuzzing builds need both from the same ' +
+                  'toolchain, e.g. CC=clang CXX=clang++')
+        endif
+    endif
+    # clang links the sanitizer runtime only into executables, so a shared
+    # library has undefined symbols, which -Wl,--no-undefined rejects.
+    if cc.get_id() == 'clang' and get_option('b_lundef')
+        error('Sanitizer and fuzzing builds with clang need -Db_lundef=false')
+    endif
+endif
+
 ################################################################################
 # Determine which features we need to build: The nvme executable, the libnvme
 # library, and/or the python bindings. These are controlled by the following
@@ -661,6 +682,12 @@ if get_option('fuzzing')
     if cc.get_id() != 'clang'
         error('-Dfuzzing=true needs clang')
     endif
+    # The coverage hooks of all code but the fuzz targets come from the
+    # sanitizer runtime.
+    if get_option('b_sanitize') == 'none'
+        error('-Dfuzzing=true needs a sanitizer, ' +
+              'e.g. -Db_sanitize=address,undefined')
+    endif
     add_project_arguments('-fsanitize=fuzzer-no-link', language : 'c')
 endif
 
@@ -930,6 +957,7 @@ if want_tests and py3_prog.found()
             files('scripts/check-install-tags.py'),
             meson.project_build_root(),
         ],
+        suite: 'check',
     )
 endif
 
