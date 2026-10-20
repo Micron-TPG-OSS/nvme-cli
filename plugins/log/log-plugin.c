@@ -370,7 +370,7 @@ static int __get_telemetry_log_ctrl(struct libnvme_transport_handle *hdl,
 				    struct nvme_telemetry_log **buf,
 				    bool da4_support)
 {
-	struct nvme_telemetry_log *log;
+	__cleanup_libnvme_free struct nvme_telemetry_log *log = NULL;
 	struct libnvme_passthru_cmd cmd;
 	int err;
 
@@ -385,19 +385,19 @@ static int __get_telemetry_log_ctrl(struct libnvme_transport_handle *hdl,
 	nvme_init_get_log_telemetry_ctrl(&cmd, 0, log, NVME_LOG_TELEM_BLOCK_SIZE);
 	err = libnvme_get_log_dynamic_chunk(hdl, &cmd, true, NVME_LOG_TELEM_BLOCK_SIZE);
 	if (err)
-		goto free;
+		return err;
 
 	if (!log->ctrlavail) {
 		if (!rae) {
 			nvme_init_get_log_telemetry_ctrl(&cmd, 0, log,
 				NVME_LOG_TELEM_BLOCK_SIZE);
-			err = libnvme_get_log_dynamic_chunk(hdl, &cmd, rae,
+			return libnvme_get_log_dynamic_chunk(hdl, &cmd, rae,
 				NVME_LOG_TELEM_BLOCK_SIZE);
-			goto free;
 		}
 
 		*size = NVME_LOG_TELEM_BLOCK_SIZE;
 		*buf = log;
+		log = NULL;
 
 		nvme_show_error("Warning: Telemetry Controller-Initiated Data Not Available.");
 		return 0;
@@ -405,13 +405,9 @@ static int __get_telemetry_log_ctrl(struct libnvme_transport_handle *hdl,
 
 	err = parse_telemetry_da(hdl, da, log, size, da4_support);
 	if (err)
-		goto free;
+		return err;
 
 	return get_log_telemetry_ctrl(hdl, rae, *size, buf);
-
-free:
-	libnvme_free(log);
-	return err;
 }
 
 static int __get_telemetry_log_host(struct libnvme_transport_handle *hdl,
@@ -545,10 +541,6 @@ static int get_telemetry_log(int argc, char **argv, struct command *acmd,
 				cfg.file_name, libnvme_strerror(errno));
 		return output;
 	}
-
-	log = libnvme_alloc(sizeof(*log));
-	if (!log)
-		return -ENOMEM;
 
 	if (cfg.ctrl_init)
 		err = __get_telemetry_log_ctrl(hdl, cfg.rae, cfg.data_area,
@@ -1480,7 +1472,8 @@ static int get_boot_part_log(int argc, char **argv, struct command *acmd, struct
 		return err;
 	}
 
-	bpsz = (boot->bpinfo & 0x7fff) * 128 * 1024;
+	bpsz = NVME_BOOT_PARTITION_INFO_BPSZ(le32_to_cpu(boot->bpinfo)) *
+		128 * 1024;
 	bp_log = libnvme_alloc(sizeof(*boot) + bpsz);
 	if (!bp_log)
 		return -ENOMEM;
@@ -1492,7 +1485,7 @@ static int get_boot_part_log(int argc, char **argv, struct command *acmd, struct
 	if (err)
 		nvme_show_err(err, "boot partition log");
 	else
-		nvme_show_boot_part_log(&bp_log,
+		nvme_show_boot_part_log(bp_log,
 					libnvme_transport_handle_get_name(hdl),
 					sizeof(*boot) + bpsz, flags);
 
@@ -1520,6 +1513,7 @@ static int get_phy_rx_eom_log(int argc, char **argv, struct command *acmd,
 	struct libnvme_passthru_cmd cmd;
 	int err = -1;
 	__u8 lsp_tmp;
+	void *p;
 
 	struct config {
 		__u8	lsp;
@@ -1573,14 +1567,15 @@ static int get_phy_rx_eom_log(int argc, char **argv, struct command *acmd,
 
 	if (phy_rx_eom_log->eomip == NVME_PHY_RX_EOM_COMPLETED)
 		phy_rx_eom_log_len = le16_to_cpu(phy_rx_eom_log->hsize) +
-				     le32_to_cpu(phy_rx_eom_log->dsize) *
-				     le16_to_cpu(phy_rx_eom_log->nd);
+			(size_t)le32_to_cpu(phy_rx_eom_log->dsize) *
+			le16_to_cpu(phy_rx_eom_log->nd);
 	else
 		phy_rx_eom_log_len = le16_to_cpu(phy_rx_eom_log->hsize);
 
-	phy_rx_eom_log = libnvme_realloc(phy_rx_eom_log, phy_rx_eom_log_len);
-	if (!phy_rx_eom_log)
+	p = libnvme_realloc(phy_rx_eom_log, phy_rx_eom_log_len);
+	if (!p)
 		return -ENOMEM;
+	phy_rx_eom_log = p;
 
 	nvme_init_get_log_phy_rx_eom(&cmd, cfg.lsp, cfg.controller,
 				     phy_rx_eom_log, phy_rx_eom_log_len);
@@ -2135,6 +2130,12 @@ static int get_dispersed_ns_psub(struct libnvme_transport_handle *hdl, __u32 nsi
 		goto err_free;
 	}
 	psub_list_len = numpsub * NVME_NQN_LENGTH;
+	/* and the buffer must not be cut short on a 32 bit system */
+	if ((size_t)(header_len + psub_list_len) !=
+	    header_len + psub_list_len) {
+		err = -EINVAL;
+		goto err_free;
+	}
 
 	p = libnvme_realloc(log, header_len + psub_list_len);
 	if (!p) {

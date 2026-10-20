@@ -532,41 +532,47 @@ static inline void eom_desc_iter_init(struct eom_desc_iter *it,
 }
 
 /*
- * Returns the next descriptor, or NULL once the count is exhausted or a
- * descriptor no longer fits the log buffer -- a corrupt or hostile
+ * Copies the fixed part of the next descriptor to @desc: dsize need not
+ * keep the descriptors aligned. Returns false once the count is exhausted
+ * or a descriptor no longer fits the log buffer -- a corrupt or hostile
  * dsize/nd pair gives no way to locate anything past that point, so the
  * walk stops there rather than guessing.
  */
-static inline struct nvme_eom_lane_desc *eom_desc_iter_next(struct eom_desc_iter *it)
+static inline bool eom_desc_iter_next(struct eom_desc_iter *it,
+		struct nvme_eom_lane_desc *desc)
 {
-	struct nvme_eom_lane_desc *desc;
-
 	if (!it->remaining)
-		return NULL;
+		return false;
 
 	/*
 	 * The full stride, not just the fixed descriptor, must fit: advancing
 	 * by dsize below would otherwise form an out-of-bounds pointer.
 	 */
 	if (it->dsize < sizeof(*desc) || !shr_buf_has_room(it->p, it->end, it->dsize))
-		return NULL;
+		return false;
 
 	it->remaining--;
 	it->cur = it->p;
-	desc = (struct nvme_eom_lane_desc *)it->cur;
+	memcpy(desc, it->cur, sizeof(*desc));
 	it->p += it->dsize;
 
-	return desc;
+	return true;
+}
+
+/* The eye data of the descriptor eom_desc_iter_next() copied last */
+static inline unsigned char *eom_desc_iter_eye(struct eom_desc_iter *it)
+{
+	return it->cur + sizeof(struct nvme_eom_lane_desc);
 }
 
 /*
  * Validates the vendor-specific eye data following the descriptor most
- * recently returned by eom_desc_iter_next() against both dsize and the log
+ * recently copied by eom_desc_iter_next() against both dsize and the log
  * buffer. Returns the data and its length via *vsdatalen, or NULL with
  * *vsdatalen == 0 if it doesn't fit.
  */
 static inline unsigned char *eom_desc_iter_vsdata(struct eom_desc_iter *it,
-		struct nvme_eom_lane_desc *desc, uint16_t *vsdatalen)
+		const struct nvme_eom_lane_desc *desc, uint16_t *vsdatalen)
 {
 	uint16_t nrows = le16_to_cpu(desc->nrows);
 	uint16_t ncols = le16_to_cpu(desc->ncols);
@@ -581,6 +587,35 @@ static inline unsigned char *eom_desc_iter_vsdata(struct eom_desc_iter *it,
 
 	*vsdatalen = edlen;
 	return it->cur + vsdataoffset;
+}
+
+/*
+ * The Metadata Element Descriptor at offset *@off of a Host Metadata data
+ * structure. A descriptor is 4 bytes and its value, so it may start at
+ * any offset: its fixed part is copied to @desc. Returns its value, which
+ * *@len long ends with the structure at the latest, and advances *@off
+ * to the next descriptor. NULL if the fixed part does not fit anymore.
+ */
+static inline const __u8 *
+nvme_host_metadata_element(const struct nvme_host_metadata *data,
+		size_t *off, struct nvme_metadata_element_desc *desc,
+		__u16 *len)
+{
+	size_t size = sizeof(data->descs_buf);
+	const __u8 *val;
+
+	if (*off > size || size - *off < sizeof(*desc))
+		return NULL;
+
+	memcpy(desc, data->descs_buf + *off, sizeof(*desc));
+	*off += sizeof(*desc);
+	val = data->descs_buf + *off;
+	*len = le16_to_cpu(desc->len);
+	if (*len > size - *off)
+		*len = size - *off;
+	*off += *len;
+
+	return val;
 }
 
 /*
@@ -828,6 +863,8 @@ void nvme_show_pull_model_ddc_req_log(struct nvme_pull_model_ddc_req_log *log,
 void nvme_show_log(const char *devname, enum nvme_cmd_get_log_lid lid, __u32 nsid, __u16 lsi,
 		   __u8 lsp, void *log, __u32 len, nvme_print_flags_t flags);
 void nvme_show_pel_header(struct nvme_persistent_event_log *pevent_log_head, int human);
+struct nvme_persistent_event_entry *nvme_pel_event(void *pevent_log_info,
+		__u32 size, __u32 offset);
 void *nvme_pel_event_data(void *pevent_log_info, __u32 offset, __u32 len,
 		__u32 *buf_len);
 void nvme_show_pel_event_header(int i, struct nvme_persistent_event_entry *pevent_entry_head,

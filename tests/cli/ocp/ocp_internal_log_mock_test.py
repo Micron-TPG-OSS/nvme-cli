@@ -49,14 +49,12 @@ Tests in this module verify:
     nest, encapsulated statistics running past their container, and the
     end-of-list identifier inside one. Two containers are checked
     against a customer's example report, field for field.
-  * Option handling: the controller telemetry support gate, the log ID
-    check, telemetry and string logs shorter than their headers, files
+  * Option handling: fetching a controller log the drive does not
+    support failing, log files decoded without querying the drive, -t
+    taken from a log file's ID and checked against it, the log
+    ID check, telemetry and string logs shorter than their headers, files
     read whatever their names, -a 3 and -a 4 decoding
     Data Area 2, invalid -a, -t and -o values, and -o json.
-
-Known defects are covered by expectedFailure tests asserting the correct
-behavior: a controller log's JSON header is decoded with the host
-header's layout, and an invalid -a value exits 0.
 
 Runs nowhere but Linux: libmock_nvme.so is an LD_PRELOAD shim.
 
@@ -65,7 +63,6 @@ Usage: python3 ocp_internal_log_mock_test.py <nvme-binary> <mock-lib>
 import json
 import os
 import struct
-import unittest
 
 from tests.cli.ocp.ocp_mock_test import (CNS_UUID_LIST, LPA_TELEMETRY,
                                          MODES, NSID_ALL, SC_INVALID_FIELD,
@@ -80,6 +77,7 @@ LSP_RETAIN = 0
 LSP_CREATE = 1
 
 LPA_TELEMETRY_DA4 = 0x40
+DA1_TIMESTAMP_MS = 1700000000123
 
 OPC_SET_FEATURES = 0x09
 OPC_GET_FEATURES = 0x0A
@@ -354,6 +352,7 @@ class TestInternalLogDataArea4(OCPInternalLogTestBase):
         """Without LPA bit 6 the controller has no Data Area 4 to read."""
         self.server.identify = pack_id_ctrl()
         result = self.run_internal_log('-a', '4')
+        self.assertNotEqual(result.returncode, 0)
         self.assertIn('Telemetry data area 4 not supported by device.',
                       result.stderr)
         self.assertEqual(self.sequence(), [])
@@ -374,6 +373,8 @@ class TestInternalLogHeaders(OCPInternalLogTestBase):
             reason + layout.REASON_VALID_FLAGS: b'\x07',
             reason + layout.REASON_VU_EXTENSION: bytes(range(0x80, 0xA0)),
             da1 + layout.DA1_MAJOR_VERSION: struct.pack('<HH', 5, 2),
+            da1 + layout.DA1_TIMESTAMP: DA1_TIMESTAMP_MS.to_bytes(
+                6, 'little') + b'\xA5\x5A',
             da1 + layout.DA1_PROFILES_SUPPORTED: b'\x03\x01',
             da1 + layout.DA1_STRING_LOG_SIZE: struct.pack('<Q', 0x1234),
             da1 + layout.DA1_SMART: b'\x05\x40\x01',
@@ -382,7 +383,9 @@ class TestInternalLogHeaders(OCPInternalLogTestBase):
 
     def _header_expected(self, telemetry):
         dalb = layout.data_area_last_blocks(telemetry)
-        label = 'Telemetry Host-Initiated Data Area {} Last Block'
+        initiator = ('Controller' if telemetry[0] == layout.LID_TELEMETRY_CTRL
+                     else 'Host')
+        label = f'Telemetry {initiator}-Initiated Data Area {{}} Last Block'
         return {
             'LogIdentifier': f'0x{telemetry[0]:02x}',
             'IEEE OUI Identifier': '0x123456',
@@ -394,8 +397,8 @@ class TestInternalLogHeaders(OCPInternalLogTestBase):
 
     _HOST_BYTES_380_383 = {
         'Telemetry Host-Initiated Scope': '0x11',
-        'Telemetry Host Initiated Generation Number': '0x22',
-        'Telemetry Host-Initiated Data Available': '0x33',
+        'Telemetry Host-Initiated Data Generation Number': '0x22',
+        'Telemetry Controller-Initiated Data Available': '0x33',
         'Telemetry Controller-Initiated Data Generation Number': '0x44',
     }
     _CTRL_BYTES_381_383 = {
@@ -418,6 +421,7 @@ class TestInternalLogHeaders(OCPInternalLogTestBase):
         return {
             'Major Version': '0x0005',
             'Minor Version': '0x0002',
+            'Timestamp': '2023-11-14D|22:13:20:123',
             'Number Telemetry Profiles Supported': '0x03',
             'Telemetry Profile Selected': '0x01',
             'Telemetry String Log Size': '0x1234',
@@ -475,15 +479,17 @@ class TestInternalLogHeaders(OCPInternalLogTestBase):
                     self.assertEqual(
                         [k for k in fields if 'Reserved' in k], [])
 
-    def test_controller_log_in_text(self):
+    def test_controller_log_sections(self):
         telemetry = self._telemetry(layout.LID_TELEMETRY_CTRL)
-        header, reason, da1, _, _ = self._sections(self.decode(
-            telemetry, string_log(), '-t', 'controller', mode='text'))
-        self.assertSubset({**self._header_expected(telemetry),
-                           **self._CTRL_BYTES_381_383}, header)
-        self.assertNotIn('Telemetry Host-Initiated Scope', header)
-        self.assertSubset(self._REASON_EXPECTED, reason)
-        self.assertSubset(self._da1_expected(telemetry), da1)
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                header, reason, da1, _, _ = self._sections(self.decode(
+                    telemetry, string_log(), '-t', 'controller', mode=mode))
+                self.assertSubset({**self._header_expected(telemetry),
+                                   **self._CTRL_BYTES_381_383}, header)
+                self.assertNotIn('Telemetry Host-Initiated Scope', header)
+                self.assertSubset(self._REASON_EXPECTED, reason)
+                self.assertSubset(self._da1_expected(telemetry), da1)
 
     def test_log_cut_inside_the_data_area_1_header(self):
         """A log that ends inside the Data Area 1 header decodes as far as
@@ -503,16 +509,23 @@ class TestInternalLogHeaders(OCPInternalLogTestBase):
         self.assertNotIn('SMART / Health Information Log(LID-02h)', titles)
         self.assertFalse([t for t in titles if t.startswith('EVENT FIFO ')])
 
-    @unittest.expectedFailure
-    def test_controller_log_in_json(self):
-        """Defect: the JSON printer decodes every log with the host
-        header's layout, so a controller log's scope, data available and
-        generation number come out under host labels, one byte off."""
-        telemetry = self._telemetry(layout.LID_TELEMETRY_CTRL)
-        header, _, _, _, _ = self._sections(self.decode(
-            telemetry, string_log(), '-t', 'controller'))
-        self.assertSubset(self._CTRL_BYTES_381_383, header)
-        self.assertNotIn('Telemetry Host-Initiated Scope', header)
+    def test_telemetry_type_comes_from_the_log(self):
+        """Without -t, a log file is decoded as the type its Log
+        Identifier names."""
+        for lid, dump, expected, absent in (
+                (layout.LID_TELEMETRY_HOST, 'Host', self._HOST_BYTES_380_383,
+                 'Telemetry Controller-Initiated Scope'),
+                (layout.LID_TELEMETRY_CTRL, 'Controller',
+                 self._CTRL_BYTES_381_383,
+                 'Telemetry Host-Initiated Scope')):
+            for mode in MODES:
+                with self.subTest(lid=lid, mode=mode):
+                    report, output = self.decode_with_output(
+                        self._telemetry(lid), string_log(), mode=mode)
+                    self.assertIn(f'Extracting Telemetry {dump} Dump', output)
+                    header = self._sections(report)[0]
+                    self.assertSubset(expected, header)
+                    self.assertNotIn(absent, header)
 
 
 def stat_expected(stat_id, name, size_dw, behavior=0, context_index=0,
@@ -1118,22 +1131,59 @@ class TestInternalLogOptions(OCPInternalLogTestBase):
 
     def test_controller_log_needs_telemetry_support(self):
         """A controller without LPA bit 3 has no controller-initiated log
-        to decode, so nothing is written."""
+        to fetch, so nothing is read or written."""
         self.server.identify = pack_id_ctrl(lpa=0)
-        result = self.run_internal_log(
-            '-t', 'controller',
-            telemetry=telemetry_log(lid=layout.LID_TELEMETRY_CTRL),
-            strings=string_log())
-        self.assertIn('Extracting Telemetry Controller Dump', result.stdout)
+        self.server.logs = {
+            layout.LID_TELEMETRY_CTRL: telemetry_log(
+                lid=layout.LID_TELEMETRY_CTRL),
+            layout.LID_STRING_LOG: string_log()}
+        result = self.run_internal_log('-t', 'controller')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Controller-initiated telemetry not supported by '
+                      'device.', result.stderr)
+        self.assertEqual(self.server.log_reads(), [])
         for mode in MODES:
             self.assertFalse(os.path.exists(self.report_path(mode)))
 
+    def test_controller_log_file_decodes_without_telemetry_support(self):
+        """With both logs given as files nothing is sent to the drive, so
+        what it supports does not matter."""
+        self.server.identify = pack_id_ctrl(lpa=0)
+        for args in ((), ('-t', 'controller')):
+            with self.subTest(args=args):
+                report = self.decode(
+                    telemetry_log(lid=layout.LID_TELEMETRY_CTRL),
+                    string_log(), *args)
+                self.assertEqual(self.server.commands, [])
+                self.assertEqual(
+                    report['Log Page Header']['LogIdentifier'], '0x08')
+
+    def test_telemetry_type_must_match_the_log(self):
+        """A -t naming the other type than the log file is rejected
+        before anything is read from the drive."""
+        for lid, value, name in (
+                (layout.LID_TELEMETRY_HOST, 'controller', 'Host'),
+                (layout.LID_TELEMETRY_CTRL, 'host', 'Controller'),
+                (layout.LID_TELEMETRY_CTRL, 'host0', 'Controller'),
+                (layout.LID_TELEMETRY_CTRL, 'host1', 'Controller')):
+            with self.subTest(lid=lid, telemetry_type=value):
+                result = self.run_internal_log(
+                    '-t', value, telemetry=telemetry_log(lid=lid))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    f'does not match the {name}-Initiated log in '
+                    'telemetry-log.', result.stderr)
+                self.assertEqual(self.server.log_reads(), [])
+                for mode in MODES:
+                    self.assertFalse(os.path.exists(self.report_path(mode)))
+
     def test_log_that_is_not_telemetry_is_rejected(self):
+        """Rejected before the string log is read from the drive."""
         telemetry = telemetry_log(overlay={layout.HDR_LID: b'\x05'})
-        result = self.run_internal_log(telemetry=telemetry,
-                                       strings=string_log())
+        result = self.run_internal_log(telemetry=telemetry)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Invalid LogPageId [0x05]', result.stderr)
+        self.assertEqual(self.server.log_reads(), [])
         self.assertFalse(os.path.exists(self.report_path('json')))
 
     def test_string_log_shorter_than_its_header_is_rejected(self):
@@ -1152,14 +1202,20 @@ class TestInternalLogOptions(OCPInternalLogTestBase):
 
     def test_telemetry_log_shorter_than_its_header_is_rejected(self):
         """The log ID and data area offsets come from the 512-byte
-        header, so a shorter telemetry log cannot be decoded."""
-        for size in (1, layout.HEADER_SIZE - 1):
+        header, so a shorter telemetry log cannot be decoded. An empty file
+        already fails to read. Either is rejected before the string log is
+        read from the drive."""
+        for size, error in (
+                (0, 'Failed to read telemetry-log.'),
+                (1, 'telemetry-log is smaller than its 512-byte header'),
+                (layout.HEADER_SIZE - 1,
+                 'telemetry-log is smaller than its 512-byte header')):
             with self.subTest(size=size):
                 result = self.run_internal_log(
-                    telemetry=telemetry_log()[:size], strings=string_log())
+                    telemetry=telemetry_log()[:size])
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn('telemetry-log is smaller than its 512-byte '
-                              'header', result.stderr)
+                self.assertIn(error, result.stderr)
+                self.assertEqual(self.server.log_reads(), [])
                 self.assertFalse(os.path.exists(self.report_path('json')))
 
     def test_files_are_read_whatever_their_names(self):
@@ -1207,9 +1263,7 @@ class TestInternalLogOptions(OCPInternalLogTestBase):
         self.assertIn("invalid value 'bogus' for -t: expected one of: host, "
                       "controller, host0, host1", result.stderr)
 
-    @unittest.expectedFailure
     def test_invalid_data_area_exits_nonzero(self):
-        """Defect: the data area check jumps out with err still 0."""
         self.assertNotEqual(self._invalid_option('-a', '5').returncode, 0)
 
     def test_invalid_telemetry_type_exits_nonzero(self):

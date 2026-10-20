@@ -2033,16 +2033,13 @@ static void json_pevent_entry(void *pevent_log_info, __u8 action, __u32 size, co
 	struct json_object *valid_attrs;
 
 	for (i = 0; i < le32_to_cpu(pevent_log_head->tnev); i++) {
-		if (offset + sizeof(*pevent_entry_head) > size)
+		pevent_entry_head = nvme_pel_event(pevent_log_info, size,
+						   offset);
+		if (!pevent_entry_head)
 			break;
 
-		pevent_entry_head = pevent_log_info + offset;
 		vsil = le16_to_cpu(pevent_entry_head->vsil);
 		el = le16_to_cpu(pevent_entry_head->el);
-
-		if (vsil > el ||
-		    offset + pevent_entry_head->ehl + 3 + el > size)
-			break;
 
 		valid_attrs = json_create_object();
 
@@ -2176,12 +2173,15 @@ static void json_lba_status(struct nvme_lba_status *list,
 			      unsigned long len)
 {
 	struct json_object *r = json_r;
-	int idx;
+	__u32 nlsd = le32_to_cpu(list->nlsd);
+	size_t nr = nvme_log_nr_entries(nlsd, len, sizeof(*list),
+					sizeof(list->descs[0]));
+	size_t idx;
 	struct nvme_lba_status_desc *e;
 	struct json_object *lsde;
 	char json_str[STR_LEN];
 
-	obj_add_uint(r, "Number of LBA Status Descriptors (NLSD)", le32_to_cpu(list->nlsd));
+	obj_add_uint(r, "Number of LBA Status Descriptors (NLSD)", nlsd);
 	obj_add_uint(r, "Completion Condition (CMPC)", list->cmpc);
 
 	switch (list->cmpc) {
@@ -2204,10 +2204,10 @@ static void json_lba_status(struct nvme_lba_status *list,
 		break;
 	}
 
-	for (idx = 0; idx < list->nlsd; idx++) {
-		lsde = json_create_array();
-		sprintf(json_str, "LSD entry %d", idx);
-		obj_add_array(r, json_str, lsde);
+	for (idx = 0; idx < nr; idx++) {
+		lsde = json_create_object();
+		sprintf(json_str, "LSD entry %zu", idx);
+		obj_add_obj(r, json_str, lsde);
 		e = &list->descs[idx];
 		sprintf(json_str, "0x%016"PRIx64"", le64_to_cpu(e->dslba));
 		obj_add_str(lsde, "DSLBA", json_str);
@@ -2357,10 +2357,10 @@ static void json_boot_part_log(void *bp_log, const char *devname,
 }
 
 /* Printable Eye string is allocated and returned, caller must free */
-static char *json_eom_printable_eye(struct nvme_eom_lane_desc *lane,
+static char *json_eom_printable_eye(const struct nvme_eom_lane_desc *lane,
+				    const unsigned char *eye,
 				    struct json_object *r)
 {
-	char *eye = (char *)lane->eye_desc;
 	size_t nrows = le16_to_cpu(lane->nrows);
 	size_t ncols = le16_to_cpu(lane->ncols);
 	struct json_object *eye_array = NULL;
@@ -2421,7 +2421,7 @@ static void json_phy_rx_eom_descs(struct nvme_phy_rx_eom_log *log,
 			struct json_object *r, char **allocated_eyes, size_t len)
 {
 	struct eom_desc_iter it;
-	struct nvme_eom_lane_desc *desc;
+	struct nvme_eom_lane_desc desc;
 	struct json_object *descs = json_create_array();
 	int i = 0;
 
@@ -2429,7 +2429,7 @@ static void json_phy_rx_eom_descs(struct nvme_phy_rx_eom_log *log,
 
 	eom_desc_iter_init(&it, log, len);
 
-	while ((desc = eom_desc_iter_next(&it))) {
+	while (eom_desc_iter_next(&it, &desc)) {
 		int idx = i++;
 		__cleanup_free char *hexstr = NULL;
 		unsigned char *vsdata;
@@ -2441,25 +2441,26 @@ static void json_phy_rx_eom_descs(struct nvme_phy_rx_eom_log *log,
 		if (!jdesc)
 			return;
 
-		obj_add_uint(jdesc, "lid", desc->mstatus);
-		obj_add_uint(jdesc, "lane", desc->lane);
-		obj_add_uint(jdesc, "eye", desc->eye);
-		obj_add_uint(jdesc, "top", le16_to_cpu(desc->top));
-		obj_add_uint(jdesc, "bottom", le16_to_cpu(desc->bottom));
-		obj_add_uint(jdesc, "left", le16_to_cpu(desc->left));
-		obj_add_uint(jdesc, "right", le16_to_cpu(desc->right));
-		obj_add_uint(jdesc, "nrows", le16_to_cpu(desc->nrows));
-		obj_add_uint(jdesc, "ncols", le16_to_cpu(desc->ncols));
-		obj_add_uint(jdesc, "edlen", le16_to_cpu(desc->edlen));
+		obj_add_uint(jdesc, "lid", desc.mstatus);
+		obj_add_uint(jdesc, "lane", desc.lane);
+		obj_add_uint(jdesc, "eye", desc.eye);
+		obj_add_uint(jdesc, "top", le16_to_cpu(desc.top));
+		obj_add_uint(jdesc, "bottom", le16_to_cpu(desc.bottom));
+		obj_add_uint(jdesc, "left", le16_to_cpu(desc.left));
+		obj_add_uint(jdesc, "right", le16_to_cpu(desc.right));
+		obj_add_uint(jdesc, "nrows", le16_to_cpu(desc.nrows));
+		obj_add_uint(jdesc, "ncols", le16_to_cpu(desc.ncols));
+		obj_add_uint(jdesc, "edlen", le16_to_cpu(desc.edlen));
 
-		vsdata = eom_desc_iter_vsdata(&it, desc, &vsdatalen);
+		vsdata = eom_desc_iter_vsdata(&it, &desc, &vsdatalen);
 		if (!vsdata) {
 			json_free_object(jdesc);
 			continue;
 		}
 
 		if (NVME_EOM_ODP_PEFP(log->odp))
-			allocated_eyes[idx] = json_eom_printable_eye(desc, jdesc);
+			allocated_eyes[idx] = json_eom_printable_eye(&desc,
+					eom_desc_iter_eye(&it), jdesc);
 
 		if (vsdatalen == 0) {
 			json_free_object(jdesc);
@@ -4181,9 +4182,12 @@ static void json_feat_perfc_id_list(struct json_object *r, struct nvme_perf_attr
 
 static void json_feat_perfc_vs(struct json_object *r, struct nvme_vs_perf_attr *data)
 {
+	__u16 attrl = le16_to_cpu(data->attrl);
+
 	obj_add_str(r, "performance attribute identifier (PAID)", shr_uuid_to_string(data->paid));
-	obj_add_uint(r, "attribute length (ATTRL)", data->attrl);
-	obj_d(r, "vendor specific (VS)", (unsigned char *)data->vs, data->attrl, 16, 1);
+	obj_add_uint(r, "attribute length (ATTRL)", attrl);
+	obj_d(r, "vendor specific (VS)", (unsigned char *)data->vs,
+	      min_t(size_t, attrl, sizeof(data->vs)), 16, 1);
 }
 
 static void json_feat_perfc(struct json_object *r, enum nvme_features_id fid, unsigned int result,
@@ -4215,8 +4219,9 @@ static void json_feat_perfc(struct json_object *r, enum nvme_features_id fid, un
 static void json_host_metadata(struct json_object *r, enum nvme_features_id fid,
 			       struct nvme_host_metadata *data)
 {
-	struct nvme_metadata_element_desc *desc = &data->descs[0];
-	__u8 *end = (__u8 *)data + sizeof(*data);
+	struct nvme_metadata_element_desc desc;
+	const __u8 *v;
+	size_t off = 0;
 	int i;
 	char val[VAL_LEN];
 	__u16 len;
@@ -4229,8 +4234,8 @@ static void json_host_metadata(struct json_object *r, enum nvme_features_id fid,
 	obj_add_array(r, "Metadata Element Descriptors", desca);
 
 	for (i = 0; i < data->ndesc; i++) {
-		/* the descriptors and their values end with the structure */
-		if (desc->val > end)
+		v = nvme_host_metadata_element(data, &off, &desc, &len);
+		if (!v)
 			break;
 
 		desce = json_create_object();
@@ -4238,21 +4243,18 @@ static void json_host_metadata(struct json_object *r, enum nvme_features_id fid,
 
 		obj_add_int(desce, "Element", i);
 
-		snprintf(json_str, sizeof(json_str), "0x%02x", desc->type);
+		snprintf(json_str, sizeof(json_str), "0x%02x", desc.type);
 		obj_add_str(desce, "Type", json_str);
 
 		obj_add_str(desce, "Type definition",
-			    nvme_host_metadata_type_to_string(fid, desc->type));
+			    nvme_host_metadata_type_to_string(fid, desc.type));
 
-		obj_add_int(desce, "Revision", desc->rev);
+		obj_add_int(desce, "Revision", desc.rev);
 
-		obj_add_int(desce, "Length", le16_to_cpu(desc->len));
+		obj_add_int(desce, "Length", le16_to_cpu(desc.len));
 
-		len = min_t(size_t, le16_to_cpu(desc->len), end - desc->val);
-		snprintf(val, sizeof(val), "%.*s", len, (char *)desc->val);
+		snprintf(val, sizeof(val), "%.*s", len, (const char *)v);
 		obj_add_str(desce, "Value", val);
-
-		desc = (struct nvme_metadata_element_desc *)&desc->val[len];
 	}
 }
 
@@ -5853,7 +5855,8 @@ static void json_output_key_value(const char *key, const char *val, va_list ap)
 	struct json_object *r = json_r;
 
 	__cleanup_free char *value = NULL;
-	__cleanup_free char *key_trim = trim_white_space(strdup(key));
+	__cleanup_free char *key_dup = strdup(key);
+	char *key_trim = trim_white_space(key_dup);
 
 	if (vasprintf(&value, val, ap) < 0)
 		value = NULL;

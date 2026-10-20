@@ -227,8 +227,9 @@ static void save_discovery_log(char *raw, const struct nvmf_discovery_log *log)
 {
 	__cleanup_free char *path = NULL;
 	static unsigned int save_count;
-	int fd, len, ret;
+	int fd, ret;
 	uint64_t numrec;
+	size_t len;
 
 	if (save_count) {
 		if (asprintf(&path, "%s.%u", raw, save_count) < 0) {
@@ -1823,7 +1824,7 @@ int fabrics_dim(const char *desc, int argc, char **argv)
 	enum nvmf_dim_tas tas;
 	struct libnvme_ctrl *c;
 	char *p;
-	int ret;
+	int ret, err = 0;
 
 	struct {
 		char *nqn;
@@ -1891,8 +1892,11 @@ int fabrics_dim(const char *desc, int argc, char **argv)
 				libnvme_for_each_subsystem(h, s) {
 					if (strcmp(libnvme_subsystem_get_subsysnqn(s), p))
 						continue;
-					libnvme_subsystem_for_each_ctrl(s, c)
+					libnvme_subsystem_for_each_ctrl(s, c) {
 						ret = dim_operation(c, tas, p);
+						if (ret && !err)
+							err = ret;
+					}
 				}
 			}
 		}
@@ -1912,8 +1916,10 @@ int fabrics_dim(const char *desc, int argc, char **argv)
 				return ret;
 			}
 			ret = dim_operation(c, tas, p);
+			if (ret && !err)
+				err = ret;
 		}
 	}
 
-	return ret;
+	return err;
 }

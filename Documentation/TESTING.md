@@ -132,6 +132,31 @@ Example: Cross-build for `s390x`:
 
 The exact supported targets depend on the toolchains installed in the container.
 
+#### 5.5 Cross Build on a Debian Host
+
+The cross files in `.github/cross` work on a Debian (or Ubuntu) host too.
+Install the toolchain of the target, and for the targets other than i386
+qemu, which runs the tests:
+
+```bash
+apt install gcc-multilib                                 # i386
+apt install gcc-arm-linux-gnueabihf qemu-user-static     # armhf
+apt install gcc-powerpc64le-linux-gnu qemu-user-static   # ppc64le
+apt install gcc-s390x-linux-gnu qemu-user-static         # s390x
+```
+
+The optional libraries come from the target architecture, e.g. json-c:
+
+```bash
+dpkg --add-architecture i386
+apt update
+apt install libjson-c-dev:i386
+```
+
+`scripts/build.sh` points qemu at the libraries of the cross toolchain
+(`QEMU_LD_PREFIX`), as the tests also start the binaries through
+binfmt_misc.
+
 ## Test names
 
 Every test is named `<component> - <test>` and is in exactly one
@@ -247,8 +272,11 @@ The `device` target fuzzes what nvme-cli does with the data a device
 returns. It runs one of the commands which read and print something, from
 the table in `tests/fuzz/fuzz-device.c`, against the device mock of
 `tests/cli/libmock_nvme.c`, which answers every command from the input.
-It needs a dynamically linked Linux build. Its seeds named `regress-*` are
-inputs which found a bug.
+An input selects the command by its index in the table, and may pass a
+fuzzed value to one option of it, so add new commands at the end of the
+table: the seeds and the corpus of earlier runs keep their meaning. It needs
+a dynamically linked Linux build. Its seeds named `regress-*` are inputs
+which found a bug.
 
 Every build runs them as tests of the `fuzz` suite: each target replays its
 seeds in `tests/fuzz/corpus/<target>` and then a few seconds of random

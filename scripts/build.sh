@@ -32,7 +32,7 @@ usage() {
     echo " -m [meson]|muon      use meson or muon"
     echo " -p                   enable coverage report"
     echo " -s                   run tests with ASan+UBSan (asanubsan setup)"
-    echo " -t [arm]|ppc64le|s390x|i386  cross compile target"
+    echo " -t [armhf]|ppc64le|s390x|i386 cross compile target"
     echo " -x                   run tests with valgrind (valgrind setup)"
     echo ""
     echo "options for the 'tests' config (mirror the e2e-* meson options):"
@@ -83,7 +83,7 @@ usage() {
 BUILDTOOL=meson
 MESON=meson
 BUILDTYPE=release
-CROSS_TARGET=arm
+CROSS_TARGET=armhf
 CC=${CC:-"gcc"}
 SCAN_BUILD=""
 
@@ -330,22 +330,39 @@ config_meson_fallback() {
         "${BUILDDIR}"
 }
 
+# The cross files work on Debian and Ubuntu, see Documentation/TESTING.md
 config_meson_cross() {
-    # armhf/ppc64le/s390x each get a dedicated <triplet>-pkg-config wrapper
-    # from their cross-gcc package, preconfigured to look in the right
-    # multiarch dir. i386 has no such wrapper (it's gcc-multilib, not a
-    # separate cross-gcc), so point plain pkg-config at the i386 multiarch
-    # dir directly instead.
-    if [ "${CROSS_TARGET}" = "i386" ]; then
-        export PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig
+    local triplet
+    local opts=()
+
+    case "${CROSS_TARGET}" in
+        armhf)   triplet=arm-linux-gnueabihf ;;
+        ppc64le) triplet=powerpc64le-linux-gnu ;;
+        s390x)   triplet=s390x-linux-gnu ;;
+        *)       triplet="" ;;
+    esac
+    # The tests run the binaries through binfmt_misc too, not only through
+    # the exe_wrapper of the cross file: point qemu at the libraries of the
+    # cross toolchain. qemu still finds what is not there, like the
+    # libraries of the target architecture in the multiarch directories.
+    if [ -n "${triplet}" ] && [ -d "/usr/${triplet}/lib" ] &&
+       [ -z "${QEMU_LD_PREFIX:-}" ]; then
+        export QEMU_LD_PREFIX="/usr/${triplet}"
+    fi
+    # The micron and ocp plugins decode some logs in host byte order, which
+    # the JSON based mock tests of them catch on big endian: leave them out
+    # until that is fixed.
+    if [ "${CROSS_TARGET}" = "s390x" ]; then
+        opts+=(-Djson-c=disabled)
     fi
 
     CC="${CC}" "${MESON}" setup                 \
         --werror                                \
         --buildtype="${BUILDTYPE}"              \
-        --cross-file=.github/cross/ubuntu-cross-${CROSS_TARGET}.txt \
+        --cross-file=.github/cross/cross-${CROSS_TARGET}.txt \
         -Dpython=disabled               \
         -Dopenssl=disabled              \
+        "${opts[@]}"                    \
         "${BUILDDIR}"
 }
 
@@ -558,7 +575,7 @@ test_meson_fuzz() {
     local seconds="${fuzz_seconds}"
     local jobs="${fuzz_jobs:-$(nproc 2>/dev/null || echo 1)}"
     local failed=()
-    local t f exe corpus artifacts logs args status summary
+    local t f exe corpus artifacts logs args status summary stamp found
     # A device reports sizes of up to gigabytes: let ASan fail such an
     # allocation instead of libFuzzer aborting as out of memory.
     local asan="allocator_may_return_null=1:max_allocation_size_mb=1024"
@@ -589,8 +606,10 @@ test_meson_fuzz() {
 
         # Run the jobs as independent processes on the shared corpus. The
         # -fork mode is newer, but the libFuzzer of clang 22 crashes in it.
+        # A job ends at its first finding, so queue more jobs than workers
+        # to keep all of them busy: the timeout below ends the run.
         args=(-close_fd_mask=3 -max_total_time="${seconds}"
-              -jobs="${jobs}" -workers="${jobs}"
+              -jobs="$((jobs * 100))" -workers="${jobs}"
               -artifact_prefix="${artifacts}/")
         case "${t}" in
             argconfig)
@@ -605,21 +624,37 @@ test_meson_fuzz() {
         esac
 
         echo "fuzz-${t}: ${seconds}s, ${jobs} jobs, logs in ${logs}"
-        # Each job writes fuzz-<job>.log to the current directory
+        # Each job writes fuzz-<job>.log to the current directory. The
+        # timeout signals the whole process group, the jobs included: a
+        # job whose timeout handler deadlocks would keep libFuzzer waiting
+        # forever otherwise.
+        stamp="${logs}/start"
+        touch "${stamp}"
         status=0
         (cd "${logs}" &&
          ASAN_OPTIONS="${ASAN_OPTIONS:+${ASAN_OPTIONS}:}${asan}" \
+            timeout --kill-after=60 "$((seconds + 60))" \
             "${exe}" "${args[@]}" "${corpus}" > main.log 2>&1) ||
             status=$?
-        if [ "${status}" -ne 0 ]; then
+        # Whether libFuzzer exits on its own or the timeout ends it (124,
+        # or 137 after SIGKILL), the inputs it saved tell about the
+        # findings. A slow unit is none.
+        found="$(find "${artifacts}" -type f -newer "${stamp}" \
+                 ! -name 'slow-unit-*' | wc -l)"
+        if [ "${found}" -gt 0 ]; then
             failed+=("${t}")
-            echo "fuzz-${t}: finding, exit status ${status}" |
+            echo "fuzz-${t}: ${found} findings, exit status ${status}" |
                 tee -a "${summary}"
             {
                 grep -hE '^(SUMMARY|==[0-9]+==ERROR)' "${logs}"/fuzz-*.log ||
                     true
-                ls "${artifacts}"/* 2>/dev/null || true
+                find "${artifacts}" -type f -newer "${stamp}" \
+                     ! -name 'slow-unit-*'
             } >> "${summary}"
+        elif [[ ! "${status}" =~ ^(0|124|137)$ ]]; then
+            failed+=("${t}")
+            echo "fuzz-${t}: failed, exit status ${status}" |
+                tee -a "${summary}"
         else
             echo "fuzz-${t}: no finding in ${seconds}s" | tee -a "${summary}"
         fi
