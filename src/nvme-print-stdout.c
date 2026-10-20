@@ -2481,6 +2481,7 @@ static void stdout_feat_perfc_id_list(struct nvme_perf_attr_id_list *data)
 
 static void stdout_feat_perfc_vs(struct nvme_vs_perf_attr *data)
 {
+	__u16 attrl = le16_to_cpu(data->attrl);
 	struct shr_table *t;
 
 	t = stdout_kv_table_create();
@@ -2489,12 +2490,13 @@ static void stdout_feat_perfc_vs(struct nvme_vs_perf_attr *data)
 
 	stdout_kv_add(t, "performance attribute identifier (PAID)", "%s",
 		      shr_uuid_to_string(data->paid));
-	stdout_kv_add(t, "attribute length (ATTRL)", "%u", data->attrl);
+	stdout_kv_add(t, "attribute length (ATTRL)", "%u", attrl);
 
 	stdout_kv_table_finish(t, "feat-perfc-vs");
 
 	printf("vendor specific (VS):\n");
-	d((unsigned char *)data->vs, data->attrl, 16, 1);
+	d((unsigned char *)data->vs,
+	  min_t(size_t, attrl, sizeof(data->vs)), 16, 1);
 }
 
 static void stdout_feat_perfc(unsigned int result,
@@ -2533,8 +2535,9 @@ static void stdout_feat_perfc(unsigned int result,
 static void stdout_host_metadata(enum nvme_features_id fid,
 				 struct nvme_host_metadata *data)
 {
-	struct nvme_metadata_element_desc *desc = &data->descs[0];
-	__u8 *end = (__u8 *)data + sizeof(*data);
+	struct nvme_metadata_element_desc desc;
+	const __u8 *val;
+	size_t off = 0;
 	int i;
 	__u16 len;
 	struct shr_table *t;
@@ -2548,10 +2551,9 @@ static void stdout_host_metadata(enum nvme_features_id fid,
 	stdout_kv_table_finish(t, "host-metadata");
 
 	for (i = 0; i < data->ndesc; i++) {
-		/* the descriptors and their values end with the structure */
-		if (desc->val > end)
+		val = nvme_host_metadata_element(data, &off, &desc, &len);
+		if (!val)
 			break;
-		len = min_t(size_t, le16_to_cpu(desc->len), end - desc->val);
 
 		printf("\tElement[%-3d]:\n", i);
 
@@ -2560,16 +2562,14 @@ static void stdout_host_metadata(enum nvme_features_id fid,
 			return;
 
 		shr_table_set_indent(t, 2);
-		stdout_kv_add(t, "Type", "%#02x (%s)", desc->type,
+		stdout_kv_add(t, "Type", "%#02x (%s)", desc.type,
 			      nvme_host_metadata_type_to_string(fid,
-								 desc->type));
-		stdout_kv_add(t, "Revision", "%d", desc->rev);
-		stdout_kv_add(t, "Length", "%d", le16_to_cpu(desc->len));
-		stdout_kv_add(t, "Value", "%.*s", len, (char *)desc->val);
+								 desc.type));
+		stdout_kv_add(t, "Revision", "%d", desc.rev);
+		stdout_kv_add(t, "Length", "%d", le16_to_cpu(desc.len));
+		stdout_kv_add(t, "Value", "%.*s", len, (const char *)val);
 
 		stdout_kv_table_finish(t, "host-metadata");
-
-		desc = (struct nvme_metadata_element_desc *)&desc->val[len];
 	}
 }
 
@@ -2617,7 +2617,7 @@ void stdout_feature_show_fields(enum nvme_features_id fid, unsigned int result,
 	const char *async = "Send async event";
 	const char *no_async = "Do not send async event";
 	struct shr_table *t;
-	__u8 field;
+	__u16 field;
 
 	switch (fid) {
 	case NVME_FEAT_FID_ARBITRATION:
@@ -3245,7 +3245,10 @@ static void stdout_lba_status(struct nvme_lba_status *list,
 	};
 	struct shr_table *t;
 	__u32 nlsd = le32_to_cpu(list->nlsd);
-	int idx, row;
+	size_t nr = nvme_log_nr_entries(nlsd, len, sizeof(*list),
+					sizeof(list->descs[0]));
+	size_t idx;
+	int row;
 
 	t = stdout_kv_table_create();
 	if (!t)
@@ -3275,14 +3278,14 @@ static void stdout_lba_status(struct nvme_lba_status *list,
 		break;
 	}
 
-	if (!nlsd)
+	if (!nr)
 		return;
 
 	t = shr_table_init_with_columns(columns, ARRAY_SIZE(columns));
 	if (!t)
 		return;
 
-	for (idx = 0; idx < nlsd; idx++) {
+	for (idx = 0; idx < nr; idx++) {
 		struct nvme_lba_status_desc *e = &list->descs[idx];
 		char dslba[24], nlb[16], status[8];
 

@@ -2460,6 +2460,7 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 	uint32_t dalb = 0;
 	bool ctrl_init = (type == NVME_LOG_LID_TELEMETRY_CTRL);
 	struct nvme_telemetry_log *log = libnvme_alloc(bs);
+	void *p;
 
 	if (!log) {
 		nvme_show_error("Failed to allocate memory for %s telemetry log header",
@@ -2509,12 +2510,14 @@ static int micron_telemetry_log(struct libnvme_transport_handle *hdl, __u8 type,
 	}
 
 	*logSize = (dalb + 1) * bs;
-	log = libnvme_realloc(log, (size_t)(*logSize));
-	if (!log) {
+	p = libnvme_realloc(log, (size_t)(*logSize));
+	if (!p) {
 		nvme_show_error("Failed to allocate memory for %s telemetry data (%u bytes)",
 			ctrl_init ? "controller" : "host", *logSize);
+		libnvme_free(log);
 		return -ENOMEM;
 	}
+	log = p;
 
 	if (ctrl_init) {
 		nvme_init_get_log_telemetry_ctrl(&cmd, bs, (__u8 *)log + bs, *logSize - bs);
@@ -4610,18 +4613,21 @@ static struct command vs_pcie_stats_cmd = {
 	.help = "Retrieve Micron PCIe error stats",
 	.fn = micron_pcie_stats,
 	.output_formats = NORMAL | JSON,
+	.needs_root = true,
 };
 
 static struct command clear_pcie_correctable_errors_cmd = {
 	.name = "clear-pcie-correctable-errors",
 	.help = "Clear correctable PCIe errors",
 	.fn = micron_clear_pcie_correctable_errors,
+	.needs_root = true,
 };
 
 static struct command vs_internal_log_cmd = {
 	.name = "vs-internal-log",
 	.help = "Retrieve Micron logs",
 	.fn = micron_internal_logs,
+	.needs_root = true,
 };
 
 static struct command vs_telemetry_controller_option_cmd = {
@@ -4656,6 +4662,7 @@ static struct command plugin_version_cmd = {
 	.help = "Display plugin version info",
 	.fn = micron_plugin_version,
 	.device = COMMAND_NO_DEVICE,
+	.needs_root = true,
 };
 
 static struct command cloud_ssd_plugin_version_cmd = {
@@ -4663,6 +4670,7 @@ static struct command cloud_ssd_plugin_version_cmd = {
 	.help = "Display plugin version info",
 	.fn = micron_cloud_ssd_plugin_version,
 	.device = COMMAND_NO_DEVICE,
+	.needs_root = true,
 };
 
 static struct command log_page_directory_cmd = {

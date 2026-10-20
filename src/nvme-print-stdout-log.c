@@ -685,16 +685,13 @@ void stdout_persistent_event_log(void *pevent_log_info, __u8 action, __u32 size,
 	printf("\n");
 	printf("\nPersistent Event Entries:\n");
 	for (int i = 0; i < le32_to_cpu(pevent_log_head->tnev); i++) {
-		if (offset + sizeof(*pevent_entry_head) > size)
+		pevent_entry_head = nvme_pel_event(pevent_log_info, size,
+						   offset);
+		if (!pevent_entry_head)
 			break;
 
-		pevent_entry_head = pevent_log_info + offset;
 		vsil = le16_to_cpu(pevent_entry_head->vsil);
 		el = le16_to_cpu(pevent_entry_head->el);
-
-		if (vsil > el ||
-		    offset + pevent_entry_head->ehl + 3 + el > size)
-			break;
 
 		nvme_show_pel_event_header(i, pevent_entry_head, verbose);
 
@@ -1124,9 +1121,9 @@ static struct shr_table *stdout_phy_rx_eom_odp_table(uint8_t odp)
 	return t;
 }
 
-static void stdout_eom_printable_eye(struct nvme_eom_lane_desc *lane)
+static void stdout_eom_printable_eye(const struct nvme_eom_lane_desc *lane,
+				     const unsigned char *eye)
 {
-	char *eye = (char *)lane->eye_desc;
 	size_t nrows = le16_to_cpu(lane->nrows);
 	size_t ncols = le16_to_cpu(lane->ncols);
 	size_t i, j;
@@ -1142,11 +1139,11 @@ static void stdout_eom_printable_eye(struct nvme_eom_lane_desc *lane)
 static void stdout_phy_rx_eom_descs(struct nvme_phy_rx_eom_log *log, size_t len)
 {
 	struct eom_desc_iter it;
-	struct nvme_eom_lane_desc *desc;
+	struct nvme_eom_lane_desc desc;
 
 	eom_desc_iter_init(&it, log, len);
 
-	while ((desc = eom_desc_iter_next(&it))) {
+	while (eom_desc_iter_next(&it, &desc)) {
 		unsigned char *vsdata;
 		uint16_t vsdatalen;
 		struct shr_table *t;
@@ -1156,27 +1153,29 @@ static void stdout_phy_rx_eom_descs(struct nvme_phy_rx_eom_log *log, size_t len)
 			return;
 
 		stdout_kv_add(t, "Measurement Status", "%s",
-			      desc->mstatus ? "Successful" : "Not Successful");
-		stdout_kv_add(t, "Lane", "%u", desc->lane);
-		stdout_kv_add(t, "Eye", "%u", desc->eye);
-		stdout_kv_add(t, "Top", "%u", le16_to_cpu(desc->top));
-		stdout_kv_add(t, "Bottom", "%u", le16_to_cpu(desc->bottom));
-		stdout_kv_add(t, "Left", "%u", le16_to_cpu(desc->left));
-		stdout_kv_add(t, "Right", "%u", le16_to_cpu(desc->right));
+			      desc.mstatus ? "Successful" : "Not Successful");
+		stdout_kv_add(t, "Lane", "%u", desc.lane);
+		stdout_kv_add(t, "Eye", "%u", desc.eye);
+		stdout_kv_add(t, "Top", "%u", le16_to_cpu(desc.top));
+		stdout_kv_add(t, "Bottom", "%u", le16_to_cpu(desc.bottom));
+		stdout_kv_add(t, "Left", "%u", le16_to_cpu(desc.left));
+		stdout_kv_add(t, "Right", "%u", le16_to_cpu(desc.right));
 		stdout_kv_add(t, "Number of Rows", "%u",
-			      le16_to_cpu(desc->nrows));
+			      le16_to_cpu(desc.nrows));
 		stdout_kv_add(t, "Number of Columns", "%u",
-			      le16_to_cpu(desc->ncols));
-		stdout_kv_add(t, "Eye Data Length", "%u", desc->edlen);
+			      le16_to_cpu(desc.ncols));
+		stdout_kv_add(t, "Eye Data Length", "%u",
+			      le16_to_cpu(desc.edlen));
 
 		stdout_kv_table_finish(t, "phy-rx-eom-descs");
 
-		vsdata = eom_desc_iter_vsdata(&it, desc, &vsdatalen);
+		vsdata = eom_desc_iter_vsdata(&it, &desc, &vsdatalen);
 		if (!vsdata)
 			continue;
 
 		if (NVME_EOM_ODP_PEFP(log->odp))
-			stdout_eom_printable_eye(desc);
+			stdout_eom_printable_eye(&desc,
+						 eom_desc_iter_eye(&it));
 
 		/* Eye Data field is vendor specific */
 		if (vsdatalen == 0)
