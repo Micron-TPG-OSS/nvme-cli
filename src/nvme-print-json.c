@@ -1649,13 +1649,12 @@ static void json_add_bitmap(int i, __u8 seb, struct json_object *r)
 	char key[128];
 
 	for (int bit = 0; bit < CHAR_BIT; bit++) {
-		if (nvme_pel_event_to_string(bit + i * CHAR_BIT)) {
-			sprintf(key, "bitmap_%x", (bit + i * CHAR_BIT));
-			if ((seb >> bit) & 0x1)
-				snprintf(evt_str, sizeof(evt_str), "Support %s",
-					 nvme_pel_event_to_string(bit + i * CHAR_BIT));
-			obj_add_str(r, key, evt_str);
-		}
+		if (!((seb >> bit) & 0x1))
+			continue;
+		sprintf(key, "bitmap_%x", (bit + i * CHAR_BIT));
+		snprintf(evt_str, sizeof(evt_str), "Support %s",
+			 nvme_pel_event_to_string(bit + i * CHAR_BIT));
+		obj_add_str(r, key, evt_str);
 	}
 }
 
@@ -5889,7 +5888,8 @@ bool json_empty(struct json_object *obj)
 
 void json_show_finish(void)
 {
-	if (--json_init)
+	/* nvme_main() finishes even if no command started a document */
+	if (!json_init || --json_init)
 		return;
 
 	if (!json_empty(json_r))
