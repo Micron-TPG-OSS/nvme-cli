@@ -504,16 +504,14 @@ void nvme_show_pel_sanitize_completion_event(void *pevent_log_info,
 	stdout_kv_table_finish(t, "pel-sanitize-completion-event");
 }
 
-void nvme_show_pel_set_feature_event(void *pevent_log_info, __u32 offset)
+void nvme_show_pel_set_feature_event(void *data, __u32 len)
 {
-	int fid, cdw11, cdw12, dword_cnt;
-	unsigned char *mem_buf;
-	struct nvme_set_feature_event *set_feat_event =
-		pevent_log_info + offset;
+	int fid, cdw11, cdw12;
+	__cleanup_free unsigned char *mem_buf = NULL;
+	struct nvme_set_feature_event *set_feat_event = data;
 	struct shr_table *t;
 
 	printf("Set Feature Event Entry:\n");
-	dword_cnt = NVME_SET_FEAT_EVENT_DW_COUNT(set_feat_event->layout);
 	fid = NVME_GET(le32_to_cpu(set_feat_event->cdw_mem[0]),
 		       SET_FEATURES_CDW10_FID);
 	cdw11 = le32_to_cpu(set_feat_event->cdw_mem[1]);
@@ -527,10 +525,9 @@ void nvme_show_pel_set_feature_event(void *pevent_log_info, __u32 offset)
 
 	stdout_kv_table_finish(t, "pel-set-feature-event");
 
-	if (!NVME_SET_FEAT_EVENT_MB_COUNT(set_feat_event->layout))
+	mem_buf = nvme_pel_set_feature_data(data, len);
+	if (!mem_buf)
 		return;
-
-	mem_buf = (unsigned char *)set_feat_event + 4 + dword_cnt * 4;
 	if (fid == NVME_FEAT_FID_FDP_EVENTS) {
 		cdw12 = le32_to_cpu(set_feat_event->cdw_mem[2]);
 		stdout_persistent_event_log_fdp_events(cdw11, cdw12, mem_buf);
@@ -737,7 +734,7 @@ void stdout_persistent_event_log(void *pevent_log_info, __u8 action, __u32 size,
 			nvme_show_pel_sanitize_completion_event(data, 0);
 			break;
 		case NVME_PEL_SET_FEATURE_EVENT:
-			nvme_show_pel_set_feature_event(data, 0);
+			nvme_show_pel_set_feature_event(data, el - vsil);
 			break;
 		case NVME_PEL_TELEMETRY_CRT:
 			if (el >= 512)
@@ -1322,7 +1319,7 @@ static struct shr_table *stdout_fdp_config_fdpa_table(uint8_t fdpa)
 }
 
 static struct shr_table *stdout_fdp_config_ruh_list_table(
-		struct nvme_fdp_config_desc *config, uint16_t nruh)
+		struct nvme_fdp_ruh_desc *ruhs, uint16_t nruh)
 {
 	struct shr_table *t;
 
@@ -1333,7 +1330,7 @@ static struct shr_table *stdout_fdp_config_ruh_list_table(
 	shr_table_set_indent(t, 2);
 
 	for (int j = 0; j < nruh; j++) {
-		struct nvme_fdp_ruh_desc *ruh = &config->ruhs[j];
+		struct nvme_fdp_ruh_desc *ruh = &ruhs[j];
 		const char *ruht_str;
 		char name[16];
 
@@ -1365,50 +1362,53 @@ void stdout_fdp_configs(struct nvme_fdp_config_log *log, size_t len)
 	n = le16_to_cpu(log->n) + 1;
 
 	for (int i = 0; i < n; i++) {
-		struct nvme_fdp_config_desc *config =
-			(struct nvme_fdp_config_desc *)p;
+		struct nvme_fdp_config_desc config;
+		struct nvme_fdp_ruh_desc *ruhs;
 		uint16_t size, nruh, max_nruh;
 
-		if (!shr_buf_has_room(p, end, sizeof(*config)))
+		if (!shr_buf_has_room(p, end, sizeof(config)))
 			break;
+
+		/* descriptors are only 4 byte aligned */
+		memcpy(&config, p, sizeof(config));
+		ruhs = (struct nvme_fdp_ruh_desc *)(p + sizeof(config));
 
 		t = stdout_kv_table_create();
 		if (!t)
 			return;
 
-		row = stdout_kv_add(t, "FDP Attributes", "%#x", config->fdpa);
+		row = stdout_kv_add(t, "FDP Attributes", "%#x", config.fdpa);
 		if (verbose)
 			shr_table_set_row_subtable(t, row,
-				stdout_fdp_config_fdpa_table(config->fdpa));
+				stdout_fdp_config_fdpa_table(config.fdpa));
 
-		stdout_kv_add(t, "Vendor Specific Size", "%u", config->vss);
+		stdout_kv_add(t, "Vendor Specific Size", "%u", config.vss);
 		stdout_kv_add(t, "Number of Reclaim Groups", "%"PRIu32,
-			      le32_to_cpu(config->nrg));
+			      le32_to_cpu(config.nrg));
 		stdout_kv_add(t, "Number of Reclaim Unit Handles", "%"PRIu16,
-			      le16_to_cpu(config->nruh));
+			      le16_to_cpu(config.nruh));
 		stdout_kv_add(t, "Number of Namespaces Supported", "%"PRIu32,
-			      le32_to_cpu(config->nnss));
+			      le32_to_cpu(config.nnss));
 		stdout_kv_add(t, "Reclaim Unit Nominal Size", "%"PRIu64,
-			      le64_to_cpu(config->runs));
+			      le64_to_cpu(config.runs));
 		stdout_kv_add(t, "Estimated Reclaim Unit Time Limit", "%"PRIu32,
-			      le32_to_cpu(config->erutl));
+			      le32_to_cpu(config.erutl));
 
-		size = le16_to_cpu(config->size);
-		if (size < sizeof(*config) || !shr_buf_has_room(p, end, size)) {
+		size = le16_to_cpu(config.size);
+		if (size < sizeof(config) || !shr_buf_has_room(p, end, size)) {
 			stdout_kv_table_finish(t, "fdp-configs");
 			break;
 		}
 
-		nruh = le16_to_cpu(config->nruh);
-		max_nruh = (size - sizeof(*config)) /
-			   sizeof(struct nvme_fdp_ruh_desc);
+		nruh = le16_to_cpu(config.nruh);
+		max_nruh = (size - sizeof(config)) / sizeof(*ruhs);
 		if (nruh > max_nruh)
 			nruh = max_nruh;
 
 		if (nruh) {
 			row = stdout_kv_add(t, "Reclaim Unit Handle List", "");
 			shr_table_set_row_subtable(t, row,
-				stdout_fdp_config_ruh_list_table(config, nruh));
+				stdout_fdp_config_ruh_list_table(ruhs, nruh));
 		}
 
 		stdout_kv_table_finish(t, "fdp-configs");
@@ -2343,9 +2343,10 @@ void stdout_ana_log(struct nvme_ana_log *ana_log, const char *devname,
 {
 	size_t offset = sizeof(struct nvme_ana_log);
 	struct nvme_ana_log *hdr = ana_log;
-	struct nvme_ana_group_desc *desc;
+	struct nvme_ana_group_desc desc;
 	size_t nsid_buf_size;
 	void *base = ana_log;
+	__le32 *nsids;
 	__u32 nr_nsids;
 	struct shr_table *t;
 	int i, j;
@@ -2366,29 +2367,31 @@ void stdout_ana_log(struct nvme_ana_log *ana_log, const char *devname,
 	printf("ANA Log Desc :-\n");
 
 	for (i = 0; i < le16_to_cpu(ana_log->ngrps); i++) {
-		if (offset > len || len - offset < sizeof(*desc))
+		if (offset > len || len - offset < sizeof(desc))
 			return;
-		desc = base + offset;
-		nr_nsids = le32_to_cpu(desc->nnsids);
+		/* descriptors are only 4 byte aligned */
+		memcpy(&desc, base + offset, sizeof(desc));
+		nr_nsids = le32_to_cpu(desc.nnsids);
 		nsid_buf_size = (size_t)nr_nsids * sizeof(__le32);
-		if (len - offset - sizeof(*desc) < nsid_buf_size)
+		if (len - offset - sizeof(desc) < nsid_buf_size)
 			return;
 
-		offset += sizeof(*desc);
+		offset += sizeof(desc);
+		nsids = base + offset;
 
 		t = stdout_kv_table_create();
 		if (!t)
 			return;
 
-		stdout_kv_add(t, "grpid", "%u", le32_to_cpu(desc->grpid));
-		stdout_kv_add(t, "nnsids", "%u", le32_to_cpu(desc->nnsids));
+		stdout_kv_add(t, "grpid", "%u", le32_to_cpu(desc.grpid));
+		stdout_kv_add(t, "nnsids", "%u", le32_to_cpu(desc.nnsids));
 		stdout_kv_add(t, "chgcnt", "%"PRIu64,
-			      le64_to_cpu(desc->chgcnt));
+			      le64_to_cpu(desc.chgcnt));
 		stdout_kv_add(t, "state", "%s",
-			      nvme_ana_state_to_string(desc->state));
+			      nvme_ana_state_to_string(desc.state));
 		for (j = 0; j < nr_nsids; j++)
 			stdout_kv_add(t, "nsid", "%u",
-				      le32_to_cpu(desc->nsids[j]));
+				      le32_to_cpu(nsids[j]));
 
 		stdout_kv_table_finish(t, "ana-log group");
 
@@ -2717,9 +2720,9 @@ void stdout_host_discovery_log(struct nvme_host_discovery_log *log, __u64 len)
 {
 	__u64 i;
 	__u16 j;
-	struct nvme_host_ext_discovery_log *hedlpe;
-	struct nvmf_ext_attr *exat;
-	void *p;
+	struct nvme_host_ext_discovery_log hedlpe;
+	struct nvmf_ext_attr exat;
+	void *rec, *p;
 	__u32 thdlpl = le32_to_cpu(log->thdlpl);
 	__u32 tel;
 	__u16 numexat;
@@ -2739,43 +2742,44 @@ void stdout_host_discovery_log(struct nvme_host_discovery_log *log, __u64 len)
 	stdout_kv_table_finish(t, "host-discovery-log");
 
 	for (i = sizeof(*log);
-	     (hedlpe = nvme_host_discovery_record(log, len, i)); i += tel) {
+	     (rec = nvme_host_discovery_record(log, len, i)); i += tel) {
+		memcpy(&hedlpe, rec, sizeof(hedlpe));
 		printf("hedlpe: %d\n", n++);
-		tel = le32_to_cpu(hedlpe->tel);
-		numexat = le16_to_cpu(hedlpe->numexat);
+		tel = le32_to_cpu(hedlpe.tel);
+		numexat = le16_to_cpu(hedlpe.numexat);
 
 		t = stdout_kv_table_create();
 		if (!t)
 			return;
 
 		stdout_kv_add(t, "trtype", "%s",
-			      libnvmf_trtype_str(hedlpe->trtype));
+			      libnvmf_trtype_str(hedlpe.trtype));
 		stdout_kv_add(t, "adrfam", "%s",
-			      hedlpe->traddr[0] ?
-			      libnvmf_adrfam_str(hedlpe->adrfam) : "");
+			      hedlpe.traddr[0] ?
+			      libnvmf_adrfam_str(hedlpe.adrfam) : "");
 		stdout_kv_add(t, "eflags", "%s",
-			      libnvmf_eflags_str(le16_to_cpu(hedlpe->eflags)));
+			      libnvmf_eflags_str(le16_to_cpu(hedlpe.eflags)));
 		stdout_kv_add(t, "hostnqn", "%-.*s",
-			      (int)sizeof(hedlpe->hostnqn), hedlpe->hostnqn);
+			      (int)sizeof(hedlpe.hostnqn), hedlpe.hostnqn);
 		stdout_kv_add(t, "traddr", "%-.*s",
-			      (int)sizeof(hedlpe->traddr), hedlpe->traddr);
-		switch (hedlpe->trtype) {
+			      (int)sizeof(hedlpe.traddr), hedlpe.traddr);
+		switch (hedlpe.trtype) {
 		case NVMF_TRTYPE_RDMA:
 			stdout_kv_add(t, "tsas.prtype", "%s",
 				      libnvmf_prtype_str(
-						hedlpe->tsas.rdma.prtype));
+						hedlpe.tsas.rdma.prtype));
 			stdout_kv_add(t, "tsas.qptype", "%s",
 				      libnvmf_qptype_str(
-						hedlpe->tsas.rdma.qptype));
+						hedlpe.tsas.rdma.qptype));
 			stdout_kv_add(t, "tsas.cms", "%s",
-				      libnvmf_cms_str(hedlpe->tsas.rdma.cms));
+				      libnvmf_cms_str(hedlpe.tsas.rdma.cms));
 			stdout_kv_add(t, "tsas.pkey", "0x%04x",
-				      le16_to_cpu(hedlpe->tsas.rdma.pkey));
+				      le16_to_cpu(hedlpe.tsas.rdma.pkey));
 			break;
 		case NVMF_TRTYPE_TCP:
 			stdout_kv_add(t, "tsas.sectype", "%s",
 				      libnvmf_sectype_str(
-						hedlpe->tsas.tcp.sectype));
+						hedlpe.tsas.tcp.sectype));
 			break;
 		default:
 			stdout_kv_add(t, "tsas.common", "");
@@ -2786,14 +2790,14 @@ void stdout_host_discovery_log(struct nvme_host_discovery_log *log, __u64 len)
 
 		stdout_kv_table_finish(t, "host-discovery-log");
 
-		if (hedlpe->trtype != NVMF_TRTYPE_RDMA &&
-		    hedlpe->trtype != NVMF_TRTYPE_TCP)
-			d((unsigned char *)hedlpe->tsas.common,
-			  sizeof(hedlpe->tsas.common), 16, 1);
+		if (hedlpe.trtype != NVMF_TRTYPE_RDMA &&
+		    hedlpe.trtype != NVMF_TRTYPE_TCP)
+			d((unsigned char *)hedlpe.tsas.common,
+			  sizeof(hedlpe.tsas.common), 16, 1);
 
-		p = hedlpe->exat;
+		p = rec + sizeof(hedlpe);
 		for (j = 0; j < numexat &&
-		     (exat = nvme_host_discovery_exat(hedlpe, p)); j++) {
+		     (p = nvme_host_discovery_exat(rec, tel, p, &exat)); j++) {
 			printf("exat: %d\n", j);
 
 			t = stdout_kv_table_create();
@@ -2801,16 +2805,16 @@ void stdout_host_discovery_log(struct nvme_host_discovery_log *log, __u64 len)
 				return;
 
 			stdout_kv_add(t, "exattype", "%u",
-				      le16_to_cpu(exat->exattype));
+				      le16_to_cpu(exat.exattype));
 			stdout_kv_add(t, "exatlen", "%u",
-				      le16_to_cpu(exat->exatlen));
+				      le16_to_cpu(exat.exatlen));
 
 			stdout_kv_table_finish(t, "host-discovery-log");
 
 			printf("exatval:\n");
-			d((unsigned char *)exat->exatval,
-			  le16_to_cpu(exat->exatlen), 16, 1);
-			p = libnvmf_exat_ptr_next(exat);
+			d((unsigned char *)p + sizeof(exat),
+			  le16_to_cpu(exat.exatlen), 16, 1);
+			p = nvme_host_discovery_exat_next(p, &exat);
 		}
 	}
 }
@@ -2841,8 +2845,9 @@ void stdout_ave_discovery_log(struct nvme_ave_discovery_log *log, __u64 len)
 {
 	__u64 i;
 	__u8 j;
-	struct nvme_ave_discovery_log_entry *adlpe;
-	struct nvme_ave_tr_record *atr;
+	struct nvme_ave_discovery_log_entry adlpe;
+	struct nvme_ave_tr_record atr;
+	void *rec;
 	__u32 tadlpl = le32_to_cpu(log->tadlpl);
 	__u32 tel;
 	__u8 numatr;
@@ -2861,10 +2866,11 @@ void stdout_ave_discovery_log(struct nvme_ave_discovery_log *log, __u64 len)
 	stdout_kv_table_finish(t, "ave-discovery-log");
 
 	for (i = sizeof(*log);
-	     (adlpe = nvme_ave_discovery_record(log, len, i)); i += tel) {
+	     (rec = nvme_ave_discovery_record(log, len, i)); i += tel) {
+		memcpy(&adlpe, rec, sizeof(adlpe));
 		printf("adlpe: %d\n", n++);
-		tel = le32_to_cpu(adlpe->tel);
-		numatr = adlpe->numatr;
+		tel = le32_to_cpu(adlpe.tel);
+		numatr = adlpe.numatr;
 
 		t = stdout_kv_table_create();
 		if (!t)
@@ -2872,16 +2878,17 @@ void stdout_ave_discovery_log(struct nvme_ave_discovery_log *log, __u64 len)
 
 		stdout_kv_add(t, "tel", "%u", tel);
 		stdout_kv_add(t, "avenqn", "%-.*s",
-			      (int)sizeof(adlpe->avenqn), adlpe->avenqn);
+			      (int)sizeof(adlpe.avenqn), adlpe.avenqn);
 		stdout_kv_add(t, "numatr", "%u", numatr);
 
 		stdout_kv_table_finish(t, "ave-discovery-log");
 
 		/* the transport records must fit the record */
-		numatr = nvme_log_nr_entries(numatr, tel, sizeof(*adlpe),
-					     sizeof(*atr));
-		atr = adlpe->atr;
+		numatr = nvme_log_nr_entries(numatr, tel, sizeof(adlpe),
+					     sizeof(atr));
 		for (j = 0; j < numatr; j++) {
+			memcpy(&atr, rec + sizeof(adlpe) + j * sizeof(atr),
+			       sizeof(atr));
 			printf("atr: %d\n", j);
 
 			t = stdout_kv_table_create();
@@ -2889,15 +2896,13 @@ void stdout_ave_discovery_log(struct nvme_ave_discovery_log *log, __u64 len)
 				return;
 
 			stdout_kv_add(t, "aveadrfam", "%s",
-				      libnvmf_adrfam_str(atr->aveadrfam));
+				      libnvmf_adrfam_str(atr.aveadrfam));
 			stdout_kv_add(t, "avetrsvcid", "%u",
-				      le16_to_cpu(atr->avetrsvcid));
-			stdout_kv_add_traddr(t, "avetraddr", atr->aveadrfam,
-					     atr->avetraddr);
+				      le16_to_cpu(atr.avetrsvcid));
+			stdout_kv_add_traddr(t, "avetraddr", atr.aveadrfam,
+					     atr.avetraddr);
 
 			stdout_kv_table_finish(t, "ave-discovery-log");
-
-			atr++;
 		}
 	}
 }

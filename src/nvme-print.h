@@ -2,6 +2,7 @@
 #pragma once
 
 #include <inttypes.h>
+#include <stddef.h>
 #include <string.h>
 
 #include <ccan/array_size/array_size.h>
@@ -14,6 +15,7 @@
 #include <shared/mem-util.h>
 #include <shared/table-util.h>
 #include <shared/uint128-util.h>
+#include <shared/unaligned-util.h>
 #include <shared/uuid-util.h>
 
 #define STR_LEN 100
@@ -104,67 +106,134 @@ static inline size_t nvme_log_nr_entries(size_t nr, size_t len, size_t hdr,
 }
 
 /*
+ * The namespace identification descriptor at offset @pos of the list, or
+ * NULL where the list ends: at a descriptor of length 0, or at one which
+ * does not fit into the list. A descriptor takes its header and NIDL bytes.
+ */
+static inline struct nvme_ns_id_desc *nvme_ns_id_desc(void *data, size_t pos)
+{
+	struct nvme_ns_id_desc *cur = data + pos;
+
+	if (pos > NVME_IDENTIFY_DATA_SIZE - sizeof(*cur))
+		return NULL;
+	if (!cur->nidl ||
+	    cur->nidl > NVME_IDENTIFY_DATA_SIZE - pos - sizeof(*cur))
+		return NULL;
+
+	return cur;
+}
+
+/*
+ * Return: the type of the namespace identification descriptor @cur, or 0,
+ * a reserved type, if its length is not the one its type has.
+ */
+static inline __u8 nvme_ns_id_desc_type(const struct nvme_ns_id_desc *cur)
+{
+	__u8 len;
+
+	switch (cur->nidt) {
+	case NVME_NIDT_EUI64:
+		len = NVME_NIDT_EUI64_LEN;
+		break;
+	case NVME_NIDT_NGUID:
+		len = NVME_NIDT_NGUID_LEN;
+		break;
+	case NVME_NIDT_UUID:
+		len = NVME_NIDT_UUID_LEN;
+		break;
+	case NVME_NIDT_CSI:
+		len = NVME_NIDT_CSI_LEN;
+		break;
+	default:
+		return cur->nidt;
+	}
+
+	return cur->nidl == len ? cur->nidt : 0;
+}
+
+/*
  * The host discovery log record at offset @off of a page of @len bytes, or
  * NULL if no whole record starts there. The page ends where its header
  * says or where the buffer ends, whichever comes first. A record must hold
  * at least its fixed part, and its length must not reach past the page.
+ * The length of a record need not be a multiple of 4, so a record need not
+ * be aligned: copy it before reading it.
  */
-static inline struct nvme_host_ext_discovery_log *
+static inline void *
 nvme_host_discovery_record(struct nvme_host_discovery_log *log, __u64 len,
 			   __u64 off)
 {
 	__u64 thdlpl = le32_to_cpu(log->thdlpl);
 	__u64 end = thdlpl < len ? thdlpl : len;
-	struct nvme_host_ext_discovery_log *rec;
+	void *rec;
 	__u32 tel;
 
-	if (off > end || end - off < sizeof(*rec))
+	if (off > end ||
+	    end - off < sizeof(struct nvme_host_ext_discovery_log))
 		return NULL;
 
 	rec = (void *)log + off;
-	tel = le32_to_cpu(rec->tel);
-	if (tel < sizeof(*rec) || tel > end - off)
+	tel = shr_get_unaligned_le32(rec +
+		offsetof(struct nvme_host_ext_discovery_log, tel));
+	if (tel < sizeof(struct nvme_host_ext_discovery_log) ||
+	    tel > end - off)
 		return NULL;
 
 	return rec;
 }
 
 /*
- * The extended attribute at @p of the host discovery log record @rec, or
- * NULL if it, with its value, doesn't fit the record.
+ * The extended attribute at @p of the host discovery log record @rec of
+ * @tel bytes, its header copied to @exat, or NULL if it, with its value,
+ * doesn't fit the record.
  */
-static inline struct nvmf_ext_attr *
-nvme_host_discovery_exat(struct nvme_host_ext_discovery_log *rec, void *p)
+static inline void *
+nvme_host_discovery_exat(void *rec, __u32 tel, void *p,
+			 struct nvmf_ext_attr *exat)
 {
-	void *end = (void *)rec + le32_to_cpu(rec->tel);
-	struct nvmf_ext_attr *exat = p;
+	void *end = rec + tel;
 
-	if (!shr_buf_has_room(p, end, sizeof(*exat)) ||
-	    !shr_buf_has_room(exat->exatval, end, le16_to_cpu(exat->exatlen)))
+	if (!shr_buf_has_room(p, end, sizeof(*exat)))
+		return NULL;
+	memcpy(exat, p, sizeof(*exat));
+	if (!shr_buf_has_room(p + sizeof(*exat), end,
+			      le16_to_cpu(exat->exatlen)))
 		return NULL;
 
-	return exat;
+	return p;
+}
+
+/* The extended attribute behind the one at @p, as libnvmf_exat_ptr_next() */
+static inline void *nvme_host_discovery_exat_next(void *p,
+		const struct nvmf_ext_attr *exat)
+{
+	return p + sizeof(*exat) + ((le16_to_cpu(exat->exatlen) + 3) & ~3);
 }
 
 /*
  * The AVE discovery log record at offset @off of a page of @len bytes, or
  * NULL if no whole record starts there, as nvme_host_discovery_record().
+ * The length of a record need not be a multiple of 4, so a record need not
+ * be aligned: copy it before reading it.
  */
-static inline struct nvme_ave_discovery_log_entry *
+static inline void *
 nvme_ave_discovery_record(struct nvme_ave_discovery_log *log, __u64 len,
 			  __u64 off)
 {
 	__u64 tadlpl = le32_to_cpu(log->tadlpl);
 	__u64 end = tadlpl < len ? tadlpl : len;
-	struct nvme_ave_discovery_log_entry *rec;
+	void *rec;
 	__u32 tel;
 
-	if (off > end || end - off < sizeof(*rec))
+	if (off > end ||
+	    end - off < sizeof(struct nvme_ave_discovery_log_entry))
 		return NULL;
 
 	rec = (void *)log + off;
-	tel = le32_to_cpu(rec->tel);
-	if (tel < sizeof(*rec) || tel > end - off)
+	tel = shr_get_unaligned_le32(rec +
+		offsetof(struct nvme_ave_discovery_log_entry, tel));
+	if (tel < sizeof(struct nvme_ave_discovery_log_entry) ||
+	    tel > end - off)
 		return NULL;
 
 	return rec;
@@ -421,6 +490,15 @@ struct print_ops {
 	void (*show_error_status)(int status, const char *msg, va_list ap);
 	void (*show_key_value)(const char *key, const char *val, va_list ap);
 
+	/*
+	 * A sandboxed printer, see nvme_print_begin(): output which does not
+	 * go to stdout is captured in the child, between capture_begin() and
+	 * capture_end(), and handed to capture_add() in the caller. Optional.
+	 */
+	int (*capture_begin)(void);
+	int (*capture_end)(void **buf, size_t *len);
+	int (*capture_add)(const void *buf, size_t len);
+
 	nvme_print_flags_t flags;
 };
 
@@ -433,6 +511,9 @@ struct print_ops *nvme_get_json_print_ops(nvme_print_flags_t flags);
 static inline struct print_ops *nvme_get_json_print_ops(nvme_print_flags_t flags) { return NULL; }
 
 #endif /* !CONFIG_JSONC */
+
+/* A printer failed in the sandbox */
+bool nvme_show_failed(void);
 
 struct print_ops *nvme_get_stdout_print_ops(nvme_print_flags_t flags);
 struct print_ops *nvme_get_binary_print_ops(nvme_print_flags_t flags);
@@ -881,7 +962,9 @@ void nvme_show_pel_format_start_event(void *pevent_log_info, __u32 offset);
 void nvme_show_pel_format_completion_event(void *pevent_log_info, __u32 offset);
 void nvme_show_pel_sanitize_start_event(void *pevent_log_info, __u32 offset);
 void nvme_show_pel_sanitize_completion_event(void *pevent_log_info, __u32 offset);
-void nvme_show_pel_set_feature_event(void *pevent_log_info, __u32 offset);
+#define NVME_PEL_FEATURE_DATA_SIZE	4096
+void *nvme_pel_set_feature_data(void *data, __u32 len);
+void nvme_show_pel_set_feature_event(void *data, __u32 len);
 void nvme_show_pel_thermal_excursion_event(void *pevent_log_info, __u32 offset);
 void nvme_show_pel_vendor_specific_event(void *pevent_log_info, __u32 offset,
 					 __u32 event_data_len);
@@ -909,9 +992,8 @@ void nvme_json_pel_sanitize_start(void *pevent_log_info, __u32 offset,
 				  struct json_object *valid_attrs);
 void nvme_json_pel_sanitize_completion(void *pevent_log_info, __u32 offset,
 				       struct json_object *valid_attrs);
-void nvme_json_pel_set_feature(void *pevent_log_info, __u32 offset,
-			       struct json_object *valid_attrs,
-			       __le16 el, __u32 size);
+void nvme_json_pel_set_feature(void *data, __u32 len,
+			       struct json_object *valid_attrs);
 void nvme_json_pel_telemetry_crt(void *pevent_log_info, __u32 offset,
 				 struct json_object *valid_attrs,
 				 __le16 el, __u32 size);

@@ -79,6 +79,14 @@ The GitHub Actions workflow uses `scripts/build.sh`. To reproduce the CI build l
 ./scripts/build.sh
 ```
 
+Privilege separation and the decoder sandbox are disabled by default and
+have their own config, which runs the tests as a user (the privsep tests
+skip as root), see [PRIVSEP.md](PRIVSEP.md):
+
+```bash
+./scripts/build.sh privsep
+```
+
 Build artifacts remain inside the container unless a host volume is mounted.
 
 ### 5. Cross-Build Example
@@ -292,55 +300,69 @@ FUZZ_SECONDS=60 FUZZ_SEED=7 meson test -C .build --suite fuzz
 Run in a sanitizer build (see above) they also catch memory errors which
 don't crash.
 
-For longer, coverage guided runs, build the targets for libFuzzer with clang,
-in a sanitizer build as described above:
+For longer, coverage guided runs, `scripts/fuzz/nvme-fuzz` builds the targets
+for libFuzzer with clang, runs them and evaluates what they find:
 
 ```bash
-CC=clang CXX=clang++ meson setup .build-fuzz -Dfuzzing=true \
-    -Db_sanitize=address,undefined -Db_lundef=false
-meson compile -C .build-fuzz
+scripts/fuzz/nvme-fuzz build
+scripts/fuzz/nvme-fuzz run --seconds 3600
+scripts/fuzz/nvme-fuzz run --targets device --jobs 8
+scripts/fuzz/nvme-fuzz triage
 ```
 
-Run a target on a copy of its seeds in the build directory, so the seeds in
-the tree stay as they are. The new inputs libFuzzer finds go to the copy:
+`build` sets up a sanitizer build in `.build-fuzz` (`-C` selects another),
+with `--buildtype=debugoptimized`, so the reports of a finding name the source
+lines. It takes clang for `CC` unless `CC` names one, e.g. `clang-19`, and the
+`clang++` of the same version.
 
-```bash
-mkdir -p .build-fuzz/corpus/argconfig
-cp tests/fuzz/corpus/argconfig/* .build-fuzz/corpus/argconfig/
-.build-fuzz/tests/fuzz/fuzz-argconfig -close_fd_mask=3 \
-    -dict=tests/fuzz/argconfig.dict .build-fuzz/corpus/argconfig
-```
+`run` runs every target in turn, each with one libFuzzer job per CPU on a
+shared corpus, for 600 seconds by default. A finding stops only its job, a
+UBSan finding like a crash; Ctrl-C stops the run. The results are in
+`.build-fuzz/fuzz` (`--results` selects another directory): `summary.txt`, and
+per target the logs of the jobs in `logs/<target>/`, the inputs which found a
+bug in `artifacts/<target>/` and the corpus in `corpus/<target>/`, which starts
+with the seeds and grows across runs. Each run first minimizes the corpus to
+the inputs which add coverage (libFuzzer's `-merge=1`): every job loads all of
+it.
 
-The config targets (`ini`, `global-config`, `fabrics-conf`) use
-`tests/fuzz/config.dict`. The `device` target reads log pages, so give it
-longer inputs. A device reports sizes of up to gigabytes, which nvme-cli
-allocates: let ASan fail such an allocation instead of libFuzzer aborting the
-run as out of memory:
+The `device` target runs in stages of equal time with more device data per
+input in each: 16 KiB, 64 KiB, 256 KiB and 1 MiB, the default of the device
+mock (`--data-limits` selects others). Most data structures fit a page, and an
+input which gets little data runs fast: a megabyte of log entries prints as
+tens of megabytes of text. The mock takes the limit from `FUZZ_DATA_LIMIT`.
+The findings of the target are named after the limit, `data-<limit>-crash-*`,
+and `check` and `triage` replay them with it.
 
-```bash
-mkdir -p .build-fuzz/corpus/device
-cp tests/fuzz/corpus/device/* .build-fuzz/corpus/device/
-ASAN_OPTIONS=allocator_may_return_null=1:max_allocation_size_mb=1024 \
-    .build-fuzz/tests/fuzz/fuzz-device -close_fd_mask=3 -max_len=16384 \
-    -timeout=10 .build-fuzz/corpus/device
-```
+`triage` replays the findings of a target and groups them by the bug they hit:
+the kind of finding and the first nvme-cli frame. For the `device` target, it
+names the command an input runs. `triage --show` prints the stack of each
+input instead, with the source lines also without `llvm-symbolizer`.
 
-`scripts/build.sh fuzz` does all of this for every target in turn, each with
-one libFuzzer job per CPU on a shared corpus, for 600 seconds by default:
+`check` runs inputs once each with halting sanitizers, by default the
+regression inputs of a target, and prints what went wrong. The test suite
+sends the output of the targets to `/dev/null`, so this is the way to see why
+a seed fails, or to show that a new regression input fails without its fix.
 
-```bash
-scripts/build.sh --fuzz-seconds 3600 fuzz
-scripts/build.sh --fuzz-targets device --fuzz-jobs 8 fuzz
-```
+`coverage` shows how far the `device` target gets into each of its commands:
+the edges an input of a command reaches beyond those of a command which only
+identifies the controller. A command which adds few does not get past its
+option parsing, or a check of the device the fuzzer may never pass. It uses
+random device data, or with `--corpus` the inputs of a corpus.
 
-It writes the results to `.build-ci/fuzz`: `summary.txt`, and per target the
-logs of the jobs in `logs/<target>/`, the inputs which found a bug in
-`artifacts/<target>/` and the corpus in `corpus/<target>/`. A finding stops
-only its job, a UBSan finding like a crash. The next run of `build.sh` removes
-the results; pass a `--fuzz-dir` outside of `.build-ci` to keep them, and to
-grow the corpus across runs. `scripts/build.sh -h` lists all options.
+`scripts/build.sh fuzz` builds and runs with `nvme-fuzz` too, in `.build-ci`
+and with its `--fuzz-*` options. It removes the build directory first, the
+results included: pass a `--fuzz-dir` outside of `.build-ci` to grow the
+corpus across runs.
 
-When run by hand, a crashing input is written to `crash-*` in the current
-directory. Add an input which found a bug to the seeds of its target. The
-targets use the libFuzzer interface, so AFL++ can run them too
-(`afl-clang-fast` with `-fsanitize=fuzzer`).
+`nvme-fuzz` is plain Python 3.10. Its unit tests run with the other tests, and
+`meson compile -C .build lint-fuzz-tool` runs `ruff` and `mypy` on it, with
+the settings of `scripts/fuzz/pyproject.toml`.
+
+The fuzz targets are libFuzzer binaries, which also run by hand: a file
+argument runs that input once, a directory is a corpus to fuzz. Then a
+crashing input is written to `crash-*` in the current directory. Add an input
+which found a bug to the seeds of its target, named `regress-*`: the seeds run
+with the default data limit, so check that it still fails without the fix with
+`nvme-fuzz check`. The targets
+use the libFuzzer interface, so AFL++ can run them too (`afl-clang-fast` with
+`-fsanitize=fuzzer`).

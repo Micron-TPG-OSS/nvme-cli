@@ -38,6 +38,7 @@
 #include <shared/fs-util.h>
 #include <shared/mmio-util.h>
 #include <shared/parse-util.h>
+#include <shared/sandbox-util.h>
 #include <shared/sig-util.h>
 #include <shared/suffix-util.h>
 #include <shared/time-util.h>
@@ -164,10 +165,61 @@ static void __shr_destructor free_plugins(void)
 	}
 }
 
+/*
+ * Open /dev/null on the standard descriptors which are closed. Else the
+ * next descriptor nvme-cli opens, e.g. the socket to the privsep helper,
+ * becomes one of them, and the output goes there.
+ */
+static int nvme_reserve_stdio(void)
+{
+#ifndef _WIN32
+	int fd, null;
+
+	for (fd = STDIN_FILENO; fd <= STDERR_FILENO; fd++) {
+		if (fcntl(fd, F_GETFD) >= 0 || errno != EBADF)
+			continue;
+		/* the lowest free descriptor, fd */
+		null = open("/dev/null", O_RDWR);
+		if (null < 0)
+			return -errno;
+		if (null != fd) {
+			close(null);
+			return -EBADF;
+		}
+	}
+#endif
+	return 0;
+}
+
+/*
+ * The decoders of device data run sandboxed with -Dsandbox=enabled unless
+ * NVME_SANDBOX=0, e.g. for a debugger, and in any build with
+ * NVME_SANDBOX=1.
+ */
+static void nvme_sandbox_init(void)
+{
+	const char *env = getenv("NVME_SANDBOX");
+	bool enable = false;
+
+#ifdef CONFIG_SANDBOX
+	enable = true;
+#endif
+	if (env)
+		enable = strcmp(env, "0");
+	shr_sandbox_enable(enable);
+}
+
 int nvme_main(int argc, char **argv)
 {
 	struct plugin_call call = {};
 	int err;
+
+	err = nvme_reserve_stdio();
+	if (err) {
+		fprintf(stderr, "%s: cannot open /dev/null: %s\n", argv[0],
+			strerror(-err));
+		return 1;
+	}
 
 #ifdef _WIN32
 	/*
@@ -183,6 +235,8 @@ int nvme_main(int argc, char **argv)
 		general_help(&builtin, NULL);
 		return 0;
 	}
+
+	nvme_sandbox_init();
 	nvme_args_register();
 
 	/* The command line comes first, nvme-cli.conf does not override it */
@@ -211,5 +265,5 @@ int nvme_main(int argc, char **argv)
 	if (argconfig_help_requested())
 		return 0;
 
-	return err ? 1 : 0;
+	return err || nvme_show_failed() ? 1 : 0;
 }

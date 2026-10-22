@@ -42,6 +42,8 @@ _SEEDS = (1, 2)
 
 # Without json-c, some commands ignore '-o json' and print text.
 _HAVE_JSON = os.environ.get('NVME_TEST_JSON', '1') == '1'
+# Run every command with and without the sandbox and compare the output.
+_COMPARE_SANDBOX = os.environ.get('NVME_TEST_COMPARE_SANDBOX') == '1'
 
 _OPC_GET_LOG_PAGE = 0x02
 _OPC_IDENTIFY = 0x06
@@ -181,6 +183,29 @@ _LIST = [['list'], ['list-subsys'], ['show-topology'],
 _LIST_FORMATS = [[], ['-v'], ['-o', 'json'], ['-v', '-o', 'json']]
 
 
+def _pretty_indent_error(text):
+    """The first line of pretty JSON which is not indented by its depth."""
+    depth = 0
+    for n, line in enumerate(text.splitlines(), 1):
+        stripped = line.lstrip(' ')
+        closing = stripped[:1] in ('}', ']')
+        if stripped and len(line) - len(stripped) != 2 * (depth - closing):
+            return f'line {n}: {line!r}'
+        in_str = esc = False
+        for c in line:
+            if esc:
+                esc = False
+            elif c == '\\':
+                esc = in_str
+            elif c == '"':
+                in_str = not in_str
+            elif not in_str and c in '{[':
+                depth += 1
+            elif not in_str and c in '}]':
+                depth -= 1
+    return None
+
+
 class PrintCLITest(unittest.TestCase):
 
     CTRL = '/dev/nvme0'
@@ -214,11 +239,20 @@ class PrintCLITest(unittest.TestCase):
                     with self.subTest(seed=seed, cmd=' '.join(cmd + fmt)):
                         self._run(cmd + fmt)
 
-    def _run(self, args):
+    def _run(self, args, compare=True):
         binary = '-o' in args and 'binary' in args
-        result = run_nvme(_NVME_BIN, self.env, self.sysfs_dir,
+        env = dict(self.env, NVME_SANDBOX='1') \
+            if _COMPARE_SANDBOX else self.env
+        result = run_nvme(_NVME_BIN, env, self.sysfs_dir,
                           self.base_dir, *args,
                           encoding=None if binary else 'utf-8')
+        if _COMPARE_SANDBOX and compare:
+            direct = run_nvme(_NVME_BIN, dict(self.env, NVME_SANDBOX='0'),
+                              self.sysfs_dir, self.base_dir, *args,
+                              encoding=None if binary else 'utf-8')
+            self.assertEqual(result.returncode, direct.returncode)
+            self.assertEqual(result.stdout, direct.stdout)
+            self.assertEqual(result.stderr, direct.stderr)
         errors, self.server.errors = self.server.errors, []
         if errors:
             self.fail('the mock server failed:\n' + ''.join(errors))
@@ -229,6 +263,8 @@ class PrintCLITest(unittest.TestCase):
         if (_HAVE_JSON and result.returncode == 0 and '-o' in args and
                 'json' in args and result.stdout.strip()):
             json.loads(result.stdout)
+            # the members of the printer calls are put together as text
+            self.assertIsNone(_pretty_indent_error(result.stdout))
 
     def test_id(self):
         self._run_all([['id', c, self.NS] for c in _ID])
@@ -256,7 +292,8 @@ class PrintCLITest(unittest.TestCase):
             for cmd in _LIST:
                 for fmt in _LIST_FORMATS:
                     with self.subTest(tree=tree, cmd=' '.join(cmd + fmt)):
-                        self._run(cmd + fmt)
+                        # a missing hostnqn is generated anew each run
+                        self._run(cmd + fmt, compare=False)
 
     def test_persistent_event(self):
         # One event of each type. Each one has enough data for the largest
@@ -323,6 +360,31 @@ class PrintCLITest(unittest.TestCase):
         entries = json.loads(result.stdout)['list_of_event_entries']
         self.assertEqual([e['prev_ts'] for e in entries],
                          [0x1000, 0x1001, 0x1002])
+
+    @unittest.skipIf(os.geteuid() == 0, 'process limits do not apply to root')
+    def test_sandbox_used(self):
+        """With the sandbox, decoding needs a child process."""
+        wrapper = os.path.join(self.tmp_dir, 'nvme-no-fork')
+        with open(wrapper, 'w', encoding='utf-8') as f:
+            f.write('#!/bin/sh\nulimit -u 1 || exit 99\n'
+                    'exec "$REAL_NVME" "$@"\n')
+        os.chmod(wrapper, 0o755)
+        env = dict(self.env, REAL_NVME=os.path.abspath(_NVME_BIN))
+        # starting the privsep helper needs a child process too
+        env.pop('NVME_PRIVSEP_TEST_HELPER', None)
+
+        direct = run_nvme(wrapper, dict(env, NVME_SANDBOX='0'),
+                          self.sysfs_dir, self.base_dir,
+                          'log', 'smart', self.CTRL)
+        if direct.returncode == 99:
+            self.skipTest('ulimit -u not supported')
+        self.assertEqual(direct.returncode, 0)
+        sandboxed = run_nvme(wrapper, dict(env, NVME_SANDBOX='1'),
+                             self.sysfs_dir, self.base_dir,
+                             'log', 'smart', self.CTRL)
+        self.assertEqual(sandboxed.returncode, 1)
+        self.assertIn('cannot decode the device data in the sandbox',
+                      sandboxed.stderr)
 
     def test_persistent_event_supported_events(self):
         # Only the Timestamp Change event (bit 3) is supported.
