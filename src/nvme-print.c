@@ -7,24 +7,35 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <libnvme.h>
 
+#include <ccan/array_size/array_size.h>
 #include <ccan/endian/endian.h>
 #include <ccan/minmax/minmax.h>
 #include <shared/int-util.h>
 #include <shared/mmio-util.h>
+#include <shared/sandbox-util.h>
 #include <shared/temp-util.h>
 
 #include "cleanup.h"
 #include "nvme-models.h"
 #include "nvme-print.h"
 
+/*
+ * A printer runs between nvme_print_begin() and nvme_print_end(). The
+ * printers which decode device data run in the sandbox, if enabled. See
+ * Documentation/PRIVSEP.md.
+ */
 #define nvme_print(name, flags, ...)				\
 	do {							\
 		struct print_ops *ops = nvme_print_ops(flags);	\
-		if (nvme_print_check(ops, ops->name))		\
+		if (nvme_print_check(ops, ops->name) &&		\
+		    nvme_print_begin(ops, ops->name)) {		\
 			ops->name(__VA_ARGS__);			\
+			nvme_print_end(ops);			\
+		}						\
 	} while (false)
 
 #define nvme_print_output_format(name, ...)			\
@@ -87,6 +98,109 @@ static struct print_ops *nvme_print_ops(nvme_print_flags_t flags)
 		ops = nvme_get_stdout_print_ops(flags);
 
 	return ops;
+}
+
+/* Printer calls in progress, a printer may call another one */
+static unsigned int print_depth;
+
+/* In the child of a sandboxed printer */
+static bool print_in_child;
+
+/* A printer failed in the sandbox */
+static bool print_failed;
+
+bool nvme_show_failed(void)
+{
+	return print_failed;
+}
+
+/*
+ * The printers which stay in process: the ones of the libnvme tree, which
+ * read sysfs while printing, the ones which hand JSON objects to their
+ * caller, the interactive one and the document.
+ */
+static bool nvme_print_sandboxed(struct print_ops *ops, void *func)
+{
+	void *in_process[] = {
+		ops->relatives, ops->list_item, ops->list_items,
+		ops->print_nvme_subsystem_list, ops->topology_ctrl,
+		ops->topology_namespace, ops->topology_multipath,
+		ops->topology_tabular, ops->config_conn_list, ops->top,
+		ops->zns_start_zone_list, ops->zns_finish_zone_list,
+		ops->zns_report_zones, ops->show_init, ops->show_finish,
+		ops->connect_msg,
+	};
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(in_process); i++)
+		if (func == in_process[i])
+			return false;
+
+	return true;
+}
+
+static void nvme_print_error(int err)
+{
+	print_failed = true;
+	if (err == -ECHILD || err == -EPROTO)
+		nvme_show_error(
+			"the decoder of the device data crashed or misbehaved in the sandbox");
+	else
+		nvme_show_error(
+			"cannot decode the device data in the sandbox: %s",
+			libnvme_strerror(-err));
+}
+
+/*
+ * Return: whether to run the printer here, in process or in the sandbox.
+ * A sandboxed printer writes to stdout as it does in process. What it
+ * writes elsewhere, the output plugin captures in the child and adds in
+ * the caller.
+ */
+static bool nvme_print_begin(struct print_ops *ops, void *func)
+{
+	struct shr_sandbox_output out;
+	int ret;
+
+	if (print_depth++ || !nvme_print_sandboxed(ops, func))
+		return true;
+
+	ret = shr_sandbox_begin(&out);
+	switch (ret) {
+	case SHR_SANDBOX_OFF:
+		return true;
+	case SHR_SANDBOX_CHILD:
+		print_in_child = true;
+		/* the caller notices a child without a result */
+		if (ops->capture_begin && ops->capture_begin())
+			_exit(1);
+		return true;
+	case SHR_SANDBOX_DONE:
+		if (ops->capture_add)
+			ret = ops->capture_add(out.buf, out.len);
+		else
+			ret = out.len ? -EPROTO : 0;
+		free(out.buf);
+		break;
+	}
+
+	print_depth--;
+	if (ret)
+		nvme_print_error(ret);
+	return false;
+}
+
+static void nvme_print_end(struct print_ops *ops)
+{
+	void *buf = NULL;
+	size_t len = 0;
+
+	if (--print_depth || !print_in_child)
+		return;
+
+	if (ops->capture_end && ops->capture_end(&buf, &len))
+		_exit(1);
+	shr_sandbox_end(buf, len);
 }
 
 static bool nvme_print_check(struct print_ops *ops, void *func)
@@ -378,6 +492,36 @@ void *nvme_pel_event_data(void *pevent_log_info, __u32 offset, __u32 len,
 
 	memcpy(buf, pevent_log_info + offset, len);
 	*buf_len = size;
+
+	return buf;
+}
+
+/*
+ * The feature printers read a whole data structure from the memory buffer
+ * of a Set Feature event, the largest 4 KiB, through an aligned pointer.
+ * The buffer follows the dwords of the command in the event data of len
+ * bytes, so is neither aligned nor that long. Returns an aligned copy of
+ * it, zero padded to 4 KiB, or NULL if the event has none. The caller
+ * frees the copy.
+ */
+void *nvme_pel_set_feature_data(void *data, __u32 len)
+{
+	struct nvme_set_feature_event *e = data;
+	__u32 layout = le32_to_cpu(e->layout);
+	__u32 rel;
+	void *buf;
+
+	if (!NVME_SET_FEAT_EVENT_MB_COUNT(layout))
+		return NULL;
+	rel = 4 + NVME_SET_FEAT_EVENT_DW_COUNT(layout) * 4;
+	if (rel >= len)
+		return NULL;
+
+	buf = calloc(1, NVME_PEL_FEATURE_DATA_SIZE);
+	if (!buf)
+		return NULL;
+	memcpy(buf, data + rel,
+	       min_t(__u32, len - rel, NVME_PEL_FEATURE_DATA_SIZE));
 
 	return buf;
 }
@@ -2084,9 +2228,13 @@ void nvme_show_log(const char *devname, enum nvme_cmd_get_log_lid lid, __u32 nsi
 		break;
 	case NVME_LOG_LID_ENDURANCE_GRP_EVT: {
 		struct nvme_aggregate_endurance_group_event *end = log;
+		/* no more entries than the log holds, before size_t cuts it */
+		__u64 nr = min_t(__u64, le64_to_cpu(end->num_entries), len);
 
-		nvme_show_endurance_group_event_agg_log(end, end->num_entries, len, devname,
-							flags);
+		nvme_show_endurance_group_event_agg_log(end,
+			nvme_log_nr_entries(nr, len, sizeof(*end),
+					    sizeof(end->entries[0])),
+			len, devname, flags);
 		break;
 	}
 	case NVME_LOG_LID_MEDIA_UNIT_STATUS:
@@ -2141,8 +2289,14 @@ void nvme_show_log(const char *devname, enum nvme_cmd_get_log_lid lid, __u32 nsi
 		break;
 	case NVME_LOG_LID_DISCOVERY: {
 		struct nvmf_discovery_log *discovery_log = log;
+		/* no more records than the log holds, before size_t cuts it */
+		__u64 nr = min_t(__u64, le64_to_cpu(discovery_log->numrec),
+				 len);
 
-		nvme_show_discovery_log(discovery_log, le64_to_cpu(discovery_log->numrec), flags);
+		nvme_show_discovery_log(discovery_log,
+			nvme_log_nr_entries(nr, len, sizeof(*discovery_log),
+					    sizeof(discovery_log->entries[0])),
+			flags);
 		break;
 	}
 	case NVME_LOG_LID_HOST_DISCOVERY:

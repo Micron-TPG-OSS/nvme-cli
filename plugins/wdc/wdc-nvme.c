@@ -4934,11 +4934,12 @@ static int wdc_get_pfail_dump(int argc, char **argv, struct command *acmd,
 
 static void wdc_do_id_ctrl(__u8 *vs, struct json_object *root)
 {
-	char vsn[24] = {0};
+	/* 24 bytes, not NUL terminated if all used */
+	char vsn[25] = {0};
 	int base = 3072;
 	int vsn_start = 3081;
 
-	memcpy(vsn, &vs[vsn_start - base], sizeof(vsn));
+	memcpy(vsn, &vs[vsn_start - base], sizeof(vsn) - 1);
 	if (root)
 		json_object_add_value_string(root, "wdc vsn", strlen(vsn) > 1 ? vsn : "NULL");
 	else
@@ -7822,6 +7823,7 @@ static int wdc_get_c1_log_page(struct libnvme_global_ctx *ctx,
 	nvme_print_flags_t fmt;
 	int total_subpages;
 	int skip_cnt = 4;
+	size_t off;
 	__u8 *data;
 	__u8 *p;
 	int i;
@@ -7855,10 +7857,18 @@ static int wdc_get_c1_log_page(struct libnvme_global_ctx *ctx,
 	if (!ret) {
 		l = (struct wdc_log_page_header *)data;
 		total_subpages = l->num_subpages + WDC_NVME_GET_STAT_PERF_INTERVAL_LIFETIME - 1;
-		for (i = 0, p = data + skip_cnt; i < total_subpages; i++, p += skip_cnt) {
+		/* the subpages must fit the buffer */
+		for (i = 0, off = skip_cnt; i < total_subpages &&
+		     off < WDC_ADD_LOG_BUF_LEN &&
+		     WDC_ADD_LOG_BUF_LEN - off >= sizeof(*sph);
+		     i++, off += skip_cnt) {
+			p = data + off;
 			sph = (struct wdc_log_page_subpage_header *)p;
 			if (sph->spcode == WDC_GET_LOG_PAGE_SSD_PERFORMANCE) {
 				if (sph->pcset == interval) {
+					if (WDC_ADD_LOG_BUF_LEN - off - 4 <
+					    sizeof(*perf))
+						break;
 					perf = (struct wdc_ssd_perf_stats *)(p + 4);
 					ret = wdc_print_log(perf, fmt);
 					break;

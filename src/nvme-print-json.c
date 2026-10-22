@@ -870,7 +870,7 @@ static void json_ana_log(struct nvme_ana_log *ana_log, const char *devname,
 {
 	size_t offset = sizeof(struct nvme_ana_log);
 	struct nvme_ana_log *hdr = ana_log;
-	struct nvme_ana_group_desc *ana_desc;
+	struct nvme_ana_group_desc ana_desc;
 	struct json_object *desc_list = json_create_array();
 	struct json_object *ns_list;
 	struct json_object *desc;
@@ -878,6 +878,7 @@ static void json_ana_log(struct nvme_ana_log *ana_log, const char *devname,
 	struct json_object *r = json_r;
 	size_t nsid_buf_size;
 	void *base = ana_log;
+	__le32 *nsids;
 	__u32 nr_nsids;
 	int i, j;
 
@@ -886,25 +887,28 @@ static void json_ana_log(struct nvme_ana_log *ana_log, const char *devname,
 	obj_add_uint(r, "ngrps", le16_to_cpu(hdr->ngrps));
 
 	for (i = 0; i < le16_to_cpu(ana_log->ngrps); i++) {
-		if (offset > len || len - offset < sizeof(*ana_desc))
+		if (offset > len || len - offset < sizeof(ana_desc))
 			break;
-		desc = json_create_object();
-		ana_desc = base + offset;
-		nr_nsids = le32_to_cpu(ana_desc->nnsids);
+		/* descriptors are only 4 byte aligned */
+		memcpy(&ana_desc, base + offset, sizeof(ana_desc));
+		nr_nsids = le32_to_cpu(ana_desc.nnsids);
 		nsid_buf_size = (size_t)nr_nsids * sizeof(__le32);
-		if (len - offset - sizeof(*ana_desc) < nsid_buf_size)
+		if (len - offset - sizeof(ana_desc) < nsid_buf_size)
 			break;
 
-		offset += sizeof(*ana_desc);
-		obj_add_uint(desc, "grpid", le32_to_cpu(ana_desc->grpid));
-		obj_add_uint(desc, "nnsids", le32_to_cpu(ana_desc->nnsids));
-		obj_add_uint64(desc, "chgcnt", le64_to_cpu(ana_desc->chgcnt));
-		obj_add_str(desc, "state", nvme_ana_state_to_string(ana_desc->state));
+		desc = json_create_object();
+		offset += sizeof(ana_desc);
+		nsids = base + offset;
+		obj_add_uint(desc, "grpid", le32_to_cpu(ana_desc.grpid));
+		obj_add_uint(desc, "nnsids", le32_to_cpu(ana_desc.nnsids));
+		obj_add_uint64(desc, "chgcnt", le64_to_cpu(ana_desc.chgcnt));
+		obj_add_str(desc, "state",
+			    nvme_ana_state_to_string(ana_desc.state));
 
 		ns_list = json_create_array();
 		for (j = 0; j < nr_nsids; j++) {
 			nsid = json_create_object();
-			obj_add_uint(nsid, "nsid", le32_to_cpu(ana_desc->nsids[j]));
+			obj_add_uint(nsid, "nsid", le32_to_cpu(nsids[j]));
 			array_add_obj(ns_list, nsid);
 		}
 		obj_add_array(desc, "NSIDS", ns_list);
@@ -1893,29 +1897,21 @@ void nvme_json_pel_sanitize_completion(void *pevent_log_info, __u32 offset,
 	obj_add_uint(valid_attrs, "cmpln_info", le16_to_cpu(sanitize_cmpln_event->cmpln_info));
 }
 
-void nvme_json_pel_set_feature(void *pevent_log_info, __u32 offset,
-			       struct json_object *valid_attrs,
-			       __le16 el, __u32 size)
+void nvme_json_pel_set_feature(void *data, __u32 len,
+			       struct json_object *valid_attrs)
 {
-	struct nvme_set_feature_event *set_feat_event = pevent_log_info + offset;
+	struct nvme_set_feature_event *set_feat_event = data;
 	int fid = NVME_GET(le32_to_cpu(set_feat_event->cdw_mem[0]), SET_FEATURES_CDW10_FID);
 	int cdw11 = le32_to_cpu(set_feat_event->cdw_mem[1]);
-	int dword_cnt = NVME_SET_FEAT_EVENT_DW_COUNT(set_feat_event->layout);
-	unsigned char *mem_buf;
-	__u32 rel;
+	__cleanup_free unsigned char *mem_buf = NULL;
 
 	obj_add_uint_02x(valid_attrs, "feature", fid);
 	obj_add_str(valid_attrs, "name", nvme_feature_to_string(fid));
 	obj_add_uint_0nx(valid_attrs, "value", cdw11, 8);
 
-	if (NVME_SET_FEAT_EVENT_MB_COUNT(set_feat_event->layout)) {
-		rel = 4 + dword_cnt * 4;
-		if (rel >= le16_to_cpu(el) ||
-		    offset + rel >= size)
-			return;
-		mem_buf = (unsigned char *)set_feat_event + rel;
+	mem_buf = nvme_pel_set_feature_data(data, len);
+	if (mem_buf)
 		json_feature_show_fields(fid, cdw11, mem_buf);
-	}
 }
 
 void nvme_json_pel_telemetry_crt(void *pevent_log_info, __u32 offset,
@@ -2105,9 +2101,8 @@ static void json_pevent_entry(void *pevent_log_info, __u8 action, __u32 size, co
 			nvme_json_pel_sanitize_completion(data, 0, valid_attrs);
 			break;
 		case NVME_PEL_SET_FEATURE_EVENT:
-			nvme_json_pel_set_feature(data, 0, valid_attrs,
-						  pevent_entry_head->el,
-						  data_len);
+			nvme_json_pel_set_feature(data, el - vsil,
+						  valid_attrs);
 			break;
 		case NVME_PEL_TELEMETRY_CRT:
 			nvme_json_pel_telemetry_crt(data, 0, valid_attrs,
@@ -2749,35 +2744,40 @@ static void json_nvme_fdp_configs(struct nvme_fdp_config_log *log, size_t len)
 	obj_add_uint(r, "n", n);
 
 	for (int i = 0; i < n + 1; i++) {
-		struct nvme_fdp_config_desc *config = (struct nvme_fdp_config_desc *)p;
+		struct nvme_fdp_config_desc config;
+		struct nvme_fdp_ruh_desc *ruhs;
 		uint16_t nruh, size, max_nruh;
 		struct json_object *obj_config, *obj_ruhs;
 
-		if (!shr_buf_has_room(p, end, sizeof(*config)))
+		if (!shr_buf_has_room(p, end, sizeof(config)))
 			break;
 
-		size = le16_to_cpu(config->size);
-		if (size < sizeof(*config) || !shr_buf_has_room(p, end, size))
+		/* descriptors are only 4 byte aligned */
+		memcpy(&config, p, sizeof(config));
+		ruhs = (struct nvme_fdp_ruh_desc *)(p + sizeof(config));
+
+		size = le16_to_cpu(config.size);
+		if (size < sizeof(config) || !shr_buf_has_room(p, end, size))
 			break;
 
-		nruh = le16_to_cpu(config->nruh);
-		max_nruh = (size - sizeof(*config)) / sizeof(struct nvme_fdp_ruh_desc);
+		nruh = le16_to_cpu(config.nruh);
+		max_nruh = (size - sizeof(config)) / sizeof(*ruhs);
 		if (nruh > max_nruh)
 			nruh = max_nruh;
 
 		obj_config = json_create_object();
 		obj_ruhs = json_create_array();
 
-		obj_add_uint(obj_config, "fdpa", config->fdpa);
-		obj_add_uint(obj_config, "vss", config->vss);
-		obj_add_uint(obj_config, "nrg", le32_to_cpu(config->nrg));
+		obj_add_uint(obj_config, "fdpa", config.fdpa);
+		obj_add_uint(obj_config, "vss", config.vss);
+		obj_add_uint(obj_config, "nrg", le32_to_cpu(config.nrg));
 		obj_add_uint(obj_config, "nruh", nruh);
-		obj_add_uint(obj_config, "nnss", le32_to_cpu(config->nnss));
-		obj_add_uint64(obj_config, "runs", le64_to_cpu(config->runs));
-		obj_add_uint(obj_config, "erutl", le32_to_cpu(config->erutl));
+		obj_add_uint(obj_config, "nnss", le32_to_cpu(config.nnss));
+		obj_add_uint64(obj_config, "runs", le64_to_cpu(config.runs));
+		obj_add_uint(obj_config, "erutl", le32_to_cpu(config.erutl));
 
 		for (int j = 0; j < nruh; j++) {
-			struct nvme_fdp_ruh_desc *ruh = &config->ruhs[j];
+			struct nvme_fdp_ruh_desc *ruh = &ruhs[j];
 
 			struct json_object *obj_ruh = json_create_object();
 
@@ -3493,51 +3493,43 @@ static void json_nvme_id_ns_descs(void *data, unsigned int nsid)
 	} desc;
 	struct json_object *r = json_r;
 	struct json_object *json_array = NULL;
-	off_t off;
-	int pos, len = 0;
+	struct nvme_ns_id_desc *cur;
+	size_t pos, off;
 	int i;
 
-	for (pos = 0; pos < NVME_IDENTIFY_DATA_SIZE; pos += len) {
-		struct nvme_ns_id_desc *cur = data + pos;
+	for (pos = 0; (cur = nvme_ns_id_desc(data, pos));
+	     pos += sizeof(*cur) + cur->nidl) {
 		const char *nidt_name = NULL;
-
-		if (cur->nidl == 0)
-			break;
 
 		memset(json_str, 0, sizeof(json_str));
 		json_str_p = json_str;
 		off = pos + sizeof(*cur);
 
-		switch (cur->nidt) {
+		switch (nvme_ns_id_desc_type(cur)) {
 		case NVME_NIDT_EUI64:
 			memcpy(desc.eui64, data + off, sizeof(desc.eui64));
 			for (i = 0; i < sizeof(desc.eui64); i++)
 				json_str_p += sprintf(json_str_p, "%02x", desc.eui64[i]);
-			len = sizeof(desc.eui64);
 			nidt_name = "eui64";
 			break;
 		case NVME_NIDT_NGUID:
 			memcpy(desc.nguid, data + off, sizeof(desc.nguid));
 			for (i = 0; i < sizeof(desc.nguid); i++)
 				json_str_p += sprintf(json_str_p, "%02x", desc.nguid[i]);
-			len = sizeof(desc.nguid);
 			nidt_name = "nguid";
 			break;
 		case NVME_NIDT_UUID:
 			memcpy(desc.uuid, data + off, sizeof(desc.uuid));
 			libnvme_uuid_to_string(desc.uuid, json_str);
-			len = sizeof(desc.uuid);
 			nidt_name = "uuid";
 			break;
 		case NVME_NIDT_CSI:
 			memcpy(&desc.csi, data + off, sizeof(desc.csi));
 			sprintf(json_str_p, "%#x", desc.csi);
-			len += sizeof(desc.csi);
 			nidt_name = "csi";
 			break;
 		default:
 			/* Skip unknown types */
-			len = cur->nidl;
 			break;
 		}
 
@@ -3554,8 +3546,6 @@ static void json_nvme_id_ns_descs(void *data, unsigned int nsid)
 				json_array = json_create_array();
 			array_add_obj(json_array, elem);
 		}
-
-		len += sizeof(*cur);
 	}
 
 	if (json_array)
@@ -5451,25 +5441,26 @@ static void json_directive_show_fields_identify(__u8 doper, __u8 *field, struct 
 
 	switch (doper) {
 	case NVME_DIRECTIVE_RECEIVE_IDENTIFY_DOPER_PARAM:
-		support = json_create_array();
-		obj_add_array(r, "Directive support", support);
+		support = json_create_object();
+		obj_add_obj(r, "Directive support", support);
 		obj_add_str(support, "Identify Directive",
 			    *field & 0x1 ? "Supported" : "Not supported");
 		obj_add_str(support, "Stream Directive",
 			    *field & 0x2 ? "Supported" : "Not supported");
 		obj_add_str(support, "Data Placement Directive",
 			    *field & 0x4 ? "Supported" : "Not supported");
-		enabled = json_create_array();
-		obj_add_array(r, "Directive enabled", enabled);
+		enabled = json_create_object();
+		obj_add_obj(r, "Directive enabled", enabled);
 		obj_add_str(enabled, "Identify Directive",
 			    *(field + 32) & 0x1 ? "Enabled" : "Disabled");
 		obj_add_str(enabled, "Stream Directive",
 			    *(field + 32) & 0x2 ? "Enabled" : "Disabled");
 		obj_add_str(enabled, "Data Placement Directive",
 			    *(field + 32) & 0x4 ? "Enabled" : "Disabled");
-		persistent = json_create_array();
-		obj_add_array(r, "Directive Persistent Across Controller Level Resets",
-			      persistent);
+		persistent = json_create_object();
+		obj_add_obj(r,
+			    "Directive Persistent Across Controller Level Resets",
+			    persistent);
 		obj_add_str(persistent, "Identify Directive",
 			    *(field + 64) & 0x1 ? "Enabled" : "Disabled");
 		obj_add_str(persistent, "Stream Directive",
@@ -5900,6 +5891,150 @@ void json_show_finish(void)
 	json_r = NULL;
 }
 
+/*
+ * A sandboxed printer: the child inherits the document as it was at the
+ * fork. Let the printer write to an object of its own instead, whose
+ * members the caller adds to its document.
+ */
+static int json_capture_begin(void)
+{
+	if (!json_init)
+		return 0;
+
+	json_r = json_create_object();
+	return json_r ? 0 : -ENOMEM;
+}
+
+static int json_member_put(struct printbuf *pb, const char *s, size_t len)
+{
+	uint32_t n = len;
+
+	if (len > UINT32_MAX)
+		return -EOVERFLOW;
+	printbuf_memappend(pb, (const char *)&n, sizeof(n));
+	printbuf_memappend(pb, s, len);
+
+	return 0;
+}
+
+/*
+ * The members the printer added, serialized as pairs of a length and the
+ * key, a length and the value. @buf is to free().
+ */
+static int json_capture_end(void **buf, size_t *len)
+{
+	struct printbuf *pb;
+	const char *v;
+	int err = 0;
+
+	*buf = NULL;
+	*len = 0;
+	if (!json_init)
+		return 0;
+
+	pb = printbuf_new();
+	if (!pb)
+		return -ENOMEM;
+	json_object_object_foreach(json_r, key, val) {
+		v = json_object_to_json_string_ext(val,
+				JSON_C_TO_STRING_PRETTY |
+				JSON_C_TO_STRING_NOSLASHESCAPE);
+		if (!v || json_member_put(pb, key, strlen(key)) ||
+		    json_member_put(pb, v, strlen(v))) {
+			err = -ENOMEM;
+			break;
+		}
+	}
+	if (!err && printbuf_length(pb)) {
+		*buf = malloc(printbuf_length(pb));
+		if (*buf) {
+			memcpy(*buf, pb->buf, printbuf_length(pb));
+			*len = printbuf_length(pb);
+		} else {
+			err = -ENOMEM;
+		}
+	}
+	printbuf_free(pb);
+
+	return err;
+}
+
+/* Writes a serialized value as it is, indented to @level */
+static int json_member_serialize(struct json_object *jso,
+				 struct printbuf *pb, int level, int flags)
+{
+	const char *s = json_object_get_string(jso);
+	size_t len = json_object_get_string_len(jso), i, start = 0;
+	int j;
+
+	for (i = 0; i < len; i++) {
+		if (s[i] != '\n')
+			continue;
+		printbuf_memappend(pb, s + start, i - start + 1);
+		start = i + 1;
+		if (flags & JSON_C_TO_STRING_PRETTY)
+			for (j = 0; j < level; j++)
+				printbuf_strappend(pb, "  ");
+	}
+	printbuf_memappend(pb, s + start, len - start);
+
+	return 0;
+}
+
+static bool json_member_get(const char **p, const char *end,
+			    const char **s, uint32_t *n)
+{
+	if ((size_t)(end - *p) < sizeof(*n))
+		return false;
+	memcpy(n, *p, sizeof(*n));
+	*p += sizeof(*n);
+	if ((size_t)(end - *p) < *n)
+		return false;
+	*s = *p;
+	*p += *n;
+
+	return true;
+}
+
+/*
+ * Adds the members of a sandboxed printer to the document. They are added
+ * as the child serialized them, not parsed again: a parse would turn 128
+ * bit numbers into doubles. A member replaces one of the same key, as when
+ * the printer runs in process. The child may have been taken over: check
+ * the framing, the values are only copied to the output.
+ */
+static int json_capture_add(const void *buf, size_t len)
+{
+	const char *p = buf, *end = p + len, *k, *v;
+	struct json_object *val;
+	__cleanup_free char *key = NULL;
+	uint32_t klen, vlen;
+
+	if (!len)
+		return 0;
+	if (!json_init || !json_r)
+		return -EPROTO;
+
+	while (p < end) {
+		if (!json_member_get(&p, end, &k, &klen) ||
+		    !json_member_get(&p, end, &v, &vlen) ||
+		    memchr(k, '\0', klen))
+			return -EPROTO;
+		free(key);
+		key = strndup(k, klen);
+		if (!key)
+			return -ENOMEM;
+		val = json_object_new_string_len(v, vlen);
+		if (!val)
+			return -ENOMEM;
+		json_object_set_serializer(val, json_member_serialize,
+					   NULL, NULL);
+		json_object_object_add(json_r, key, val);
+	}
+
+	return 0;
+}
+
 static void json_mgmt_addr_list_log(struct nvme_mgmt_addr_list_log *ma_list)
 {
 	int i;
@@ -6043,11 +6178,11 @@ static void json_host_discovery_log(struct nvme_host_discovery_log *log,
 	struct json_object *r = json_r;
 	__u64 i;
 	__u16 j;
-	struct nvme_host_ext_discovery_log *hedlpe;
-	struct nvmf_ext_attr *exat;
-	void *p;
-	char hostnqn[sizeof(hedlpe->hostnqn) + 1];
-	char traddr[sizeof(hedlpe->traddr) + 1];
+	struct nvme_host_ext_discovery_log hedlpe;
+	struct nvmf_ext_attr exat;
+	void *rec, *p;
+	char hostnqn[sizeof(hedlpe.hostnqn) + 1];
+	char traddr[sizeof(hedlpe.traddr) + 1];
 	__u32 thdlpl = le32_to_cpu(log->thdlpl);
 	__u32 tel;
 	__u16 numexat;
@@ -6064,51 +6199,63 @@ static void json_host_discovery_log(struct nvme_host_discovery_log *log,
 	obj_add_uint(r, "thdlpl", thdlpl);
 
 	for (i = sizeof(*log);
-	     (hedlpe = nvme_host_discovery_record(log, len, i)); i += tel) {
+	     (rec = nvme_host_discovery_record(log, len, i)); i += tel) {
+		memcpy(&hedlpe, rec, sizeof(hedlpe));
 		hedlpe_o = json_create_object();
-		tel = le32_to_cpu(hedlpe->tel);
-		numexat = le16_to_cpu(hedlpe->numexat);
+		tel = le32_to_cpu(hedlpe.tel);
+		numexat = le16_to_cpu(hedlpe.numexat);
 		snprintf(hostnqn, sizeof(hostnqn), "%-.*s",
-			 (int)sizeof(hedlpe->hostnqn), hedlpe->hostnqn);
+			 (int)sizeof(hedlpe.hostnqn), hedlpe.hostnqn);
 		snprintf(traddr, sizeof(traddr), "%-.*s",
-			 (int)sizeof(hedlpe->traddr), hedlpe->traddr);
-		obj_add_str(hedlpe_o, "trtype", libnvmf_trtype_str(hedlpe->trtype));
+			 (int)sizeof(hedlpe.traddr), hedlpe.traddr);
+		obj_add_str(hedlpe_o, "trtype",
+			    libnvmf_trtype_str(hedlpe.trtype));
 		obj_add_str(hedlpe_o, "adrfam", traddr[0] ?
-			    libnvmf_adrfam_str(hedlpe->adrfam) : "");
-		obj_add_str(hedlpe_o, "eflags", libnvmf_eflags_str(le16_to_cpu(hedlpe->eflags)));
+			    libnvmf_adrfam_str(hedlpe.adrfam) : "");
+		obj_add_str(hedlpe_o, "eflags",
+			    libnvmf_eflags_str(le16_to_cpu(hedlpe.eflags)));
 		obj_add_str(hedlpe_o, "hostnqn", hostnqn);
 		obj_add_str(hedlpe_o, "traddr", traddr);
 		tsas_o = json_create_object();
-		switch (hedlpe->trtype) {
+		switch (hedlpe.trtype) {
 		case NVMF_TRTYPE_RDMA:
-			obj_add_str(tsas_o, "prtype", libnvmf_prtype_str(hedlpe->tsas.rdma.prtype));
-			obj_add_str(tsas_o, "qptype", libnvmf_qptype_str(hedlpe->tsas.rdma.qptype));
-			obj_add_str(tsas_o, "cms", libnvmf_cms_str(hedlpe->tsas.rdma.cms));
-			obj_add_uint_0nx(tsas_o, "pkey", le16_to_cpu(hedlpe->tsas.rdma.pkey), 4);
+			obj_add_str(tsas_o, "prtype",
+				libnvmf_prtype_str(hedlpe.tsas.rdma.prtype));
+			obj_add_str(tsas_o, "qptype",
+				libnvmf_qptype_str(hedlpe.tsas.rdma.qptype));
+			obj_add_str(tsas_o, "cms",
+				    libnvmf_cms_str(hedlpe.tsas.rdma.cms));
+			obj_add_uint_0nx(tsas_o, "pkey",
+					 le16_to_cpu(hedlpe.tsas.rdma.pkey), 4);
 			break;
 		case NVMF_TRTYPE_TCP:
-			obj_add_str(tsas_o, "sectype", libnvmf_sectype_str(hedlpe->tsas.tcp.sectype));
+			obj_add_str(tsas_o, "sectype",
+				libnvmf_sectype_str(hedlpe.tsas.tcp.sectype));
 			break;
 		default:
-			obj_d(tsas_o, "common", (unsigned char *)hedlpe->tsas.common,
-			      sizeof(hedlpe->tsas.common), 16, 1);
+			obj_d(tsas_o, "common",
+			      (unsigned char *)hedlpe.tsas.common,
+			      sizeof(hedlpe.tsas.common), 16, 1);
 			break;
 		}
 		obj_add_obj(hedlpe_o, "tsas", tsas_o);
 		obj_add_uint(hedlpe_o, "tel", tel);
 		obj_add_uint(hedlpe_o, "numexat", numexat);
 
-		p = hedlpe->exat;
+		p = rec + sizeof(hedlpe);
 		for (j = 0; j < numexat &&
-		     (exat = nvme_host_discovery_exat(hedlpe, p)); j++) {
+		     (p = nvme_host_discovery_exat(rec, tel, p, &exat)); j++) {
 			exat_o = json_create_object();
 			snprintf(json_str, sizeof(json_str), "exat: %d", j);
-			obj_add_uint(exat_o, "exattype", le16_to_cpu(exat->exattype));
-			obj_add_uint(exat_o, "exatlen", le16_to_cpu(exat->exatlen));
-			obj_d(exat_o, "exatval", (unsigned char *)exat->exatval,
-			      le16_to_cpu(exat->exatlen), 16, 1);
+			obj_add_uint(exat_o, "exattype",
+				     le16_to_cpu(exat.exattype));
+			obj_add_uint(exat_o, "exatlen",
+				     le16_to_cpu(exat.exatlen));
+			obj_d(exat_o, "exatval",
+			      (unsigned char *)p + sizeof(exat),
+			      le16_to_cpu(exat.exatlen), 16, 1);
 			obj_add_obj(hedlpe_o, json_str, exat_o);
-			p = libnvmf_exat_ptr_next(exat);
+			p = nvme_host_discovery_exat_next(p, &exat);
 		}
 		snprintf(json_str, sizeof(json_str), "hedlpe: %d", n++);
 		obj_add_obj(r, json_str, hedlpe_o);
@@ -6142,9 +6289,10 @@ static void json_ave_discovery_log(struct nvme_ave_discovery_log *log,
 	struct json_object *r = json_r;
 	__u64 i;
 	__u8 j;
-	struct nvme_ave_discovery_log_entry *adlpe;
-	char avenqn[sizeof(adlpe->avenqn) + 1];
-	struct nvme_ave_tr_record *atr;
+	struct nvme_ave_discovery_log_entry adlpe;
+	char avenqn[sizeof(adlpe.avenqn) + 1];
+	struct nvme_ave_tr_record atr;
+	void *rec;
 	__u32 tadlpl = le32_to_cpu(log->tadlpl);
 	__u32 tel;
 	__u8 numatr;
@@ -6159,28 +6307,32 @@ static void json_ave_discovery_log(struct nvme_ave_discovery_log *log,
 	obj_add_uint(r, "thdlpl", tadlpl);
 
 	for (i = sizeof(*log);
-	     (adlpe = nvme_ave_discovery_record(log, len, i)); i += tel) {
+	     (rec = nvme_ave_discovery_record(log, len, i)); i += tel) {
+		memcpy(&adlpe, rec, sizeof(adlpe));
 		adlpe_o = json_create_object();
-		tel = le32_to_cpu(adlpe->tel);
-		numatr = adlpe->numatr;
+		tel = le32_to_cpu(adlpe.tel);
+		numatr = adlpe.numatr;
 		snprintf(avenqn, sizeof(avenqn), "%-.*s",
-			 (int)sizeof(adlpe->avenqn), adlpe->avenqn);
+			 (int)sizeof(adlpe.avenqn), adlpe.avenqn);
 		obj_add_uint(adlpe_o, "tel", tel);
 		obj_add_str(adlpe_o, "avenqn", avenqn);
 		obj_add_uint(adlpe_o, "numatr", numatr);
 
 		/* the transport records must fit the record */
-		numatr = nvme_log_nr_entries(numatr, tel, sizeof(*adlpe),
-					     sizeof(*atr));
-		atr = adlpe->atr;
+		numatr = nvme_log_nr_entries(numatr, tel, sizeof(adlpe),
+					     sizeof(atr));
 		for (j = 0; j < numatr; j++) {
+			memcpy(&atr, rec + sizeof(adlpe) + j * sizeof(atr),
+			       sizeof(atr));
 			atr_o = json_create_object();
 			snprintf(json_str, sizeof(json_str), "atr: %d", j);
-			obj_add_str(atr_o, "aveadrfam", libnvmf_adrfam_str(atr->aveadrfam));
-			obj_add_uint(atr_o, "avetrsvcid", le16_to_cpu(atr->avetrsvcid));
-			obj_add_traddr(atr_o, "avetraddr", atr->aveadrfam, atr->avetraddr);
+			obj_add_str(atr_o, "aveadrfam",
+				    libnvmf_adrfam_str(atr.aveadrfam));
+			obj_add_uint(atr_o, "avetrsvcid",
+				     le16_to_cpu(atr.avetrsvcid));
+			obj_add_traddr(atr_o, "avetraddr", atr.aveadrfam,
+				       atr.avetraddr);
 			obj_add_obj(adlpe_o, json_str, atr_o);
-			atr++;
 		}
 		snprintf(json_str, sizeof(json_str), "adlpe: %d", n++);
 		obj_add_obj(r, json_str, adlpe_o);
@@ -6364,10 +6516,27 @@ static struct print_ops json_print_ops = {
 	.show_opcode_status		= json_output_opcode_status,
 	.show_error_status		= json_output_error_status,
 	.show_key_value			= json_output_key_value,
+	.capture_begin			= json_capture_begin,
+	.capture_end			= json_capture_end,
+	.capture_add			= json_capture_add,
 };
+
+/*
+ * json-c seeds its string hash on the first lookup. Built without
+ * getrandom(), as the meson subproject is, it reads /dev/urandom then,
+ * which a printer in the sandbox cannot open.
+ */
+static void json_seed_hash(void)
+{
+	struct json_object *o = json_create_object();
+
+	json_object_object_get_ex(o, "", NULL);
+	json_free_object(o);
+}
 
 struct print_ops *nvme_get_json_print_ops(nvme_print_flags_t flags)
 {
+	json_seed_hash();
 	json_print_ops.flags = flags;
 	return &json_print_ops;
 }
