@@ -108,6 +108,7 @@ if python3.found()
             ['init-pi-tags', 'nvme_init_pi_tags_test.py', cli_test_env, 30],
             ['dry-run', 'nvme_dry_run_test.py', cli_test_env, 30],
             ['sel', 'nvme_sel_test.py', cli_test_env, 30],
+            ['format', 'nvme_format_test.py', cli_test_env, 30],
             ['host-metadata', 'nvme_host_metadata_test.py', cli_test_env,
              30],
             ['fuzz-record', 'nvme_fuzz_record_test.py', cli_test_env, 30],
@@ -119,6 +120,31 @@ if python3.found()
             ]
         endif
 
+        if 'dir' in selected_plugins and json_c_dep.found()
+            mock_cli_tests += [
+                ['dir-receive', 'nvme_dir_receive_test.py', cli_test_env,
+                 30],
+            ]
+        endif
+
+        if 'ns' in selected_plugins and 'resv' in selected_plugins
+            mock_cli_tests += [
+                ['ctratt', 'nvme_ctratt_test.py', cli_test_env, 30],
+            ]
+        endif
+
+        if 'rpmb' in selected_plugins
+            mock_cli_tests += [
+                ['rpmb', 'nvme_rpmb_test.py', cli_test_env, 30],
+            ]
+        endif
+
+        if 'zns' in selected_plugins
+            mock_cli_tests += [
+                ['zns-append', 'nvme_zns_append_test.py', cli_test_env, 30],
+            ]
+        endif
+
         # A command of the sandisk plugin which falls back to the wdc one
         if 'sandisk' in selected_plugins and 'wdc' in selected_plugins and \
            json_c_dep.found()
@@ -127,6 +153,12 @@ if python3.found()
                  30],
                 ['sndk-fallback', 'nvme_sndk_fallback_test.py', cli_test_env,
                  30],
+            ]
+        endif
+
+        if 'ymtc' in selected_plugins
+            mock_cli_tests += [
+                ['ymtc', 'nvme_ymtc_test.py', cli_test_env, 30],
             ]
         endif
 
@@ -236,6 +268,10 @@ if python3.found()
 
     if 'micron' in selected_plugins
         subdir('micron')
+    endif
+
+    if 'wdc' in selected_plugins
+        subdir('wdc')
     endif
 
     if 'samsung' in selected_plugins

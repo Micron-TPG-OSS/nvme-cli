@@ -1564,6 +1564,7 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 	char pci_vid[7], pci_did[7], pci_ssvid[7], link_speed[20], link_width[5], link_string[40];
 	char path[512], numa_node[5], vendor[10], form_factor[15], temperature[10], io_speed[15];
 	char chr_dev[32], serial_number[21], model_number[41];
+	__cleanup_free char *ctrl_path = NULL;
 	char firmware_revision[9], pcie_status[9];
 	struct json_object *root, *dev_stats, *link_stats, *crit_stats;
 	nvme_print_flags_t flags;
@@ -1595,9 +1596,10 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 		if (!libnvme_exec_admin_passthru(hdl, &cmd)) {
 			nvme_id_ns_flbas_to_lbaf_inuse(id_ns.flbas,
 						       &lbaf_index);
-			sector_size = 1 << id_ns.lbaf[lbaf_index].ds;
+			sector_size =
+				nvme_lbaf_data_size(id_ns.lbaf[lbaf_index].ds);
 			capacity = le64_to_cpu(id_ns.nsze) * sector_size;
-			capacity_valid = true;
+			capacity_valid = sector_size != 0;
 		}
 	}
 
@@ -1616,8 +1618,13 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 			chr_dev[len] = '\0';
 	}
 
+	/* The controller in sysfs, in the test root of --set-options */
+	err = nvme_sysfs_ctrl_path(chr_dev, &ctrl_path);
+	if (err)
+		return err;
+
 	// Populate PCIe VID/DID/SS_VID, link speed/width, and NUMA node from /sys/
-	snprintf(path, 512, "/sys/class/nvme/%s/device/vendor", chr_dev);
+	snprintf(path, sizeof(path), "%s/device/vendor", ctrl_path);
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
 		nvme_show_perror("Could not open PCIe VID in /sys/");
@@ -1632,7 +1639,7 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 	}
 	close(fd);
 
-	snprintf(path, 512, "/sys/class/nvme/%s/device/device", chr_dev);
+	snprintf(path, sizeof(path), "%s/device/device", ctrl_path);
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
 		nvme_show_perror("Could not open PCIe DID in /sys/");
@@ -1656,7 +1663,7 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 		return -1;
 	}
 
-	snprintf(path, 512, "/sys/class/nvme/%s/device/subsystem_vendor", chr_dev);
+	snprintf(path, sizeof(path), "%s/device/subsystem_vendor", ctrl_path);
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
 		nvme_show_perror("Could not open PCIe Subsystem Vendor ID in /sys/");
@@ -1671,7 +1678,7 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 	}
 	close(fd);
 
-	snprintf(path, 512, "/sys/class/nvme/%s/device/current_link_speed", chr_dev);
+	snprintf(path, sizeof(path), "%s/device/current_link_speed", ctrl_path);
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
 		nvme_show_perror("Could not open link speed in /sys/");
@@ -1691,7 +1698,7 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 			link_speed[len+2] = '\0';
 	}
 
-	snprintf(path, 512, "/sys/class/nvme/%s/device/current_link_width", chr_dev);
+	snprintf(path, sizeof(path), "%s/device/current_link_width", ctrl_path);
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
 		nvme_show_perror("Could not open link width in /sys/");
@@ -1713,7 +1720,7 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 
 	snprintf(link_string, 40, "Speed %s, Width x%s", link_speed, link_width);
 
-	snprintf(path, 512, "/sys/class/nvme/%s/device/numa_node", chr_dev);
+	snprintf(path, sizeof(path), "%s/device/numa_node", ctrl_path);
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
 		nvme_show_perror("Could not open NUMA node in /sys/");
@@ -1734,7 +1741,8 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 	}
 
 	//Populate PCIe AER errors from /sys/
-	snprintf(path, 512, "/sys/class/nvme/%s/device/aer_dev_correctable", chr_dev);
+	snprintf(path, sizeof(path), "%s/device/aer_dev_correctable",
+		 ctrl_path);
 	pcie_cor_valid = true;
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
@@ -1758,7 +1766,7 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 		}
 	}
 
-	snprintf(path, 512, "/sys/class/nvme/%s/device/aer_dev_nonfatal", chr_dev);
+	snprintf(path, sizeof(path), "%s/device/aer_dev_nonfatal", ctrl_path);
 	pcie_nonfatal_valid = true;
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
@@ -1781,7 +1789,7 @@ static int sfx_status(int argc, char **argv, struct command *acmd, struct plugin
 			pcie_nonfatal_valid = false;
 		}
 	}
-	snprintf(path, 512, "/sys/class/nvme/%s/device/aer_dev_fatal", chr_dev);
+	snprintf(path, sizeof(path), "%s/device/aer_dev_fatal", ctrl_path);
 	pcie_fatal_valid = true;
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
