@@ -323,7 +323,8 @@ per target the logs of the jobs in `logs/<target>/`, the inputs which found a
 bug in `artifacts/<target>/` and the corpus in `corpus/<target>/`, which starts
 with the seeds and grows across runs. Each run first minimizes the corpus to
 the inputs which add coverage (libFuzzer's `-merge=1`): every job loads all of
-it.
+it. Before that, it adds the seeds of the mock tests of the build to the
+corpus of the `device` target (see `seeds` below, `--no-mock-seeds` skips it).
 
 The `device` target runs in stages of equal time with more device data per
 input in each: 16 KiB, 64 KiB, 256 KiB and 1 MiB, the default of the device
@@ -331,23 +332,49 @@ mock (`--data-limits` selects others). Most data structures fit a page, and an
 input which gets little data runs fast: a megabyte of log entries prints as
 tens of megabytes of text. The mock takes the limit from `FUZZ_DATA_LIMIT`.
 The findings of the target are named after the limit, `data-<limit>-crash-*`,
-and `check` and `triage` replay them with it.
+and `check` and `triage` replay them with it. Each stage starts with the corpus
+minimized again, for its limit: a stage adds tens of thousands of inputs, and
+each job of the next one would load all of them. A merge runs every input once,
+so the corpus of the target is merged by command, one merge per CPU, and what
+they keep once more.
 
 `triage` replays the findings of a target and groups them by the bug they hit:
 the kind of finding and the first nvme-cli frame. For the `device` target, it
 names the command an input runs. `triage --show` prints the stack of each
-input instead, with the source lines also without `llvm-symbolizer`.
+input instead, with the source lines also without `llvm-symbolizer`. Both
+replay each input in a temporary directory, so the `crash-*` inputs and
+other files a run leaves behind do not pile up in the current one.
 
 `check` runs inputs once each with halting sanitizers, by default the
 regression inputs of a target, and prints what went wrong. The test suite
 sends the output of the targets to `/dev/null`, so this is the way to see why
 a seed fails, or to show that a new regression input fails without its fix.
+The regression inputs are those of the source tree `nvme-fuzz` is in, also
+with the build of another tree: run the `nvme-fuzz` of the tree under test.
 
 `coverage` shows how far the `device` target gets into each of its commands:
 the edges an input of a command reaches beyond those of a command which only
 identifies the controller. A command which adds few does not get past its
 option parsing, or a check of the device the fuzzer may never pass. It uses
-random device data, or with `--corpus` the inputs of a corpus.
+random device data, or with `--corpus` the inputs of a corpus. The commands
+of plugins which check the PCI IDs of the controller run with a model of each
+set of capabilities in the model tables of the plugin, or with the IDs of
+`--pci`.
+
+`sweep` tries the commands of the `device` target before a fuzz run: it runs
+each a few times with each variant and random device data, and reports one
+which crashes, takes long or writes files into its working directory. A new
+command in the table which does any of this would make a run fail on nearly
+every input. `--entries` selects commands, `--save` keeps the inputs with a
+problem for `check` and `triage`.
+
+`seeds` adds seeds to the corpus of the `device` target from the CLI mock
+tests, which answer the commands with valid device data, where fuzzed data
+rarely gets past the first check. It runs the `mock` test suite of the build
+with `NVME_FUZZ_RECORD` set, which records the answers in the input format of
+the target, and turns each run of a command of the table into a seed named
+`mock-*`. `-C` selects the build, e.g. one which runs the mock tests faster
+than the sanitizer build; failed tests only record less.
 
 `scripts/build.sh fuzz` builds and runs with `nvme-fuzz` too, in `.build-ci`
 and with its `--fuzz-*` options. It removes the build directory first, the

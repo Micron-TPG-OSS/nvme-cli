@@ -58,6 +58,7 @@
 
 #define WDC_PLUGIN_VERSION   "2.15.1"
 
+#include "wdc-nvme-cmds.h"
 #include "wdc-utils.h"
 
 #define WRITE_SIZE	(sizeof(__u8) * 4096)
@@ -4417,18 +4418,8 @@ static int wdc_vs_internal_fw_log(int argc, char **argv, struct command *acmd,
 		"Output file size. Deprecated, see man page for supported devices.";
 	const char *offset =
 		"Output file data offset. Deprecated, see man page for supported devices.";
-	char f[PATH_MAX] = {0};
-	char fb[PATH_MAX/2] = {0};
-	char fileSuffix[PATH_MAX] = {0};
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
-	__u32 xfer_size = 0;
-	int telemetry_type = 0, telemetry_data_area = 0;
-	UtilsTimeInfo             timeInfo;
-	__u8                      timeStamp[MAX_PATH_LEN];
-	__u64 capabilities = 0;
-	__u32 device_id, read_vendor_id;
-	char file_path[PATH_MAX/2] = {0};
 	int ret = -1;
 
 	struct argconfig_opt_val types[] = {
@@ -4438,16 +4429,7 @@ static int wdc_vs_internal_fw_log(int argc, char **argv, struct command *acmd,
 		VAL_END()
 	};
 
-	struct config {
-		char *file;
-		__u32 xfer_size;
-		__u32 data_area;
-		__u64 file_size;
-		__u64 offset;
-		int type;
-	};
-
-	struct config cfg = {
+	struct wdc_vs_internal_fw_log_cfg cfg = {
 		.file = NULL,
 		.xfer_size = 0x10000,
 		.data_area = 0,
@@ -4471,11 +4453,33 @@ static int wdc_vs_internal_fw_log(int argc, char **argv, struct command *acmd,
 		return ret;
 
 	ret = libnvme_scan_topology(ctx, NULL, NULL);
-	if (ret || !wdc_check_device(ctx, hdl))
+	if (ret)
+		return ret;
+
+	return run_wdc_vs_internal_fw_log(ctx, hdl, &cfg);
+}
+
+int run_wdc_vs_internal_fw_log(struct libnvme_global_ctx *ctx,
+		struct libnvme_transport_handle *hdl,
+		struct wdc_vs_internal_fw_log_cfg *cfg)
+{
+	char f[PATH_MAX] = {0};
+	char fb[PATH_MAX/2] = {0};
+	char fileSuffix[PATH_MAX] = {0};
+	__u32 xfer_size = 0;
+	int telemetry_type = 0, telemetry_data_area = 0;
+	UtilsTimeInfo             timeInfo;
+	__u8                      timeStamp[MAX_PATH_LEN];
+	__u64 capabilities = 0;
+	__u32 device_id, read_vendor_id;
+	char file_path[PATH_MAX/2] = {0};
+	int ret = 0;
+
+	if (!wdc_check_device(ctx, hdl))
 		goto out;
 
-	if (cfg.xfer_size) {
-		xfer_size = cfg.xfer_size;
+	if (cfg->xfer_size) {
+		xfer_size = cfg->xfer_size;
 	} else {
 		nvme_show_error("ERROR: WDC: Invalid length");
 		goto out;
@@ -4484,17 +4488,18 @@ static int wdc_vs_internal_fw_log(int argc, char **argv, struct command *acmd,
 	ret = nvme_get_pci_ids(ctx, hdl, &read_vendor_id, &device_id, NULL, NULL, NULL);
 
 	if (!wdc_is_sn861(device_id)) {
-		if (cfg.file) {
+		if (cfg->file) {
 			int verify_file;
 
 			/* verify file name and path is valid before getting dump data */
-			verify_file = shr_open_rawdata(cfg.file, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+			verify_file = shr_open_rawdata(cfg->file,
+					O_WRONLY | O_CREAT | O_TRUNC, 0666);
 			if (verify_file < 0) {
 				nvme_show_error("ERROR: WDC: open: %s", libnvme_strerror(errno));
 				goto out;
 			}
 			close(verify_file);
-			shr_strscpy(f, cfg.file, sizeof(f));
+			shr_strscpy(f, cfg->file, sizeof(f));
 		} else {
 			wdc_UtilsGetTime(&timeInfo);
 			memset(timeStamp, 0, sizeof(timeStamp));
@@ -4512,7 +4517,7 @@ static int wdc_vs_internal_fw_log(int argc, char **argv, struct command *acmd,
 			}
 		}
 
-		if (!cfg.file) {
+		if (!cfg->file) {
 			if (strlen(f) > PATH_MAX - 5) {
 				nvme_show_error("ERROR: WDC: file name overflow");
 				ret = -1;
@@ -4522,22 +4527,22 @@ static int wdc_vs_internal_fw_log(int argc, char **argv, struct command *acmd,
 		}
 		nvme_show_error("%s: filename = %s", __func__, f);
 
-		if (cfg.data_area) {
-			if (cfg.data_area > 5 || cfg.data_area < 1) {
+		if (cfg->data_area) {
+			if (cfg->data_area > 5 || cfg->data_area < 1) {
 				nvme_show_error("ERROR: WDC: Data area must be 1-5");
 				ret = -1;
 				goto out;
 			}
 		}
 
-		telemetry_type = cfg.type;
+		telemetry_type = cfg->type;
 		if (telemetry_type == WDC_TELEMETRY_TYPE_NONE)
 			telemetry_data_area = 0;
 		else
-			telemetry_data_area = cfg.data_area;
+			telemetry_data_area = cfg->data_area;
 	} else {
-		if (cfg.file) {
-			shr_strscpy(fb, cfg.file, sizeof(fb));
+		if (cfg->file) {
+			shr_strscpy(fb, cfg->file, sizeof(fb));
 		} else {
 			wdc_UtilsGetTime(&timeInfo);
 			memset(timeStamp, 0, sizeof(timeStamp));
@@ -4625,16 +4630,16 @@ static int wdc_vs_internal_fw_log(int argc, char **argv, struct command *acmd,
 					telemetry_type, telemetry_data_area);
 			goto out;
 		} else {
-			if (!cfg.data_area)
-				cfg.data_area = 1;
+			if (!cfg->data_area)
+				cfg->data_area = 1;
 
 			/* FW requirement - xfer size must be 256k for data area 4 */
-			if (cfg.data_area >= 4)
+			if (cfg->data_area >= 4)
 				xfer_size = 0x40000;
 			ret = wdc_do_cap_dui(hdl, f, xfer_size,
-					 cfg.data_area,
-					 nvme_args.verbose, cfg.file_size,
-					 cfg.offset);
+					 cfg->data_area,
+					 nvme_args.verbose, cfg->file_size,
+					 cfg->offset);
 			goto out;
 		}
 	}
@@ -5722,18 +5727,15 @@ static void wdc_print_fb_ca_log_json(struct wdc_ssd_ca_perf_stats *perf)
 static void wdc_print_bd_ca_log_normal(struct libnvme_transport_handle *hdl, void *data)
 {
 	struct wdc_bd_ca_log_format *bd_data = (struct wdc_bd_ca_log_format *)data;
-	__u64 *raw;
+	struct wdc_bd_ca_log_format *end = bd_data +
+		WDC_BD_CA_LOG_BUF_LEN / sizeof(*bd_data);
 	__u64 rawSwapped;
-	__u16 *word_raw1 = NULL,
-		*word_raw2 = NULL,
-		*word_raw3 = NULL;
-	__u32  *dword_raw = NULL;
-	__u8  *byte_raw = NULL;
+	__u8 *raw;
 	bool valid_id = true;
 
-	while (valid_id) {
-		raw = (__u64 *)&bd_data->raw_value[0];
-		rawSwapped = (le64_to_cpu(*raw)>>8);
+	while (valid_id && bd_data < end) {
+		raw = bd_data->raw_value;
+		rawSwapped = shr_get_unaligned_le64(raw) >> 8;
 
 		switch (bd_data->field_id) {
 		case 0x0:
@@ -5748,15 +5750,12 @@ static void wdc_print_bd_ca_log_normal(struct libnvme_transport_handle *hdl, voi
 					bd_data->normalized_value, (uint64_t)rawSwapped);
 			break;
 		case 0x2:
-			word_raw1 = (__u16 *)&bd_data->raw_value[1];
-			word_raw2 = (__u16 *)&bd_data->raw_value[3];
-			word_raw3 = (__u16 *)&bd_data->raw_value[5];
 			printf("wear_leveling                   : %3"PRIu8,
 					bd_data->normalized_value);
 			printf("%%       min: %"PRIu16", max: %"PRIu16", avg: %"PRIu16"\n",
-					le16_to_cpu(*word_raw1),
-					le16_to_cpu(*word_raw2),
-					le16_to_cpu(*word_raw3));
+					shr_get_unaligned_le16(&raw[1]),
+					shr_get_unaligned_le16(&raw[3]),
+					shr_get_unaligned_le16(&raw[5]));
 			break;
 		case 0x3:
 			printf("end_to_end_error_detection_count: %3"PRIu8"%%       %"PRIu64"\n",
@@ -5780,11 +5779,10 @@ static void wdc_print_bd_ca_log_normal(struct libnvme_transport_handle *hdl, voi
 					bd_data->normalized_value, (uint64_t)rawSwapped);
 			break;
 		case 0x8:
-			byte_raw = (__u8 *)&bd_data->raw_value[1];
-			dword_raw = (__u32 *)&bd_data->raw_value[2];
 			printf("thermal_throttle_status         : %3"PRIu8"%%       %"PRIu16,
-					bd_data->normalized_value, *byte_raw);
-			printf("%%, cnt: %"PRIu16"\n", le32_to_cpu(*dword_raw));
+					bd_data->normalized_value, raw[1]);
+			printf("%%, cnt: %"PRIu32"\n",
+					shr_get_unaligned_le32(&raw[2]));
 			break;
 		case 0x9:
 			printf("retry_buffer_overflow_count     : %3"PRIu8"%%       %"PRIu64"\n",
@@ -5818,16 +5816,16 @@ static void wdc_print_bd_ca_log_normal(struct libnvme_transport_handle *hdl, voi
 static void wdc_print_bd_ca_log_json(void *data)
 {
 	struct wdc_bd_ca_log_format *bd_data = (struct wdc_bd_ca_log_format *)data;
-	__u64 *raw, rawSwapped;
-	__u16 *word_raw;
-	__u32  *dword_raw;
-	__u8  *byte_raw;
+	struct wdc_bd_ca_log_format *end = bd_data +
+		WDC_BD_CA_LOG_BUF_LEN / sizeof(*bd_data);
+	__u64 rawSwapped;
+	__u8 *raw;
 	bool valid_id = true;
 	struct json_object *root = json_create_object();
 
-	while (valid_id) {
-		raw = (__u64 *)&bd_data->raw_value[0];
-		rawSwapped = (le64_to_cpu(*raw)>>8);
+	while (valid_id && bd_data < end) {
+		raw = bd_data->raw_value;
+		rawSwapped = shr_get_unaligned_le64(raw) >> 8;
 
 		switch (bd_data->field_id) {
 		case 0x0:
@@ -5843,17 +5841,14 @@ static void wdc_print_bd_ca_log_json(void *data)
 					rawSwapped);
 			break;
 		case 0x2:
-			word_raw = (__u16 *)&bd_data->raw_value[1];
 			json_object_add_value_int(root, "wear_leveling normalized",
 					bd_data->normalized_value);
 			json_object_add_value_int(root, "wear_leveling min",
-					le16_to_cpu(*word_raw));
-			word_raw = (__u16 *)&bd_data->raw_value[3];
+					shr_get_unaligned_le16(&raw[1]));
 			json_object_add_value_int(root, "wear_leveling max",
-					le16_to_cpu(*word_raw));
-			word_raw = (__u16 *)&bd_data->raw_value[5];
+					shr_get_unaligned_le16(&raw[3]));
 			json_object_add_value_int(root, "wear_leveling avg",
-					le16_to_cpu(*word_raw));
+					shr_get_unaligned_le16(&raw[5]));
 			break;
 		case 0x3:
 			json_object_add_value_int(root,
@@ -5888,14 +5883,12 @@ static void wdc_print_bd_ca_log_json(void *data)
 					rawSwapped);
 			break;
 		case 0x8:
-			byte_raw = (__u8 *)&bd_data->raw_value[1];
 			json_object_add_value_int(root, "thermal_throttle_status normalized",
 					bd_data->normalized_value);
 			json_object_add_value_int(root, "thermal_throttle_status",
-					*byte_raw);
-			dword_raw = (__u32 *)&bd_data->raw_value[2];
+					raw[1]);
 			json_object_add_value_int(root, "thermal_throttle_cnt",
-					le32_to_cpu(*dword_raw));
+					shr_get_unaligned_le32(&raw[2]));
 			break;
 		case 0x9:
 			json_object_add_value_int(root, "retry_buffer_overflow_count normalized",
@@ -9669,18 +9662,9 @@ static int wdc_vs_fw_activate_history(int argc, char **argv, struct command *acm
 		struct plugin *plugin)
 {
 	const char *desc = "Retrieve FW activate history table.";
-	__u64 capabilities = 0;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
-	int ret = -1;
-
-	struct config {
-		char *output_format;
-	};
-
-	struct config cfg = {
-		.output_format = "normal",
-	};
+	int ret;
 
 	OPT_ARGS(opts) = {
 		OPT_END()
@@ -9690,11 +9674,19 @@ static int wdc_vs_fw_activate_history(int argc, char **argv, struct command *acm
 	if (ret)
 		return ret;
 
-	cfg.output_format = nvme_args.output_format;
-
 	ret = libnvme_scan_topology(ctx, NULL, NULL);
 	if (ret)
 		return ret;
+
+	return run_wdc_vs_fw_activate_history(ctx, hdl);
+}
+
+int run_wdc_vs_fw_activate_history(struct libnvme_global_ctx *ctx,
+		struct libnvme_transport_handle *hdl)
+{
+	char *output_format = nvme_args.output_format;
+	__u64 capabilities = 0;
+	int ret = -1;
 
 	capabilities = wdc_get_drive_capabilities(ctx, hdl);
 
@@ -9718,11 +9710,12 @@ static int wdc_vs_fw_activate_history(int argc, char **argv, struct command *acm
 			(cust_fw_id == WDC_CUSTOMER_ID_0x1008) ||
 			(cust_fw_id == WDC_CUSTOMER_ID_0x1005) ||
 			(cust_fw_id == WDC_CUSTOMER_ID_0x1304))
-			ret = wdc_get_fw_act_history_C2(ctx, hdl, cfg.output_format);
+			ret = wdc_get_fw_act_history_C2(ctx, hdl,
+							output_format);
 		else
-			ret = wdc_get_fw_act_history(ctx, hdl, cfg.output_format);
+			ret = wdc_get_fw_act_history(ctx, hdl, output_format);
 	} else if (capabilities & WDC_DRIVE_CAP_FW_ACTIVATE_HISTORY_C2) {
-		ret = wdc_get_fw_act_history_C2(ctx, hdl, cfg.output_format);
+		ret = wdc_get_fw_act_history_C2(ctx, hdl, output_format);
 	}
 
 	if (ret)
@@ -9764,7 +9757,6 @@ static int wdc_clear_fw_activate_history(int argc, char **argv, struct command *
 		struct plugin *plugin)
 {
 	const char *desc = "Clear FW activate history table.";
-	__u64 capabilities = 0;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	int ret;
@@ -9780,6 +9772,15 @@ static int wdc_clear_fw_activate_history(int argc, char **argv, struct command *
 	ret = libnvme_scan_topology(ctx, NULL, NULL);
 	if (ret)
 		return ret;
+
+	return run_wdc_clear_fw_activate_history(ctx, hdl);
+}
+
+int run_wdc_clear_fw_activate_history(struct libnvme_global_ctx *ctx,
+		struct libnvme_transport_handle *hdl)
+{
+	__u64 capabilities = 0;
+	int ret;
 
 	capabilities = wdc_get_drive_capabilities(ctx, hdl);
 
@@ -10733,7 +10734,6 @@ static int wdc_drive_resize(int argc, char **argv,
 	const char *size = "The new size (in GB) to resize the drive to.";
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
-	uint64_t capabilities = 0;
 	int ret;
 
 	struct config {
@@ -10754,20 +10754,32 @@ static int wdc_drive_resize(int argc, char **argv,
 		return ret;
 
 	ret = libnvme_scan_topology(ctx, NULL, NULL);
-	if (ret || !wdc_check_device(ctx, hdl))
+	if (ret)
+		return -1;
+
+	return run_wdc_drive_resize(ctx, hdl, cfg.size);
+}
+
+int run_wdc_drive_resize(struct libnvme_global_ctx *ctx,
+		struct libnvme_transport_handle *hdl, uint64_t size)
+{
+	uint64_t capabilities = 0;
+	int ret;
+
+	if (!wdc_check_device(ctx, hdl))
 		return -1;
 
 	capabilities = wdc_get_drive_capabilities(ctx, hdl);
 
 	if ((capabilities & WDC_DRIVE_CAP_RESIZE) == WDC_DRIVE_CAP_RESIZE) {
-		ret = wdc_do_drive_resize(hdl, cfg.size);
+		ret = wdc_do_drive_resize(hdl, size);
 	} else {
 		nvme_show_error("ERROR: WDC: unsupported device for this command");
 		ret = -1;
 	}
 
 	if (!ret)
-		printf("New size: %" PRIu64 " GB\n", cfg.size);
+		printf("New size: %" PRIu64 " GB\n", size);
 
 	nvme_show_status(ret);
 	return ret;
@@ -13044,13 +13056,6 @@ int run_wdc_cloud_ssd_plugin_version(int argc, char **argv,
 	return wdc_cloud_ssd_plugin_version(argc, argv, command, plugin);
 }
 
-int run_wdc_vs_internal_fw_log(int argc, char **argv,
-		struct command *command,
-		struct plugin *plugin)
-{
-	return wdc_vs_internal_fw_log(argc, argv, command, plugin);
-}
-
 int run_wdc_vs_nand_stats(int argc, char **argv,
 		struct command *command,
 		struct plugin *plugin)
@@ -13084,27 +13089,6 @@ int run_wdc_clear_assert_dump(int argc, char **argv,
 		struct plugin *plugin)
 {
 	return wdc_clear_assert_dump(argc, argv, command, plugin);
-}
-
-int run_wdc_drive_resize(int argc, char **argv,
-		struct command *command,
-		struct plugin *plugin)
-{
-	return wdc_drive_resize(argc, argv, command, plugin);
-}
-
-int run_wdc_vs_fw_activate_history(int argc, char **argv,
-		struct command *command,
-		struct plugin *plugin)
-{
-	return wdc_vs_fw_activate_history(argc, argv, command, plugin);
-}
-
-int run_wdc_clear_fw_activate_history(int argc, char **argv,
-		struct command *command,
-		struct plugin *plugin)
-{
-	return wdc_clear_fw_activate_history(argc, argv, command, plugin);
 }
 
 int run_wdc_vs_telemetry_controller_option(int argc, char **argv,

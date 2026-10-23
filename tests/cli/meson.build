@@ -33,8 +33,9 @@ if python3.found()
 
     # Standalone CLI test for "nvme config-convert". Needs no device; uses
     # an explicit --config/--output pair under /tmp instead. Requires
-    # json-c since the legacy config.json reader is a no-op without it.
-    if want_fabrics and json_c_dep.found()
+    # json-c since the legacy config.json reader is a no-op without it,
+    # and the "config" plugin, which has the command.
+    if want_fabrics and 'config' in selected_plugins and json_c_dep.found()
         test('nvme-cli - config-convert',
              python3,
              args: [files('nvme_config_convert_test.py'), nvme_exe],
@@ -109,11 +110,23 @@ if python3.found()
             ['sel', 'nvme_sel_test.py', cli_test_env, 30],
             ['host-metadata', 'nvme_host_metadata_test.py', cli_test_env,
              30],
+            ['fuzz-record', 'nvme_fuzz_record_test.py', cli_test_env, 30],
         ]
 
         if 'id' in selected_plugins and json_c_dep.found()
             mock_cli_tests += [
                 ['ns-descs', 'nvme_ns_descs_test.py', cli_test_env, 30],
+            ]
+        endif
+
+        # A command of the sandisk plugin which falls back to the wdc one
+        if 'sandisk' in selected_plugins and 'wdc' in selected_plugins and \
+           json_c_dep.found()
+            mock_cli_tests += [
+                ['json-document', 'nvme_json_document_test.py', cli_test_env,
+                 30],
+                ['sndk-fallback', 'nvme_sndk_fallback_test.py', cli_test_env,
+                 30],
             ]
         endif
 

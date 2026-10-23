@@ -18,11 +18,12 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nvme_fuzz import run, targets
+from nvme_fuzz import run, seeds, targets
 
 # What a libFuzzer binary does, as far as nvme-fuzz run cares: FAKE_MODE
 # says whether it finds something, ignores SIGTERM or just runs. A merge
-# keeps the inputs not named redundant-*, unless it fails.
+# keeps the inputs not named redundant-*, unless it fails, and notes its
+# data limit and inputs in FAKE_MERGES.
 FAKE = f"""#!{sys.executable}
 import os, shutil, signal, sys, time
 args = [a for a in sys.argv[1:] if a.startswith('-')]
@@ -32,6 +33,13 @@ mode = os.environ.get('FAKE_MODE', 'sleep')
 if '-merge=1' in args:
     if mode == 'merge-fail':
         sys.exit(1)
+    if mode == 'merge-sleep':
+        time.sleep(60)
+    if 'FAKE_MERGES' in os.environ:
+        with open(os.environ['FAKE_MERGES'], 'a') as f:
+            limit = os.environ.get('FUZZ_DATA_LIMIT', 'none')
+            names = ' '.join(sorted(os.listdir(dirs[1])))
+            f.write(f'{{limit}} {{names}}\\n')
     for f in os.listdir(dirs[1]):
         if not f.startswith('redundant-'):
             shutil.copy(os.path.join(dirs[1], f), dirs[0])
@@ -40,6 +48,7 @@ os.mkdir('fuzz-device-abcdef')
 if mode == 'crash':
     limit = os.environ.get('FUZZ_DATA_LIMIT', 'none')
     open(prefix[0] + 'crash-1234', 'w').write(limit)
+    open('args', 'w').write(' '.join(args))
     open('fuzz-0.log', 'w').write('SUMMARY: AddressSanitizer: x\\n')
     sys.exit(1)
 if mode == 'ignore-term':
@@ -69,14 +78,16 @@ class RunTest(unittest.TestCase):
         mode: str,
         seconds: int = 1,
         data_limits: tuple[int, ...] = (1 << 20,),
+        jobs: int = 1,
     ) -> int:
         args = argparse.Namespace(
             build_dir=self.build,
             results=self.results,
             seconds=seconds,
-            jobs=1,
+            jobs=jobs,
             targets=[targets.TARGETS['device']],
             data_limits=data_limits,
+            no_mock_seeds=True,
         )
         with mock.patch.dict(os.environ, {'FAKE_MODE': mode}):
             return run.main(args)
@@ -97,6 +108,12 @@ class RunTest(unittest.TestCase):
         logs = self.results / 'logs' / 'device'
         self.assertFalse(list(logs.glob('fuzz-device-*')))
 
+    def test_reload(self) -> None:
+        self.assertEqual(self._run('crash'), 1)
+        logs = self.results / 'logs' / 'device' / 'data-1048576'
+        args = (logs / 'args').read_text().split()
+        self.assertIn(f'-reload={run.RELOAD_SECONDS}', args)
+
     def test_stages(self) -> None:
         self.assertEqual(self._run('crash', data_limits=(4096, 8192)), 1)
         artifacts = self.results / 'artifacts' / 'device'
@@ -110,6 +127,29 @@ class RunTest(unittest.TestCase):
         self.assertEqual(
             self._summary().count('SUMMARY: AddressSanitizer: x'), 2
         )
+
+    def test_mock_seeds(self) -> None:
+        def add_seeds(build_dir: Path, corpus: Path) -> None:
+            self.assertEqual(build_dir, self.build)
+            (corpus / 'mock-1').write_bytes(b'm')
+
+        args = argparse.Namespace(
+            build_dir=self.build,
+            results=self.results,
+            seconds=1,
+            jobs=1,
+            targets=[targets.TARGETS['device']],
+            data_limits=(1 << 20,),
+            no_mock_seeds=False,
+        )
+        with (
+            mock.patch.object(run, 'DEADLINE_EXTRA', 0),
+            mock.patch.object(seeds, 'add_seeds', add_seeds),
+        ):
+            self.assertEqual(run.main(args), 0)
+        # added ahead of the merge, which keeps it
+        corpus = self.results / 'corpus' / 'device'
+        self.assertTrue((corpus / 'mock-1').exists())
 
     def test_merge(self) -> None:
         corpus = self.results / 'corpus' / 'device'
@@ -133,6 +173,55 @@ class RunTest(unittest.TestCase):
             self.assertEqual(self._run('merge-fail'), 0)
         self.assertTrue((corpus / 'redundant-1').exists())
         self.assertFalse(corpus.with_name('device.merge').exists())
+
+    def test_merge_partitioned(self) -> None:
+        corpus = self.results / 'corpus' / 'device'
+        corpus.mkdir(parents=True)
+        (corpus / 'redundant-1').write_bytes(b'\x01x')
+        (corpus / 'a-1').write_bytes(b'\x01y')
+        (corpus / 'b-1').write_bytes(b'\x02y')
+        merges = Path(self.tmp.name) / 'merges'
+        with (
+            mock.patch.object(run, 'DEADLINE_EXTRA', 0),
+            # without the seeds of the tree
+            mock.patch.object(run, 'copy_new', lambda src, dst: 0),
+            mock.patch.dict(os.environ, {'FAKE_MERGES': str(merges)}),
+        ):
+            self.assertEqual(self._run('sleep', 2, (4096, 8192), 2), 0)
+        self.assertEqual(
+            sorted(merges.read_text().splitlines()),
+            [
+                # the parts by the first byte, then what they keep, for
+                # the limit of each stage
+                '4096 a-1 b-1',
+                '4096 a-1 redundant-1',
+                '4096 b-1',
+                '8192 a-1',
+                '8192 a-1 b-1',
+                '8192 b-1',
+            ],
+        )
+        self.assertEqual({f.name for f in corpus.iterdir()}, {'a-1', 'b-1'})
+        self.assertFalse(corpus.with_name('device.parts').exists())
+
+    def test_interrupt_merge(self) -> None:
+        corpus = self.results / 'corpus' / 'device'
+        corpus.mkdir(parents=True)
+        (corpus / 'redundant-1').write_bytes(b'\x01x')
+
+        def ctrl_c() -> None:
+            time.sleep(1)
+            os.kill(os.getpid(), signal.SIGINT)
+
+        threading.Thread(target=ctrl_c).start()
+        start = time.time()
+        self.assertEqual(self._run('merge-sleep', 600, jobs=2), 130)
+        self.assertLess(time.time() - start, 30)
+        # the corpus as it was, and nothing of the merge left
+        self.assertTrue((corpus / 'redundant-1').exists())
+        self.assertEqual(
+            sorted(f.name for f in corpus.parent.iterdir()), ['device']
+        )
 
     def test_deadline(self) -> None:
         with mock.patch.object(run, 'DEADLINE_EXTRA', 0):
