@@ -24,67 +24,31 @@
 
 #include <shared/compiler-attributes-util.h>
 #include <shared/int-util.h>
+#include <shared/unaligned-util.h>
 
 #include "global-ctx.h"
+#include "nvme-pci-ids.h"
 #include "nvme-print.h"
 #include "plugin.h"
 #include "src/cleanup.h"
 #include "ymtc-utils.h"
 
-static unsigned short vendor_id;
-static unsigned short device_id;
-
 /**
- * ReadSysFile - Read a hexadecimal ID value from a sysfs file
- * @file:  Path to the sysfs file
- * @id:    Output parameter to store the read ID value
- * Return: Number of bytes read on success, -1 on failure
- */
-static int ReadSysFile(const char *file, unsigned short *id)
-{
-	int ret = 0;
-	char idstr[32] = { '\0' };
-	int fd = open(file, O_RDONLY);
-
-	if (fd < 0) {
-		perror(file);
-		return fd;
-	}
-
-	ret = read(fd, idstr, sizeof(idstr) - 1);
-	close(fd);
-	if (ret < 0)
-		perror("read");
-	else
-		*id = strtol(idstr, NULL, 16);
-
-	return ret;
-}
-
-/**
- * GetSSDModel - Identify YMTC SSD model by NVMe controller index
- * @idx: NVMe controller index (e.g., idx=0 for nvme0)
+ * GetSSDModel - Identify the YMTC SSD model of a controller
+ * @ctx: NVMe global context
+ * @hdl: transport handle of the controller or one of its namespaces
  * Return: ySSDModel enum value indicating the SSD model
  */
-static enum ySSDModel GetSSDModel(int idx)
+static enum ySSDModel GetSSDModel(struct libnvme_global_ctx *ctx,
+				  struct libnvme_transport_handle *hdl)
 {
 	enum ySSDModel model = UNKNOWN_SSD;
-	char path[512];
+	__u32 vendor_id = 0, device_id = 0;
 
-	snprintf(path, sizeof(path),
-		 "/sys/class/nvme/nvme%d/device/vendor", idx);
-	if (ReadSysFile(path, &vendor_id) < 0) {
-		snprintf(path, sizeof(path),
-			 "/sys/class/misc/nvme%d/device/vendor", idx);
-		ReadSysFile(path, &vendor_id);
-	}
-	snprintf(path, sizeof(path),
-		 "/sys/class/nvme/nvme%d/device/device", idx);
-	if (ReadSysFile(path, &device_id) < 0) {
-		snprintf(path, sizeof(path),
-			 "/sys/class/misc/nvme%d/device/device", idx);
-		ReadSysFile(path, &device_id);
-	}
+	if (nvme_get_pci_ids(ctx, hdl, &vendor_id, &device_id,
+			     NULL, NULL, NULL))
+		return model;
+
 	if (vendor_id == YMTC_VENDOR_ID) {
 		switch (device_id) {
 		case 0x1058:
@@ -127,18 +91,14 @@ static int ymtc_parse_options(struct libnvme_global_ctx **ctx,
 		struct argconfig_commandline_options *opts,
 		enum ySSDModel *model)
 {
-	int idx;
 	int err;
 
 	err = parse_and_open(ctx, hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
 
-	if (model) {
-		if (sscanf(nvme_args.device, "/dev/nvme%d", &idx) != 1)
-			idx = 0;
-		*model = GetSSDModel(idx);
-	}
+	if (model)
+		*model = GetSSDModel(*ctx, *hdl);
 
 	return 0;
 }
@@ -172,13 +132,18 @@ static void print_ymtc_smart_item(const struct nvme_ymtc_smart_log_item *it,
 
 	case SI_VD_WEARLEVELING_COUNT_ID:
 		printf("wear_leveling                   : %3d%%       min: %u, max: %u, avg: %u\n",
-			   *nm, *(uint16_t *)raw, *(uint16_t *)(raw + 2), *(uint16_t *)(raw + 4));
+			   *nm,
+			   shr_get_unaligned_le16(raw),
+			   shr_get_unaligned_le16(raw + 2),
+			   shr_get_unaligned_le16(raw + 4));
 		break;
 
 	case SI_VD_TEMPT_SINCE_BOOTUP_ID:
 		printf("tempt_since_bootup              : %3d%%       max: %u, min: %u, curr: %u\n",
-			   *nm, *(uint16_t *)raw - 273, *(uint16_t *)(raw + 2) - 273,
-			   *(uint16_t *)(raw + 4) - 273);
+			   *nm,
+			   shr_get_unaligned_le16(raw) - 273,
+			   shr_get_unaligned_le16(raw + 2) - 273,
+			   shr_get_unaligned_le16(raw + 4) - 273);
 		break;
 
 	case SI_VD_E2E_DECTECTION_COUNT_ID:
@@ -188,7 +153,7 @@ static void print_ymtc_smart_item(const struct nvme_ymtc_smart_log_item *it,
 
 	case SI_VD_PCIE_CRC_ERR_COUNT_ID:
 		printf("crc_error_count                 : %3d%%       %"PRIu32"\n",
-			   *nm, *(uint32_t *)raw);
+			   *nm, shr_get_unaligned_le32(raw));
 		break;
 
 	case SI_VD_TIMED_WORKLOAD_MEDIA_WEAR_ID:
@@ -218,23 +183,28 @@ static void print_ymtc_smart_item(const struct nvme_ymtc_smart_log_item *it,
 
 	case SI_VD_TEMPT_SINCE_BORN_ID:
 		printf("tempt_since_born                : %3d%%       max: %u, min: %u, curr: %u\n",
-			   *nm, *(uint16_t *)raw - 273, *(uint16_t *)(raw + 2) - 273,
-			   *(int16_t *)(raw + 4) - 273);
+			   *nm,
+			   shr_get_unaligned_le16(raw) - 273,
+			   shr_get_unaligned_le16(raw + 2) - 273,
+			   (int16_t)shr_get_unaligned_le16(raw + 4) - 273);
 		break;
 
 	case SI_VD_POWER_CONSUMPTION_ID:
 		printf("power_consumption               : %3d%%       max: %u, min: %u, curr: %u\n",
-			   *nm, *(uint16_t *)raw, *(uint16_t *)(raw + 2), *(uint16_t *)(raw + 4));
+			   *nm,
+			   shr_get_unaligned_le16(raw),
+			   shr_get_unaligned_le16(raw + 2),
+			   shr_get_unaligned_le16(raw + 4));
 		break;
 
 	case SI_VD_THERMAL_THROTTLE_STATUS_ID:
 		printf("thermal_throttle_status         : %3d%%       %d%%, cnt: %"PRIu32"\n",
-			   *nm, *raw, *(uint32_t *)(raw + 1));
+			   *nm, *raw, shr_get_unaligned_le32(raw + 1));
 		break;
 
 	case SI_VD_THERMAL_THROTTLE_TIME_ID:
 		printf("thermal_throttle_time           : %3d%%       %u, time: %"PRIu32"\n",
-			   *nm, *raw, *(uint32_t *)(raw + 1));
+			   *nm, *raw, shr_get_unaligned_le32(raw + 1));
 		break;
 
 	case SI_VD_FEATURE_EC_ID:
@@ -243,7 +213,10 @@ static void print_ymtc_smart_item(const struct nvme_ymtc_smart_log_item *it,
 				   *nm, int48_to_long(raw));
 		else if (model == PE501 || model == PE522)
 			printf("capacitor_capacitance           : %3d%%       current: %u, nominal: %u, threshold: %u\n",
-				   *nm, *(uint16_t *)raw, *(uint16_t *)(raw + 2), *(uint16_t *)(raw + 4));
+				   *nm,
+				   shr_get_unaligned_le16(raw),
+				   shr_get_unaligned_le16(raw + 2),
+				   shr_get_unaligned_le16(raw + 4));
 		break;
 
 	case SI_VD_FEATURE_ED_ID:

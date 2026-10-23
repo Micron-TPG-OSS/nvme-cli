@@ -7910,7 +7910,8 @@ static int wdc_get_c3_log_page(struct libnvme_global_ctx *ctx, struct libnvme_tr
 		log_data = (struct wdc_ssd_latency_monitor_log *)data;
 
 		/* check log page version */
-		if (log_data->log_page_version != WDC_LATENCY_MON_VERSION) {
+		if (le16_to_cpu(log_data->log_page_version) !=
+		    WDC_LATENCY_MON_VERSION) {
 			nvme_show_error("ERROR: WDC: invalid latency monitor version");
 			ret = -1;
 			goto out;
@@ -7982,10 +7983,10 @@ static int wdc_get_ocp_c1_log_page(struct libnvme_global_ctx *ctx, struct libnvm
 		log_data = (struct wdc_ocp_c1_error_recovery_log *)data;
 
 		/* check log page version */
-		if ((log_data->log_page_version < 1) ||
-			(log_data->log_page_version > 3)) {
+		if ((le16_to_cpu(log_data->log_page_version) < 1) ||
+			(le16_to_cpu(log_data->log_page_version) > 3)) {
 			nvme_show_error("ERROR: WDC: invalid error recovery log version - %d",
-				log_data->log_page_version);
+				le16_to_cpu(log_data->log_page_version));
 			ret = -1;
 			goto out;
 		}
@@ -8054,8 +8055,11 @@ static int wdc_get_ocp_c4_log_page(struct libnvme_global_ctx *ctx, struct libnvm
 		log_data = (struct wdc_ocp_C4_dev_cap_log *)data;
 
 		/* check log page version */
-		if (log_data->log_page_version != WDC_DEV_CAP_LOG_VERSION) {
-			nvme_show_error("ERROR: WDC: invalid device capabilities log version - %d", log_data->log_page_version);
+		if (le16_to_cpu(log_data->log_page_version) !=
+		    WDC_DEV_CAP_LOG_VERSION) {
+			nvme_show_error(
+				"ERROR: WDC: invalid device capabilities log version - %d",
+				le16_to_cpu(log_data->log_page_version));
 			ret = -1;
 			goto out;
 		}
@@ -8124,10 +8128,11 @@ static int wdc_get_ocp_c5_log_page(struct libnvme_global_ctx *ctx, struct libnvm
 		log_data = (struct wdc_ocp_C5_unsupported_reqs *)data;
 
 		/* check log page version */
-		if (log_data->log_page_version != WDC_UNSUPPORTED_REQS_LOG_VERSION) {
+		if (le16_to_cpu(log_data->log_page_version) !=
+		    WDC_UNSUPPORTED_REQS_LOG_VERSION) {
 			nvme_show_error("ERROR: WDC: invalid 0xC5 log page version");
 			nvme_show_error("ERROR: WDC: log page version: %d",
-				log_data->log_page_version);
+				le16_to_cpu(log_data->log_page_version));
 			ret = -1;
 			goto out;
 		}
@@ -8224,6 +8229,17 @@ static long double le_to_float(__u8 *data, int byte_len)
 	return result;
 }
 
+/*
+ * A counter of @byte_len bytes at @data, at most UINT64_MAX: a device can
+ * report more, which a conversion of the long double would make undefined.
+ */
+static __u64 le_to_u64(__u8 *data, int byte_len)
+{
+	long double val = le_to_float(data, byte_len);
+
+	return val < 0x1p64L ? (__u64)val : UINT64_MAX;
+}
+
 /* The GUID as "0x" and its bytes in hex, the most significant first */
 static void stringify_log_page_guid(__u8 *guid, char *buf, size_t size)
 {
@@ -8301,9 +8317,9 @@ static void wdc_show_cloud_smart_log_json(struct ocp_cloud_smart_log *log)
 
 	root = json_create_object();
 	json_object_add_value_uint64(root, "physical_media_units_written",
-				     le_to_float(log->physical_media_units_written, 16));
+		le_to_u64(log->physical_media_units_written, 16));
 	json_object_add_value_uint64(root, "physical_media_units_read",
-				     le_to_float(log->physical_media_units_read, 16));
+		le_to_u64(log->physical_media_units_read, 16));
 	json_object_add_value_object(root, "bad_user_nand_blocks",
 				     bad_user_nand_blocks);
 	json_object_add_value_object(root, "bad_system_nand_blocks",
@@ -8358,9 +8374,9 @@ static void wdc_show_cloud_smart_log_json(struct ocp_cloud_smart_log *log)
 	json_object_add_value_uint(root, "total_nuse",
 				   le64_to_cpu(log->total_nuse));
 	json_object_add_value_uint64(root, "plp_start_count",
-				     le_to_float(log->plp_start_count, 16));
+		le_to_u64(log->plp_start_count, 16));
 	json_object_add_value_uint64(root, "endurance_estimate",
-				     le_to_float(log->endurance_estimate, 16));
+		le_to_u64(log->endurance_estimate, 16));
 	if (smart_log_ver >= 3) {
 		json_object_add_value_uint(root, "pcie_link_retraining_count",
 					   le64_to_cpu(log->pcie_link_retraining_cnt));
