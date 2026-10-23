@@ -55,7 +55,7 @@
 static const uint8_t zero_uuid[16] = { 0 };
 static struct print_ops json_print_ops;
 static struct json_object *json_r;
-static int json_init;
+static bool json_init;
 
 static void json_feature_show_fields(enum nvme_features_id fid, unsigned int result,
 				     unsigned char *buf);
@@ -5856,7 +5856,7 @@ static void json_output_key_value(const char *key, const char *val, va_list ap)
 
 void json_show_init(void)
 {
-	json_init++;
+	json_init = true;
 
 	if (!json_r)
 		json_r = json_create_object();
@@ -5880,8 +5880,9 @@ bool json_empty(struct json_object *obj)
 void json_show_finish(void)
 {
 	/* nvme_main() finishes even if no command started a document */
-	if (!json_init || --json_init)
+	if (!json_init)
 		return;
+	json_init = false;
 
 	if (!json_empty(json_r))
 		json_output_object(json_r);
@@ -6043,6 +6044,7 @@ static void json_mgmt_addr_list_log(struct nvme_mgmt_addr_list_log *ma_list)
 	struct json_object *mad;
 	struct json_object *mat;
 	char json_str[STR_LEN];
+	char madrs[sizeof(ma_list->mad[0].madrs) + 1];
 
 	for (i = 0; i < ARRAY_SIZE(ma_list->mad); i++) {
 		switch (ma_list->mad[i].mat) {
@@ -6054,7 +6056,10 @@ static void json_mgmt_addr_list_log(struct nvme_mgmt_addr_list_log *ma_list)
 				    "NVM subsystem management agent" : "fabric interface manager");
 			snprintf(json_str, sizeof(json_str), "type: %d", ma_list->mad[i].mat);
 			obj_add_obj(mad, json_str, mat);
-			obj_add_str(mad, "address", (const char *)ma_list->mad[i].madrs);
+			snprintf(madrs, sizeof(madrs), "%-.*s",
+				 (int)sizeof(ma_list->mad[i].madrs),
+				 ma_list->mad[i].madrs);
+			obj_add_str(mad, "address", madrs);
 			snprintf(json_str, sizeof(json_str), "descriptor: %d", i);
 			obj_add_obj(r, json_str, mad);
 			reserved = false;
