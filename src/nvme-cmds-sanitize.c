@@ -61,7 +61,7 @@ static int nvme_sleep(unsigned int seconds)
 
 	if (shr_sigint_received) {
 		nvme_show_error("Interrupted device self-test operation by SIGINT");
-		return -SIGINT;
+		return -EINTR;
 	}
 
 	return 0;
@@ -113,15 +113,18 @@ static int wait_self_test(struct libnvme_transport_handle *hdl)
 			return err;
 		}
 
-		if (++cnt > wthr) {
-			nvme_show_error("no progress for %d seconds, stop waiting", wthr);
-			return -EIO;
-		}
-
-		if (log->completion == 0 && p > 0) {
+		if (NVME_GET(log->current_operation, ST_CURR_OP) ==
+		    NVME_ST_CURR_OP_NOT_RUNNING) {
 			if (nvme_is_output_format_normal())
 				print_info("\r[%.*s] %3d%%\n", 50, dash, 100);
 			break;
+		}
+
+		if (++cnt > wthr) {
+			nvme_show_error(
+				"no progress for %d seconds, stop waiting",
+				wthr);
+			return -EIO;
 		}
 
 		if (log->completion < p) {
@@ -221,9 +224,8 @@ static int device_self_test(int argc, char **argv, struct command *acmd, struct 
 			NVME_CSI_NVM, log, sizeof(*log));
 		err = libnvme_get_log(hdl, &cmd, false, sizeof(*log));
 		if (err) {
-			if (nvme_is_output_format_normal())
-				print_info("\n");
-			nvme_show_err(err, "self test log\n");
+			nvme_show_err(err, "self test log");
+			return err;
 		}
 
 		if (log->completion == 0) {
@@ -276,7 +278,7 @@ static int wait_sanitize(struct libnvme_transport_handle *hdl)
 	static const char spin[] = {'-', '\\', '|', '/' };
 	struct libnvme_passthru_cmd cmd;
 	__u64 i = 0, cnt = 0, wthr = 0;
-	__u32 p = 0;
+	__u32 p = 0, scdw10;
 	int err;
 
 	log = libnvme_alloc(sizeof(*log));
@@ -290,23 +292,24 @@ static int wait_sanitize(struct libnvme_transport_handle *hdl)
 		return err;
 	}
 
-	switch (NVME_GET(log->scdw10, SANITIZE_CDW10_SANACT)) {
+	scdw10 = le32_to_cpu(log->scdw10);
+	switch (NVME_GET(scdw10, SANITIZE_CDW10_SANACT)) {
 	case NVME_SANITIZE_SANACT_EXIT_FAILURE:
 		break;
 	case NVME_SANITIZE_SANACT_START_BLOCK_ERASE:
-		if (NVME_GET(log->scdw10, SANITIZE_CDW10_NDAS))
+		if (NVME_GET(scdw10, SANITIZE_CDW10_NDAS))
 			wthr = le32_to_cpu(log->etbend);
 		else
 			wthr = le32_to_cpu(log->etbe);
 		break;
 	case NVME_SANITIZE_SANACT_START_OVERWRITE:
-		if (NVME_GET(log->scdw10, SANITIZE_CDW10_NDAS))
+		if (NVME_GET(scdw10, SANITIZE_CDW10_NDAS))
 			wthr = le32_to_cpu(log->etond);
 		else
 			wthr = le32_to_cpu(log->eto);
 		break;
 	case NVME_SANITIZE_SANACT_START_CRYPTO_ERASE:
-		if (NVME_GET(log->scdw10, SANITIZE_CDW10_NDAS))
+		if (NVME_GET(scdw10, SANITIZE_CDW10_NDAS))
 			wthr = le32_to_cpu(log->etcend);
 		else
 			wthr = le32_to_cpu(log->etce);
@@ -315,7 +318,7 @@ static int wait_sanitize(struct libnvme_transport_handle *hdl)
 	default:
 		break;
 	}
-	if (wthr != 0xffffffff && NVME_GET(log->scdw10, SANITIZE_CDW10_EMVS))
+	if (wthr != 0xffffffff && NVME_GET(scdw10, SANITIZE_CDW10_EMVS))
 		wthr += le32_to_cpu(log->etpvds);
 
 	nvme_show_result("Waiting for sanitize completion...");
@@ -339,17 +342,17 @@ static int wait_sanitize(struct libnvme_transport_handle *hdl)
 			return err;
 		}
 
+		if (le16_to_cpu(log->sprog) == 0xffff) {
+			if (nvme_is_output_format_normal())
+				print_info("\r[%.*s] %3d%%\n", 50, dash, 100);
+			break;
+		}
+
 		if (++cnt > wthr) {
 			nvme_show_error(
 			    "no progress for %"PRIu64" seconds, stop waiting",
 			    wthr);
 			return -EIO;
-		}
-
-		if (le16_to_cpu(log->sprog) == 0xffff) {
-			if (nvme_is_output_format_normal())
-				print_info("\r[%.*s] %3d%%\n", 50, dash, 100);
-			break;
 		}
 
 		if (le16_to_cpu(log->sprog) < p) {
@@ -501,6 +504,11 @@ static int sanitize_cmd(int argc, char **argv, struct command *acmd, struct plug
 	if (err)
 		return err;
 
+	if (!cfg.repeat) {
+		nvme_show_error("invalid repeat count: 0");
+		return -EINVAL;
+	}
+
 	ctrl = identify_ctrl(hdl);
 	if (!ctrl)
 		return -errno;
@@ -613,6 +621,7 @@ static int sanitize_ns_cmd(int argc, char **argv, struct command *acmd,
 
 	struct config {
 		bool	ish;
+		__u32	nsid;
 		bool	ause;
 		__u8	sanact;
 		bool	emvs;
@@ -621,6 +630,7 @@ static int sanitize_ns_cmd(int argc, char **argv, struct command *acmd,
 
 	struct config cfg = {
 		.ish		= false,
+		.nsid		= 0,
 		.ause		= false,
 		.sanact		= 0,
 		.emvs		= false,
@@ -638,6 +648,8 @@ static int sanitize_ns_cmd(int argc, char **argv, struct command *acmd,
 
 	OPT_ARGS(opts) = {
 		OPT_FLAG("ish",    'I', &cfg.ish,    ish),
+		OPT_UINT("namespace-id", 'n', &cfg.nsid,
+			 namespace_id_desired, nvme_nsid_values),
 		OPT_FLAG("ause",   'u', &cfg.ause,   ause_desc),
 		OPT_BYTE("sanact", 'a', &cfg.sanact, sanact_desc, sanact),
 		OPT_FLAG("emvs",   'e', &cfg.emvs,   emvs_desc),
@@ -648,6 +660,15 @@ static int sanitize_ns_cmd(int argc, char **argv, struct command *acmd,
 	err = parse_and_open(&ctx, &hdl, argc, argv, desc, opts);
 	if (err)
 		return err;
+
+	if (!cfg.nsid) {
+		err = libnvme_get_nsid(hdl, &cfg.nsid);
+		if (err < 0) {
+			nvme_show_error("get-namespace-id: %s",
+					libnvme_strerror(-err));
+			return err;
+		}
+	}
 
 	switch (cfg.sanact) {
 	case NVME_SANITIZE_SANACT_EXIT_FAILURE:
@@ -672,6 +693,7 @@ static int sanitize_ns_cmd(int argc, char **argv, struct command *acmd,
 	}
 
 	nvme_init_sanitize_ns(&cmd, cfg.sanact, cfg.ause, cfg.emvs, cfg.preq);
+	cmd.nsid = cfg.nsid;
 	if (cfg.ish) {
 		if (libnvme_transport_handle_is_mi(hdl))
 			nvme_init_mi_cmd_flags(&cmd, ish);
@@ -826,7 +848,8 @@ static int format_cmd(int argc, char **argv, struct command *acmd, struct plugin
 		cfg.namespace_id = NVME_NSID_ALL;
 	} else if (!cfg.namespace_id) {
 		err = libnvme_get_nsid(hdl, &cfg.namespace_id);
-		if (err < 0) {
+		/* a controller has no namespace */
+		if (err < 0 && err != -ENOTTY) {
 			nvme_show_error("get-namespace-id: %s", libnvme_strerror(-err));
 			return err;
 		}

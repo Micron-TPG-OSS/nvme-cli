@@ -186,7 +186,7 @@ static int nvme_attach_ns(int argc, char **argv, int attach, const char *desc, s
 		nvme_init_identify_ctrl(&cmd, &ctrl);
 		err = libnvme_exec_admin_passthru(hdl, &cmd);
 		if (err) {
-			nvme_show_error("identify-ctrl %s", libnvme_strerror(-err));
+			nvme_show_err(err, "identify-ctrl");
 			return err;
 		}
 		cntlist->num = cpu_to_le16(1);
@@ -240,8 +240,6 @@ static int parse_lba_num_si(struct libnvme_transport_handle *hdl, const char *op
 	struct libnvme_passthru_cmd cmd;
 	__u32 nsid = 1;
 	__u8 lbaf;
-	unsigned int remainder;
-	char *endptr;
 	int err = -EINVAL;
 	unsigned int data_size, lbas;
 
@@ -270,7 +268,7 @@ static int parse_lba_num_si(struct libnvme_transport_handle *hdl, const char *op
 	if (!ns_list)
 		return -ENOMEM;
 
-	if ((ctrl->oacs & 0x8) >> 3) {
+	if (le16_to_cpu(ctrl->oacs) & NVME_CTRL_OACS_NMS) {
 		nsid = NVME_NSID_ALL;
 	} else {
 		nvme_init_identify_active_ns_list(&cmd, nsid - 1, ns_list);
@@ -301,21 +299,13 @@ static int parse_lba_num_si(struct libnvme_transport_handle *hdl, const char *op
 	}
 	lbas = data_size + le16_to_cpu(ns->lbaf[lbaf].ms);
 
-	err = shr_suffix_si_parse(val, &endptr, (uint64_t *)num);
+	/* a size in bytes, or without an SI suffix in logical blocks */
+	err = shr_suffix_si_parse_units(val, align, lbas, (uint64_t *)num);
 	if (err) {
 		nvme_show_error("Expected long suffixed integer argument for '%s-si' but got '%s'!",
 				opt, val);
-		return -err;
+		return err;
 	}
-
-	if (endptr[0]) {
-		remainder = *num % align;
-		if (remainder)
-			*num += align - remainder;
-	}
-
-	if (endptr[0] != '\0')
-		*num /= lbas;
 
 	return 0;
 }
@@ -499,7 +489,9 @@ static int create_ns(int argc, char **argv, struct command *acmd, struct plugin 
 		nvme_init_identify_ns_granularity(&cmd, gr_list);
 		if (!libnvme_exec_admin_passthru(hdl, &cmd)) {
 			struct nvme_id_ns_granularity_desc *desc;
-			int index = cfg.flbas;
+			__u8 index;
+
+			nvme_id_ns_flbas_to_lbaf_inuse(cfg.flbas, &index);
 
 			/* FIXME: add a proper bitmask to libnvme */
 			if (!(le32_to_cpu(gr_list->attributes) & 1)) {

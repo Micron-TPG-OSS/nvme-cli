@@ -192,7 +192,7 @@ static int feat_get_nsid(struct libnvme_transport_handle *hdl, __u32 nsid,
 		libnvme_get_feature_length(fid, cdw11, NVME_DATA_TFR_CTRL_TO_HOST, &len);
 
 	if (len) {
-		buf = libnvme_alloc(len - 1);
+		buf = libnvme_alloc(len);
 		if (!buf)
 			return -ENOMEM;
 	}
@@ -303,16 +303,21 @@ static int perfc_set(struct libnvme_transport_handle *hdl, __u8 fid, __u32 cdw11
 		data.std_perf->r4karl = cfg->r4karl;
 		break;
 	case NVME_FEAT_PERFC_ATTRI_VS_MIN ... NVME_FEAT_PERFC_ATTRI_VS_MAX:
+		if (cfg->attrl > sizeof(data.vs_perf->vs)) {
+			nvme_show_error("attribute length %u exceeds %zu bytes",
+					cfg->attrl, sizeof(data.vs_perf->vs));
+			return -EINVAL;
+		}
 		libnvme_uuid_from_string(cfg->paid, data.vs_perf->paid);
-		data.vs_perf->attrl = cfg->attrl;
-		if (data.vs_perf->attrl && strlen(cfg->vs_data)) {
+		data.vs_perf->attrl = cpu_to_le16(cfg->attrl);
+		if (cfg->attrl && strlen(cfg->vs_data)) {
 			ffd = open(cfg->vs_data, O_RDONLY);
 			if (ffd < 0) {
 				nvme_show_error("Failed to open file %s: %s", cfg->vs_data,
 						libnvme_strerror(errno));
 				return -EINVAL;
 			}
-			err = read(ffd, data.vs_perf->vs, data.vs_perf->attrl);
+			err = read(ffd, data.vs_perf->vs, cfg->attrl);
 			if (err < 0) {
 				nvme_show_error("failed to read data buffer from input file: %s",
 						libnvme_strerror(errno));
@@ -333,7 +338,7 @@ static int perfc_set(struct libnvme_transport_handle *hdl, __u8 fid, __u32 cdw11
 
 	nvme_show_result("Set %s: 0x%04x (%s)", perfc_feat, cdw11,
 			 sv ? "Save" : "Not save");
-	nvme_feature_show_fields(fid, cdw11, NULL);
+	nvme_feature_show_fields(fid, cdw11, (unsigned char *)&data);
 
 	return err;
 }
@@ -462,7 +467,7 @@ static int timestamp_set(struct libnvme_transport_handle *hdl, const __u8 fid,
 {
 	__u64 result;
 	int err;
-	struct nvme_timestamp ts;
+	struct nvme_timestamp ts = { 0 };
 	__le64 timestamp = cpu_to_le64(tstmp);
 
 	memcpy(ts.timestamp, &timestamp, sizeof(ts.timestamp));
@@ -694,7 +699,11 @@ static int feat_arbitration(int argc, char **argv, struct command *acmd, struct 
 	if (err)
 		return err;
 
-	if (argc == 2 || argconfig_given(opts, &cfg.feat.sel))
+	if (argconfig_given(opts, &cfg.feat.sel) ||
+	    !(argconfig_given(opts, &cfg.ab) ||
+	      argconfig_given(opts, &cfg.lpw) ||
+	      argconfig_given(opts, &cfg.mpw) ||
+	      argconfig_given(opts, &cfg.hpw)))
 		return feat_get(hdl, fid, 0, cfg.feat.sel, 0,
 				"arbitration feature");
 
@@ -993,7 +1002,8 @@ static int feat_power_meas(int argc, char **argv, struct command *cmd,
 				     cfg.uidx,
 				     cfg.feat.save);
 	else
-		err = feat_get(hdl, fid, 0, cfg.feat.sel, 0, power_meas_feat);
+		err = feat_get(hdl, fid, 0, cfg.feat.sel, cfg.uidx,
+			       power_meas_feat);
 
 	return err;
 }
@@ -1282,13 +1292,19 @@ static int lba_range_type_set(struct libnvme_transport_handle *hdl, __u8 fid,
 	int j;
 #endif /* NVME_HAVE_INT128 */
 
+	if (cfg->num >= NVME_FEAT_LBA_RANGE_MAX) {
+		nvme_show_error("invalid number of LBA ranges: %u (0's based)",
+				cfg->num);
+		return -EINVAL;
+	}
+
 	if (sv)
 		gsel = NVME_GET_FEATURES_SEL_SAVED;
 
 	nvme_init_get_features_lba_range(&cmd, cfg->nsid, gsel, &data);
 	err = libnvme_exec_admin_passthru(hdl, &cmd);
 	if (err) {
-		nvme_show_err(err, "Get %s", host_behavior_feat);
+		nvme_show_err(err, "Get %s", lba_range_feat);
 		return err;
 	}
 
@@ -1323,10 +1339,12 @@ static int lba_range_type_set(struct libnvme_transport_handle *hdl, __u8 fid,
 	}
 
 #ifdef NVME_HAVE_INT128
-	ng = shr_parse_csv_u128(cfg->guids, guids, ARRAY_SIZE(guids));
-	if (ng != num) {
-		nvme_show_error("No valid guid definition provided");
-		return -EINVAL;
+	if (argconfig_given(opts, &cfg->guids)) {
+		ng = shr_parse_csv_u128(cfg->guids, guids, ARRAY_SIZE(guids));
+		if (ng != num) {
+			nvme_show_error("No valid guid definition provided");
+			return -EINVAL;
+		}
 	}
 #else /* NVME_HAVE_INT128 */
 	if (argconfig_given(opts, &cfg->guids)) {
@@ -1400,7 +1418,7 @@ static int feat_lba_range_type(int argc, char **argv, struct command *acmd,
 	if (!feat)
 		return -ENOMEM;
 
-	err = parse_and_open(&ctx, &hdl, argc, argv, HOST_BEHAVIOR_DESC, opts);
+	err = parse_and_open(&ctx, &hdl, argc, argv, LBA_RANGE_DESC, opts);
 	if (err)
 		return err;
 

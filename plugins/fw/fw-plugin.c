@@ -50,9 +50,6 @@ static int fw_download_single(struct libnvme_transport_handle *hdl, void *fw_buf
 		           offset, fw_len, (int)(100 * offset / fw_len));
 	}
 
-	if (libnvme_transport_handle_is_mi(hdl))
-		nvme_init_mi_cmd_flags(&cmd, ish);
-
 	for (try = 0; try < max_retries; try++) {
 		if (try > 0) {
 			nvme_show_error("retrying offset %x (%u/%u)",
@@ -62,6 +59,8 @@ static int fw_download_single(struct libnvme_transport_handle *hdl, void *fw_buf
 		err = nvme_init_fw_download(&cmd, fw_buf, len, offset);
 		if (err)
 			return err;
+		if (libnvme_transport_handle_is_mi(hdl))
+			nvme_init_mi_cmd_flags(&cmd, ish);
 
 		err = libnvme_exec_admin_passthru(hdl, &cmd);
 		if (!err)
@@ -229,7 +228,7 @@ static int fw_download(int argc, char **argv, struct command *acmd, struct plugi
 		nvme_init_identify_ctrl(&cmd, &ctrl);
 		err = libnvme_exec_admin_passthru(hdl, &cmd);
 		if (err) {
-			nvme_show_error("identify-ctrl: %s", libnvme_strerror(err));
+			nvme_show_err(err, "identify-ctrl");
 			return err;
 		}
 		if (ctrl.fwug == 0 || ctrl.fwug == 0xff)
@@ -240,8 +239,9 @@ static int fw_download(int argc, char **argv, struct command *acmd, struct plugi
 		cfg.xfer = 4096;
 
 	if (ctrl.fwug && ctrl.fwug != 0xff && fw_size % cfg.xfer)
-		nvme_show_error("WARNING: firmware file size %u not conform to FWUG alignment %lu",
-				fw_size, cfg.xfer);
+		nvme_show_error(
+			"WARNING: firmware file size %u not conform to FWUG alignment %u",
+			fw_size, cfg.xfer);
 
 	if (cfg.stream) {
 		stream_buf = libnvme_alloc(cfg.xfer);
@@ -297,9 +297,9 @@ static int fw_download(int argc, char **argv, struct command *acmd, struct plugi
 	return err;
 }
 
-static char *nvme_fw_status_reset_type(__u16 status)
+static char *nvme_fw_status_reset_type(__u8 sc)
 {
-	switch (status & 0x7ff) {
+	switch (sc) {
 	case NVME_SC_FW_NEEDS_CONV_RESET:
 		return "conventional";
 	case NVME_SC_FW_NEEDS_SUBSYS_RESET:
@@ -352,20 +352,21 @@ static void fw_commit_print_mud(bool mud_supported, __u64 result)
 
 static void fw_commit_err(int err, __u8 action, __u8 slot, __u8 bpid)
 {
-	__u32 val;
+	__u32 val = nvme_status_get_value(err);
+	char bp[16] = "";
 
-	if (err > 0 && nvme_status_get_type(err) == NVME_STATUS_TYPE_NVME) {
-		val = nvme_status_get_value(err);
-		switch (val & 0x7ff) {
+	if (err > 0 && nvme_status_get_type(err) == NVME_STATUS_TYPE_NVME &&
+	    NVME_GET(val, SCT) == NVME_SCT_CMD_SPECIFIC) {
+		switch (NVME_GET(val, SC)) {
 		case NVME_SC_FW_NEEDS_CONV_RESET:
 		case NVME_SC_FW_NEEDS_SUBSYS_RESET:
 		case NVME_SC_FW_NEEDS_RESET:
-			print_info("Success activating firmware action:%d slot:%d",
-			           action, slot);
 			if (action == 6 || action == 7)
-				print_info(" bpid:%d", bpid);
-			print_info(", but firmware requires %s reset\n",
-			           nvme_fw_status_reset_type(val));
+				snprintf(bp, sizeof(bp), " bpid:%d", bpid);
+			nvme_show_result(
+				"Success activating firmware action:%d slot:%d%s, but firmware requires %s reset",
+				action, slot, bp,
+				nvme_fw_status_reset_type(NVME_GET(val, SC)));
 			return;
 		default:
 			break;
