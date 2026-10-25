@@ -280,7 +280,7 @@ static int zns_mgmt_send(int argc, char **argv, struct command *acmd, struct plu
 
 	nvme_init_zns_mgmt_send(&cmd, cfg.namespace_id, cfg.zslba, zsa,
 				cfg.select_all, 0, 0, NULL, 0);
-	err = libnvme_exec_admin_passthru(hdl, &cmd);
+	err = libnvme_exec_io_passthru(hdl, &cmd);
 	if (!err) {
 		if (zsa == NVME_ZNS_ZSA_RESET)
 			zcapc = cmd.result & 0x1;
@@ -422,7 +422,7 @@ static int zone_mgmt_send(int argc, char **argv, struct command *acmd, struct pl
 	nvme_init_zns_mgmt_send(&cmd, cfg.namespace_id, cfg.zslba, cfg.zsa,
 				cfg.select_all, cfg.zsaso, 0, buf,
 				cfg.data_len);
-	err = libnvme_exec_admin_passthru(hdl, &cmd);
+	err = libnvme_exec_io_passthru(hdl, &cmd);
 	if (!err)
 		nvme_show_verbose_result("zone-mgmt-send: Success, action:%d zone:%"PRIx64" all:%d nsid:%d",
 		       cfg.zsa, (uint64_t)cfg.zslba, (int)cfg.select_all, cfg.namespace_id);
@@ -494,7 +494,7 @@ static int open_zone(int argc, char **argv, struct command *acmd, struct plugin 
 	nvme_init_zns_mgmt_send(&cmd, cfg.namespace_id, cfg.zslba,
 				NVME_ZNS_ZSA_OPEN, cfg.select_all, cfg.zrwaa, 0,
 				NULL, 0);
-	err = libnvme_exec_admin_passthru(hdl, &cmd);
+	err = libnvme_exec_io_passthru(hdl, &cmd);
 	if (!err)
 		nvme_show_verbose_result("zns-open-zone: Success zone slba:%"PRIx64" nsid:%d",
 		       (uint64_t)cfg.zslba, cfg.namespace_id);
@@ -594,7 +594,7 @@ static int set_zone_desc(int argc, char **argv, struct command *acmd, struct plu
 	nvme_init_zns_mgmt_send(&cmd, cfg.namespace_id, cfg.zslba,
 				NVME_ZNS_ZSA_SET_DESC_EXT, 0, cfg.zrwaa, 0, buf,
 				data_len);
-	err = libnvme_exec_admin_passthru(hdl, &cmd);
+	err = libnvme_exec_io_passthru(hdl, &cmd);
 	if (!err)
 		nvme_show_verbose_result("set-zone-desc: Success, zone:%"PRIx64" nsid:%d",
 		       (uint64_t)cfg.zslba, cfg.namespace_id);
@@ -647,7 +647,7 @@ static int zrwa_flush_zone(int argc, char **argv, struct command *acmd, struct p
 
 	nvme_init_zns_mgmt_send(&cmd, cfg.namespace_id, cfg.lba,
 				NVME_ZNS_ZSA_ZRWA_FLUSH, 0, 0, 0, NULL, 0);
-	err = libnvme_exec_admin_passthru(hdl, &cmd);
+	err = libnvme_exec_io_passthru(hdl, &cmd);
 	if (!err)
 		nvme_show_verbose_result("zrwa-flush-zone: Success, lba:%"PRIx64" nsid:%d",
 		       (uint64_t)cfg.lba, cfg.namespace_id);
@@ -706,8 +706,10 @@ static int zone_mgmt_recv(int argc, char **argv, struct command *acmd, struct pl
 		}
 	}
 
-	if (cfg.zra == NVME_ZNS_ZRA_REPORT_ZONES && !cfg.data_len) {
-		nvme_show_error("error: data len is needed for NVME_ZRA_ZONE_REPORT");
+	/* Each action returns data: NUMD is a 0's based count of dwords. */
+	if (!cfg.data_len || cfg.data_len % 4) {
+		nvme_show_error(
+			"--data-len must be a non-zero multiple of 4");
 		return -EINVAL;
 	}
 	if (cfg.data_len) {
@@ -720,7 +722,7 @@ static int zone_mgmt_recv(int argc, char **argv, struct command *acmd, struct pl
 
 	nvme_init_zns_mgmt_recv(&cmd, cfg.namespace_id, cfg.zslba, cfg.zra,
 				cfg.zrasf, cfg.partial, data, cfg.data_len);
-	err = libnvme_exec_admin_passthru(hdl, &cmd);
+	err = libnvme_exec_io_passthru(hdl, &cmd);
 	if (!err)
 		nvme_show_verbose_result("zone-mgmt-recv: Success, action:%d zone:%"PRIx64" nsid:%d",
 		       cfg.zra, (uint64_t)cfg.zslba, cfg.namespace_id);
@@ -998,6 +1000,14 @@ static int zone_append(int argc, char **argv, struct command *acmd, struct plugi
 		return -EINVAL;
 	}
 
+	/* NLB is a 0's based 16 bit count */
+	if (cfg.data_size / lba_size > 0x10000) {
+		nvme_show_error(
+			"Data size:%#"PRIx64" exceeds 65536 logical blocks",
+			(uint64_t)cfg.data_size);
+		return -EINVAL;
+	}
+
 	meta_size = ns.lbaf[lba_index].ms;
 	if (meta_size && !(meta_size == 8 && (cfg.prinfo & 0x8)) &&
 	    (!cfg.metadata_size || cfg.metadata_size % meta_size)) {
@@ -1042,10 +1052,10 @@ static int zone_append(int argc, char **argv, struct command *acmd, struct plugi
 	}
 
 	if (cfg.metadata_size) {
-		mbuf = libnvme_alloc(meta_size);
+		mbuf = libnvme_alloc(cfg.metadata_size);
 		if (!mbuf) {
-			nvme_show_error("No memory for metadata size:%d",
-				meta_size);
+			nvme_show_error("No memory for metadata size:%"PRIx64"",
+				(uint64_t)cfg.metadata_size);
 			err = -1;
 			goto close_mfd;
 		}
@@ -1070,7 +1080,7 @@ static int zone_append(int argc, char **argv, struct command *acmd, struct plugi
 	nvme_init_zns_append(&cmd, cfg.namespace_id, cfg.zslba, nblocks,
 			     control, cev, dspec, buf, cfg.data_size, mbuf,
 			     cfg.metadata_size);
-	err = libnvme_exec_admin_passthru(hdl, &cmd);
+	err = libnvme_exec_io_passthru(hdl, &cmd);
 	gettimeofday(&end_time, NULL);
 	if (cfg.latency)
 		nvme_show_result(" latency: zone append: %llu us",

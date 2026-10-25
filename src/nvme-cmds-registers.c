@@ -35,6 +35,7 @@
 #include <ccan/minmax/minmax.h>
 #include <shared/compiler-attributes-util.h>
 #include <shared/fs-util.h>
+#include <shared/mmio-util.h>
 #include <shared/parse-util.h>
 #include <shared/sig-util.h>
 #include <shared/suffix-util.h>
@@ -80,14 +81,15 @@ static int nvme_get_single_property(struct libnvme_transport_handle *hdl,
 		return 0;
 	}
 
-	if (cfg->fabrics && nvme_is_fabrics_optional_reg(cfg->offset)) {
-		*value = -1;
-		return 0;
-	}
-
-	if (!cfg->fabrics &&
-	    nvme_status_equals(err, NVME_STATUS_TYPE_NVME,
-			       NVME_SC_INVALID_FIELD)) {
+	/*
+	 * A controller fails a property it doesn't implement with Invalid
+	 * Field in Command, maybe with the DNR bit set: show an optional one
+	 * as unsupported.
+	 */
+	if (nvme_is_fabrics_optional_reg(cfg->offset) &&
+	    libnvme_status_is_invalid_field(err)) {
+		nvme_fabrics_reg_set_unsupported(&cfg->unsupported,
+						 cfg->offset);
 		*value = -1;
 		return 0;
 	}
@@ -110,7 +112,7 @@ static int nvme_get_properties(struct libnvme_transport_handle *hdl, void **pbar
 		return -ENOMEM;
 
 	memset(bar, 0xff, size);
-	for (offset = NVME_REG_CAP; offset <= NVME_REG_CMBSZ;
+	for (offset = NVME_REG_CAP; offset <= NVME_REG_CRTO;
 	     offset += is_64bit ? sizeof(uint64_t) : sizeof(uint32_t)) {
 		if (!nvme_is_fabrics_reg(offset))
 			continue;
@@ -120,11 +122,12 @@ static int nvme_get_properties(struct libnvme_transport_handle *hdl, void **pbar
 		if (err)
 			break;
 
+		/* Little endian, as the printers read the registers */
 		is_64bit = nvme_is_64bit_reg(cfg->offset);
 		if (is_64bit)
-			*(uint64_t *)(bar + cfg->offset) = value;
+			shr_mmio_write64(bar + cfg->offset, value, true);
 		else
-			*(uint32_t *)(bar + cfg->offset) = value;
+			shr_mmio_write32(bar + cfg->offset, value);
 	}
 
 	if (err)
@@ -176,7 +179,7 @@ static int show_registers(int argc, char **argv, struct command *acmd, struct pl
 			return err;
 	}
 
-	nvme_show_ctrl_registers(bar, cfg.fabrics, flags);
+	nvme_show_ctrl_registers(bar, cfg.fabrics, cfg.unsupported, flags);
 	free(bar);
 
 	return 0;
@@ -278,10 +281,13 @@ static int get_register_properties(struct libnvme_transport_handle *hdl,
 
 		nvme_init_get_property(&cmd, offset);
 		err = libnvme_exec_admin_passthru(hdl, &cmd);
-		if (nvme_status_equals(err, NVME_STATUS_TYPE_NVME, NVME_SC_INVALID_FIELD)) {
+		if (libnvme_status_is_invalid_field(err)) {
+			/* not implemented, see nvme_get_single_property() */
+			nvme_fabrics_reg_set_unsupported(&cfg->unsupported,
+							 offset);
 			value = -1;
 		} else if (err) {
-			nvme_show_error("get-property: %s", libnvme_strerror(-err));
+			nvme_show_err(err, "get-property");
 			free(bar);
 			return err;
 		} else {
@@ -289,9 +295,9 @@ static int get_register_properties(struct libnvme_transport_handle *hdl,
 		}
 
 		if (nvme_is_64bit_reg(offset))
-			*(uint64_t *)(bar + offset) = value;
+			shr_mmio_write64(bar + offset, value, true);
 		else
-			*(uint32_t *)(bar + offset) = value;
+			shr_mmio_write32(bar + offset, value);
 	}
 
 	*pbar = bar;
@@ -338,29 +344,36 @@ bool nvme_is_ctrl_reg(int offset)
 	return false;
 }
 
-static bool get_register_offset(struct argconfig_commandline_options *opts,
+static int get_register_offset(struct argconfig_commandline_options *opts,
 				void *bar, bool fabrics,
 				struct get_reg_config *cfg,
 				nvme_print_flags_t flags)
 {
 	bool given = argconfig_given(opts, &cfg->offset);
 	bool offset_matched = given;
-	int offset;
+	int offset, err = 0;
 
 	if (offset_matched)
-		nvme_show_ctrl_register(bar, fabrics, cfg->offset, flags);
+		err = nvme_show_ctrl_register(bar, fabrics, cfg->unsupported,
+					      cfg->offset, flags);
 
 	for (offset = NVME_REG_CAP; offset <= NVME_REG_PMRMSCU; offset += get_reg_size(offset)) {
 		if (!nvme_is_ctrl_reg(offset) ||
 		    (given && offset == cfg->offset) ||
 		    !is_reg_selected(cfg, offset))
 			continue;
-		nvme_show_ctrl_register(bar, fabrics, offset, flags);
-		if (!offset_matched)
-			offset_matched = true;
+		if (nvme_show_ctrl_register(bar, fabrics, cfg->unsupported,
+					    offset, flags))
+			err = -EINVAL;
+		offset_matched = true;
 	}
 
-	return offset_matched;
+	if (!offset_matched) {
+		nvme_show_error("offset required param");
+		return -EINVAL;
+	}
+
+	return err;
 }
 
 static int get_register(int argc, char **argv, struct command *acmd, struct plugin *plugin)
@@ -442,6 +455,13 @@ static int get_register(int argc, char **argv, struct command *acmd, struct plug
 		return -EINVAL;
 	}
 
+	/* The registers are read into a page: no other offset in there. */
+	if (argconfig_given(opts, &cfg.offset) &&
+	    !nvme_is_ctrl_reg(cfg.offset)) {
+		nvme_show_error("invalid register offset: %#x", cfg.offset);
+		return -EINVAL;
+	}
+
 	flags = nvme_args.output_flags;
 
 	if (nvme_args.verbose)
@@ -455,10 +475,7 @@ static int get_register(int argc, char **argv, struct command *acmd, struct plug
 		fabrics = true;
 	}
 
-	if (!get_register_offset(opts, bar, fabrics, &cfg, flags)) {
-		nvme_show_error("offset required param");
-		err = -EINVAL;
-	}
+	err = get_register_offset(opts, bar, fabrics, &cfg, flags);
 
 	free(bar);
 
@@ -774,7 +791,7 @@ static int get_property(int argc, char **argv, struct command *acmd, struct plug
 
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
-	__u64 value;
+	struct libnvme_passthru_cmd cmd;
 	int err;
 	nvme_print_flags_t flags = NORMAL;
 
@@ -802,11 +819,17 @@ static int get_property(int argc, char **argv, struct command *acmd, struct plug
 	if (nvme_args.verbose)
 		flags |= VERBOSE;
 
-	err = nvme_get_single_property(hdl, &cfg, &value);
-	if (!err)
-		nvme_show_single_property(cfg.offset, value, flags);
+	/* Any failure, also of a property the controller doesn't implement */
+	nvme_init_get_property(&cmd, cfg.offset);
+	err = libnvme_exec_admin_passthru(hdl, &cmd);
+	if (err) {
+		nvme_show_err(err, "get-property");
+		return err;
+	}
 
-	return err;
+	nvme_show_single_property(cfg.offset, cmd.result, flags);
+
+	return 0;
 }
 
 static int set_property(int argc, char **argv, struct command *acmd, struct plugin *plugin)

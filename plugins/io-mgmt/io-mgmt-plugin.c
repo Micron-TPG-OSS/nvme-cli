@@ -17,6 +17,7 @@
 
 #include <shared/compiler-attributes-util.h>
 #include <shared/fs-util.h>
+#include <shared/io-util.h>
 
 #include "argconfig.h"
 #include "cleanup.h"
@@ -161,11 +162,16 @@ static int io_mgmt_recv(int argc, char **argv, struct command *acmd, struct plug
 		}
 	}
 
-	if (cfg.data_len) {
-		buf = libnvme_alloc(cfg.data_len);
-		if (!buf)
-			return -ENOMEM;
+	/* NUMD is a 0's based count of dwords */
+	if (!cfg.data_len || cfg.data_len % 4) {
+		nvme_show_error(
+			"--data-len must be a non-zero multiple of 4");
+		return -EINVAL;
 	}
+
+	buf = libnvme_alloc(cfg.data_len);
+	if (!buf)
+		return -ENOMEM;
 
 	nvme_init_io_mgmt_recv(&cmd, cfg.nsid, cfg.mo, cfg.mos, buf,
 		cfg.data_len);
@@ -185,10 +191,10 @@ static int io_mgmt_recv(int argc, char **argv, struct command *acmd, struct plug
 			return -errno;
 		}
 
-		err = write(dfd, buf, cfg.data_len);
-		if (err < 0) {
+		err = shr_write_all(dfd, buf, cfg.data_len);
+		if (err) {
 			nvme_show_perror("write");
-			return -errno;
+			return err;
 		}
 	} else {
 		d((unsigned char *)buf, cfg.data_len, 16, 1);

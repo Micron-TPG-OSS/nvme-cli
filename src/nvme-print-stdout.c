@@ -826,8 +826,9 @@ static struct shr_table *stdout_registers_crto_table(__u32 crto)
 	if (!t)
 		return NULL;
 
-	stdout_kv_add(t, "CRIMT", "%d secs", NVME_CRTO_CRIMT(crto) / 2);
-	stdout_kv_add(t, "CRWMT", "%d secs", NVME_CRTO_CRWMT(crto) / 2);
+	/* in 500 millisecond units */
+	stdout_kv_add(t, "CRIMT", "%u ms", NVME_CRTO_CRIMT(crto) * 500);
+	stdout_kv_add(t, "CRWMT", "%u ms", NVME_CRTO_CRWMT(crto) * 500);
 
 	return t;
 }
@@ -1346,9 +1347,6 @@ static void stdout_ctrl_register_support(struct shr_table *t, void *bar,
 		shr_mmio_read64(bar + offset) : shr_mmio_read32(bar + offset);
 	int row;
 
-	if (fabrics && value == -1)
-		return;
-
 	row = stdout_kv_add(t, nvme_register_symbol_to_string(offset),
 			     "%#"PRIx64, value);
 	if (verbose)
@@ -1358,7 +1356,7 @@ static void stdout_ctrl_register_support(struct shr_table *t, void *bar,
 								    support));
 }
 
-void stdout_ctrl_registers(void *bar, bool fabrics)
+void stdout_ctrl_registers(void *bar, bool fabrics, __u32 unsupported)
 {
 	uint32_t value;
 	bool verbose = !!(stdout_print_ops.flags & VERBOSE);
@@ -1373,7 +1371,9 @@ void stdout_ctrl_registers(void *bar, bool fabrics)
 	for (offset = NVME_REG_CAP; offset <= NVME_REG_PMRMSCU;
 	     offset += get_reg_size(offset)) {
 		if (!nvme_is_ctrl_reg(offset) ||
-		    (fabrics && !nvme_is_fabrics_reg(offset)))
+		    (fabrics && (!nvme_is_fabrics_reg(offset) ||
+				 nvme_fabrics_reg_unsupported(unsupported,
+							      offset))))
 			continue;
 		switch (offset) {
 		case NVME_REG_CMBLOC:

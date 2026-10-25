@@ -119,6 +119,8 @@ if python3.found()
              cli_test_env, 30],
             ['sanitize', 'nvme_sanitize_test.py', cli_test_env, 30],
             ['mgmt', 'nvme_mgmt_test.py', cli_test_env, 30],
+            ['io', 'nvme_io_test.py', cli_test_env, 30],
+            ['registers', 'nvme_registers_test.py', cli_test_env, 30],
         ]
 
         if 'feat' in selected_plugins
@@ -158,6 +160,24 @@ if python3.found()
             ]
         endif
 
+        if 'dir' in selected_plugins
+            mock_cli_tests += [
+                ['dir-send', 'nvme_dir_send_test.py', cli_test_env, 30],
+            ]
+        endif
+
+        if 'io-mgmt' in selected_plugins
+            mock_cli_tests += [
+                ['io-mgmt', 'nvme_io_mgmt_test.py', cli_test_env, 30],
+            ]
+        endif
+
+        if 'resv' in selected_plugins
+            mock_cli_tests += [
+                ['resv', 'nvme_resv_test.py', cli_test_env, 30],
+            ]
+        endif
+
         if 'ns' in selected_plugins and 'resv' in selected_plugins
             mock_cli_tests += [
                 ['ctratt', 'nvme_ctratt_test.py', cli_test_env, 30],
@@ -173,6 +193,7 @@ if python3.found()
         if 'zns' in selected_plugins
             mock_cli_tests += [
                 ['zns-append', 'nvme_zns_append_test.py', cli_test_env, 30],
+                ['zns', 'nvme_zns_test.py', cli_test_env, 30],
             ]
         endif
 
