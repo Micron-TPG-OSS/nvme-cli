@@ -716,7 +716,7 @@ static int copy_cmd(int argc, char **argv, struct command *acmd, struct plugin *
 	union {
 		__u32 short_pi[256];
 		__u64 long_pi[256];
-	} eilbrts;
+	} eilbrts = { 0 };
 
 	__u16 elbatms[256] = { 0 };
 	__u16 elbats[256] = { 0 };
@@ -958,7 +958,7 @@ static int submit_io(int opcode, char *command, const char *desc, int argc, char
 {
 	__cleanup_nvme_transport_handle struct libnvme_transport_handle *hdl = NULL;
 	__cleanup_nvme_global_ctx struct libnvme_global_ctx *ctx = NULL;
-	unsigned long long buffer_size = 0, mbuffer_size = 0;
+	unsigned long long buffer_size = 0, mbuffer_size = 0, blocks;
 	__cleanup_free struct nvme_nvm_id_ns *nvm_ns = NULL;
 	__cleanup_huge struct libnvme_mem_huge mh = { 0, };
 	__cleanup_free struct nvme_id_ns *ns = NULL;
@@ -1192,7 +1192,16 @@ static int submit_io(int opcode, char *command, const char *desc, int argc, char
 		nblocks = cfg.block_count;
 	} else {
 		/* Get the required block count. Note this is a zeroes based value. */
-		nblocks = ((buffer_size + (logical_block_size - 1)) / logical_block_size) - 1;
+		/* Round up without adding: --data-size may be near 2^64. */
+		blocks = buffer_size / logical_block_size +
+			!!(buffer_size % logical_block_size);
+		if (blocks > 0x10000) {
+			nvme_show_error(
+				"data size %llu exceeds 65536 logical blocks",
+				buffer_size);
+			return -EINVAL;
+		}
+		nblocks = blocks - 1;
 
 		/* Update the data size based on the required block count */
 		buffer_size = ((unsigned long long)nblocks + 1) * logical_block_size;
@@ -1205,7 +1214,7 @@ static int submit_io(int opcode, char *command, const char *desc, int argc, char
 	}
 
 	if (cfg.metadata_size) {
-		mbuffer_size = ((unsigned long long)cfg.block_count + 1) * ms;
+		mbuffer_size = ((unsigned long long)nblocks + 1) * ms;
 		if (ms && cfg.metadata_size < mbuffer_size)
 			nvme_show_error("Rounding metadata size to fit block count (%lld bytes)",
 					mbuffer_size);
@@ -1492,6 +1501,20 @@ static int get_lba_status(int argc, char **argv, struct command *acmd,
 
 	if (!cfg.atype) {
 		nvme_show_error("action type (--action) has to be given");
+		return -EINVAL;
+	}
+
+	if (!cfg.namespace_id) {
+		err = libnvme_get_nsid(hdl, &cfg.namespace_id);
+		if (err < 0) {
+			nvme_show_err(err, "get-namespace-id");
+			return err;
+		}
+	}
+
+	/* MNDW is 0's based: the data length must fit 32 bits. */
+	if (cfg.mndw >= UINT32_MAX / 4) {
+		nvme_show_error("invalid max-dw:%#x", cfg.mndw);
 		return -EINVAL;
 	}
 

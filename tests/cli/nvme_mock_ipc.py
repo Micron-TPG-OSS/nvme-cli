@@ -30,6 +30,7 @@ import socket
 import struct
 import subprocess
 import sys
+import tempfile
 import threading
 import traceback
 from pathlib import Path
@@ -37,7 +38,7 @@ from pathlib import Path
 IPC_REQUEST_FMT = "<IIII B3x I IIIIII I BBBBI BB2x IIII"
 IPC_REQUEST_LEN = struct.calcsize(IPC_REQUEST_FMT)
 # status, errno_val, sc_status, result, data_len -- see struct ipc_response.
-IPC_RESPONSE_FMT = "<iiiII"
+IPC_RESPONSE_FMT = "<iiiQI"
 
 IPC_TYPE_WRITE = 1  # write() on /dev/nvme-fabrics (connect args)
 IPC_TYPE_IOCTL = 2  # ioctl() admin or I/O passthru command
@@ -425,7 +426,8 @@ def _is_asan_binary(nvme_bin):
 
 
 def run_nvme(nvme_bin, env, sysfs_dir, base_dir, *args, encoding='utf-8',
-             stdin_data=None, stack_limit_kb=None, close_fd=None):
+             stdin_data=None, stack_limit_kb=None, close_fd=None,
+             file_size_limit=None):
     """Runs `nvme_bin *args` under libmock_nvme.c. Returns the completed
     subprocess.Popen result, with stdout/stderr captured as text. Callers
     check .returncode/.stdout/.stderr themselves.
@@ -435,7 +437,12 @@ def run_nvme(nvme_bin, env, sysfs_dir, base_dir, *args, encoding='utf-8',
     feed it to stdin, e.g. to answer a confirmation prompt. Otherwise
     stdin is /dev/null. Pass @stack_limit_kb to run nvme with that
     stack size limit. Pass @close_fd to run nvme with that standard
-    descriptor closed."""
+    descriptor closed. Pass @file_size_limit to run nvme with that file
+    size limit, in the units of `ulimit -f` (512 or 1024 bytes), and
+    SIGXFSZ ignored: a write past the limit is cut short instead. The
+    gcov counters of such a run go to a scratch directory: the limit
+    cuts their write short as well, which corrupts the .gcda files of
+    the build tree."""
     cmd = [
         nvme_bin,
         '--set-options', f'test-sysfs-dir={sysfs_dir},test-base-dir={base_dir}',
@@ -466,6 +473,11 @@ def run_nvme(nvme_bin, env, sysfs_dir, base_dir, *args, encoding='utf-8',
     # process that, like the mock server, runs threads.
     if stack_limit_kb is not None:
         ulimit += f'ulimit -s {int(stack_limit_kb)}; '
+    gcov_dir = None
+    if file_size_limit is not None:
+        ulimit += f"trap '' XFSZ; ulimit -f {int(file_size_limit)}; "
+        gcov_dir = tempfile.TemporaryDirectory(prefix='nvme-gcov-')
+        env['GCOV_PREFIX'] = gcov_dir.name
     close = f' {int(close_fd)}>&-' if close_fd is not None else ''
     wrapped_cmd = [
         '/bin/sh', '-c',
@@ -484,6 +496,8 @@ def run_nvme(nvme_bin, env, sysfs_dir, base_dir, *args, encoding='utf-8',
                             errors='replace' if encoding else None,
                             timeout=_NVME_TIMEOUT_S)
     _fuzz_recorder.finish(args, sysfs_dir)
+    if gcov_dir is not None:
+        gcov_dir.cleanup()
 
     # Print outputs to sys.stderr so they are displayed by unittest on
     # failure. With encoding=None these are bytes, so summarise stdout

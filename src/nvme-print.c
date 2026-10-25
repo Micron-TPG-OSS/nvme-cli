@@ -706,6 +706,8 @@ bool nvme_is_fabrics_reg(int offset)
 	case NVME_REG_CC:
 	case NVME_REG_CSTS:
 	case NVME_REG_NSSR:
+	case NVME_REG_NSSD:
+	case NVME_REG_CRTO:
 		return true;
 	default:
 		break;
@@ -714,10 +716,34 @@ bool nvme_is_fabrics_reg(int offset)
 	return false;
 }
 
+/*
+ * The properties a fabrics controller does not implement, a bit for the
+ * dword offset of each: all of them are below 80h. Any value, all ones
+ * too, can be the one of a property which is implemented.
+ */
+void nvme_fabrics_reg_set_unsupported(__u32 *unsupported, int offset)
+{
+	if (offset >= 0 && offset < 32 * 4)
+		*unsupported |= 1U << (offset / 4);
+}
+
+bool nvme_fabrics_reg_unsupported(__u32 unsupported, int offset)
+{
+	return offset >= 0 && offset < 32 * 4 &&
+		unsupported & (1U << (offset / 4));
+}
+
+/*
+ * The properties a fabrics controller may not implement: NSSR and NSSD
+ * are optional, and CRTO is reserved for a Discovery Controller and not
+ * there before NVMe 2.0.
+ */
 bool nvme_is_fabrics_optional_reg(int offset)
 {
 	switch (offset) {
 	case NVME_REG_NSSR:
+	case NVME_REG_NSSD:
+	case NVME_REG_CRTO:
 		return true;
 	default:
 		break;
@@ -736,14 +762,21 @@ bool nvme_registers_pmrctl_ready(__u32 pmrctl)
 	return NVME_PMRCTL_EN(pmrctl);
 }
 
-void nvme_show_ctrl_register(void *bar, bool fabrics, int offset, nvme_print_flags_t flags)
+int nvme_show_ctrl_register(void *bar, bool fabrics, __u32 unsupported,
+			    int offset, nvme_print_flags_t flags)
 {
 	uint64_t value;
 
 	if (fabrics && !nvme_is_fabrics_reg(offset)) {
 		nvme_show_error("register: %#04x (%s) not fabrics", offset,
 				nvme_register_to_string(offset));
-		return;
+		return -EINVAL;
+	}
+
+	if (fabrics && nvme_fabrics_reg_unsupported(unsupported, offset)) {
+		nvme_show_error("register: %#04x (%s) not implemented",
+				offset, nvme_register_to_string(offset));
+		return -EINVAL;
 	}
 
 	if (nvme_is_64bit_reg(offset))
@@ -752,11 +785,14 @@ void nvme_show_ctrl_register(void *bar, bool fabrics, int offset, nvme_print_fla
 		value = shr_mmio_read32(bar + offset);
 
 	nvme_print(ctrl_register, flags, offset, value);
+
+	return 0;
 }
 
-void nvme_show_ctrl_registers(void *bar, bool fabrics, nvme_print_flags_t flags)
+void nvme_show_ctrl_registers(void *bar, bool fabrics, __u32 unsupported,
+			      nvme_print_flags_t flags)
 {
-	nvme_print(ctrl_registers, flags, bar, fabrics);
+	nvme_print(ctrl_registers, flags, bar, fabrics, unsupported);
 }
 
 void nvme_show_single_property(int offset, uint64_t value64, nvme_print_flags_t flags)
