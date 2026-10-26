@@ -2257,6 +2257,27 @@ static int wdc_create_log_file(const char *file, const __u8 *drive_log_data,
 	return 0;
 }
 
+/*
+ * A C2 log entry starts where the lengths of the entries before it put
+ * it, at any byte: read its fields unaligned.
+ */
+static __u32 wdc_c2_entry_length(const void *entry)
+{
+	return shr_get_unaligned_le32(entry);
+}
+
+static __u32 wdc_c2_entry_id(const void *entry)
+{
+	return shr_get_unaligned_le32((const __u8 *)entry +
+		offsetof(struct wdc_c2_log_subpage_header, entry_id));
+}
+
+static const __u8 *wdc_c2_entry_data(const void *entry)
+{
+	return (const __u8 *)entry +
+		offsetof(struct wdc_c2_log_subpage_header, data);
+}
+
 bool wdc_validate_dev_mng_log(void *data)
 {
 	__u32 remaining_len = 0;
@@ -2285,8 +2306,8 @@ bool wdc_validate_dev_mng_log(void *data)
 	/* Proceed only if there is at least enough data to read an entry header */
 	while (remaining_len >= sizeof(struct wdc_c2_log_subpage_header)) {
 		/* Get size of the next entry */
-		log_entry_size = le32_to_cpu(p_next_log_entry->length);
-		log_entry_id = le32_to_cpu(p_next_log_entry->entry_id);
+		log_entry_size = wdc_c2_entry_length(p_next_log_entry);
+		log_entry_id = wdc_c2_entry_id(p_next_log_entry);
 		/*
 		 * If log entry size is 0 or the log entry goes past the end
 		 * of the data, we must be at the end of the data
@@ -2364,8 +2385,8 @@ bool wdc_parse_dev_mng_log_entry(void *data, __u32 entry_id,
 	/* Proceed only if there is at least enough data to read an entry header */
 	while (remaining_len >= sizeof(struct wdc_c2_log_subpage_header)) {
 		/* Get size of the next entry */
-		log_entry_size = le32_to_cpu(p_next_log_entry->length);
-		log_entry_id = le32_to_cpu(p_next_log_entry->entry_id);
+		log_entry_size = wdc_c2_entry_length(p_next_log_entry);
+		log_entry_id = wdc_c2_entry_id(p_next_log_entry);
 
 		/*
 		 * If log entry size is 0 or the log entry goes past the end
@@ -2454,8 +2475,8 @@ bool wdc_get_dev_mng_log_entry(__u32 log_length, __u32 entry_id,
 	/* Proceed only if there is at least enough data to read an entry header */
 	while (remaining_len >= log_entry_hdr_size) {
 		/* Get size of the next entry */
-		log_entry_size = le32_to_cpu(p_next_log_entry->length);
-		log_entry_id = le32_to_cpu(p_next_log_entry->entry_id);
+		log_entry_size = wdc_c2_entry_length(p_next_log_entry);
+		log_entry_id = wdc_c2_entry_id(p_next_log_entry);
 
 		/*
 		 * If log entry size is 0 or the log entry goes past the end
@@ -2657,13 +2678,14 @@ static bool get_dev_mgmt_log_page_lid_data(struct libnvme_transport_handle *hdl,
 	sph = NULL;
 	found = wdc_get_dev_mng_log_entry(le32_to_cpu(hdr_ptr->length), log_id, hdr_ptr, &sph);
 	if (found && sph) {
-		*cbs_data = calloc(le32_to_cpu(sph->length), sizeof(__u8));
+		*cbs_data = calloc(wdc_c2_entry_length(sph), sizeof(__u8));
 		if (!*cbs_data) {
 			nvme_show_error("ERROR: WDC: calloc: %s", libnvme_strerror(errno));
 			found = false;
 			goto end;
 		}
-		memcpy((void *)*cbs_data, (void *)&sph->data, le32_to_cpu(sph->length));
+		memcpy((void *)*cbs_data, wdc_c2_entry_data(sph),
+		       wdc_c2_entry_length(sph));
 	} else if(found && !sph) {
 		nvme_show_error("ERROR: WDC: C2 log id 0x%x not present in log page with uuid index %d",log_id, uuid_ix);
 		found = false;
@@ -2900,7 +2922,8 @@ static bool wdc_nvme_parse_dev_status_log_entry(void *log_data, __u32 *ret_data,
 
 	if (wdc_parse_dev_mng_log_entry(log_data, entry_id, &entry_data)) {
 		if (entry_data) {
-			*ret_data = le32_to_cpu(entry_data->data);
+			*ret_data = shr_get_unaligned_le32(
+				wdc_c2_entry_data(entry_data));
 			return true;
 		}
 	}
@@ -2916,7 +2939,7 @@ static bool wdc_nvme_parse_dev_status_log_str(void *log_data,
 		__u32 *ret_data_len)
 {
 	struct wdc_c2_log_subpage_header *entry_data = NULL;
-	struct wdc_c2_cbs_data *entry_str_data = NULL;
+	const __u8 *entry_str_data;
 	__u32 entry_len, entry_total_len, max_payload_len;
 
 	if (!ret_data || !ret_data_len || ret_data_size == 0)
@@ -2924,9 +2947,9 @@ static bool wdc_nvme_parse_dev_status_log_str(void *log_data,
 
 	if (wdc_parse_dev_mng_log_entry(log_data, entry_id, &entry_data)) {
 		if (entry_data) {
-			entry_str_data = (struct wdc_c2_cbs_data *)&entry_data->data;
-			entry_len = le32_to_cpu(entry_str_data->length);
-			entry_total_len = le32_to_cpu(entry_data->length);
+			entry_str_data = wdc_c2_entry_data(entry_data);
+			entry_len = shr_get_unaligned_le32(entry_str_data);
+			entry_total_len = wdc_c2_entry_length(entry_data);
 			if (entry_total_len <
 			    sizeof(struct wdc_c2_log_subpage_header))
 				return false;
@@ -2935,8 +2958,8 @@ static bool wdc_nvme_parse_dev_status_log_str(void *log_data,
 			if (entry_len > max_payload_len ||
 			    entry_len >= ret_data_size)
 				return false;
-			memcpy(ret_data,
-			       (void *)&entry_str_data->data,
+			memcpy(ret_data, entry_str_data +
+			       offsetof(struct wdc_c2_cbs_data, data),
 			       entry_len);
 			ret_data[entry_len] = '\0';
 			*ret_data_len = entry_len;
@@ -5558,9 +5581,11 @@ static void wdc_print_unsupported_reqs_log_normal(struct wdc_ocp_C5_unsupported_
 	printf("  Number Unsupported Req IDs		: 0x%x\n",
 	       le16_to_cpu(log_data->unsupported_count));
 
-	for (j = 0; j < le16_to_cpu(log_data->unsupported_count); j++)
-		printf("  Unsupported Requirement List %d	: %s\n", j,
-		       log_data->unsupported_req_list[j]);
+	for (j = 0; j < le16_to_cpu(log_data->unsupported_count) &&
+		    j < ARRAY_SIZE(log_data->unsupported_req_list); j++)
+		printf("  Unsupported Requirement List %d	: %.*s\n", j,
+		       (int)sizeof(log_data->unsupported_req_list[j]),
+		       (char *)log_data->unsupported_req_list[j]);
 
 	printf("  Log Page Version			: 0x%x\n", le16_to_cpu(log_data->log_page_version));
 	printf("  Log page GUID				: 0x");
@@ -5579,10 +5604,15 @@ static void wdc_print_unsupported_reqs_log_json(struct wdc_ocp_C5_unsupported_re
 	char unsup_req_list_str[41];
 
 	memset((void *)unsup_req_list_str, 0, 41);
-	for (j = 0; j < le16_to_cpu(log_data->unsupported_count); j++) {
+	for (j = 0; j < le16_to_cpu(log_data->unsupported_count) &&
+		    j < ARRAY_SIZE(log_data->unsupported_req_list); j++) {
+		char req[sizeof(log_data->unsupported_req_list[j]) + 1] = {};
+
+		memcpy(req, log_data->unsupported_req_list[j],
+		       sizeof(log_data->unsupported_req_list[j]));
 		snprintf((char *)unsup_req_list_str, sizeof(unsup_req_list_str),
 			 "Unsupported Requirement List %d", j);
-		json_object_add_value_string(root, unsup_req_list_str, (char *)log_data->unsupported_req_list[j]);
+		json_object_add_value_string(root, unsup_req_list_str, req);
 	}
 
 	json_object_add_value_int(root, "Log Page Version",
@@ -6557,9 +6587,11 @@ static int nvme_get_print_c0_eol_log(struct libnvme_transport_handle *hdl,
 static int nvme_get_ext_smart_cloud_log(struct libnvme_transport_handle *hdl, __u8 **data, int uuid_index, __u32 namespace_id)
 {
 	struct libnvme_passthru_cmd cmd;
-	__u8 *log_ptr = NULL;
+	__cleanup_free __u8 *log_ptr = NULL;
 	int ret, i;
 
+	/* the log only on success: the callers free it only then */
+	*data = NULL;
 	log_ptr = (__u8 *)malloc(sizeof(__u8) * WDC_NVME_SMART_CLOUD_ATTR_LEN);
 	if (!log_ptr) {
 		nvme_show_error("ERROR: WDC: malloc: %s", libnvme_strerror(errno));
@@ -6594,19 +6626,24 @@ static int nvme_get_ext_smart_cloud_log(struct libnvme_transport_handle *hdl, __
 			}
 		}
 	}
+	if (ret)
+		return ret;
 
 	*data = log_ptr;
+	log_ptr = NULL;
 
-	return ret;
+	return 0;
 }
 
 
 static int nvme_get_hw_rev_log(struct libnvme_transport_handle *hdl, __u8 **data, int uuid_index, __u32 namespace_id)
 {
-	struct wdc_nvme_hw_rev_log *log_ptr = NULL;
+	__cleanup_free struct wdc_nvme_hw_rev_log *log_ptr = NULL;
 	struct libnvme_passthru_cmd cmd;
 	int ret, i;
 
+	/* the log only on success: the callers free it only then */
+	*data = NULL;
 	log_ptr = malloc(sizeof(*log_ptr));
 	if (!log_ptr) {
 		nvme_show_error("ERROR: WDC: malloc: %s", libnvme_strerror(errno));
@@ -6641,10 +6678,13 @@ static int nvme_get_hw_rev_log(struct libnvme_transport_handle *hdl, __u8 **data
 			}
 		}
 	}
+	if (ret)
+		return ret;
 
 	*data = (__u8 *)log_ptr;
+	log_ptr = NULL;
 
-	return ret;
+	return 0;
 }
 
 
@@ -7810,8 +7850,8 @@ static int wdc_get_c1_log_page(struct libnvme_global_ctx *ctx,
 			       struct libnvme_transport_handle *hdl, char *format,
 			       uint8_t interval)
 {
-	struct wdc_log_page_subpage_header *sph;
-	struct wdc_ssd_perf_stats *perf;
+	struct wdc_log_page_subpage_header sph;
+	struct wdc_ssd_perf_stats perf;
 	struct wdc_log_page_header *l;
 	nvme_print_flags_t fmt;
 	int total_subpages;
@@ -7853,21 +7893,22 @@ static int wdc_get_c1_log_page(struct libnvme_global_ctx *ctx,
 		/* the subpages must fit the buffer */
 		for (i = 0, off = skip_cnt; i < total_subpages &&
 		     off < WDC_ADD_LOG_BUF_LEN &&
-		     WDC_ADD_LOG_BUF_LEN - off >= sizeof(*sph);
+		     WDC_ADD_LOG_BUF_LEN - off >= sizeof(sph);
 		     i++, off += skip_cnt) {
+			/* a subpage starts at any byte: copy what is read */
 			p = data + off;
-			sph = (struct wdc_log_page_subpage_header *)p;
-			if (sph->spcode == WDC_GET_LOG_PAGE_SSD_PERFORMANCE) {
-				if (sph->pcset == interval) {
+			memcpy(&sph, p, sizeof(sph));
+			if (sph.spcode == WDC_GET_LOG_PAGE_SSD_PERFORMANCE) {
+				if (sph.pcset == interval) {
 					if (WDC_ADD_LOG_BUF_LEN - off - 4 <
-					    sizeof(*perf))
+					    sizeof(perf))
 						break;
-					perf = (struct wdc_ssd_perf_stats *)(p + 4);
-					ret = wdc_print_log(perf, fmt);
+					memcpy(&perf, p + 4, sizeof(perf));
+					ret = wdc_print_log(&perf, fmt);
 					break;
 				}
 			}
-			skip_cnt = le16_to_cpu(sph->subpage_length) + 4;
+			skip_cnt = le16_to_cpu(sph.subpage_length) + 4;
 		}
 		if (ret)
 			nvme_show_error("ERROR: WDC: Unable to read data from buffer");
@@ -11473,9 +11514,9 @@ static void wdc_print_nand_stats_normal(__u16 version, void *data)
 {
 	struct wdc_nand_stats *nand_stats = (struct wdc_nand_stats *)(data);
 	struct wdc_nand_stats_V3 *nand_stats_v3 = (struct wdc_nand_stats_V3 *)(data);
-	__u64 temp_raw;
+	uint64_t temp_raw;
 	__u16 temp_norm;
-	__u64 *temp_ptr = NULL;
+	uint64_t temp;
 
 	switch (version) {
 	case 0:
@@ -11509,13 +11550,14 @@ static void wdc_print_nand_stats_normal(__u16 version, void *data)
 		printf("  SLC Units Written				 %s\n",
 			uint128_t_to_string(
 				le128_to_cpu(nand_stats_v3->nand_write_slc)));
-		temp_ptr = (__u64 *)nand_stats_v3->bad_nand_block_count;
-		temp_norm = (__u16)(*temp_ptr & 0x000000000000FFFF);
-		temp_raw = ((*temp_ptr & 0xFFFFFFFFFFFF0000) >> 16);
+		temp = shr_get_unaligned_le64(
+			nand_stats_v3->bad_nand_block_count);
+		temp_norm = temp & 0xffff;
+		temp_raw = temp >> 16;
 		printf("  Bad NAND Blocks Count - Normalized		 %"PRIu16"\n",
-				le16_to_cpu(temp_norm));
+				temp_norm);
 		printf("  Bad NAND Blocks Count - Raw			 %"PRIu64"\n",
-				le64_to_cpu(temp_raw));
+				temp_raw);
 		printf("  NAND XOR Recovery count			 %"PRIu64"\n",
 				le64_to_cpu(nand_stats_v3->xor_recovery_count));
 		printf("  UECC Read Error count				 %"PRIu64"\n",
@@ -11536,20 +11578,22 @@ static void wdc_print_nand_stats_normal(__u16 version, void *data)
 				le64_to_cpu(nand_stats_v3->user_data_erase_counts[2]));
 		printf("  User Data Erase Counts - SLC Max		 %"PRIu64"\n",
 				le64_to_cpu(nand_stats_v3->user_data_erase_counts[3]));
-		temp_ptr = (__u64 *)nand_stats_v3->program_fail_count;
-		temp_norm = (__u16)(*temp_ptr & 0x000000000000FFFF);
-		temp_raw = ((*temp_ptr & 0xFFFFFFFFFFFF0000) >> 16);
+		temp = shr_get_unaligned_le64(
+			nand_stats_v3->program_fail_count);
+		temp_norm = temp & 0xffff;
+		temp_raw = temp >> 16;
 		printf("  Program Fail Count - Normalized		 %"PRIu16"\n",
-				le16_to_cpu(temp_norm));
+				temp_norm);
 		printf("  Program Fail Count - Raw			 %"PRIu64"\n",
-				le64_to_cpu(temp_raw));
-		temp_ptr = (__u64 *)nand_stats_v3->erase_fail_count;
-		temp_norm = (__u16)(*temp_ptr & 0x000000000000FFFF);
-		temp_raw = ((*temp_ptr & 0xFFFFFFFFFFFF0000) >> 16);
+				temp_raw);
+		temp = shr_get_unaligned_le64(
+			nand_stats_v3->erase_fail_count);
+		temp_norm = temp & 0xffff;
+		temp_raw = temp >> 16;
 		printf("  Erase Fail Count - Normalized			 %"PRIu16"\n",
-				le16_to_cpu(temp_norm));
+				temp_norm);
 		printf("  Erase Fail Count - Raw		         %"PRIu64"\n",
-				le64_to_cpu(temp_raw));
+				temp_raw);
 		printf("  PCIe Correctable Error Count			 %"PRIu16"\n",
 				le16_to_cpu(nand_stats_v3->correctable_error_count));
 		printf("  %% Free Blocks (User)				 %u\n",
@@ -11571,13 +11615,14 @@ static void wdc_print_nand_stats_normal(__u16 version, void *data)
 				le64_to_cpu(nand_stats_v3->soft_ecc_error_count));
 		printf("  Refresh Count					 %"PRIu64"\n",
 				le64_to_cpu(nand_stats_v3->refresh_count));
-		temp_ptr = (__u64 *)nand_stats_v3->bad_sys_nand_block_count;
-		temp_norm = (__u16)(*temp_ptr & 0x000000000000FFFF);
-		temp_raw = ((*temp_ptr & 0xFFFFFFFFFFFF0000) >> 16);
+		temp = shr_get_unaligned_le64(
+			nand_stats_v3->bad_sys_nand_block_count);
+		temp_norm = temp & 0xffff;
+		temp_raw = temp >> 16;
 		printf("  Bad System Nand Block Count - Normalized	 %"PRIu16"\n",
-				le16_to_cpu(temp_norm));
+				temp_norm);
 		printf("  Bad System Nand Block Count - Raw	         %"PRIu64"\n",
-				le64_to_cpu(temp_raw));
+				temp_raw);
 		printf("  Endurance Estimate				 %s\n",
 			uint128_t_to_string(
 				le128_to_cpu(nand_stats_v3->endurance_estimate)));
@@ -11606,9 +11651,9 @@ static void wdc_print_nand_stats_json(__u16 version, void *data)
 	struct wdc_nand_stats *nand_stats = (struct wdc_nand_stats *)(data);
 	struct wdc_nand_stats_V3 *nand_stats_v3 = (struct wdc_nand_stats_V3 *)(data);
 	struct json_object *root = json_create_object();
-	__u64 temp_raw;
+	uint64_t temp_raw;
 	__u16 temp_norm;
-	__u64 *temp_ptr = NULL;
+	uint64_t temp;
 
 	switch (version) {
 	case 0:
@@ -11637,13 +11682,14 @@ static void wdc_print_nand_stats_json(__u16 version, void *data)
 				le128_to_cpu(nand_stats_v3->nand_write_tlc));
 		json_object_add_value_uint128(root, "NAND Writes SLC (Bytes)",
 				le128_to_cpu(nand_stats_v3->nand_write_slc));
-		temp_ptr = (__u64 *)nand_stats_v3->bad_nand_block_count;
-		temp_norm = (__u16)(*temp_ptr & 0x000000000000FFFF);
-		temp_raw = ((*temp_ptr & 0xFFFFFFFFFFFF0000) >> 16);
+		temp = shr_get_unaligned_le64(
+			nand_stats_v3->bad_nand_block_count);
+		temp_norm = temp & 0xffff;
+		temp_raw = temp >> 16;
 		json_object_add_value_uint(root, "Bad NAND Blocks Count - Normalized",
-				le16_to_cpu(temp_norm));
+				temp_norm);
 		json_object_add_value_uint64(root, "Bad NAND Blocks Count - Raw",
-				le64_to_cpu(temp_raw));
+				temp_raw);
 		json_object_add_value_uint64(root, "NAND XOR Recovery count",
 				le64_to_cpu(nand_stats_v3->xor_recovery_count));
 		json_object_add_value_uint64(root, "UECC Read Error count",
@@ -11664,20 +11710,22 @@ static void wdc_print_nand_stats_json(__u16 version, void *data)
 				le64_to_cpu(nand_stats_v3->user_data_erase_counts[2]));
 		json_object_add_value_uint64(root, "User Data Erase Counts - SLC Max",
 				le64_to_cpu(nand_stats_v3->user_data_erase_counts[3]));
-		temp_ptr = (__u64 *)nand_stats_v3->program_fail_count;
-		temp_norm = (__u16)(*temp_ptr & 0x000000000000FFFF);
-		temp_raw = ((*temp_ptr & 0xFFFFFFFFFFFF0000) >> 16);
+		temp = shr_get_unaligned_le64(
+			nand_stats_v3->program_fail_count);
+		temp_norm = temp & 0xffff;
+		temp_raw = temp >> 16;
 		json_object_add_value_uint(root, "Program Fail Count - Normalized",
-				le16_to_cpu(temp_norm));
+				temp_norm);
 		json_object_add_value_uint64(root, "Program Fail Count - Raw",
-				le64_to_cpu(temp_raw));
-		temp_ptr = (__u64 *)nand_stats_v3->erase_fail_count;
-		temp_norm = (__u16)(*temp_ptr & 0x000000000000FFFF);
-		temp_raw = ((*temp_ptr & 0xFFFFFFFFFFFF0000) >> 16);
+				temp_raw);
+		temp = shr_get_unaligned_le64(
+			nand_stats_v3->erase_fail_count);
+		temp_norm = temp & 0xffff;
+		temp_raw = temp >> 16;
 		json_object_add_value_uint(root, "Erase Fail Count - Normalized",
-				le16_to_cpu(temp_norm));
+				temp_norm);
 		json_object_add_value_uint64(root, "Erase Fail Count - Raw",
-				le64_to_cpu(temp_raw));
+				temp_raw);
 		json_object_add_value_uint(root, "PCIe Correctable Error Count",
 				le16_to_cpu(nand_stats_v3->correctable_error_count));
 		json_object_add_value_uint(root, "% Free Blocks (User)",
@@ -11698,13 +11746,14 @@ static void wdc_print_nand_stats_json(__u16 version, void *data)
 				le64_to_cpu(nand_stats_v3->soft_ecc_error_count));
 		json_object_add_value_uint64(root, "Refresh Count",
 				le64_to_cpu(nand_stats_v3->refresh_count));
-		temp_ptr = (__u64 *)nand_stats_v3->bad_sys_nand_block_count;
-		temp_norm = (__u16)(*temp_ptr & 0x000000000000FFFF);
-		temp_raw = ((*temp_ptr & 0xFFFFFFFFFFFF0000) >> 16);
+		temp = shr_get_unaligned_le64(
+			nand_stats_v3->bad_sys_nand_block_count);
+		temp_norm = temp & 0xffff;
+		temp_raw = temp >> 16;
 		json_object_add_value_uint(root, "Bad System Nand Block Count - Normalized",
-				le16_to_cpu(temp_norm));
+				temp_norm);
 		json_object_add_value_uint64(root, "Bad System Nand Block Count - Raw",
-				le64_to_cpu(temp_raw));
+				temp_raw);
 		json_object_add_value_uint128(root, "Endurance Estimate",
 				le128_to_cpu(nand_stats_v3->endurance_estimate));
 		json_object_add_value_uint(root, "Thermal Throttling Status",

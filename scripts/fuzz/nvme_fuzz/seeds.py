@@ -89,13 +89,17 @@ def _is_value(a: str) -> bool:
 
 def _score(cmd: device.Command, args: _Args) -> int | None:
     """How well @cmd matches @args, None for not at all: its words must be
-    those of the command line, its options given, best with its value."""
+    those of the command line, its options given, best with its value.
+    An option which names a file in /dev, which the target passes for the
+    files a test writes or reads, need not be given."""
     words = [a for a in cmd.argv if not a.startswith('-')]
     if words != args.words:
         return None
     score = 0
     for opt in (a for a in cmd.argv if a.startswith('-')):
         name, _, value = opt.partition('=')
+        if name not in args.options and value.startswith('/dev/'):
+            continue
         if name not in args.options:
             return None
         score += 1 + (args.options[name] == value)
@@ -139,7 +143,25 @@ def seed(record: dict[str, Any], cmds: list[device.Command]) -> bytes | None:
             variant |= 8
             arg = n & 0xFF
     pci_ids = (pci[0], pci[1]) if cmd.pci and pci else (0, 0)
-    return cmd.header(variant, arg, pci_ids) + bytes.fromhex(record['answers'])
+    return cmd.header(variant, arg, pci_ids, _opts(cmd, args)) + bytes.fromhex(
+        record['answers']
+    )
+
+
+def _opts(cmd: device.Command, args: _Args) -> int:
+    """The option set of @cmd the command line @args uses: the one with
+    the most options, all of which it gives with the same value, else
+    one without options."""
+    best, most = None, -1
+    for n in range(4):
+        opts = cmd.opts[n] if n < len(cmd.opts) else ()
+        given = all(
+            name in args.options and (not eq or args.options[name] == value)
+            for name, eq, value in (o.partition('=') for o in opts)
+        )
+        if given and len(opts) > most:
+            best, most = n, len(opts)
+    return best or 0
 
 
 def _record(build_dir: Path, records: Path) -> None:

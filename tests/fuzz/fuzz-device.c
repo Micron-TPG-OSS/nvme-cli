@@ -13,11 +13,12 @@
  * tests/cli/libmock_nvme.c built with MOCK_FUZZ, linked into this
  * program, so its open()/ioctl() replace the libc ones.
  *
- * The input is the command (one byte, an index into the table below),
- * the variant (one byte: output format, verbose, controller or namespace
- * device, whether to pass the argument), the argument (one byte, the
- * value of the option the command names) and then the answers of the
- * device, see ipc_call() in the mock.
+ * The input is the command (one byte, an index into the table below,
+ * or 0xff and a second byte for the commands from index 255 on), the
+ * variant (one byte: output format, verbose, controller or namespace
+ * device, whether to pass the argument, which option set), the argument
+ * (one byte, the value of the option the command names) and then the
+ * answers of the device, see ipc_call() in the mock.
  */
 #include <dlfcn.h>
 #include <errno.h>
@@ -45,23 +46,35 @@ void mock_fuzz_input(const uint8_t *data, size_t size);
 #define MAX_ARGS 14
 
 /*
- * Commands which read from the device and print what they got. Nothing
- * which writes a file but /dev/null, waits or loops on the device, or
- * needs a value which can't have a default. The seeds select a command
- * by its index: add new commands at the end.
+ * Commands which do something with what the device returns: print it,
+ * size a buffer by it, wait for it. Nothing which writes a file but
+ * /dev/null, reads one but /dev/zero, needs a terminal or a value which
+ * can't have a default. The seeds select a command by its index: add new
+ * commands at the end.
  *
  * A command may name an option which takes the argument byte of the
  * input as its value, 0xff meaning 0xffffffff (all namespaces).
+ *
+ * A command may have up to four option sets, of which bits 5:4 of the
+ * variant select one: fixed values of the options which decide how much
+ * data the command transfers, or what it does, rather than fuzzed ones.
+ * A set it doesn't have adds no option.
  *
  * A command with pci set sees a controller whose PCI vendor and device ID
  * are the next four bytes of the input, little endian, ahead of the
  * answers of the device: plugins which check them to decide what a drive
  * supports do nothing on any other controller.
  */
+/* --fw= the firmware image fw_setup() writes into the test root */
+#define FW_IMAGE "fw.img"
+#define FW_IMAGE_SIZE (64 * 1024)
+static char fw_option[sizeof("--fw=/" FW_IMAGE) + PATH_MAX];
+
 static const struct {
 	const char *argv[4];
 	const char *arg;
 	bool pci;
+	const char *opts[4][3];
 } commands[] = {
 	{ { "id", "ctrl" } },
 	{ { "id", "ns" }, "--namespace-id" },
@@ -304,9 +317,55 @@ static const struct {
 	{ { "micron", "smart-log" }, .pci = true },
 	{ { "ymtc", "smart-log-add" }, .pci = true },
 	{ { "sfx", "status" }, .pci = true },
+	{ { "read", "--data=/dev/null", "--data-size=65536" }, "--block-count",
+	  .opts = { {}, { "--metadata-size=4096", "--metadata=/dev/null" },
+		    { "--block-size=4096" } } },
+	{ { "write", "--data=/dev/zero", "--data-size=65536" }, "--block-count",
+	  .opts = { {}, { "--metadata-size=4096", "--metadata=/dev/zero" },
+		    { "--block-size=4096" } } },
+	{ { "compare", "--data=/dev/zero", "--data-size=65536" },
+	  "--block-count",
+	  .opts = { {}, { "--metadata-size=4096", "--metadata=/dev/zero" },
+		    { "--block-size=4096" } } },
+	{ { "admin-passthru", "--data-len=4096", "--input-file=/dev/null",
+	    "--metadata=/dev/null" }, "--opcode",
+	  .opts = { {}, { "--read", "--metadata-len=64" }, { "--raw-binary" },
+		    { "--write", "--metadata-len=64" } } },
+	{ { "io-passthru", "--data-len=4096", "--input-file=/dev/null",
+	    "--metadata=/dev/null" }, "--opcode",
+	  .opts = { {}, { "--read", "--metadata-len=64" }, { "--raw-binary" },
+		    { "--write", "--metadata-len=64" } } },
+	{ { "format", "--force" }, "--lbaf",
+	  .opts = { { "--namespace-id=1" },
+		    { "--namespace-id=1", "--block-size=4096" },
+		    { "--namespace-id=1", "--pi=1", "--ms=1" },
+		    { "--namespace-id=1", "--reset" } } },
+	{ { "sanitize", "--wait" }, "--sanact",
+	  .opts = { { "--sanact=start-block-erase" },
+		    { "--sanact=start-crypto-erase" },
+		    { "--sanact=start-overwrite" },
+		    { "--sanact=exit-media-verification" } } },
+	{ { "sanitize-ns" }, "--namespace-id",
+	  .opts = { { "--sanact=start-crypto-erase" },
+		    { "--sanact=exit-media-verification" },
+		    { "--sanact=exit-failure" } } },
+	{ { "device-self-test", "--wait" }, "--self-test-code",
+	  .opts = { { "--self-test-code=1" }, { "--self-test-code=2" } } },
+	{ { "fw", "download", fw_option }, "--offset",
+	  .opts = { {}, { "--xfer=4096" }, { "--stream", "--progress" },
+		    { "--xfer=16384", "--ignore-ovr" } } },
+	{ { "rpmb", "read-data", "--msgfile=/dev/null" }, "--blocks",
+	  .opts = { {}, { "--address=8", "--target=1" } } },
+	{ { "rpmb", "write-data", "--msg=fuzz", "--key=fuzz" }, "--blocks",
+	  .opts = { {}, { "--address=8", "--target=1" } } },
+	{ { "rpmb", "write-config", "--msg=fuzz", "--key=fuzz" } },
+	{ { "rpmb", "program-key", "--key=fuzz" }, "--target" },
 };
 
 #define NR_COMMANDS ARRAY_SIZE(commands)
+
+/* The first byte of an input of a command from index 255 on */
+#define EXTENDED_INDEX 0xff
 
 static struct nvme_args defaults;
 
@@ -459,6 +518,8 @@ static void pci_cleanup(void)
 			 pci_fixed_attrs[i].name);
 		unlink(path);
 	}
+	snprintf(path, sizeof(path), "%s/" FW_IMAGE, pci_root);
+	unlink(path);
 	for (i = 0; i < ARRAY_SIZE(dirs); i++) {
 		snprintf(path, sizeof(path), "%s%s", pci_root, dirs[i]);
 		rmdir(path);
@@ -502,6 +563,29 @@ static void pci_setup(void)
 	}
 }
 
+/*
+ * The firmware image fw download sends, in the test root: of a size
+ * which takes several transfers. What it holds doesn't matter, the mock
+ * answers a write without looking at its data.
+ */
+static void fw_setup(void)
+{
+	static const char chunk[4096];
+	FILE *f;
+	size_t i;
+
+	snprintf(fw_option, sizeof(fw_option), "--fw=%s/" FW_IMAGE,
+		 pci_root);
+	f = fopen(fw_option + strlen("--fw="), "w");
+	if (!f)
+		abort();
+	for (i = 0; i < FW_IMAGE_SIZE / sizeof(chunk); i++)
+		if (fwrite(chunk, sizeof(chunk), 1, f) != 1)
+			abort();
+	if (fclose(f))
+		abort();
+}
+
 /* Give nvme0 of the test root the PCI IDs at @data, vendor and device */
 static void pci_sysfs(const uint8_t *data)
 {
@@ -522,6 +606,25 @@ static void pci_sysfs(const uint8_t *data)
 	}
 }
 
+static bool running;
+
+/*
+ * nvme-cli waits a second between the polls of a device which sanitizes
+ * or tests itself, and the mock answers them right away: don't wait. The
+ * polls end when the device says so, or the data limit of the mock is
+ * reached. libFuzzer's own sleep() calls still sleep.
+ */
+unsigned int sleep(unsigned int seconds)
+{
+	static unsigned int (*fn)(unsigned int);
+
+	if (running)
+		return 0;
+	if (!fn)
+		fn = real("sleep");
+	return fn(seconds);
+}
+
 int LLVMFuzzerInitialize(int *argc, char ***argv)
 {
 #ifndef __SANITIZE_ADDRESS__
@@ -538,21 +641,33 @@ int LLVMFuzzerInitialize(int *argc, char ***argv)
 	(void)argv;
 	defaults = nvme_args;
 	pci_setup();
+	fw_setup();
 	return 0;
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
+	const char *const *opts;
 	char *argv[MAX_ARGS + 1];
+	unsigned int idx;
 	char arg[64];
 	uint8_t variant;
 	int argc = 0, i;
 	bool pci;
 
+	if (size && data[0] == EXTENDED_INDEX) {
+		if (size < 2)
+			return 0;
+		idx = EXTENDED_INDEX + data[1];
+		data++;
+		size--;
+	} else {
+		idx = size ? data[0] : 0;
+	}
 	/* No modulo: a new command must not change what an input does */
-	if (size < 3 || data[0] >= NR_COMMANDS)
+	if (size < 3 || idx >= NR_COMMANDS)
 		return 0;
-	pci = commands[data[0]].pci;
+	pci = commands[idx].pci;
 	if (pci && size < 7)
 		return 0;
 
@@ -569,8 +684,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	} else {
 		argv[argc++] = "test-sysfs-dir=/nonexistent/fuzz-device";
 	}
-	for (i = 0; i < 4 && commands[data[0]].argv[i]; i++)
-		argv[argc++] = (char *)commands[data[0]].argv[i];
+	for (i = 0; i < 4 && commands[idx].argv[i]; i++)
+		argv[argc++] = (char *)commands[idx].argv[i];
 
 	variant = data[1];
 	argv[argc++] = variant & 4 ? "/dev/nvme0n1" : "/dev/nvme0";
@@ -578,11 +693,14 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		argv[argc++] = "--output-format=json";
 	if (variant & 2)
 		argv[argc++] = "--verbose";
-	if (variant & 8 && commands[data[0]].arg) {
-		snprintf(arg, sizeof(arg), "%s=%u", commands[data[0]].arg,
+	if (variant & 8 && commands[idx].arg) {
+		snprintf(arg, sizeof(arg), "%s=%u", commands[idx].arg,
 			 data[2] == 0xff ? 0xffffffffU : data[2]);
 		argv[argc++] = arg;
 	}
+	opts = commands[idx].opts[variant >> 4 & 3];
+	for (i = 0; i < 3 && opts[i]; i++)
+		argv[argc++] = (char *)opts[i];
 	argv[argc] = NULL;
 
 	nvme_args = defaults;
@@ -590,7 +708,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		mock_fuzz_input(data + 7, size - 7);
 	else
 		mock_fuzz_input(data + 3, size - 3);
+	running = true;
 	nvme_main(argc, argv);
+	running = false;
 	mock_fuzz_input(NULL, 0);
 
 	return 0;
