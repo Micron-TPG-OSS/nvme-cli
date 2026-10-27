@@ -1016,7 +1016,7 @@ static int wdc_enc_get_nic_log(struct libnvme_transport_handle *hdl, __u8 log_id
 static int wdc_enc_submit_move_data(struct libnvme_transport_handle *hdl, char *cmd, int len, int xfer_size,
 				    FILE *out, int data_id, int cdw14, int cdw15);
 static bool get_dev_mgment_cbs_data(struct libnvme_global_ctx *ctx, struct libnvme_transport_handle *hdl, __u8 log_id,
-				    void **cbs_data);
+				    void **cbs_data, size_t *cbs_len);
 static __u32 wdc_get_fw_cust_id(struct libnvme_global_ctx *ctx, struct libnvme_transport_handle *hdl);
 static int wdc_print_c0_cloud_attr_log(void *data,
 		int fmt,
@@ -1495,10 +1495,23 @@ static double safe_div_fp(double numerator, double denominator)
 	return denominator ? numerator / denominator : 0;
 }
 
-static double calc_percent(uint64_t numerator, uint64_t denominator)
+/* At most UINT64_MAX: the device reports the counters */
+static uint64_t calc_percent(uint64_t numerator, uint64_t denominator)
 {
-	return denominator ?
-		(uint64_t)(((double)numerator / (double)denominator) * 100) : 0;
+	double percent;
+
+	if (!denominator)
+		return 0;
+	percent = (double)numerator / (double)denominator * 100;
+	return percent < 0x1p64 ? (uint64_t)percent : UINT64_MAX;
+}
+
+/* An average of the JSON output, at most UINT64_MAX */
+static uint64_t json_avg(double numerator, double denominator)
+{
+	double avg = safe_div_fp(numerator, denominator);
+
+	return avg < 0x1p64 ? (uint64_t)avg : UINT64_MAX;
 }
 
 static int wdc_get_vendor_id(struct libnvme_transport_handle *hdl, uint32_t *vendor_id)
@@ -2612,6 +2625,7 @@ end:
 
 static bool get_dev_mgmt_log_page_lid_data(struct libnvme_transport_handle *hdl,
 	void **cbs_data,
+	size_t *cbs_len,
 	__u8 lid,
 	__u8 log_id,
 	__u8 uuid_ix)
@@ -2678,14 +2692,23 @@ static bool get_dev_mgmt_log_page_lid_data(struct libnvme_transport_handle *hdl,
 	sph = NULL;
 	found = wdc_get_dev_mng_log_entry(le32_to_cpu(hdr_ptr->length), log_id, hdr_ptr, &sph);
 	if (found && sph) {
-		*cbs_data = calloc(wdc_c2_entry_length(sph), sizeof(__u8));
+		/*
+		 * The data of the entry, after its header: zero padded, so
+		 * that one shorter than the dword of a value still has one.
+		 */
+		size_t hdr_len =
+			offsetof(struct wdc_c2_log_subpage_header, data);
+		size_t entry_len = wdc_c2_entry_length(sph);
+		size_t len = entry_len > hdr_len ? entry_len - hdr_len : 0;
+
+		*cbs_data = calloc(len + sizeof(__le32), sizeof(__u8));
 		if (!*cbs_data) {
 			nvme_show_error("ERROR: WDC: calloc: %s", libnvme_strerror(errno));
 			found = false;
 			goto end;
 		}
-		memcpy((void *)*cbs_data, wdc_c2_entry_data(sph),
-		       wdc_c2_entry_length(sph));
+		memcpy((void *)*cbs_data, wdc_c2_entry_data(sph), len);
+		*cbs_len = len;
 	} else if(found && !sph) {
 		nvme_show_error("ERROR: WDC: C2 log id 0x%x not present in log page with uuid index %d",log_id, uuid_ix);
 		found = false;
@@ -2765,9 +2788,24 @@ static bool get_dev_mgment_data(struct libnvme_global_ctx *ctx, struct libnvme_t
 	return found;
 }
 
-static bool get_dev_mgment_cbs_data(struct libnvme_global_ctx *ctx, struct libnvme_transport_handle *hdl,
-				__u8 log_id, void **cbs_data)
+/*
+ * The bytes of the C2 entry data @cbs of @len bytes, a length and the
+ * bytes it counts: those which are in the data.
+ */
+static __u32 wdc_cbs_len(const struct wdc_c2_cbs_data *cbs, size_t len)
 {
+	size_t max = len > sizeof(cbs->length) ? len - sizeof(cbs->length) : 0;
+
+	size_t cbs_len = le32_to_cpu(cbs->length);
+
+	return cbs_len < max ? cbs_len : max;
+}
+
+static bool get_dev_mgment_cbs_data(struct libnvme_global_ctx *ctx, struct libnvme_transport_handle *hdl,
+				__u8 log_id, void **cbs_data, size_t *cbs_len)
+{
+	size_t len;
+
 	bool found = false;
 	__u8 lid = 0;
 	__u32 device_id = 0, vendor_id = 0;
@@ -2801,8 +2839,8 @@ static bool get_dev_mgment_cbs_data(struct libnvme_global_ctx *ctx, struct libnv
 		}
 
 		if (uuid_index >= 0)
-			found = get_dev_mgmt_log_page_lid_data(hdl, cbs_data, lid,
-							       log_id, uuid_index);
+			found = get_dev_mgmt_log_page_lid_data(hdl, cbs_data,
+				&len, lid, log_id, uuid_index);
 		else {
 			nvme_show_error("%s: UUID lists are supported but a matching ",
 			__func__);
@@ -2815,22 +2853,26 @@ static bool get_dev_mgment_cbs_data(struct libnvme_global_ctx *ctx, struct libnv
 		 * to determine which is returning the correct log page data.
 		 */
 		uuid_index = 1;
-		found = get_dev_mgmt_log_page_lid_data(hdl, cbs_data, lid, log_id, uuid_index);
+		found = get_dev_mgmt_log_page_lid_data(hdl, cbs_data,
+				&len, lid, log_id, uuid_index);
 		if (!found) {
 			/* not found with uuid = 1 try with uuid = 0 */
 			uuid_index = 0;
 			nvme_show_error("Not found, requesting log page with uuid_index %d",
 					uuid_index);
 
-			found = get_dev_mgmt_log_page_lid_data(hdl, cbs_data, lid, log_id,
-							       uuid_index);
+			found = get_dev_mgmt_log_page_lid_data(hdl, cbs_data,
+				&len, lid, log_id, uuid_index);
 		}
 	} else {
 		/* Default to uuid-index 0 for cases where UUID lists are not supported */
 		uuid_index = 0;
-		found = get_dev_mgmt_log_page_lid_data(hdl, cbs_data, lid, log_id, uuid_index);
+		found = get_dev_mgmt_log_page_lid_data(hdl, cbs_data,
+				&len, lid, log_id, uuid_index);
 	}
 
+	if (found && cbs_len)
+		*cbs_len = len;
 	return found;
 }
 
@@ -2858,6 +2900,7 @@ static bool wdc_nvme_check_supported_log_page(struct libnvme_global_ctx *ctx,
 	bool found = false;
 	int err = -1;
 	struct wdc_c2_cbs_data *cbs_data = NULL;
+	size_t cbs_len = 0;
 
 	__cleanup_libnvme_free struct nvme_supported_log_pages *supports = NULL;
 
@@ -2883,9 +2926,11 @@ static bool wdc_nvme_check_supported_log_page(struct libnvme_global_ctx *ctx,
 	if (!found) {
 		if (get_dev_mgment_cbs_data(ctx, hdl,
 				WDC_C2_LOG_PAGES_SUPPORTED_ID,
-				(void *)&cbs_data)) {
+				(void *)&cbs_data, &cbs_len)) {
 			if (cbs_data) {
-				for (i = 0; i < le32_to_cpu(cbs_data->length); i++) {
+				__u32 n = wdc_cbs_len(cbs_data, cbs_len);
+
+				for (i = 0; i < n; i++) {
 					if (log_id == cbs_data->data[i]) {
 						found = true;
 						break;
@@ -2898,8 +2943,7 @@ static bool wdc_nvme_check_supported_log_page(struct libnvme_global_ctx *ctx,
 						log_id);
 					nvme_show_error("WDC: Supported Log Pages:");
 					/* print the supported pages */
-					d((__u8 *)cbs_data->data, le32_to_cpu(cbs_data->length),
-						16, 1);
+					d((__u8 *)cbs_data->data, n, 16, 1);
 				}
 #endif
 				free(cbs_data);
@@ -2977,7 +3021,8 @@ static bool wdc_nvme_get_dev_status_log_data(struct libnvme_global_ctx *ctx, str
 {
 	__u32 *cbs_data = NULL;
 
-	if (get_dev_mgment_cbs_data(ctx, hdl, log_id, (void *)&cbs_data)) {
+	if (get_dev_mgment_cbs_data(ctx, hdl, log_id, (void *)&cbs_data,
+				    NULL)) {
 		if (cbs_data) {
 			memcpy((void *)ret_data, (void *)cbs_data, 4);
 			free(cbs_data);
@@ -5175,53 +5220,69 @@ static void wdc_print_log_json(struct wdc_ssd_perf_stats *perf)
 {
 	struct json_object *root = json_create_object();
 
-	json_object_add_value_int(root, "Host Read Commands", le64_to_cpu(perf->hr_cmds));
-	json_object_add_value_int(root, "Host Read Blocks", le64_to_cpu(perf->hr_blks));
-	json_object_add_value_int(root, "Average Read Size",
-			safe_div_fp((le64_to_cpu(perf->hr_blks)), (le64_to_cpu(perf->hr_cmds))));
-	json_object_add_value_int(root, "Host Read Cache Hit Commands",
+	json_object_add_value_uint64(root, "Host Read Commands",
+		le64_to_cpu(perf->hr_cmds));
+	json_object_add_value_uint64(root, "Host Read Blocks",
+		le64_to_cpu(perf->hr_blks));
+	json_object_add_value_uint64(root, "Average Read Size",
+			json_avg(le64_to_cpu(perf->hr_blks),
+				 le64_to_cpu(perf->hr_cmds)));
+	json_object_add_value_uint64(root, "Host Read Cache Hit Commands",
 			le64_to_cpu(perf->hr_ch_cmds));
-	json_object_add_value_int(root, "Host Read Cache Hit Percentage",
-			(uint64_t) calc_percent(le64_to_cpu(perf->hr_ch_cmds), le64_to_cpu(perf->hr_cmds)));
-	json_object_add_value_int(root, "Host Read Cache Hit Blocks",
+	json_object_add_value_uint64(root, "Host Read Cache Hit Percentage",
+			calc_percent(le64_to_cpu(perf->hr_ch_cmds),
+				     le64_to_cpu(perf->hr_cmds)));
+	json_object_add_value_uint64(root, "Host Read Cache Hit Blocks",
 			le64_to_cpu(perf->hr_ch_blks));
-	json_object_add_value_int(root, "Average Read Cache Hit Size",
-			safe_div_fp((le64_to_cpu(perf->hr_ch_blks)), (le64_to_cpu(perf->hr_ch_cmds))));
-	json_object_add_value_int(root, "Host Read Commands Stalled",
+	json_object_add_value_uint64(root, "Average Read Cache Hit Size",
+			json_avg(le64_to_cpu(perf->hr_ch_blks),
+				 le64_to_cpu(perf->hr_ch_cmds)));
+	json_object_add_value_uint64(root, "Host Read Commands Stalled",
 			le64_to_cpu(perf->hr_st_cmds));
-	json_object_add_value_int(root, "Host Read Commands Stalled Percentage",
-			(uint64_t)calc_percent((le64_to_cpu(perf->hr_st_cmds)), le64_to_cpu(perf->hr_cmds)));
-	json_object_add_value_int(root, "Host Write Commands",
+	json_object_add_value_uint64(root,
+		"Host Read Commands Stalled Percentage",
+			calc_percent((le64_to_cpu(perf->hr_st_cmds)),
+				     le64_to_cpu(perf->hr_cmds)));
+	json_object_add_value_uint64(root, "Host Write Commands",
 			le64_to_cpu(perf->hw_cmds));
-	json_object_add_value_int(root, "Host Write Blocks",
+	json_object_add_value_uint64(root, "Host Write Blocks",
 			le64_to_cpu(perf->hw_blks));
-	json_object_add_value_int(root, "Average Write Size",
-			safe_div_fp((le64_to_cpu(perf->hw_blks)), (le64_to_cpu(perf->hw_cmds))));
-	json_object_add_value_int(root, "Host Write Odd Start Commands",
+	json_object_add_value_uint64(root, "Average Write Size",
+			json_avg(le64_to_cpu(perf->hw_blks),
+				 le64_to_cpu(perf->hw_cmds)));
+	json_object_add_value_uint64(root, "Host Write Odd Start Commands",
 			le64_to_cpu(perf->hw_os_cmds));
-	json_object_add_value_int(root, "Host Write Odd Start Commands Percentage",
-			(uint64_t)calc_percent((le64_to_cpu(perf->hw_os_cmds)), (le64_to_cpu(perf->hw_cmds))));
-	json_object_add_value_int(root, "Host Write Odd End Commands",
+	json_object_add_value_uint64(root,
+		"Host Write Odd Start Commands Percentage",
+			calc_percent((le64_to_cpu(perf->hw_os_cmds)),
+				     (le64_to_cpu(perf->hw_cmds))));
+	json_object_add_value_uint64(root, "Host Write Odd End Commands",
 			le64_to_cpu(perf->hw_oe_cmds));
-	json_object_add_value_int(root, "Host Write Odd End Commands Percentage",
-			(uint64_t)calc_percent((le64_to_cpu(perf->hw_oe_cmds)), (le64_to_cpu((perf->hw_cmds)))));
-	json_object_add_value_int(root, "Host Write Commands Stalled",
+	json_object_add_value_uint64(root,
+		"Host Write Odd End Commands Percentage",
+			calc_percent((le64_to_cpu(perf->hw_oe_cmds)),
+				     (le64_to_cpu((perf->hw_cmds)))));
+	json_object_add_value_uint64(root, "Host Write Commands Stalled",
 		le64_to_cpu(perf->hw_st_cmds));
-	json_object_add_value_int(root, "Host Write Commands Stalled Percentage",
-		(uint64_t)calc_percent((le64_to_cpu(perf->hw_st_cmds)), (le64_to_cpu(perf->hw_cmds))));
-	json_object_add_value_int(root, "NAND Read Commands",
+	json_object_add_value_uint64(root,
+		"Host Write Commands Stalled Percentage",
+		calc_percent((le64_to_cpu(perf->hw_st_cmds)),
+			     (le64_to_cpu(perf->hw_cmds))));
+	json_object_add_value_uint64(root, "NAND Read Commands",
 		le64_to_cpu(perf->nr_cmds));
-	json_object_add_value_int(root, "NAND Read Blocks Commands",
+	json_object_add_value_uint64(root, "NAND Read Blocks Commands",
 		le64_to_cpu(perf->nr_blks));
-	json_object_add_value_int(root, "Average NAND Read Size",
-		safe_div_fp((le64_to_cpu(perf->nr_blks)), (le64_to_cpu((perf->nr_cmds)))));
-	json_object_add_value_int(root, "Nand Write Commands",
+	json_object_add_value_uint64(root, "Average NAND Read Size",
+		json_avg(le64_to_cpu(perf->nr_blks),
+			 le64_to_cpu(perf->nr_cmds)));
+	json_object_add_value_uint64(root, "Nand Write Commands",
 			le64_to_cpu(perf->nw_cmds));
-	json_object_add_value_int(root, "NAND Write Blocks",
+	json_object_add_value_uint64(root, "NAND Write Blocks",
 			le64_to_cpu(perf->nw_blks));
-	json_object_add_value_int(root, "Average NAND Write Size",
-			safe_div_fp((le64_to_cpu(perf->nw_blks)), (le64_to_cpu(perf->nw_cmds))));
-	json_object_add_value_int(root, "NAND Read Before Written",
+	json_object_add_value_uint64(root, "Average NAND Write Size",
+			json_avg(le64_to_cpu(perf->nw_blks),
+				 le64_to_cpu(perf->nw_cmds)));
+	json_object_add_value_uint64(root, "NAND Read Before Written",
 			le64_to_cpu(perf->nrbw));
 	json_print_object(root, NULL);
 	printf("\n");
@@ -9014,7 +9075,7 @@ static int wdc_vs_device_waf(int argc, char **argv, struct command *acmd,
 		ret = -1;
 		goto out;
 	} else {
-		nvme_show_error("smart log: %s", libnvme_strerror(errno));
+		nvme_show_error("smart log: %s", libnvme_strerror(-ret));
 		ret = -1;
 		goto out;
 	}
@@ -9621,7 +9682,8 @@ static __u32 wdc_get_fw_cust_id(struct libnvme_global_ctx *ctx, struct libnvme_t
 	__u32 cust_id = WDC_INVALID_CUSTOMER_ID;
 	__u32 *cust_id_ptr = NULL;
 
-	if (!get_dev_mgment_cbs_data(ctx, hdl, WDC_C2_CUSTOMER_ID_ID, (void *)&cust_id_ptr))
+	if (!get_dev_mgment_cbs_data(ctx, hdl, WDC_C2_CUSTOMER_ID_ID,
+				     (void *)&cust_id_ptr, NULL))
 		nvme_show_error("%s: ERROR: WDC: 0xC2 Log Page entry ID 0x%x not found",
 			__func__, WDC_C2_CUSTOMER_ID_ID);
 	else
@@ -11174,6 +11236,8 @@ static int wdc_log_page_directory(int argc, char **argv, struct command *acmd,
 	int ret = 0;
 	__u64 capabilities = 0;
 	struct wdc_c2_cbs_data *cbs_data = NULL;
+	size_t cbs_len = 0;
+	__u32 n;
 	int i, uuid_index = 0;
 	__u8 log_id = 0;
 	__u32 device_id, read_vendor_id;
@@ -11257,8 +11321,8 @@ static int wdc_log_page_directory(int argc, char **argv, struct command *acmd,
 			}
 
 			if (!get_dev_mgment_cbs_data(ctx, hdl,
-						    WDC_C2_LOG_PAGES_SUPPORTED_ID,
-						    (void *)&cbs_data)) {
+					WDC_C2_LOG_PAGES_SUPPORTED_ID,
+					(void *)&cbs_data, &cbs_len)) {
 				nvme_show_error(
 					"%s: ERROR: WDC: 0xC2 Log Page entry ID 0x%x not found\n",
 					__func__, WDC_C2_LOG_PAGES_SUPPORTED_ID);
@@ -11270,19 +11334,19 @@ static int wdc_log_page_directory(int argc, char **argv, struct command *acmd,
 				ret = -1;
 				goto out;
 			}
+			n = wdc_cbs_len(cbs_data, cbs_len);
 			printf("Log Page Directory\n");
 			/* print the supported pages */
 			if (!strcmp(cfg.output_format, "normal")) {
-				for (i = 0; i < le32_to_cpu(cbs_data->length); i++)
+				for (i = 0; i < n; i++)
 					printf("0x%x  - %s\n", cbs_data->data[i],
 					       nvme_log_id_to_string(cbs_data->data[i]));
 			} else if (!strcmp(cfg.output_format, "binary")) {
-				d((__u8 *)cbs_data->data,
-				  le32_to_cpu(cbs_data->length), 16, 1);
+				d((__u8 *)cbs_data->data, n, 16, 1);
 			} else if (!strcmp(cfg.output_format, "json")) {
 				struct json_object *root = json_create_object();
 
-				for (i = 0; i < le32_to_cpu(cbs_data->length); i++) {
+				for (i = 0; i < n; i++) {
 					json_object_add_value_int(root,
 						nvme_log_id_to_string(cbs_data->data[i]),
 						cbs_data->data[i]);
