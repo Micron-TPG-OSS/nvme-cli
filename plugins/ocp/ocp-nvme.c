@@ -50,7 +50,7 @@
 
 #define C3_LATENCY_MON_LOG_BUF_LEN		0x200
 
-static __u8 lat_mon_guid[GUID_LEN] = {
+static const __u8 lat_mon_guid[GUID_LEN] = {
 	0x92, 0x7a, 0xc0, 0x8c,
 	0xd0, 0x84, 0x6c, 0x9c,
 	0x70, 0x43, 0xe6, 0xd4,
@@ -194,8 +194,8 @@ struct ieee1667_get_cq_entry {
 static const char *sel = "[0-3]: current/default/saved/supported";
 static const char *no_uuid = "Skip UUID index search (UUID index not required for OCP 1.0)";
 static const char *all_ns = "Apply to all namespaces";
-const char *data = "Error injection data structure entries";
-const char *number = "Number of valid error injection data entries";
+static const char *data = "Error injection data structure entries";
+static const char *number = "Number of valid error injection data entries";
 static const char *type = "Error injection type";
 static const char *nrtdp = "Number of reads to trigger device panic";
 static const char *save = "Specifies that the controller shall save the attribute";
@@ -622,11 +622,14 @@ static int eol_plp_failure_mode(int argc, char **argv, struct command *acmd,
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 /// Telemetry Log
-//global buffers
-__u8 *ptelemetry_buffer;
-size_t ptelemetry_buffer_size;
-__u8 *pstring_buffer;
-size_t pstring_buffer_size;
+
+static void cleanup_ocp_telemetry_logs(struct ocp_telemetry_logs *logs)
+{
+	free(logs->telemetry);
+	free(logs->string);
+}
+
+#define __cleanup_ocp_telemetry_logs __cleanup(cleanup_ocp_telemetry_logs)
 
 static int get_telemetry_log_page_data(struct libnvme_transport_handle *hdl,
 		int tele_type,
@@ -883,60 +886,49 @@ static int get_c9_log_page_data(struct libnvme_transport_handle *hdl,
 	return 0;
 }
 
-int parse_ocp_telemetry_log(struct ocp_telemetry_parse_options *options)
+static int read_log_file(const char *path, const char *name,
+			 size_t min_size, unsigned char **buf, long *size)
 {
-	int status = 0;
-	long string_buffer_size = 0;
-	enum nvme_print_flags fmt;
+	int err;
 
-	if (!ptelemetry_buffer) {
-		nvme_show_error("telemetry-log is empty.");
-		return -1;
+	err = shr_read_file(NULL, path, size, buf);
+	if (err) {
+		nvme_show_error("Failed to read %s.", name);
+		return err;
 	}
 
-	if (options->string_log) {
-		/* Read the data from the string binary file */
-		status = shr_read_file(NULL,
-				(const char *)options->string_log,
-				&string_buffer_size,
-				&pstring_buffer);
-		if (status) {
-			nvme_show_error("Failed to read string-log.");
-			return status;
-		}
-
-		/* All lookups rely on a valid string log header. */
-		if (string_buffer_size <
-		    (long)sizeof(struct nvme_ocp_telemetry_string_header)) {
-			nvme_show_error("string-log is smaller than its %zu-byte header.",
-					sizeof(struct nvme_ocp_telemetry_string_header));
-			free(pstring_buffer);
-			pstring_buffer = NULL;
-			return -EINVAL;
-		}
-
-		pstring_buffer_size = string_buffer_size;
-	} else {
-		nvme_show_error("string-log is empty.");
-		return -1;
+	if (*size < (long)min_size) {
+		nvme_show_error("%s is smaller than its %zu-byte header.",
+				name, min_size);
+		free(*buf);
+		*buf = NULL;
+		return -EINVAL;
 	}
-
-	status = validate_output_format(options->output_format, &fmt);
-	if (status < 0) {
-		nvme_show_error("Invalid output format");
-		return status;
-	}
-
-	ocp_show_telemetry_log(options, fmt);
 
 	return 0;
 }
 
-/*
- * Loads the telemetry log at path into ptelemetry_buffer and validates that
- * its Log Identifier indicates a Host- or Controller-Initiated Telemetry log.
- */
-static int load_telemetry_log_file(const char *path)
+static int load_string_log_file(const char *path,
+				struct ocp_telemetry_logs *logs)
+{
+	const size_t header_size =
+		sizeof(struct nvme_ocp_telemetry_string_header);
+	unsigned char *buf;
+	long size;
+	int err;
+
+	err = read_log_file(path, "string-log", header_size, &buf, &size);
+	if (err)
+		return err;
+
+	free(logs->string);
+	logs->string = buf;
+	logs->string_size = size;
+	return 0;
+}
+
+static int load_telemetry_log_file(const char *path,
+				   struct ocp_telemetry_logs *logs)
 {
 	/* Host and controller headers are both 512 bytes. */
 	const size_t header_size =
@@ -945,18 +937,9 @@ static int load_telemetry_log_file(const char *path)
 	long size;
 	int err;
 
-	err = shr_read_file(NULL, path, &size, &buf);
-	if (err) {
-		nvme_show_error("Failed to read telemetry-log.");
+	err = read_log_file(path, "telemetry-log", header_size, &buf, &size);
+	if (err)
 		return err;
-	}
-
-	if (size < (long)header_size) {
-		nvme_show_error("telemetry-log is smaller than its %zu-byte header.",
-				header_size);
-		free(buf);
-		return -EINVAL;
-	}
 
 	if (buf[0] != NVME_LOG_LID_TELEMETRY_HOST &&
 	    buf[0] != NVME_LOG_LID_TELEMETRY_CTRL) {
@@ -965,9 +948,9 @@ static int load_telemetry_log_file(const char *path)
 		return -EINVAL;
 	}
 
-	free(ptelemetry_buffer);
-	ptelemetry_buffer = buf;
-	ptelemetry_buffer_size = size;
+	free(logs->telemetry);
+	logs->telemetry = buf;
+	logs->telemetry_size = size;
 	return 0;
 }
 
@@ -1005,6 +988,7 @@ static int ocp_telemetry_log(int argc, char **argv, struct command *acmd, struct
 	struct nvme_id_ctrl ctrl;
 	struct libnvme_passthru_cmd cmd;
 	struct ocp_telemetry_parse_options opt = {0};
+	__cleanup_ocp_telemetry_logs struct ocp_telemetry_logs logs = { 0 };
 	int tele_type = TELEMETRY_TYPE_HOST;
 	int tele_area = 0;
 	__u32 host_gen = 1;
@@ -1012,6 +996,7 @@ static int ocp_telemetry_log(int argc, char **argv, struct command *acmd, struct
 	const char *string_suffix = "string.bin";
 	const char *tele_log_suffix = "telemetry.bin";
 	bool host_behavior_changed = false;
+	enum nvme_print_flags fmt;
 
 	OPT_ARGS(opts) = {
 		OPT_FILE("telemetry-log",  'l', &opt.telemetry_log,
@@ -1049,6 +1034,21 @@ static int ocp_telemetry_log(int argc, char **argv, struct command *acmd, struct
 		goto out;
 	}
 
+	if (argconfig_given(opts, &nvme_args.output_format))
+		opt.output_format = nvme_args.output_format;
+
+	if (!opt.output_format) {
+		nvme_show_result("Missing output format. Using default format - %s.\n",
+				 DEFAULT_OUTPUT_FORMAT);
+		opt.output_format = DEFAULT_OUTPUT_FORMAT;
+	}
+
+	err = validate_output_format(opt.output_format, &fmt);
+	if (err < 0) {
+		nvme_show_error("Invalid output format");
+		goto out;
+	}
+
 	tele_area = opt.data_area;
 
 	if (tele_type == 0) {
@@ -1066,11 +1066,11 @@ static int ocp_telemetry_log(int argc, char **argv, struct command *acmd, struct
 	if (opt.telemetry_log) {
 		int log_type;
 
-		err = load_telemetry_log_file(opt.telemetry_log);
+		err = load_telemetry_log_file(opt.telemetry_log, &logs);
 		if (err)
 			goto out;
 
-		log_type = ptelemetry_buffer[0] == NVME_LOG_LID_TELEMETRY_CTRL ?
+		log_type = logs.telemetry[0] == NVME_LOG_LID_TELEMETRY_CTRL ?
 			   TELEMETRY_TYPE_CONTROLLER : TELEMETRY_TYPE_HOST;
 		if (argconfig_given(opts, &tele_type) &&
 		    tele_type != log_type) {
@@ -1133,7 +1133,7 @@ static int ocp_telemetry_log(int argc, char **argv, struct command *acmd, struct
 		nvme_show_result("telemetry.bin generated. Proceeding with next steps.\n");
 		opt.telemetry_log = file_path_telemetry;
 
-		err = load_telemetry_log_file(opt.telemetry_log);
+		err = load_telemetry_log_file(opt.telemetry_log, &logs);
 		if (err)
 			goto out;
 	}
@@ -1155,21 +1155,14 @@ static int ocp_telemetry_log(int argc, char **argv, struct command *acmd, struct
 		opt.string_log = file_path_string;
 	}
 
-	if (argconfig_given(opts, &nvme_args.output_format))
-		opt.output_format = nvme_args.output_format;
-
-	if (!opt.output_format) {
-		nvme_show_result("Missing output format. Using default format - %s.\n",
-				 DEFAULT_OUTPUT_FORMAT);
-		opt.output_format = DEFAULT_OUTPUT_FORMAT;
-	}
+	err = load_string_log_file(opt.string_log, &logs);
+	if (err)
+		goto out;
 
 	printf("Extracting Telemetry %s Dump (Data Area %d)...\n",
 	       tele_type == TELEMETRY_TYPE_HOST ? "Host" : "Controller",
 	       tele_area);
-	err = parse_ocp_telemetry_log(&opt);
-	if (err)
-		nvme_show_result("Status:(%x)\n", err);
+	ocp_show_telemetry_log(&logs, &opt, fmt);
 
 	printf("ocp internal-log command completed.\n");
 out:
@@ -1185,7 +1178,7 @@ out:
 /* C5 Unsupported Requirement Log Page */
 #define C5_UNSUPPORTED_REQS_LEN            4096
 
-static __u8 unsupported_req_guid[GUID_LEN] = {
+static const __u8 unsupported_req_guid[GUID_LEN] = {
 	0x2F, 0x72, 0x9C, 0x0E,
 	0x99, 0x23, 0x2C, 0xBB,
 	0x63, 0x48, 0x32, 0xD0,
@@ -1292,7 +1285,7 @@ static int ocp_unsupported_requirements_log(int argc, char **argv, struct comman
 
 #define C1_ERROR_RECOVERY_LOG_BUF_LEN       0x200
 
-static __u8 error_recovery_guid[GUID_LEN] = {
+static const __u8 error_recovery_guid[GUID_LEN] = {
 	0x44, 0xd9, 0x31, 0x21,
 	0xfe, 0x30, 0x34, 0xae,
 	0xab, 0x4d, 0xfd, 0x3d,
@@ -1396,7 +1389,7 @@ static int ocp_error_recovery_log(int argc, char **argv, struct command *acmd, s
 /// Device Capabilities (Log Identifier C4h) Requirements
 
 #define C4_DEV_CAP_REQ_LEN			0x1000
-static __u8 dev_cap_req_guid[GUID_LEN] = {
+static const __u8 dev_cap_req_guid[GUID_LEN] = {
 	0x97, 0x42, 0x05, 0x0d,
 	0xd1, 0xe1, 0xc9, 0x98,
 	0x5d, 0x49, 0x58, 0x4b,
@@ -2097,7 +2090,7 @@ static int ocp_telemetry_str_log_format(int argc, char **argv, struct command *a
 /* C7 TCG Configuration Log Page */
 #define C7_TCG_CONFIGURATION_LEN           512
 
-static __u8 tcg_configuration_guid[GUID_LEN] = {
+static const __u8 tcg_configuration_guid[GUID_LEN] = {
 	0x06, 0x40, 0x24, 0xBD,
 	0x7E, 0xE0, 0xE6, 0x83,
 	0xC0, 0x47, 0x54, 0xFA,
@@ -2367,7 +2360,8 @@ static int error_injection_set(struct libnvme_transport_handle *hdl, struct erri
 			 0, 0, 0, 0, entry, data_len, NULL);
 	if (err) {
 		if (err < 0)
-			nvme_show_error("set-error-injection: %s", libnvme_strerror(errno));
+			nvme_show_error("set-error-injection: %s",
+					libnvme_strerror(-err));
 		else if (err > 0)
 			nvme_show_status(err);
 		return err;

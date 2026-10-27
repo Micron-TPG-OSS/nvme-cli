@@ -426,6 +426,10 @@
 
 ### Plugins
 
+* The JSON output of `nvme wdc vs-smart-add-log` prints the counters,
+  averages and percentages of the C1 performance statistics as 64 bit
+  values. Before, a value above 2^31 - 1 came out wrapped.
+
 * `nvme feat num-queues --nsqr=N` without `--ncqr` keeps the current
   number of completion queues now. Before, it requested a single
   completion queue and a wrong number of submission queues.
@@ -546,6 +550,14 @@
   rules were not installed.
 
 ### libnvme
+
+* Built with liburing, libnvme sends a passthru command through
+  io_uring only where the kernel takes it: admin commands on the char
+  device of a controller, I/O commands on that of a namespace, and
+  nothing on a block device. Before, every command on a namespace
+  block device (`/dev/nvme0n1`) failed with "Invalid argument", and
+  every admin command on a namespace char device (`/dev/ng0n1`) with
+  "Inappropriate ioctl for device".
 
 * A failed read of `/dev/nvme-fabrics` is no longer cached for the
   life of the global context, so a later connect retries it.

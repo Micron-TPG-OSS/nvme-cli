@@ -147,7 +147,7 @@ check 'help lists sub-commands' 0 'usage: nvme' -- help
 check 'list runs with no device present' 0 '-' -- list
 check 'list -o json emits Devices' 0 '"Devices"' -- list -o json
 check 'unknown sub-command fails' \
-    nonzero 'Invalid sub-command' -- not-a-sub-command
+    nonzero 'invalid sub-command' -- not-a-sub-command
 check 'missing device argument fails' nonzero '-' -- id ctrl
 
 # "nvme list -o json" is what other tooling consumes, so a truncated or

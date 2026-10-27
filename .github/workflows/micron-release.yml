@@ -92,9 +92,12 @@ jobs:
             TAG="${INPUT_TAG}"
             echo "Using tag from workflow input: ${TAG}"
           else
-            # Most recently published non-draft release, including prereleases.
+            # Most recently published non-draft release, including prereleases,
+            # but only versioned ones: upstream also publishes a rolling
+            # "nightly" release whose tag is moved on every build, which the
+            # tag-sync job below (rightly) refuses to follow.
             TAG="$(gh api 'repos/linux-nvme/nvme-cli/releases?per_page=30' \
-              --jq '[.[] | select(.draft == false)]
+              --jq '[.[] | select(.draft == false and (.tag_name | test("^v[0-9]")))]
                     | sort_by(.published_at) | reverse | .[0].tag_name')"
             echo "Newest upstream release: ${TAG}"
           fi

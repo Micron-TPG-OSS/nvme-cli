@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import FrameType
 
-from . import seeds
+from . import device, seeds
 from .libfuzzer import copy_new, is_slow_unit
 from .targets import TARGETS, Target, parse_targets, sanitizer_env
 
@@ -201,14 +201,29 @@ def _libfuzzer(
     return status
 
 
+def job_env() -> dict[str, str]:
+    """The environment of the fuzz jobs and the merges: the sanitizer
+    settings, and allocation stacks of two frames instead of 30, which
+    makes a job about a tenth faster. A finding is still reported; triage
+    and check replay it with the whole stacks."""
+    env = sanitizer_env(dict(os.environ))
+    env['ASAN_OPTIONS'] += ':malloc_context_size=2'
+    return env
+
+
 def _partitions(corpus: Path, parts: Path) -> list[Path]:
-    """Split @corpus by the first byte of its inputs into directories in
+    """Split @corpus by the first byte of its inputs, the first two for
+    those of the device target from index 255 on, into directories in
     @parts, of hard links to them. Returns them, the largest first."""
     sizes: dict[Path, int] = {}
     for f in corpus.iterdir():
         with f.open('rb') as fh:
-            first = fh.read(1)
-        d = parts / str(first[0] if first else 'empty')
+            first = fh.read(2)
+        if first[:1] == bytes([device.EXTENDED_INDEX]):
+            first = first[:2]
+        else:
+            first = first[:1]
+        d = parts / ('-'.join(map(str, first)) or 'empty')
         if d not in sizes:
             d.mkdir(parents=True)
             sizes[d] = 0
@@ -249,7 +264,7 @@ def _merge(
     before = sum(1 for _ in corpus.iterdir())
     print(f'fuzz-{t.name}: minimizing the corpus of {before} inputs')
     # Only the coverage counts here, the jobs report the findings
-    env = sanitizer_env(dict(os.environ))
+    env = job_env()
     env['ASAN_OPTIONS'] += ':detect_leaks=0'
     if limit is not None:
         env['FUZZ_DATA_LIMIT'] = str(limit)
@@ -344,7 +359,7 @@ def _run_target(
     status = 0
     for i, limit in enumerate(stages):
         secs = max(1, seconds // len(stages) + (i < seconds % len(stages)))
-        env = sanitizer_env(dict(os.environ))
+        env = job_env()
         prefix = f'{artifacts}/'
         cwd = logs
         what = ''
