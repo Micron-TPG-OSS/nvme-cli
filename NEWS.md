@@ -265,6 +265,20 @@
 
 ### nvme-cli
 
+* `nvme top -o json` samples the I/O statistics over `--delay` seconds
+  and prints the rates and the error, retry, failover, reset and
+  reconnect counters of the subsystems, namespaces, paths and
+  controllers as one JSON document, for scripts and monitoring tools.
+  `nvme top` has a man page now, which describes the document.
+
+* `scripts/mcp/nvme-mcp` is an MCP server on top of `nvme top -o json`.
+  It lets an agent watch the multipath I/O of a host: it flags paths
+  which are not optimized, are slow compared with their siblings, get
+  an uneven share of the I/O, or whose error counters go up. Started
+  with `--allow-iopolicy`, it also changes the I/O policy of a
+  subsystem and compares the policies under a running workload. See
+  `scripts/mcp/README.md`.
+
 * `nvme get-reg --register=NAME[,NAME...]` and `nvme set-reg
   --register=NAME --value=VAL` name the registers, with completion of
   the names, and `--offset` of `get-reg`, `set-reg`, `get-property` and
@@ -499,6 +513,12 @@
 
 ### nvme-discoverd
 
+* `meson install` no longer installs `nvme-discoverd.conf`, which
+  overwrote the admin's settings. It installs a commented
+  `nvme-discoverd.conf.sample` instead; copy it to
+  `nvme-discoverd.conf` to change a setting. Without the file, every
+  setting keeps its default.
+
 * Discovery Controllers are now connected with `--discovery` and a
   keep-alive timeout of 30 s, or the configured `keep-alive-tmo`. No
   keep-alive timeout is used for `persistent = no`.
@@ -583,6 +603,14 @@
   `libnvmf_config_get_discovered_params()` and
   `libnvmf_context_set_config()`, and `config_discovered_params()` in
   the Python bindings.
+
+* The Copy source range entries carry the Expected Logical Block Tags
+  (ELBT), Application Tag (ELBAT) and Application Tag Mask (ELBATM)
+  little endian again, as in 2.x, except the 80 bit ELBT of formats 1h
+  and 3h, which stays big endian. 3.0 and 3.1 sent them big endian,
+  which `nvme copy --expected-ref-tags` and `--expected-app-tags`
+  inherit. The byte order is not spelled out in the specification,
+  see [#4278](https://github.com/linux-nvme/nvme-cli/issues/4278).
 
 ### nvme-keysd
 
