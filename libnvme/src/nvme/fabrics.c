@@ -2340,7 +2340,7 @@ static int nvmf_connect_disc_entry(struct libnvmf_context *fctx,
 		return 0;
 	}
 
-	if (ret == EINVAL && c->cfg.disable_sqflow) {
+	if (ret == -ENVME_CONNECT_INVAL && c->cfg.disable_sqflow) {
 		/* disable_sqflow is unrecognized option on older kernels */
 		libnvme_msg(h->ctx, LIBNVME_LOG_INFO, "failed to connect controller, "
 			 "retry with disabling SQ flow control\n");
@@ -4432,7 +4432,7 @@ __shr_public int libnvmf_discover_nbft(struct libnvme_global_ctx *ctx,
 						libnvme_msg(ctx, LIBNVME_LOG_INFO,
 							"SSNS %d: connect with host_traddr=\"%s\" failed, success after omitting host_traddr\n",
 							(*ss)->index,
-							host_traddr);
+							hfi->tcp_info.ipaddr);
 				}
 
 				if (rr) {
