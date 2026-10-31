@@ -70,6 +70,7 @@ adoc_sources_man1 = [
     'nvme-get-lba-status',
     'nvme-get-log',
     'nvme-get-property',
+    'nvme-get-reg',
     'nvme-help',
     'nvme-huawei-id-ctrl',
     'nvme-huawei-list',
@@ -228,6 +229,7 @@ adoc_sources_man1 = [
     'nvme-sed-unlock',
     'nvme-set-feature',
     'nvme-set-property',
+    'nvme-set-reg',
     'nvme-show-hostnqn',
     'nvme-show-regs',
     'nvme-show-topology',
@@ -277,12 +279,14 @@ adoc_sources_man1 = [
     'nvme-solidigm-workload-tracker',
     'nvme-subsystem-reset',
     'nvme-supported-log-pages',
+    'nvme-top',
     'nvme-toshiba-clear-pcie-correctable-errors',
     'nvme-toshiba-vs-internal-log',
     'nvme-toshiba-vs-smart-add-log',
     'nvme-transcend-badblock',
     'nvme-transcend-healthvalue',
     'nvme-verify',
+    'nvme-virt-mgmt',
     'nvme-virtium-save-smart-to-vtview-log',
     'nvme-virtium-show-identify',
     'nvme-wdc-cap-diag',
@@ -309,6 +313,7 @@ adoc_sources_man1 = [
     'nvme-wdc-namespace-resize',
     'nvme-wdc-purge',
     'nvme-wdc-purge-monitor',
+    'nvme-wdc-set-latency-monitor-feature',
     'nvme-wdc-vs-cloud-log',
     'nvme-wdc-vs-device-waf',
     'nvme-wdc-vs-drive-info',
@@ -336,6 +341,7 @@ adoc_sources_man1 = [
     'nvme-zns-zone-append',
     'nvme-zns-zone-mgmt-recv',
     'nvme-zns-zone-mgmt-send',
+    'nvme-zns-zrwa-flush-zone',
 ]
 
 adoc_sources_deprecated = [
@@ -362,6 +368,9 @@ adoc_sources_deprecated = [
     'nvme-gen-tls-key',
     'nvme-get-ns-id',
     'nvme-host-discovery-log',
+    'nvme-id-ns-granularity',
+    'nvme-id-ns-lba-format',
+    'nvme-id-uuid',
     'nvme-lba-status-log',
     'nvme-list-ctrl',
     'nvme-list-endgrp',
@@ -379,6 +388,7 @@ adoc_sources_deprecated = [
     'nvme-pred-lat-event-agg-log',
     'nvme-predictable-lat-log',
     'nvme-primary-ctrl-caps',
+    'nvme-pull-model-ddc-req-log',
     'nvme-reachability-associations-log',
     'nvme-reachability-groups-log',
     'nvme-resv-notif-log',
@@ -389,7 +399,6 @@ adoc_sources_deprecated = [
     'nvme-supported-cap-config-log',
     'nvme-telemetry-log',
     'nvme-tls-key',
-    'nvme-top',
 ]
 adoc_sources_man1 += adoc_sources_deprecated
 
@@ -521,4 +530,41 @@ if want_nvme
             endif
         endforeach
     endforeach
+endif
+
+py3_doc = find_program('python3', required: false)
+if want_tests and py3_doc.found()
+    test(
+        'nvme-cli - doc-sources',
+        py3_doc,
+        args: [
+            files('../scripts/check-doc-sources.py'),
+            meson.current_source_dir(),
+        ] + adoc_sources_man1 + adoc_sources_man5 + adoc_sources_man8 +
+            adoc_includes,
+        suite: 'check',
+    )
+endif
+
+# cmds-main.txt and cmd-plugins.txt are generated from the command
+# metadata of nvme. The metadata dump lives in the "utils" plugin and
+# needs json-c.
+if (want_nvme and py3_doc.found() and json_c_dep.found() and
+        'utils' in selected_plugins)
+    gen_cmd_lists = files('../scripts/generate-cmd-lists.py')
+    run_target(
+        'update-cmd-lists',
+        command: [py3_doc, gen_cmd_lists, '--nvme', nvme_exe,
+                  meson.current_source_dir()],
+        depends: nvme_exe,
+    )
+    if want_tests and meson.can_run_host_binaries()
+        test(
+            'nvme-cli - cmd-lists',
+            py3_doc,
+            args: [gen_cmd_lists, '--check', '--nvme', nvme_exe,
+                   meson.current_source_dir()],
+            suite: 'check',
+        )
+    endif
 endif

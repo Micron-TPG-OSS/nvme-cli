@@ -1,0 +1,39 @@
+nvme-pull-model-ddc-req-log(1)
+==============================
+
+NAME
+----
+nvme-pull-model-ddc-req-log - Retrieve Pull Model DDC Request Log, show it
+
+SYNOPSIS
+--------
+[verse]
+'nvme' [<global-options>] 'pull-model-ddc-req-log' <device> [--rae | -r]
+
+DESCRIPTION
+-----------
+Retrieve Pull Model DDC Request Log, show it
+
+The <device> parameter is mandatory NVMe character device (ex: /dev/nvme0).
+
+On success it returns 0, error code otherwise.
+
+OPTIONS
+-------
+-r::
+--rae::
+	Retain an Asynchronous Event.
+
+include::global-options.txt[]
+
+EXAMPLES
+--------
+* Has the program issue a pull-model-ddc-req-log
++
+------------
+# nvme pull-model-ddc-req-log /dev/nvme0
+------------
+
+NVME
+----
+Part of the nvme-user suite.
