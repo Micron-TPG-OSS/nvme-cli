@@ -8,20 +8,21 @@
 name: Build FreeBSD
 
 # Runs against the FreeBSD containerDisk (ghcr.io/linux-nvme/blktests-freebsd-
-# containerdisk) on the same ARC/KubeVirt infrastructure as run-nightly-
-# tests.yml, via linux-blktests/blktests-ci's kubevirt-action.
-#
-# The VM build is slow, so it only runs when master is updated rather than
-# on every pull request.
+# containerdisk) on the same ARC/KubeVirt infrastructure as
+# nightly-tests.yml, via linux-blktests/blktests-ci's kubevirt-action.
 on:
   push:
     branches:
       - master
+  pull_request:
+    branches: [master]
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A new push to a pull request cancels its older run. Each push to
+  # master gets a run of its own, to show which commit broke something.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   actions: read
@@ -31,6 +32,7 @@ jobs:
   build-freebsd:
     if: ${{ github.event_name == 'workflow_dispatch' || github.repository == 'linux-nvme/nvme-cli' }}
     runs-on: arc-vm-nvme-cli
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -48,9 +50,11 @@ jobs:
 
             sudo pkg install -y git meson ninja pkgconf json-c openssl
 
+            # A clone has no pull request commits: fetch the one to test.
             git clone https://github.com/${{ github.repository }} nvme-cli
             cd nvme-cli
-            git checkout ${{ github.sha }}
+            git fetch origin ${{ github.sha }}
+            git checkout FETCH_HEAD
 
             meson setup .build
             ninja -C .build

@@ -6,12 +6,21 @@
 #
 # Authors: Daniel Wagner <dwagner@suse.de>
 
-name: Checkpatch Review
+name: Checkpatch
 on:
   pull_request:
   workflow_dispatch:
   schedule:
-    - cron: '0 02 * * *'
+    - cron: '41 21 * * *'
+
+concurrency:
+  # A new push to a pull request cancels its older run. Each push to
+  # master gets a run of its own, to show which commit broke something.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 # A pull request reads only the caches of its own branch and of the
 # default branch. So only a run on the default branch saves the copy of
@@ -22,6 +31,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' &&
             github.ref_name == github.event.repository.default_branch }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
     - name: Fetch checkpatch.pl
       run: |
@@ -37,6 +47,7 @@ jobs:
     name: checkpatch review
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
     - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       with:

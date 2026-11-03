@@ -16,7 +16,7 @@ CI Containers Repository:
 [linux-nvme/ci-containers](https://github.com/linux-nvme/ci-containers)
 
 CI Build Workflow Reference:
-[libnvme-build.yml](https://github.com/linux-nvme/nvme-cli/blob/master/.github/workflows/libnvme-build.yml)
+[build.yml](https://github.com/linux-nvme/nvme-cli/blob/master/.github/workflows/build.yml)
 
 ### 1. Pull a CI Container
 
@@ -402,6 +402,63 @@ with the default data limit, so check that it still fails without the fix with
 `nvme-fuzz check`. The targets
 use the libFuzzer interface, so AFL++ can run them too (`afl-clang-fast` with
 `-fsanitize=fuzzer`).
+
+## Nightly tests and known failures
+
+The nightly workflow (`.github/workflows/nightly-tests.yml`) runs
+blktests, the end-to-end tests and the daemon tests in a VM with the
+latest mainline kernel. A kernel bug can make a blktests test fail for
+weeks. To keep the nightly run meaningful in the meantime, such a test is
+marked as a known failure: it still runs and its result is reported, but
+its failure does not fail the run.
+
+Each known failure is tracked in an issue with the label
+`blktests-known-failure`. Only maintainers can set labels, so only they
+decide what counts. The issue body names the tests, each on a line of its
+own:
+
+```
+blktests-ignore: nvme/004:tr=rdma
+blktests-ignore: nvme/073
+blktests-exclude: nvme/039
+```
+
+- `blktests-ignore: TEST` runs the test, but its failure does not fail
+  the run. `TEST` is a group (`nvme`), a test (`nvme/073`), or a test
+  with conditions, as blktests shows them in parentheses after the test
+  name (`nvme/004:tr=rdma`, several separated by `,`).
+- `blktests-exclude: TEST` does not run the test at all: for tests which
+  crash or hang the machine, or which the nightly run leaves out on
+  purpose, e.g. long fio runs which do not use nvme-cli. It takes no
+  conditions.
+
+Once the issue is closed, the next night counts the test again. A known
+failure which passes is reported, but stays on the list until its issue
+is closed by hand, as the test may be flapping.
+
+The tooling, `scripts/nightly/nvme-nightly`, does not depend on GitHub
+beyond reading the issues: the list is a plain text file which can also
+be written by hand, and the summary of a run is a JSON file. It is plain
+Python; only the status page needs Jinja2 for its templates
+(`scripts/nightly/nvme_nightly/templates`).
+
+```
+# the list of the open issues, and the blktests config lines for it
+scripts/nightly/nvme-nightly known-failures --github linux-nvme/nvme-cli \
+    -o known-failures.txt --config known-failures.cfg
+# judge a blktests results directory: exit status 1 for a failed run
+scripts/nightly/nvme-nightly blktests-summary blktests/results \
+    --known-failures known-failures.txt -o blktests-summary.json
+# build the status page from the summary and the previous history
+scripts/nightly/nvme-nightly site -o site --summary blktests-summary.json \
+    --history https://linux-nvme.github.io/nvme-cli/history.json
+```
+
+The status page, <https://linux-nvme.github.io/nvme-cli/>, shows the
+result of the last night, the known failures and the history of the
+failed tests, and links the clang analyzer report. The `Status page`
+workflow builds it after each nightly and analyzer run; the page keeps
+no state but its `history.json`, which the next build reads back.
 
 ## NVMe-oF failover tests
 
