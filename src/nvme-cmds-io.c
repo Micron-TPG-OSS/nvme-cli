@@ -363,8 +363,9 @@ static int get_pi_info(struct libnvme_transport_handle *hdl,
 		err = get_pif_sts(ns, nvm_ns, &pif, &sts);
 		if (err)
 			return err;
-	} else if (!nvme_status_equals(err, NVME_STATUS_TYPE_NVME,
-				       NVME_SC_INVALID_FIELD)) {
+	} else if (nvme_status_get_type(err) != NVME_STATUS_TYPE_NVME ||
+		   nvme_status_code(nvme_status_get_value(err)) !=
+		   NVME_SC_INVALID_FIELD) {
 		return err;
 	}
 
@@ -1172,8 +1173,13 @@ static int submit_io(int opcode, char *command, const char *desc, int argc, char
 			/* Namespace's reported PI format is self-inconsistent. */
 			return err;
 		default:
-			/* Identify NVM CS NS failed/unsupported: PI unavailable. */
-			nvme_show_err(err, "identify NVM CS NS: continuing without protection information");
+			/* Identify NVM CS NS failed: PI unavailable. */
+			if (err > 0)
+				nvme_show_error_status(err,
+					"identify NVM CS NS failed, continuing without protection information");
+			else
+				nvme_show_err(err,
+					"identify NVM CS NS failed, continuing without protection information");
 			pi_available = false;
 			break;
 		}

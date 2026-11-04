@@ -15,7 +15,8 @@ import signal
 
 from tests.cli.nvme_mock import (CNS_CSI_NS, CNS_NS, FLBAS_META_EXT,
                                  OPC_NVM_READ, PIC_QPIFS, SC_INTERNAL,
-                                 SC_INVALID_FIELD, MockTestCase, Reply,
+                                 SC_INVALID_FIELD, STATUS_DNR, MockTestCase,
+                                 Reply,
                                  id_ns, main, nvm_id_ns)
 
 PIF_16B_GUARD = 0
@@ -105,14 +106,26 @@ class SubmitIOAutoDiscoveredBlockSizeTest(SubmitIOMockTestBase):
         self.assertEqual(result.returncode, 0,
                          f'nvme read failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}')
 
+    def test_nvm_cs_ns_invalid_field_with_dnr_falls_back_silently(self):
+        """Controllers set DNR and More along with the status code, e.g.
+        0x4002. Invalid Field still means "not supported": no error
+        message, the read proceeds without PI."""
+        self.server.identify[CNS_CSI_NS] = STATUS_DNR | SC_INVALID_FIELD
+        result = self._read()
+        self.assertEqual(result.returncode, 0,
+                         f'nvme read failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}')
+        self.assertNotIn('NVMe status', result.stderr)
+
     def test_nvm_cs_ns_other_status_error_falls_back_without_pi(self):
         """Any other failure (Internal Error here) is tolerated too: only
         ECLI_INVALID_TAGS aborts. More lenient than write-zeroes/copy and
-        submit_io() with --block-size (see below)."""
+        submit_io() with --block-size (see below). The message names the
+        failing Identify, not the read."""
         self.server.identify[CNS_CSI_NS] = SC_INTERNAL
         result = self._read()
         self.assertEqual(result.returncode, 0,
                          f'nvme read failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}')
+        self.assertIn('identify NVM CS NS', result.stderr)
 
     def test_extended_lba_cs_ns_failure_still_uses_full_transfer_size(self):
         """A failing Identify NVM CS NS only means "no PI" -- it must not
