@@ -5,7 +5,6 @@
 #include <ccan/endian/endian.h>
 #include <shared/hex-util.h>
 #include <shared/int-util.h>
-#include <shared/time-util.h>
 #include <shared/uint128-util.h>
 #include <shared/uuid-util.h>
 
@@ -272,21 +271,21 @@ static void stdout_c3_log(struct libnvme_transport_handle *hdl, struct ssd_laten
 	       le16_to_cpu(log_data->active_bucket_timer_threshold));
 	printf("  Active Threshold A                 %d ms\n",
 	       C3_ACTIVE_THRESHOLD_INCREMENT *
-	       le16_to_cpu(log_data->active_threshold_a+1));
+	       (log_data->active_threshold_a + 1));
 	printf("  Active Threshold B                 %d ms\n",
 	       C3_ACTIVE_THRESHOLD_INCREMENT *
-	       le16_to_cpu(log_data->active_threshold_b+1));
+	       (log_data->active_threshold_b + 1));
 	printf("  Active Threshold C                 %d ms\n",
 	       C3_ACTIVE_THRESHOLD_INCREMENT *
-	       le16_to_cpu(log_data->active_threshold_c+1));
+	       (log_data->active_threshold_c + 1));
 	printf("  Active Threshold D                 %d ms\n",
 	       C3_ACTIVE_THRESHOLD_INCREMENT *
-	       le16_to_cpu(log_data->active_threshold_d+1));
+	       (log_data->active_threshold_d + 1));
 	printf("  Active Latency Configuration       0x%x\n",
 	       le16_to_cpu(log_data->active_latency_config));
 	printf("  Active Latency Minimum Window      %d ms\n",
 	       C3_MINIMUM_WINDOW_INCREMENT *
-	       le16_to_cpu(log_data->active_latency_min_window));
+	       log_data->active_latency_min_window);
 	printf("  Active Latency Stamp Units         %d\n",
 	       le16_to_cpu(log_data->active_latency_stamp_units));
 	printf("  Static Latency Stamp Units         %d\n",
@@ -306,18 +305,15 @@ static void stdout_c3_log(struct libnvme_transport_handle *hdl, struct ssd_laten
 	       le16_to_cpu(log_data->debug_log_trigger_enable));
 	printf("  Debug Log Measured Latency         %d\n",
 	       le16_to_cpu(log_data->debug_log_measured_latency));
-	if (le64_to_cpu(log_data->debug_log_latency_stamp) == -1) {
-		printf("  Debug Log Latency Time Stamp       N/A\n");
-	} else {
-		shr_format_ts(le64_to_cpu(log_data->debug_log_latency_stamp), ts_buf);
-		printf("  Debug Log Latency Time Stamp       %s\n", ts_buf);
-	}
+	printf("  Debug Log Latency Time Stamp       %s\n",
+	       ocp_c3_stamp_str(&log_data->debug_log_latency_stamp, ts_buf,
+				"N/A"));
 	printf("  Debug Log Pointer                  %d\n",
 	       le16_to_cpu(log_data->debug_log_ptr));
 	printf("  Debug Counter Trigger Source       %d\n",
 	       le16_to_cpu(log_data->debug_log_counter_trigger));
 	printf("  Debug Log Stamp Units              %d\n",
-	       le16_to_cpu(log_data->debug_log_stamp_units));
+	       log_data->debug_log_stamp_units);
 	printf("  Log Page Version                   %d\n", log_page_version);
 
 	char guid[(GUID_LEN * 2) + 1];
@@ -330,7 +326,7 @@ static void stdout_c3_log(struct libnvme_transport_handle *hdl, struct ssd_laten
 
 	printf("%64s     %27s     %27s\n", "Read", "Write", "Deallocate/Trim");
 	for (i = 0; i < C3_BUCKET_NUM; i++) {
-		printf("  Active Bucket Counter: Bucket %d    %27d     %27d     %27d\n",
+		printf("  Active Bucket Counter: Bucket %d    %27u     %27u     %27u\n",
 		       i,
 		       le32_to_cpu(log_data->active_bucket_counter[i][READ]),
 		       le32_to_cpu(log_data->active_bucket_counter[i][WRITE]),
@@ -340,13 +336,14 @@ static void stdout_c3_log(struct libnvme_transport_handle *hdl, struct ssd_laten
 	for (i = 0; i < C3_BUCKET_NUM; i++) {
 		printf("  Active Latency Time Stamp: Bucket %d    ", i);
 		for (j = 2; j >= 0; j--) {
-			if (le64_to_cpu(log_data->active_latency_timestamp[3-i][j]) == -1) {
+			const struct nvme_timestamp *stamp =
+				&log_data->active_latency_timestamp[3 - i][j];
+			const char *ts = ocp_c3_stamp_str(stamp, ts_buf, NULL);
+
+			if (ts)
+				printf("%s     ", ts);
+			else
 				printf("                    N/A         ");
-			} else {
-				shr_format_ts(le64_to_cpu(log_data->active_latency_timestamp[3-i][j]),
-					   ts_buf);
-				printf("%s     ", ts_buf);
-			}
 		}
 		printf("\n");
 	}
@@ -361,7 +358,7 @@ static void stdout_c3_log(struct libnvme_transport_handle *hdl, struct ssd_laten
 
 	printf("\n");
 	for (i = 0; i < C3_BUCKET_NUM; i++) {
-		printf("  Static Bucket Counter: Bucket %d    %27d     %27d     %27d\n",
+		printf("  Static Bucket Counter: Bucket %d    %27u     %27u     %27u\n",
 		       i,
 		       le32_to_cpu(log_data->static_bucket_counter[i][READ]),
 		       le32_to_cpu(log_data->static_bucket_counter[i][WRITE]),
@@ -371,13 +368,14 @@ static void stdout_c3_log(struct libnvme_transport_handle *hdl, struct ssd_laten
 	for (i = 0; i < C3_BUCKET_NUM; i++) {
 		printf("  Static Latency Time Stamp: Bucket %d    ", i);
 		for (j = 2; j >= 0; j--) {
-			if (le64_to_cpu(log_data->static_latency_timestamp[3-i][j]) == -1) {
+			const struct nvme_timestamp *stamp =
+				&log_data->static_latency_timestamp[3 - i][j];
+			const char *ts = ocp_c3_stamp_str(stamp, ts_buf, NULL);
+
+			if (ts)
+				printf("%s     ", ts);
+			else
 				printf("                    N/A         ");
-			} else {
-				shr_format_ts(le64_to_cpu(log_data->static_latency_timestamp[3-i][j]),
-					   ts_buf);
-				printf("%s     ", ts_buf);
-			}
 		}
 		printf("\n");
 	}

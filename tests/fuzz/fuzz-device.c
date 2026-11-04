@@ -19,6 +19,10 @@
  * device, whether to pass the argument, which option set), the argument
  * (one byte, the value of the option the command names) and then the
  * answers of the device, see ipc_call() in the mock.
+ *
+ * FUZZ_PLUGINS, a comma-separated list of the first words of commands of
+ * the table, e.g. "ocp,micron", has only those commands run: an input of
+ * another one is rejected, libFuzzer adds it to no corpus.
  */
 #include <dlfcn.h>
 #include <errno.h>
@@ -429,6 +433,9 @@ static const struct {
 	  "--zslba",
 	  .opts = { {}, { "--metadata-size=64", "--metadata=/dev/zero" },
 		    { "--prinfo=8", "--piremap" } } },
+	{ { "ocp", "internal-log", "--print-only" }, "--host-generate",
+	  .opts = { {}, { "--data-area=2" }, { "--data-area=4" },
+		    { "--telemetry-type=controller", "--data-area=3" } } },
 };
 
 #define NR_COMMANDS ARRAY_SIZE(commands)
@@ -437,6 +444,45 @@ static const struct {
 #define EXTENDED_INDEX 0xff
 
 static struct nvme_args defaults;
+
+/* The commands an input may run, see FUZZ_PLUGINS */
+static bool selected[NR_COMMANDS];
+
+static void select_commands(void)
+{
+	const char *env = getenv("FUZZ_PLUGINS");
+	char *list, *name, *save;
+	size_t i, names = 0;
+	bool found;
+
+	if (!env) {
+		for (i = 0; i < NR_COMMANDS; i++)
+			selected[i] = true;
+		return;
+	}
+	list = strdup(env);
+	if (!list)
+		abort();
+	for (name = strtok_r(list, ",", &save); name;
+	     name = strtok_r(NULL, ",", &save)) {
+		names++;
+		found = false;
+		for (i = 0; i < NR_COMMANDS; i++) {
+			if (!strcmp(commands[i].argv[0], name))
+				selected[i] = found = true;
+		}
+		if (!found) {
+			fprintf(stderr, "FUZZ_PLUGINS=%s: no command of %s\n",
+				env, name);
+			exit(EXIT_FAILURE);
+		}
+	}
+	if (!names) {
+		fprintf(stderr, "FUZZ_PLUGINS=%s: names no command\n", env);
+		exit(EXIT_FAILURE);
+	}
+	free(list);
+}
 
 #if defined(__has_feature)
 #if __has_feature(address_sanitizer)
@@ -709,6 +755,7 @@ int LLVMFuzzerInitialize(int *argc, char ***argv)
 	(void)argc;
 	(void)argv;
 	defaults = nvme_args;
+	select_commands();
 	pci_setup();
 	fw_setup();
 	return 0;
@@ -737,6 +784,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	/* No modulo: a new command must not change what an input does */
 	if (size < 3 || idx >= NR_COMMANDS)
 		return 0;
+	if (!selected[idx])
+		return -1;
 	pci = commands[idx].pci;
 	if (pci && size < 7)
 		return 0;
