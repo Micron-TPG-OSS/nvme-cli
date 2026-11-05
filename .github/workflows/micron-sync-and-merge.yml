@@ -182,12 +182,15 @@ jobs:
     # always() required - without it, GitHub skips this job when sync or merge is skipped, ignoring the rest of the condition
     if: |
       always() &&
-      (needs.sync.result == 'failure' || needs.merge.result == 'failure')
+      (needs.config.result == 'failure' || needs.sync.result == 'failure' || needs.merge.result == 'failure')
     steps:
       - name: Determine failed job
         id: failed-job
         run: |
-          if [ "${{ needs.sync.result }}" == "failure" ]; then
+          if [ "${{ needs.config.result }}" == "failure" ]; then
+            echo "job_name=Config" >> $GITHUB_OUTPUT
+            echo "job_step=validate merge settings" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.sync.result }}" == "failure" ]; then
             echo "job_name=Sync" >> $GITHUB_OUTPUT
             echo "job_step=sync upstream master" >> $GITHUB_OUTPUT
           elif [ "${{ needs.merge.result }}" == "failure" ]; then
