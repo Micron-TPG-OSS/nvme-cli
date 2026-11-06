@@ -15,6 +15,7 @@ data, and simulated errno failures.
 
 Usage: python3 nvme_fabrics_mock_test.py <path-to-nvme-binary> <path-to-mock-lib>
 """
+import errno
 import shutil
 import struct
 from pathlib import Path
@@ -500,6 +501,123 @@ class FabricsMockCLITest(MockTestCase):
     def _owner_connect_args(self, subsysnqn, traddr='192.168.20.10'):
         return ('connect', '-t', 'tcp', '-a', traddr, '-s', '4420',
                 '-n', subsysnqn, '--hostnqn', self._OWNER_HOSTNQN)
+
+    # NBFT-static-ipv4: one TCP boot subsystem, and the firmware's host.
+    _NBFT_TABLE = (Path(__file__).resolve().parents[2] /
+                   'libnvme/tests/nbft/tables/NBFT-static-ipv4')
+    _NBFT_HOSTNQN = ('nqn.2014-08.org.nvmexpress:uuid:'
+                     'a1b759e3-035d-4777-b3cc-1754b8b819b9')
+
+    def _connect_all_nbft(self, *args):
+        tables = Path(self.tmp) / 'tables'
+        tables.mkdir()
+        shutil.copyfile(self._NBFT_TABLE, tables / 'NBFT')
+        self._run('connect-all', '--nbft', f'--nbft-path={tables}', *args)
+        return (self._ctrl_path(0) / 'hostnqn').read_text().strip()
+
+    def test_connect_all_nbft_host(self):
+        """The NBFT boot connections connect as the host the NBFT names,
+        not as the system's host, as with nvme-cli 2."""
+        self.assertEqual(self._connect_all_nbft(), self._NBFT_HOSTNQN)
+        self.assertEqual((self._ctrl_path(0) / 'hostid').read_text().strip(),
+                         'e359b7a1-5d03-7747-b3cc-1754b8b819b9')
+
+    def test_connect_all_nbft_explicit_host(self):
+        """--hostnqn overrides the NBFT's host."""
+        self.assertEqual(
+            self._connect_all_nbft('--hostnqn', self._OWNER_HOSTNQN),
+            self._OWNER_HOSTNQN)
+
+    _DC_TRADDR = '192.168.40.10'
+
+    def _dc_with_one_subsystem(self):
+        self.server.discovery_entries = [{
+            'transport': 'tcp', 'traddr': '192.168.40.20',
+            'trsvcid': '4420',
+            'subsysnqn': 'nqn.2014-08.org.nvmexpress:boot-subsys'}]
+
+    def _connected_nqns(self):
+        return sorted(c['subsysnqn'] for c in self.server.controllers.values())
+
+    def test_connect_all_default_config(self):
+        """connect-all without arguments reads nvme-fabrics.conf; with
+        test-base-dir, the one in it."""
+        self._dc_with_one_subsystem()
+        (Path(self.base_dir) / 'nvme-fabrics.conf').write_text(
+            '[Discovery Controller]\n'
+            f'controller = transport=tcp;traddr={self._DC_TRADDR};'
+            'trsvcid=8009\n')
+        self._run('connect-all', '--no-nbft')
+        self.assertIn('nqn.2014-08.org.nvmexpress:boot-subsys',
+                      self._connected_nqns())
+
+    def test_connect_all_converts_dracut_discovery_conf(self):
+        """dracut writes rd.nvmf.discover= to discovery.conf, with "none"
+        for an address it doesn't have. connect-all converts it to
+        nvme-fabrics.conf and connects. "none" means unset: before, it
+        was copied into nvme-fabrics.conf, which then failed to parse,
+        and nothing was connected."""
+        self._dc_with_one_subsystem()
+        base = Path(self.base_dir)
+        (base / 'discovery.conf').write_text(
+            f'--transport=tcp --traddr={self._DC_TRADDR} '
+            '--host-traddr=none --trsvcid=8009\n')
+        self._run('connect-all', '--no-nbft')
+        self.assertIn('nqn.2014-08.org.nvmexpress:boot-subsys',
+                      self._connected_nqns())
+        ini = (base / 'nvme-fabrics.conf').read_text()
+        self.assertIn(f'traddr={self._DC_TRADDR}', ini)
+        self.assertNotIn('none', ini)
+        self.assertTrue((base / 'discovery.conf.converted').is_symlink())
+
+    def _devid_file(self):
+        return Path(self.base_dir) / 'devid'
+
+    def test_connect_devid_file(self):
+        """--devid-file gets the name of the new controller, and the name
+        of the existing one when it is already connected."""
+        args = self._owner_connect_args(
+            "nqn.2014-08.org.nvmexpress:devid-io-subsys")
+        devid = f'--devid-file={self._devid_file()}'
+
+        self._run(*args, devid)
+        self.assertEqual(self._devid_file().read_text(), 'nvme0\n')
+
+        self._devid_file().unlink()
+        self._run(*args, '--idempotent', devid)
+        self.assertEqual(self._devid_file().read_text(), 'nvme0\n')
+
+    def test_connect_devid_file_kept_on_failure(self):
+        """A name an earlier connect recorded survives a failed one."""
+        self._devid_file().write_text('nvme7\n')
+        self.server.connect_errno = errno.ECONNREFUSED
+        self._run(*self._owner_connect_args(
+                      "nqn.2014-08.org.nvmexpress:devid-io-subsys"),
+                  f'--devid-file={self._devid_file()}', expect_fail=True)
+        self.assertEqual(self._devid_file().read_text(), 'nvme7\n')
+
+    def test_connect_devid_file_not_left_empty(self):
+        """A devid file the connect created is removed when it has no
+        name to record: after a failed connect, and after the kernel
+        reports the controller as connected while the scan finds none.
+        Before, an empty file was left, which a reader takes for the
+        name of a device."""
+        subsysnqn = "nqn.2014-08.org.nvmexpress:devid-io-subsys"
+        args = (*self._owner_connect_args(subsysnqn),
+                f'--devid-file={self._devid_file()}')
+
+        self.server.connect_errno = errno.ECONNREFUSED
+        self._run(*args, expect_fail=True)
+        self.assertFalse(self._devid_file().exists())
+
+        # The kernel has the controller (EALREADY), sysfs does not show it.
+        self.server.connect_errno = 0
+        self.server.reject_duplicate_connect = True
+        self.server.controllers[5] = {
+            'subsysnqn': subsysnqn, 'transport': 'tcp',
+            'traddr': '192.168.20.10', 'trsvcid': '4420'}
+        self._run(*args, '--idempotent')
+        self.assertFalse(self._devid_file().exists())
 
     def test_connect_registry_ownership(self):
         """A fresh connect claims the registry entry; a reuse only touches

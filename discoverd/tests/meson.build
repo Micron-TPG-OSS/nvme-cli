@@ -2,7 +2,7 @@
 
 test_dlp = executable(
     'test-dlp',
-    ['test-dlp.c', '../src/dlp.c', '../src/tid.c'],
+    ['test-dlp.c', '../src/dlp.c', '../src/sysfs.c', '../src/tid.c'],
     include_directories: discoverd_inc,
     dependencies: [
         ccan_dep,
@@ -59,6 +59,50 @@ test_netif = executable(
 
 test('nvme-discoverd - netif', test_netif, suite: 'unit')
 
+test_sysfs = executable(
+    'test-sysfs',
+    ['test-sysfs.c', '../src/sysfs.c', '../src/tid.c'],
+    include_directories: discoverd_inc,
+    dependencies: [
+        ccan_dep,
+        libnvme_dep,
+        libsystemd_dep,
+        shared_dep,
+    ],
+)
+
+test('nvme-discoverd - sysfs', test_sysfs, suite: 'unit')
+
+test_units_local = executable(
+    'test-units-local',
+    ['test-units-local.c', '../src/units-local.c'],
+    include_directories: discoverd_inc,
+    dependencies: [
+        ccan_dep,
+        daemon_util_dep,
+        libnvme_dep,
+        libsystemd_dep,
+        shared_dep,
+    ],
+)
+
+test('nvme-discoverd - units-local', test_units_local, suite: 'unit')
+
+test_control = executable(
+    'test-control',
+    ['test-control.c', '../src/control.c'],
+    include_directories: discoverd_inc,
+    dependencies: [
+        ccan_dep,
+        daemon_util_dep,
+        libnvme_dep,
+        libsystemd_dep,
+        shared_dep,
+    ],
+)
+
+test('nvme-discoverd - control', test_control, suite: 'unit')
+
 test_inventory = executable(
     'test-inventory',
     ['test-inventory.c', '../src/inventory.c', '../src/tid.c'],
@@ -89,3 +133,13 @@ test('nvme-discoverd - missing-config', nvme_discoverd,
      args: ['--config', '/nonexistent/nvme-discoverd.conf'],
      should_fail: true,
      suite: 'mock')
+
+# The daemon in a sandbox (--set-options test-base-dir/test-sysfs-dir):
+# local units, control socket, fake_nvme.py as the units' nvme binary.
+if python3.found()
+    test('nvme-discoverd - sandbox',
+         python3,
+         args: [files('test_sandbox.py'), nvme_discoverd],
+         depends: nvme_discoverd,
+         suite: 'mock')
+endif

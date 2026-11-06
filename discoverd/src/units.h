@@ -13,6 +13,7 @@
 
 #include <nvme/config.h>
 
+#include "events.h"
 #include "tid.h"
 
 /*
@@ -48,7 +49,19 @@ struct unit_mgr;
 struct unit_mgr *unit_mgr_new(sd_bus *bus, sd_event *event,
 			      unit_job_callback callback, void *user_data,
 			      const char *nvme_path);
+/*
+ * Create a unit manager that runs the units in nvme-discoverd itself and
+ * keeps them in @dir, for tests. See units-local.h.
+ */
+struct unit_mgr *unit_mgr_new_local(sd_event *event, const char *dir,
+				     unit_job_callback callback,
+				     void *user_data, const char *nvme_path);
 void unit_mgr_free(struct unit_mgr *mgr);
+/*
+ * Pass --set-options=@opts to every nvme the units run, e.g. the test
+ * directories of the daemon. Returns 0 or -ENOMEM.
+ */
+int unit_mgr_set_nvme_options(struct unit_mgr *mgr, const char *opts);
 
 /*
  * Create a transient DC connection unit.  @params carries the resolved
@@ -65,15 +78,6 @@ int unit_start_dc(struct unit_mgr *mgr, const struct libnvmf_tid *t,
  */
 int unit_start_ioc(struct unit_mgr *mgr, const struct libnvmf_tid *t,
 		   const struct libnvmf_params *params, bool is_nbft);
-
-/* Address of a connected DC, as its uevent reports it. */
-struct dc_addr {
-	const char *transport;
-	const char *traddr;
-	const char *trsvcid;
-	const char *host_traddr;
-	const char *host_iface;
-};
 
 /*
  * Run "nvme connect-all" once over the existing connection to DC

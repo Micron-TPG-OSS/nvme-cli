@@ -643,6 +643,56 @@ const char *nvmf_resolve_persistent_arg(bool given, const char *arg)
 	return arg ? arg : "auto";
 }
 
+/* @prod_path, or @name in the test base directory (cached in @cache). */
+static const char *nvmf_config_path(const char *prod_path, const char *name,
+		char **cache)
+{
+	const char *base = nvme_test_base_dir();
+
+	if (!base)
+		return prod_path;
+	if (!*cache && asprintf(cache, "%s/%s", base, name) < 0) {
+		*cache = NULL;
+		return prod_path;
+	}
+
+	return *cache;
+}
+
+const char *nvme_nvmf_disc_path(void)
+{
+	static char *cache;
+
+	return nvmf_config_path(PATH_NVMF_DISC, "discovery.conf", &cache);
+}
+
+const char *nvme_nvmf_json_path(void)
+{
+	static char *cache;
+
+	return nvmf_config_path(PATH_NVMF_CONFIG, "config.json", &cache);
+}
+
+const char *nvme_nvmf_ini_path(void)
+{
+	static char *cache;
+
+	return nvmf_config_path(PATH_NVMF_INI, "nvme-fabrics.conf", &cache);
+}
+
+char *nvme_nvmf_config_file(char *config_file)
+{
+	if (config_file && !strcmp(config_file, PATH_NVMF_INI))
+		return (char *)nvme_nvmf_ini_path();
+
+	return config_file;
+}
+
+static const char *none_to_null(const char *value)
+{
+	return value && !strcmp(value, "none") ? NULL : value;
+}
+
 /*
  * Parse one discovery.conf line -- the same argv-style syntax 'nvme
  * discover'/'connect-all' accept, reusing nvmf_options() so every short
@@ -697,6 +747,17 @@ int nvmf_convert_discovery_line(struct libnvmf_config_emitter *emitter,
 	if (argconfig_parse(argc, argv, "discovery.conf", opts))
 		return 0;
 
+	/*
+	 * "none" is how discovery.conf says that it has no value, e.g. in
+	 * the lines dracut writes for rd.nvmf.discover=, and how "nvme
+	 * connect-all" takes it. nvme-fabrics.conf has no such value: leave
+	 * the key out.
+	 */
+	fa.traddr = none_to_null(fa.traddr);
+	fa.trsvcid = none_to_null(fa.trsvcid);
+	fa.host_traddr = none_to_null(fa.host_traddr);
+	fa.host_iface = none_to_null(fa.host_iface);
+
 	if (!fa.transport && !fa.traddr)
 		return 0;
 
@@ -718,10 +779,13 @@ static int setup_common_context(struct libnvmf_context *fctx,
 	if (err)
 		return err;
 
-	err = libnvmf_context_set_hostnqn(fctx,
-		fa->hostnqn, fa->hostid);
-	if (err)
-		return err;
+	/* No host: each connection names its own, see fabrics_discover(). */
+	if (fa->hostnqn) {
+		err = libnvmf_context_set_hostnqn(fctx,
+			fa->hostnqn, fa->hostid);
+		if (err)
+			return err;
+	}
 
 	err = libnvmf_context_set_crypto(fctx,
 		fa->hostkey, fa->ctrlkey,
@@ -853,7 +917,7 @@ static int fabrics_discovery_config(struct libnvme_global_ctx *ctx,
 	/* Custom --config failing is fatal (explicit ask). Default path
 	 * failing isn't: boot-time connect-all must keep going.
 	 */
-	is_default_config = !strcmp(config_file, PATH_NVMF_INI);
+	is_default_config = !strcmp(config_file, nvme_nvmf_ini_path());
 
 	ret = nvme_config_convert_auto(ctx, config_file, &ini_path);
 	if (ret) {
@@ -949,6 +1013,8 @@ int fabrics_discover(const char *desc, int argc, char **argv, bool connect)
 	__cleanup_free char *resolved_traddr = NULL;
 	int ret;
 	struct nvmf_args fa = nvmf_args_defaults();
+	struct nvmf_args ctx_fa;
+	const char *hostnqn_arg, *hostid_arg;
 	__cleanup_free struct argconfig_commandline_options *nvmf =
 		nvmf_options(&fa);
 	char *device = NULL;
@@ -997,12 +1063,15 @@ int fabrics_discover(const char *desc, int argc, char **argv, bool connect)
 	if (!strcmp(config_file, "none"))
 		config_file = NULL;
 
+	hostnqn_arg = fa.hostnqn;
+	hostid_arg = fa.hostid;
 	ret = nvme_create_global_ctx_hostnqn(&ctx,
 		fa.hostnqn, fa.hostid, &hnqn, &hid);
 	if (ret)
 		return ret;
 	fa.hostnqn = hnqn;
 	fa.hostid = hid;
+	config_file = nvme_nvmf_config_file(config_file);
 
 	/*
 	 * --nbft defaults the owner to "nbft" so legacy boot scripts that
@@ -1044,7 +1113,22 @@ int fabrics_discover(const char *desc, int argc, char **argv, bool connect)
 		.raw = raw,
 	};
 
-	ret = create_discovery_context(ctx, device, &fa, &dld, &fctx);
+	/*
+	 * An NBFT names the host the firmware connected as, and the boot
+	 * connections must connect as that host. Unless the command line
+	 * names a host, as in nvme-cli 2, leave the context without one:
+	 * libnvmf_discover_nbft() then takes the NBFT's and falls back to
+	 * the system's. The configured connections get the system's from
+	 * fabrics_discovery_config().
+	 */
+	ctx_fa = fa;
+	if (!device && !fa.transport && !fa.traddr && !nonbft &&
+	    !hostnqn_arg && !hostid_arg) {
+		ctx_fa.hostnqn = NULL;
+		ctx_fa.hostid = NULL;
+	}
+
+	ret = create_discovery_context(ctx, device, &ctx_fa, &dld, &fctx);
 	if (ret)
 		return ret;
 
@@ -1744,6 +1828,7 @@ int fabrics_config_validate(const char *desc, int argc, char **argv)
 	ret = nvme_create_global_ctx(&ctx);
 	if (ret)
 		return ret;
+	config_file = nvme_nvmf_config_file(config_file);
 
 	if (access(config_file, F_OK)) {
 		nvme_show_error("%s: no such file", config_file);
@@ -1781,6 +1866,7 @@ int fabrics_config_show(const char *desc, int argc, char **argv)
 	ret = nvme_create_global_ctx(&ctx);
 	if (ret)
 		return ret;
+	config_file = nvme_nvmf_config_file(config_file);
 
 	ret = libnvmf_config_read(ctx, config_file, &cfg);
 	if (ret) {
