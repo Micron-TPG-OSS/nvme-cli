@@ -65,6 +65,12 @@ concurrency:
   group: micron-windows-release
   cancel-in-progress: false
 
+# Least privilege by default: a job that needs more (sync_tag, release)
+# asks for it itself. Stated here rather than left to the repository's
+# default token setting, so the file means the same wherever it runs.
+permissions:
+  contents: read
+
 jobs:
   detect:
     name: detect upstream release
@@ -720,7 +726,7 @@ jobs:
     steps:
       - name: Generate GitHub App token
         id: generate-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.SYNC_APP_ID }}
           private-key: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
