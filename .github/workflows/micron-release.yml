@@ -10,7 +10,7 @@
 #   GitHub release events do not cross repository boundaries: a release
 #   published in linux-nvme/nvme-cli cannot trigger a workflow here. So we poll
 #   the upstream releases API instead. The poll runs shortly after the 12:00 UTC
-#   "Micron - Sync and Merge" job, so master/mingw are already current.
+#   "Micron - Sync and Merge" job, so master is already current.
 #
 #   The poll deliberately does NOT use the "latest release" endpoint: every
 #   v3.0-* release upstream is flagged as a prerelease, and /releases/latest
@@ -18,10 +18,11 @@
 #   published non-draft release, prerelease or not, and mirror that flag onto
 #   our release.
 #
-# Why build from the tag rather than from mingw?
-#   As of v3.0-rc1 the Windows port is fully upstream -- the only files mingw
-#   carries on top of the upstream tag are .github/*, TODO.md and
-#   WINDOWS_COMMAND_SUPPORT.md, none of which affect the build. Building the tag
+# Why build from the tag rather than from a fork branch?
+#   As of v3.0-rc1 the Windows port is fully upstream -- the old mingw branch
+#   (archived as tag archive/mingw) only carried .github/*, TODO.md and
+#   WINDOWS_COMMAND_SUPPORT.md on top of upstream, none of which affect the
+#   build. Building the tag
 #   itself means the artifacts correspond exactly to the upstream release. (The
 #   previous hand-built 3.0-b.3 release shipped 3.0-b.3-150-gae99de1+, i.e. 150
 #   commits past the tag and dirty.)
@@ -54,10 +55,6 @@ on:
         required: false
       force:
         description: 'Rebuild even if a release already exists for the tag'
-        type: boolean
-        default: false
-      merge_tag_into_mingw:
-        description: 'Also merge the upstream tag into mingw and push'
         type: boolean
         default: false
 
@@ -699,64 +696,9 @@ jobs:
             --upstream-release-url "https://github.com/linux-nvme/nvme-cli/releases/tag/${TAG}" \
             --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
-  # Optional and off by default. The daily "Micron - Sync and Merge" already
-  # brings the tag's commits into mingw by way of master, so merging the tag
-  # here as well is redundant and only adds conflict surface. Kept as a manual
-  # switch for when you want mingw explicitly pinned at a release point.
-  merge_mingw:
-    name: merge tag into mingw
-    needs: detect
-    if: |
-      needs.detect.outputs.should_build == 'true' &&
-      inputs.merge_tag_into_mingw == true
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    concurrency:
-      group: merge-master-to-mingw
-      cancel-in-progress: false
-    env:
-      TAG: ${{ needs.detect.outputs.tag }}
-    steps:
-      - name: Generate GitHub App token
-        id: generate-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          client-id: ${{ secrets.SYNC_APP_ID }}
-          private-key: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          ref: mingw
-          fetch-depth: 0
-          token: ${{ steps.generate-token.outputs.token }}
-
-      - name: Merge and push
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git fetch --no-tags origin "refs/tags/${TAG}:refs/tags/${TAG}"
-          if git merge-base --is-ancestor "refs/tags/${TAG}" HEAD; then
-            echo "mingw already contains ${TAG} -- nothing to merge"
-            exit 0
-          fi
-
-          git merge --no-edit "refs/tags/${TAG}" \
-            -m "Merge upstream ${TAG} into mingw"
-          git push origin mingw
-
-      - name: Notify on merge conflict
-        if: failure()
-        run: |
-          echo "::error::Failed to merge ${TAG} into mingw. Manual intervention required."
-          exit 1
-
   notify:
     name: notify on failure
-    needs: [detect, sync_tag, build, release, sharepoint, merge_mingw]
+    needs: [detect, sync_tag, build, release, sharepoint]
     runs-on: ubuntu-latest
     # always() required - without it, GitHub skips this job when an upstream job
     # is skipped, ignoring the rest of the condition.
@@ -766,8 +708,7 @@ jobs:
        needs.sync_tag.result == 'failure' ||
        needs.build.result == 'failure' ||
        needs.release.result == 'failure' ||
-       needs.sharepoint.result == 'failure' ||
-       needs.merge_mingw.result == 'failure')
+       needs.sharepoint.result == 'failure')
     steps:
       - name: Determine failed job
         id: failed-job
@@ -784,12 +725,9 @@ jobs:
           elif [ "${{ needs.release.result }}" == "failure" ]; then
             echo "job_name=Release" >> $GITHUB_OUTPUT
             echo "job_step=publish GitHub release" >> $GITHUB_OUTPUT
-          elif [ "${{ needs.sharepoint.result }}" == "failure" ]; then
+          else
             echo "job_name=SharePoint" >> $GITHUB_OUTPUT
             echo "job_step=update the TACT site" >> $GITHUB_OUTPUT
-          else
-            echo "job_name=Merge" >> $GITHUB_OUTPUT
-            echo "job_step=merge tag into mingw" >> $GITHUB_OUTPUT
           fi
 
       - name: Send Teams Notification

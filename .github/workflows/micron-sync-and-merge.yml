@@ -31,7 +31,8 @@ jobs:
   #   merge_target_branch  Long-running integration branch that master is
   #                        merged into when the merge job is enabled.
   #
-  # The merge job is OFF for now: we are no longer using the 'mingw' branch.
+  # The merge job is OFF: the 'mingw' branch is retired (archived as the tag
+  # archive/mingw).
   # To re-enable, set merge_enabled to 'true' and point merge_target_branch at
   # the integration branch.
   # ---------------------------------------------------------------------------

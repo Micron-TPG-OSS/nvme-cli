@@ -69,12 +69,16 @@ first run and found a real hole.
 
 ## What carries a Micron delta on an upstream file
 
-**`build.yml`, `check-accessors.yml`.** On `mingw` these carry a
-one-line Micron change (adding `mingw` to the CI branch triggers). Git merges
-upstream changes around that line, so it survives a sync unless upstream edits
-the same trigger list, in which case the `mingw` merge fails and needs resolving
-by hand. Do not replace these with whole-file Micron copies: that would pin them
-at a Micron snapshot and silently discard future upstream CI improvements.
+None. On `master` every Micron file is a new file (`.github/micron/*`,
+`.github/workflows/micron-*.yml`), so the daily upstream sync cannot conflict.
+Keep it that way: if a Micron change to an upstream file ever becomes
+necessary, make it a minimal in-place edit rather than a whole-file Micron
+copy, which would pin the file at a Micron snapshot and silently discard future
+upstream CI improvements.
+
+The retired `mingw` integration branch did carry one-line trigger edits to
+`build.yml` and `check-accessors.yml`; it is preserved as the tag
+`archive/mingw` (`git branch mingw archive/mingw` to restore it).
 
 ## Shared conventions with the sibling tools
 

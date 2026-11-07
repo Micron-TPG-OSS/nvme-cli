@@ -33,9 +33,9 @@ on:
       - '.github/micron/**'
       - '.github/workflows/micron-*.yml'
   push:
-    # A sync pushes straight to master and mingw with no pull request in
-    # between. This is the only place the merged result gets looked at.
-    branches: [master, mingw]
+    # A sync pushes straight to master with no pull request in between.
+    # This is the only place the merged result gets looked at.
+    branches: [master]
     paths:
       - '.github/micron/**'
       - '.github/workflows/micron-*.yml'
