@@ -470,6 +470,8 @@ struct print_ops {
 				  __u64 len);
 	void (*pull_model_ddc_req_log)(struct nvme_pull_model_ddc_req_log *log,
 				       __u64 len);
+	void (*voltage_meas_log)(struct nvme_voltage_measurement_log *log,
+				 __u32 size);
 
 	/* libnvme tree print functions */
 	void (*list_item)(struct libnvme_ns *n, struct shr_table *t);
@@ -925,6 +927,8 @@ void nvme_show_mgmt_addr_list_log(struct nvme_mgmt_addr_list_log *ma_list,
 				  nvme_print_flags_t flags);
 void nvme_show_power_meas_log(struct nvme_power_meas_log *log, __u32 size,
 			      nvme_print_flags_t flags);
+void nvme_show_voltage_meas_log(struct nvme_voltage_measurement_log *log,
+				__u32 size, nvme_print_flags_t flags);
 void nvme_show_rotational_media_info_log(struct nvme_rotational_media_info_log *info,
 					 nvme_print_flags_t flags);
 void nvme_show_dispersed_ns_psub_log(struct nvme_dispersed_ns_participating_nss_log *log,
@@ -994,7 +998,7 @@ void nvme_json_pel_set_feature(void *data, __u32 len,
 			       struct json_object *valid_attrs);
 void nvme_json_pel_telemetry_crt(void *pevent_log_info, __u32 offset,
 				 struct json_object *valid_attrs,
-				 __le16 el, __u32 size);
+				 __u32 len, __u32 size);
 void nvme_json_pel_thermal_excursion(void *pevent_log_info, __u32 offset,
 				     struct json_object *valid_attrs);
 void nvme_json_pel_vendor_specific_event(void *pevent_log_info, __u32 offset,

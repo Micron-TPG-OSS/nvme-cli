@@ -11,35 +11,47 @@ The mock serves a synthetic Persistent Event log built by
 tests/e2e/plugins/ocp/ocp_pel_layout.py, transcribed from the NVM Express
 Base specification and the OCP 2.7 TCG Activity Event Format rather than
 from nvme-cli's structs. It keeps a reporting context as a controller
-does: Establish Context (01b) takes a snapshot of the log and fails with
-Command Sequence Error while one is held, Read Log Data (00b) serves it
-and fails with Command Sequence Error without one, and Release Context
-(10b) drops it. A read returns no more than the NUMD dwords it asks for.
-A reserved Action or LSP bit fails with Invalid Field in Command.
+does: Establish Context and Read Log Data (01b) takes a snapshot of the
+log and fails with Command Sequence Error while one is held, Read Log
+Data (00b) serves it and fails with Command Sequence Error without one,
+Release Context (10b) drops it, and Establish Context and Read 512 Bytes
+of Header (11b) takes a snapshot unless one is held and returns its
+header, with Reporting Context Exists set if one was. A read returns no
+more than the NUMD dwords it asks for. A reserved LSP bit fails with
+Invalid Field in Command.
 
 Tests in this module verify:
+  * Without -a, the action is 11b: the context is established, or kept
+    if it is, with a 512 byte read of the header, which is shown with
+    its Reporting Context Exists bit, whatever -l is; an -a over 3 is
+    rejected.
   * -a 1 establishes the context with a 512 byte read of the header and
     reads the rest with Action 00b, from the log page of all namespaces
     and without a UUID index; -a 1 alone only establishes it.
   * -a 0 reads the Total Log Length of an established context, and fails
-    without one; -a 2 releases it; -l sets the length of the read.
+    without one, or with a Total Log Length shorter than the log header
+    or too large for a 32 bit read.
+  * -a 2 releases the context; -l, --log-len, sets the length of the
+    read, up to the Total Log Length, and --log_len, the name of earlier
+    versions, still does.
+  * A log length which is not a multiple of 4 is read in whole dwords,
+    and no more than that length is decoded or printed.
   * A failed Get Log Page and a Generation Number which changes between
-    reading the log and reading its header again fail.
+    reading the log and reading its header again fail; a log length under
+    512 bytes shows that the header needs 512.
+  * The text output shows the action given with -a, even for -a 1,
+    which reads the log with Action 00b after establishing the context.
   * Every field of the log header decodes in text and JSON.
   * The events are walked by their lengths, also past Vendor Specific
-    Information, and the standard events decode from their offsets.
+    Information, which is dumped from after the event header, and the
+    standard events decode from their offsets. The data of a Telemetry
+    Log Create event is dumped only when the event data, without the
+    Vendor Specific Information, holds all 512 bytes of it.
+  * A TCG Activity Event is recognized by its descriptor, after the Vendor
+    Specific Information, and decodes from its offsets.
   * A vendor specific event which is not a TCG Activity Event goes
     through the generic Vendor Specific Event decoder.
   * -b and -o binary print the log as read.
-
-Known defects are covered by expectedFailure tests asserting the behavior
-the specifications define: the default action is reserved, a TCG Activity
-Event is looked for at the Vendor Specific Information instead of at its
-descriptor, its ProtocolID is taken as two bytes, the Vendor Specific
-Information is dumped from byte 1 of the event, a log length under 512
-bytes fails the Generation Number check, a log length which is not a
-multiple of 4 loses the last bytes of the log, and the --log-len option
-of the man page does not exist.
 
 Runs nowhere but Linux: libmock_nvme.so is an LD_PRELOAD shim.
 
@@ -48,7 +60,6 @@ Usage: python3 ocp_persistent_event_log_mock_test.py <nvme-binary> <mock-lib>
 import json
 import re
 import struct
-import unittest
 
 from tests.cli.nvme_mock import (NSID_ALL, SC_CMD_SEQ_ERROR, SC_INTERNAL,
                                  SC_INVALID_FIELD, main)
@@ -82,12 +93,22 @@ class PELController(OCPController):
 
     def _answer_pel(self, cmd):
         action = cmd.lsp & layout.ACTION_MASK
-        if cmd.lsp & ~layout.ACTION_MASK or action == layout.ACTION_RESERVED:
+        if cmd.lsp & ~layout.ACTION_MASK:
             return SC_INVALID_FIELD
-        if action == layout.ACTION_RELEASE:
+        if action == layout.ACTION_RELEASE_CTX:
             self.context = None
             return b''
-        if action == layout.ACTION_ESTABLISH:
+        if action == layout.ACTION_EST_CTX_AND_READ_HDR:
+            existed = self.context is not None
+            if not existed:
+                self.context = bytes(self.log)
+            # The header, whatever the offset and length of the read
+            header = bytearray(self.context[:layout.HEADER_SIZE])
+            rci = struct.unpack_from('<I', header, layout.RCI)[0]
+            rci = rci | layout.RCI_RCE if existed else rci & ~layout.RCI_RCE
+            struct.pack_into('<I', header, layout.RCI, rci)
+            return bytes(header)
+        if action == layout.ACTION_EST_CTX_AND_READ:
             if self.context is not None:
                 return SC_CMD_SEQ_ERROR
             self.context = bytes(self.log)
@@ -127,7 +148,7 @@ class PersistentEventLogTestBase(OCPMockTestBase):
         """The text and the JSON report of @log, each read in a context of
         its own."""
         self.serve(log)
-        args = ('-a', str(layout.ACTION_ESTABLISH),
+        args = ('-a', str(layout.ACTION_EST_CTX_AND_READ),
                 '-l', str(dword_len(log))) + args
         text = self.text(*args)
         self.server.context = None
@@ -170,7 +191,7 @@ class TestPersistentEventLogReads(PersistentEventLogTestBase):
         reads = self.reads()
         self.assertGreaterEqual(len(reads), 2, reads)
         first, rest = reads[0], reads[1:]
-        self.assertEqual(first.lsp, layout.ACTION_ESTABLISH)
+        self.assertEqual(first.lsp, layout.ACTION_EST_CTX_AND_READ)
         self.assertEqual(first.data_len, layout.HEADER_SIZE)
         self.assertEqual(first.lpo, 0)
         self.assertEqual([r.lsp for r in rest],
@@ -188,7 +209,8 @@ class TestPersistentEventLogReads(PersistentEventLogTestBase):
         self.assertNotIn(ENTRIES, text)
         reads = self.reads()
         self.assertEqual([(r.lsp, r.data_len) for r in reads],
-                         [(layout.ACTION_ESTABLISH, layout.HEADER_SIZE)])
+                         [(layout.ACTION_EST_CTX_AND_READ,
+                           layout.HEADER_SIZE)])
         self.assertIsNotNone(self.server.context)
 
     def test_read_in_context_reads_the_total_log_length(self):
@@ -200,7 +222,7 @@ class TestPersistentEventLogReads(PersistentEventLogTestBase):
         self.assertEqual([r.lsp for r in reads],
                          [layout.ACTION_READ] * len(reads))
         self.assertEqual(reads[0].data_len, layout.HEADER_SIZE)
-        self.assertIn(reads[1].data_len, (len(log), dword_len(log)))
+        self.assertEqual(reads[1].data_len, dword_len(log))
         self.assertEqual(text.count('Event Number'), 2, text)
 
     def test_read_without_context_fails(self):
@@ -209,6 +231,30 @@ class TestPersistentEventLogReads(PersistentEventLogTestBase):
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn('Command Sequence Error', result.stderr)
         self.assertNotIn(ENTRIES, result.stdout)
+
+    def check_bad_total_log_length(self, tll, message):
+        log = layout.pack_log(sample_events(), tll=tll)
+        self.serve(log)
+        self.server.context = log
+        result = self.run_pel('-a', '0')
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn(message, result.stderr)
+        self.assertEqual([r.data_len for r in self.reads()],
+                         [layout.HEADER_SIZE])
+
+    def test_total_log_length_too_large_fails(self):
+        # Lengths a dword round-up takes past 32 bits, or wraps to 0
+        for tll in ((1 << 32) - 3, 1 << 32, (1 << 64) - 3, (1 << 64) - 1):
+            with self.subTest(tll=tll):
+                self.server.commands.clear()
+                self.check_bad_total_log_length(tll, 'is too large')
+
+    def test_total_log_length_shorter_than_header_fails(self):
+        for tll in (0, layout.HEADER_SIZE - 4):
+            with self.subTest(tll=tll):
+                self.server.commands.clear()
+                self.check_bad_total_log_length(
+                    tll, 'is shorter than its header')
 
     def test_establish_in_context_fails(self):
         log = layout.pack_log(sample_events())
@@ -227,16 +273,47 @@ class TestPersistentEventLogReads(PersistentEventLogTestBase):
         self.assertIn('Releasing Persistent Event Log Context', text)
         self.assertNotIn(ENTRIES, text)
         self.assertEqual([r.lsp for r in self.reads()],
-                         [layout.ACTION_RELEASE])
+                         [layout.ACTION_RELEASE_CTX])
         self.assertIsNone(self.server.context)
 
     def test_log_len_sets_the_length_of_the_read(self):
         log = layout.pack_log(sample_events())
         self.serve(log)
-        self.text('-a', '1', '-l', '1024')
+        self.text('-a', '1', '-l', '512')
         reads = self.reads()
         self.assertEqual(reads[1].lsp, layout.ACTION_READ)
-        self.assertEqual(reads[1].data_len, 1024)
+        self.assertEqual(reads[1].data_len, 512)
+
+    def test_log_len_over_total_log_length_reads_the_log(self):
+        log = layout.pack_log(sample_events())
+        self.serve(log)
+        result = self.run_pel('-a', '1', '-l', '1048576', '-b',
+                              encoding=None)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.reads()[1].data_len, dword_len(log))
+        self.assertEqual(result.stdout, log)
+
+    def test_action_given_is_shown(self):
+        log = layout.pack_log(sample_events())
+        self.serve(log)
+        for action in (layout.ACTION_EST_CTX_AND_READ, layout.ACTION_READ,
+                       layout.ACTION_EST_CTX_AND_READ_HDR):
+            with self.subTest(action=action):
+                text = self.text('-a', str(action), '-l',
+                                 str(dword_len(log)))
+                self.assertEqual(
+                    self.text_value(text, 'Action for Persistent Event Log'),
+                    str(action))
+
+    def test_unaligned_log_len_is_read_in_whole_dwords(self):
+        log = layout.pack_log(sample_events())
+        self.assertNotEqual(len(log) % 4, 0)
+        self.serve(log)
+        result = self.run_pel('-a', '1', '-l', str(len(log)), '-b',
+                              encoding=None)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.reads()[1].data_len, dword_len(log))
+        self.assertEqual(result.stdout, log)
 
     def test_get_log_error_fails(self):
         self.server.logs[layout.LID] = SC_INTERNAL
@@ -263,39 +340,91 @@ class TestPersistentEventLogReads(PersistentEventLogTestBase):
         self.assertIn(GEN_CHANGED_MSG, result.stderr)
         self.assertNotIn(ENTRIES, result.stdout)
 
-    @unittest.expectedFailure
-    def test_default_action_is_defined(self):
-        """Defect: without -a the action is FFh, which goes out as LSP
-        7Fh: the reserved Action 11b, with the reserved bits of the LSP
-        set. The man page's example to print the log uses no options."""
-        self.serve(layout.pack_log(sample_events()))
-        result = self.run_pel()
-        actions = [r.lsp for r in self.reads()]
-        self.assertTrue(set(actions) <= {layout.ACTION_READ,
-                                         layout.ACTION_ESTABLISH,
-                                         layout.ACTION_RELEASE}, actions)
-        self.assertOk(result)
-        self.assertEqual(result.stdout.count('Event Number'), 2,
-                         result.stdout)
+    def check_header_shown(self, text, report, rci):
+        """@text and @report show the log header the one 11b read
+        returned, with the RCI @rci, and no events."""
+        self.assertEqual([(r.lsp, r.data_len) for r in self.reads()],
+                         [(layout.ACTION_EST_CTX_AND_READ_HDR,
+                           layout.HEADER_SIZE)] * 2)
+        self.assertEqual(self.text_value(text, 'Total Number of Events'),
+                         '2')
+        self.assertEqual(
+            self.text_value(text, 'Reporting Context Information (RCI)'),
+            str(rci))
+        self.assertNotIn('Event Number', text)
+        self.assertEqual(report['rci'], rci)
+        self.assertEqual(self.events(report), [])
 
-    @unittest.expectedFailure
+    def test_default_action_is_establish_and_read_header(self):
+        """Without -a the action is Establish Context and Read 512 Bytes
+        of Header (11b), with no reserved bit of the LSP set: the context
+        is established and the header it read is shown, with Reporting
+        Context Exists cleared."""
+        self.serve(layout.pack_log(sample_events()))
+        text = self.text()
+        self.server.context = None
+        report = self.json_log()
+        self.check_header_shown(text, report, 0)
+        self.assertIsNotNone(self.server.context)
+
+    def test_establish_header_keeps_an_established_context(self):
+        """-a 3 keeps a context which is established, where -a 1 fails,
+        and shows its header with Reporting Context Exists set."""
+        log = layout.pack_log(sample_events())
+        self.serve(layout.pack_log())
+        self.server.context = log
+        text = self.text('-a', str(layout.ACTION_EST_CTX_AND_READ_HDR))
+        report = self.json_log('-a', str(layout.ACTION_EST_CTX_AND_READ_HDR))
+        self.check_header_shown(text, report, layout.RCI_RCE)
+        self.assertIs(self.server.context, log)
+
+    def test_establish_header_ignores_log_len(self):
+        """-a 3 shows the header its one 11b read returned, whatever the
+        length given with -l."""
+        log = layout.pack_log(sample_events())
+        self.serve(log)
+        args = ('-a', str(layout.ACTION_EST_CTX_AND_READ_HDR),
+                '-l', str(dword_len(log)))
+        text = self.text(*args)
+        self.server.context = None
+        report = self.json_log(*args)
+        self.check_header_shown(text, report, 0)
+
+        self.server.context = None
+        result = self.run_pel(*args, '-b', encoding=None)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, log[:layout.HEADER_SIZE])
+        self.assertEqual(len(self.reads()), 3)
+
+    def test_action_out_of_range_is_rejected(self):
+        self.serve(layout.pack_log(sample_events()))
+        result = self.run_pel('-a', '4')
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn('expected a number from 0 to 3', result.stderr)
+        self.assertEqual(self.reads(), [])
+
     def test_short_log_len_shows_hint(self):
-        """Defect: with -l under 512 bytes the Generation Number of the
-        log is taken from beyond what was read, so a log with a non-zero
-        one is taken as changed, and the hint that 512 bytes are needed
-        is not shown."""
+        """With -l under 512 bytes the read has no Generation Number to
+        check, even for a log with a non-zero one, and the hint that 512
+        bytes are needed is shown."""
         self.serve(layout.pack_log(sample_events(), gen_number=5))
         result = self.run_pel('-a', '1', '-l', '256')
         self.assertOk(result)
         self.assertIn(SHORT_LEN_HINT, result.stdout)
 
-    @unittest.expectedFailure
     def test_documented_log_len_option(self):
-        """Defect: the man page documents --log-len, the command takes
-        --log_len."""
+        """The --log-len option of the man page."""
         self.serve(layout.pack_log(sample_events()))
-        self.assertOk(self.run_pel('-a', '1', '--log-len=1024'))
-        self.assertEqual(self.reads()[1].data_len, 1024)
+        self.assertOk(self.run_pel('-a', '1', '--log-len=512'))
+        self.assertEqual(self.reads()[1].data_len, 512)
+
+    def test_old_log_len_option(self):
+        """--log_len, the name of earlier versions, is still taken, with
+        a warning."""
+        self.serve(layout.pack_log(sample_events()))
+        result = self.assertOk(self.run_pel('-a', '1', '--log_len=512'))
+        self.assertIn("'--log_len' is deprecated", result.stderr)
+        self.assertEqual(self.reads()[1].data_len, 512)
 
 
 class TestPersistentEventLogHeader(PersistentEventLogTestBase):
@@ -414,11 +543,9 @@ class TestPersistentEventLogEvents(PersistentEventLogTestBase):
         self.assertEqual(self.text_values(text, 'Event Number'), ['0', '1'])
         self.assertEqual(len(self.events(report)), 2)
 
-    @unittest.expectedFailure
     def test_vendor_specific_information_is_dumped(self):
-        """Defect: the Vendor Specific Information of an event is dumped
-        from byte 1 of the event header instead of from byte 24, after
-        the header."""
+        """The Vendor Specific Information of an event is dumped from
+        byte 24, after the event header."""
         vsi = b'VSI!'
         log = layout.pack_log([layout.pack_timestamp_change(1, 2, vsi=vsi,
                                                             cntlid=1)])
@@ -429,12 +556,30 @@ class TestPersistentEventLogEvents(PersistentEventLogTestBase):
         self.assertEqual(''.join(self.events(report)[0]['vs_info_bin']),
                          vsi.decode())
 
-    @unittest.expectedFailure
+    def test_telemetry_log_create_is_dumped_whole(self):
+        """A Telemetry Log Create event holds a 512 byte Telemetry log
+        header. Its data is dumped only if the event holds all of it, not
+        counting the Vendor Specific Information: 504 bytes of data
+        behind 8 of VSI make an Event Length of 512, but no header."""
+        vsi = b'V' * 8
+        for data, dumped in ((b'T' * 512, True), (b'T' * 504, False),
+                             (b'T' * 16, False)):
+            with self.subTest(data_len=len(data)):
+                self.server.context = None
+                text, report = self.reports(layout.pack_log([
+                    layout.pack_event(layout.ETYPE_TELEMETRY_LOG_CREATE,
+                                      data, vsi=vsi)]))
+                self.assertEqual(self.text_values(text, 'Event Type'),
+                                 ['Set Telemetry CRT Event(0xc)'])
+                self.assertEqual(
+                    bool(re.search(r'(?m)^0000: 54 54', text)), dumped)
+                self.assertEqual('create' in self.events(report)[0], dumped)
+
     def test_unaligned_total_log_length_is_read_whole(self):
-        """Defect: a log length which is not a multiple of 4 is asked for
-        as that many dwords rounded down (NUMD), so the last bytes of the
-        log are never read. The Total Log Length of these events is 606,
-        and the Vendor Assigned Firmware Commit Result Code is the last 2
+        """A Total Log Length which is not a multiple of 4 is read as
+        that many dwords rounded up (NUMD), so the last bytes of the log
+        are read. The Total Log Length of these events is 606, and the
+        Vendor Assigned Firmware Commit Result Code is the last 2
         bytes."""
         log = layout.pack_log(sample_events())
         self.assertNotEqual(len(log) % 4, 0)
@@ -500,12 +645,10 @@ class TestPersistentEventLogVendorSpecific(PersistentEventLogTestBase):
                          '2')
         self.assertNotIn('tcg_activity_event_data', self.events(report)[0])
 
-    @unittest.expectedFailure
     def test_tcg_activity_event_is_decoded(self):
-        """Defect: the TCG Activity Event is recognized by a Vendor
-        Specific Event Descriptor read from byte 24 of the event, the
-        Vendor Specific Information (TCGCE-11), instead of from byte 28
-        (TCGCE-12 to -15), so no TCG Activity Event is ever decoded."""
+        """The TCG Activity Event is recognized by its Vendor Specific
+        Event Descriptor at byte 28 (TCGCE-12 to -15), after the Vendor
+        Specific Information at byte 24 (TCGCE-11)."""
         values = tcg_values()
         text, report = self.tcg_reports(layout.pack_tcg_event(
             uidx=OCP_UUID_INDEX, context=TCG_CONTEXT, **values))
@@ -534,25 +677,20 @@ class TestPersistentEventLogVendorSpecific(PersistentEventLogTestBase):
             with self.subTest(key=key):
                 self.assertEqual(tcg[key], want)
 
-    @unittest.expectedFailure
     def test_vsi_is_not_taken_for_the_descriptor(self):
-        """Defect: the TCG Activity Event is recognized by a Vendor
-        Specific Event Descriptor read from the Vendor Specific
-        Information, so an event whose VSI reads as code 0001h, binary,
-        and whose real event code is 26h, is decoded as one."""
+        """An event whose Vendor Specific Information reads as event code
+        0001h, binary, and whose real event code is 26h, is not a TCG
+        Activity Event."""
         vsi = struct.pack('<HBB', layout.TCG_VSEC, layout.VSEDT_BINARY, 0)
         text, report = self.tcg_reports(layout.pack_tcg_event(
             vsec=layout.TCG_VSEDL, vsi=vsi, **tcg_values()))
         self.assertNotIn(TCG_ENTRY, text)
         self.assertNotIn('tcg_activity_event_data', self.events(report)[0])
 
-    @unittest.expectedFailure
     def test_tcg_fields_after_com_id(self):
-        """Defect: the ProtocolID of the TCG Activity Event is taken as two
-        bytes; it is one (TCGCE-21), so the Status, the Process Time and
-        the TCG Activity Specific Context (TCGCE-22 to -24) are read one
-        byte late. The defect of test_tcg_activity_event_is_decoded keeps
-        them from being decoded at all."""
+        """The ProtocolID of the TCG Activity Event is one byte
+        (TCGCE-21), and the Status, the Process Time and the TCG Activity
+        Specific Context (TCGCE-22 to -24) follow it."""
         values = tcg_values()
         text, report = self.tcg_reports(layout.pack_tcg_event(
             uidx=OCP_UUID_INDEX, context=TCG_CONTEXT, **values))
@@ -585,7 +723,7 @@ class TestPersistentEventLogBinary(PersistentEventLogTestBase):
                 result = self.run_pel('-a', '1', '-l', str(length), *args,
                                       encoding=None)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stdout, log.ljust(length, b'\0'))
+                self.assertEqual(result.stdout, log)
 
 
 if __name__ == '__main__':

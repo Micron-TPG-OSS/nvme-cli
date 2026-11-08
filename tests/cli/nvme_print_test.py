@@ -23,6 +23,7 @@ Usage: python3 nvme_print_test.py <path-to-nvme-binary> <path-to-mock-lib>
 import json
 import os
 import random
+import re
 import struct
 import subprocess
 import unittest
@@ -142,7 +143,7 @@ _LOG = ['supported-pages', 'smart', 'ana', 'fw', 'endurance', 'effects',
         'rotational-media-info', 'dispersed-ns-participating-nss',
         'reachability-groups', 'reachability-associations',
         'host-discovery', 'ave-discovery', 'pull-model-ddc-req',
-        'power-measurement', 'sanitize']
+        'power-measurement', 'voltage-measurement', 'sanitize']
 _FEAT = ['arbitration', 'power-mgmt', 'temp-thresh', 'volatile-wc',
          'num-queues', 'timestamp', 'hctm', 'host-behavior-support',
          'perf-characteristics', 'power-limit', 'power-thresh', 'power-meas',
@@ -297,8 +298,9 @@ class PrintCLITest(MockTestCase):
 
     def test_persistent_event_entries(self):
         # Three Timestamp Change events. The first one has Vendor Specific
-        # Information, which EL includes. The last one ends at TLL.
-        vsi = b'\xaa' * 4
+        # Information, which EL includes and which follows the header. The
+        # last one ends at TLL.
+        vsi = b'VSI!'
         events = b''
         for i, info in enumerate((vsi, b'', b'')):
             data = info + struct.pack('<QQ', 0x1000 + i, 0)
@@ -314,6 +316,9 @@ class PrintCLITest(MockTestCase):
         result = self.nvme('log', 'persistent-event', self.ctrl)
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout.count('Event Number'), 3)
+        self.assertIn('Vendor Specific Information:', result.stdout)
+        dump = result.stdout.split('Vendor Specific Information:', 1)[1]
+        self.assertIn(' '.join(f'{b:02x}' for b in vsi), dump)
 
         if not HAVE_JSON:
             return
@@ -322,6 +327,7 @@ class PrintCLITest(MockTestCase):
         entries = json.loads(result.stdout)['list_of_event_entries']
         self.assertEqual([e['prev_ts'] for e in entries],
                          [0x1000, 0x1001, 0x1002])
+        self.assertEqual(''.join(entries[0]['vs_info_bin']), vsi.decode())
 
     @unittest.skipIf(os.geteuid() == 0, 'process limits do not apply to root')
     def test_sandbox_used(self):
@@ -347,6 +353,37 @@ class PrintCLITest(MockTestCase):
         self.assertEqual(sandboxed.returncode, 1)
         self.assertIn('cannot decode the device data in the sandbox',
                       sandboxed.stderr)
+
+    def test_persistent_event_telemetry_log_create(self):
+        # A Telemetry Log Create event holds a 512 byte Telemetry log
+        # header. Its data is dumped only if the event holds all of it,
+        # not counting the Vendor Specific Information.
+        vsi = b'V' * 8
+        for data, dumped in ((b'T' * 512, True), (b'T' * 504, False)):
+            with self.subTest(data_len=len(data)):
+                # etype, etype_rev, ehl, ehai, cntlid, ets, pelpid, vsil, el
+                events = struct.pack('<BBBBHQH4xHH', 0x0c, 0, 21, 0, 1, 0,
+                                     0, len(vsi), len(vsi) + len(data))
+                events += vsi + data
+                header = bytearray(512)
+                struct.pack_into('<B3xIQ', header, 0, _LID_PERSISTENT_EVENT,
+                                 1, len(header) + len(events))
+                self.server.logs[_LID_PERSISTENT_EVENT] = (bytes(header) +
+                                                           events)
+
+                result = self.nvme('log', 'persistent-event', self.ctrl)
+                self.assertEqual(result.returncode, 0)
+                self.assertEqual(
+                    bool(re.search(r'(?m)^0000: 54 54', result.stdout)),
+                    dumped)
+
+                if not HAVE_JSON:
+                    continue
+                result = self.nvme('log', 'persistent-event', self.ctrl,
+                                   '-o', 'json')
+                self.assertEqual(result.returncode, 0)
+                entry = json.loads(result.stdout)['list_of_event_entries'][0]
+                self.assertEqual('create' in entry, dumped)
 
     def test_persistent_event_supported_events(self):
         # Only the Timestamp Change event (bit 3) is supported.
