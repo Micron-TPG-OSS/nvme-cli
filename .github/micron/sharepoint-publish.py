@@ -57,7 +57,7 @@ COLUMNS = [
     {"name": "Arm64Zip", "hyperlinkOrPicture": {"isPicture": False},
      "description": "Download: ARM64 nvme.exe"},
     {"name": "ForkRelease", "hyperlinkOrPicture": {"isPicture": False},
-     "description": "The Micron-TPG-OSS release holding these assets"},
+     "description": "The Micron-ITP-OSS release holding these assets"},
     {"name": "UpstreamRelease", "hyperlinkOrPicture": {"isPicture": False},
      "description": "The linux-nvme/nvme-cli release this mirrors"},
     {"name": "BuildRun", "hyperlinkOrPicture": {"isPicture": False},
@@ -359,7 +359,7 @@ def parse_args(argv):
                    or "NVMe CLI Windows Builds")
     p.add_argument("--list-description",
                    default="Windows x64/ARM64 nvme.exe builds published by "
-                           "Micron-TPG-OSS/nvme-cli for each upstream "
+                           "Micron-ITP-OSS/nvme-cli for each upstream "
                            "linux-nvme/nvme-cli release. Rows are written by "
                            "the Micron - Windows Release workflow.")
     p.add_argument("--create-list", action="store_true",

@@ -70,7 +70,7 @@ jobs:
     name: detect upstream release
     runs-on: ubuntu-latest
     # Guard against this running in any further fork of this fork.
-    if: github.repository == 'Micron-TPG-OSS/nvme-cli'
+    if: github.repository == 'Micron-ITP-OSS/nvme-cli'
     outputs:
       should_build: ${{ steps.check.outputs.should_build }}
       tag: ${{ steps.check.outputs.tag }}
@@ -545,7 +545,7 @@ jobs:
           SHORT_SHA="${UPSTREAM_SHA:0:7}"
 
           cat > notes.md <<EOF
-          Windows build of nvme-cli **${VERSION}** (Micron TPG OSS) for x64 and ARM64.
+          Windows build of nvme-cli **${VERSION}** (Micron ITP OSS) for x64 and ARM64.
 
           Built from the upstream release tag [\`${TAG}\`](https://github.com/linux-nvme/nvme-cli/releases/tag/${TAG}) at commit \`${SHORT_SHA}\`.
 
