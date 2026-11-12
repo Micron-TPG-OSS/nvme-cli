@@ -390,4 +390,12 @@ if python3.found()
     if 'seagate' in selected_plugins
         subdir('seagate')
     endif
+
+    if 'transcend' in selected_plugins
+        subdir('transcend')
+    endif
+
+    if 'solidigm' in selected_plugins
+        subdir('solidigm')
+    endif
 endif

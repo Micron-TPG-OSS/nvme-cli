@@ -105,3 +105,11 @@ __shr_public char *libnvme_ctrl_owner(struct libnvme_ctrl *c)
 {
 	return NULL;
 }
+
+void _libnvmf_ctx_free(struct libnvme_global_ctx *ctx)
+{
+}
+
+void _libnvmf_ctx_test_base_dir_changed(struct libnvme_global_ctx *ctx)
+{
+}

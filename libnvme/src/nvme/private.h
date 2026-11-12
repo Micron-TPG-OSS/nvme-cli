@@ -461,6 +461,7 @@ struct libnvme_global_ctx { // !generate-accessors:read=none,write=none,prefix=l
 	struct libnvme_fabric_options *options;
 	char **kernel_options; /* NULL-terminated, from /dev/nvme-fabrics */
 	struct ifaddrs *ifaddrs_cache; /* init with libnvmf_getifaddrs() */
+	struct libnvmf_vendor_defaults *vendor; /* vendor.c, on first use */
 #endif
 	char *hostnqn;		// !access:read=none,write=generated
 	char *hostid;		// !access:read=none,write=generated
@@ -503,6 +504,9 @@ ssize_t __libnvme_privsep_fabrics(struct libnvme_privsep *ps,
 		enum libnvmf_dev_step *step);
 int __libnvme_privsep_delete_ctrl(struct libnvme_privsep *ps,
 		const char *name);
+/* Write @attr of @dev, see LIBNVME_PRIVSEP_OP_SET_ATTR. */
+int __libnvme_privsep_set_attr(struct libnvme_privsep *ps, const char *dev,
+		const char *attr, const char *value);
 
 #ifdef CONFIG_MI
 struct nvme_mi_msg_hdr;
@@ -586,6 +590,14 @@ int __libnvmf_import_keys_from_config(struct libnvme_host *h,
  * Return: true if addr1 == addr2. false otherwise.
  */
 bool libnvme_ipaddrs_eq(const char *addr1, const char *addr2);
+
+/*
+ * The fabrics part of the global context (lib-fabrics.c, empty without
+ * fabrics): free it, and drop what was read from the old test base
+ * directory when it changes.
+ */
+void _libnvmf_ctx_free(struct libnvme_global_ctx *ctx);
+void _libnvmf_ctx_test_base_dir_changed(struct libnvme_global_ctx *ctx);
 
 #ifdef CONFIG_FABRICS
 void _libnvmf_free_kernel_options(struct libnvme_global_ctx *ctx);

@@ -3,6 +3,41 @@
 
 ## Changes in 3.3 (unreleased)
 
+### Feature removals and incompatible changes
+
+* The 80 bit Expected Logical Block Tags (ELBT) of the Copy source range
+  formats 1h and 3h are little endian now, like the other tags of the
+  source range entries since 3.2, with the reference tag in the low
+  bytes, as in Command Dwords 14, 3 and 2. 3.2 and earlier sent them big
+  endian. `nvme copy --expected-ref-tags` with `--format=1` or
+  `--format=3` inherits this. See
+  [#4278](https://github.com/linux-nvme/nvme-cli/issues/4278).
+
+* libnvme no longer installs the udev rule `70-nvmf-registry.rules` and
+  no longer writes the `seqnum` attribute into registry entries. The
+  rule removed the entry of a removed controller, and a queued REMOVE
+  event could remove the entry the next controller with the same name
+  had just written. The entry of a removed controller now stays until a
+  connect that gets the name replaces it, and libnvme ignores the entry
+  of a controller that is not in sysfs. A host that mixes tools on
+  libnvme 1 and libnvme 3 to connect controllers is not supported: a
+  controller connected by libnvme 1 under a reused name reads as owned
+  by the old owner.
+
+### Fabrics
+
+* libnvme applies the defaults of storage vendors for their controllers
+  right after it connected one: the I/O policy of the subsystem and
+  `ctrl_loss_tmo`, from INI files in `vendor.d`, see nvme-vendor.d(5).
+  nvme-cli ships one per vendor in `/usr/lib/nvme/vendor.d` (NetApp,
+  HPE, VAST Data, with the values of the udev rules `71-nvmf-*.rules`).
+  The directories follow udev and sysctl.d: `/etc/nvme/vendor.d` and
+  `/run/nvme/vendor.d` replace a file of the same name or turn it off,
+  and all files are read in the order of their names. A section matches
+  `model` and `transport` as the udev rules do. A `ctrl_loss_tmo` given
+  on the command line or in `nvme-fabrics.conf` wins over `vendor.d`.
+  While nvme-discoverd runs, its service masks the udev rules.
+
 ### nvme-discoverd
 
 * `nvme-discoverd.service` masks the legacy udev rule
@@ -10,6 +45,47 @@
   in `/run/udev/rules.d`. The legacy rule no longer connects in parallel
   to nvme-discoverd, also when it is left over from an older
   installation. Stopping nvme-discoverd removes the mask.
+
+* `nvme-discoverd.service` loads `nvme-fabrics` before nvme-discoverd
+  starts (`modprobe@nvme_fabrics.service`). On a host that boots without
+  NVMe-oF, its connection units failed with "Failed to scan topology"
+  and retried forever.
+
+* A discovery controller parked for EPCSD=0 is parked again after a
+  re-check whose reconnect gets its old device name back. It stayed
+  connected before.
+
+* An FC discovery event makes nvme-discoverd read the log page of a
+  connected discovery controller again. An FC I/O controller deleted
+  after `dev_loss_tmo` behind a persistent discovery controller was not
+  connected again.
+
+### nvmf-autoconnect
+
+* `nvmf-autoconnect.service` wants `network-online.target`; it was only
+  ordered after it. Without a `_netdev` mount, which pulls the target
+  in, it started before the network and failed to connect (#3309).
+
+* `nvmf-autoconnect.service` stays active and disconnects the
+  controllers with the owner `autoconnect` when it stops: at the
+  shutdown after the `_netdev` mounts are unmounted and before the
+  network goes down. A controller left behind kept late shutdown steps,
+  such as `lvm2-monitor.service`, waiting for a network that was gone
+  (#3309). Controllers with another owner, or none, are left alone.
+
+* `nvmf-connect@.service` skips every event while nvme-discoverd is
+  active, also the AEN and `rediscover` events; it skipped only the FC
+  kickstart. nvme-discoverd handles them itself (#4327).
+
+* `nvmf-connect-nbft.service`, which NetworkManager's dispatcher script
+  starts when an NBFT interface comes up late, skips while nvme-discoverd
+  is active. nvme-discoverd connects the NBFT's subsystems itself
+  (#4329).
+
+* `nvmefc-boot-connections.service` skips when nvme-discoverd is
+  enabled: nvme-discoverd replays the FC discovery events itself when it
+  starts, and the unit ran before that, while the legacy rule was not
+  masked yet (#4327).
 
 ## Changes in 3.2 (2026-10-30)
 

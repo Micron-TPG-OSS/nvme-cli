@@ -11,12 +11,6 @@
 #include <libgen.h>
 #include <strings.h>
 
-#ifdef CONFIG_FABRICS
-#include <sys/types.h>
-
-#include <ifaddrs.h>
-#endif
-
 #include <shared/compiler-attributes-util.h>
 
 #include <libnvme.h>
@@ -87,6 +81,7 @@ __shr_public int libnvme_set_test_base_dir(struct libnvme_global_ctx *ctx,
 	}
 	free(ctx->test_base_dir);
 	ctx->test_base_dir = dup;
+	_libnvmf_ctx_test_base_dir_changed(ctx);
 	return 0;
 }
 
@@ -128,11 +123,7 @@ __shr_public void libnvme_free_global_ctx(struct libnvme_global_ctx *ctx)
 	if (!ctx)
 		return;
 
-#ifdef CONFIG_FABRICS
-	freeifaddrs(ctx->ifaddrs_cache); /* NULL-safe */
-	ctx->ifaddrs_cache = NULL;
-	_libnvmf_free_kernel_options(ctx);
-#endif
+	_libnvmf_ctx_free(ctx);
 	free(ctx->hostnqn);
 	free(ctx->hostid);
 

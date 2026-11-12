@@ -418,8 +418,29 @@ static char *nvmf_read_file(const char *f, int len)
 	return strndup(buf, strcspn(buf, "\n"));
 }
 
+/*
+ * The host NQN or host ID file: @prod_path, or <test_base_dir>/@name in a
+ * test sandbox (libnvme_set_test_base_dir()), built into @buf. NULL if
+ * the path does not fit.
+ */
+static const char *host_file(struct libnvme_global_ctx *ctx,
+			     const char *prod_path, const char *name,
+			     char *buf, size_t len)
+{
+	int n;
+
+	if (!ctx->test_base_dir)
+		return prod_path;
+
+	n = snprintf(buf, len, "%s/%s", ctx->test_base_dir, name);
+
+	return n > 0 && (size_t)n < len ? buf : NULL;
+}
+
 __shr_public char *libnvmf_read_hostnqn(struct libnvme_global_ctx *ctx)
 {
+	char buf[PATH_MAX];
+	const char *path;
 	char *val;
 
 	if (!ctx)
@@ -428,14 +449,14 @@ __shr_public char *libnvmf_read_hostnqn(struct libnvme_global_ctx *ctx)
 	if (shr_nqn_valid(ctx->hostnqn))
 		return strdup(ctx->hostnqn);
 
-	val = nvmf_read_file(NVMF_HOSTNQN_FILE, NVMF_NQN_SIZE);
+	path = host_file(ctx, NVMF_HOSTNQN_FILE, "hostnqn", buf, sizeof(buf));
+	val = path ? nvmf_read_file(path, NVMF_NQN_SIZE) : NULL;
 	if (shr_nqn_valid(val))
 		return val;
 
 	if (val) {
 		libnvme_msg(ctx, LIBNVME_LOG_ERR,
-			    "%s does not contain a valid host NQN\n",
-			    NVMF_HOSTNQN_FILE);
+			    "%s does not contain a valid host NQN\n", path);
 		free(val);
 	}
 
@@ -444,6 +465,8 @@ __shr_public char *libnvmf_read_hostnqn(struct libnvme_global_ctx *ctx)
 
 __shr_public char *libnvmf_read_hostid(struct libnvme_global_ctx *ctx)
 {
+	char buf[PATH_MAX];
+	const char *path;
 	char *val;
 
 	if (!ctx)
@@ -452,14 +475,15 @@ __shr_public char *libnvmf_read_hostid(struct libnvme_global_ctx *ctx)
 	if (shr_hostid_valid(ctx->hostid))
 		return strdup(ctx->hostid);
 
-	val = nvmf_read_file(NVMF_HOSTID_FILE, NVMF_HOSTID_SIZE);
+	path = host_file(ctx, NVMF_HOSTID_FILE, "hostid", buf, sizeof(buf));
+	val = path ? nvmf_read_file(path, NVMF_HOSTID_SIZE) : NULL;
 	if (shr_hostid_valid(val))
 		return val;
 
 	if (val) {
 		libnvme_msg(ctx, LIBNVME_LOG_ERR,
 			    "%s does not contain a valid host identifier\n",
-			    NVMF_HOSTID_FILE);
+			    path);
 		free(val);
 	}
 
@@ -2107,6 +2131,7 @@ __shr_public int libnvmf_add_ctrl(struct libnvme_host *h, struct libnvme_ctrl *c
 
 	libnvme_msg(h->ctx, LIBNVME_LOG_INFO, "nvme%d: %s connected\n", ret,
 		 libnvme_ctrl_get_subsysnqn(c));
+	libnvmf_vendor_apply_connected(h->ctx, ret, c->cfg.ctrl_loss_tmo);
 	return libnvme_init_ctrl(h, c, ret);
 }
 
@@ -2127,6 +2152,7 @@ __shr_public int libnvmf_connect_ctrl(struct libnvme_ctrl *c)
 	if (ret < 0)
 		return ret;
 
+	libnvmf_vendor_apply_connected(c->s->h->ctx, ret, c->cfg.ctrl_loss_tmo);
 	return 0;
 }
 
@@ -4274,8 +4300,14 @@ static int get_vlan_id(const char *ifname)
 	if (!f)
 		return 0;
 
+	/*
+	 * The first line starts with the interface's name:
+	 * "eth0.10  VID: 10  REORDER_HDR: 1  dev->priv_flags: 1021"
+	 */
 	while (fgets(line, sizeof(line), f)) {
-		if (sscanf(line, " VID: %d", &vlan_id) == 1) {
+		char *vid = strstr(line, "VID:");
+
+		if (vid && sscanf(vid, "VID: %d", &vlan_id) == 1) {
 			fclose(f);
 			return vlan_id;
 		}
