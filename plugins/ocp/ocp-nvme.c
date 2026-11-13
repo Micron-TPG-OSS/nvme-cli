@@ -74,14 +74,7 @@ struct __packed feature_latency_monitor {
 };
 
 struct erri_entry {
-	union {
-		__u8 flags;
-		struct {
-			__u8 enable:1;
-			__u8 single:1;
-			__u8 rsvd2:6;
-		};
-	};
+	__u8 flags;
 	__u8 rsvd1;
 	__le16 type;
 	union {
@@ -507,8 +500,8 @@ static int eol_plp_failure_mode_get(struct libnvme_transport_handle *hdl, const 
 	err = nvme_get_features(hdl, nsid, fid, sel, 0, uidx, NULL, 0, &result);
 	if (!err) {
 		nvme_show_result("End of Life Behavior (feature: %#0*x): %#0*x (%s: %s)",
-				 fid ? 4 : 2, fid, result ? 10 : 8, result,
-				 nvme_select_to_string(sel),
+				 fid ? 4 : 2, fid, result ? 10 : 8,
+				 (__u32)result, nvme_select_to_string(sel),
 				 eol_plp_failure_mode_to_string(result));
 		if (sel == NVME_GET_FEATURES_SEL_SUPPORTED)
 			nvme_show_select_result(fid, result);
@@ -536,8 +529,8 @@ static int eol_plp_failure_mode_set(struct libnvme_transport_handle *hdl, const 
 		}
 	}
 
-	err = nvme_set_features(hdl, nsid, fid, sv, mode << 30, 0, 0, uidx, 0, NULL,
-			0, &result);
+	err = nvme_set_features(hdl, nsid, fid, sv, (__u32)mode << 30, 0, 0,
+			uidx, 0, NULL, 0, &result);
 	if (err) {
 		nvme_show_err(err, "Define EOL/PLP failure mode");
 	} else {
@@ -1838,8 +1831,8 @@ static int set_plp_health_check_interval(int argc, char **argv, struct command *
 	}
 
 	err = nvme_set_features(hdl, nsid, OCP_FID_PLPI, cfg.sv,
-			cfg.plp_health_interval << 16, 0, 0, uidx, 0, NULL, 0,
-			&result);
+			(__u32)cfg.plp_health_interval << 16, 0, 0, uidx, 0,
+			NULL, 0, &result);
 	if (err) {
 		nvme_show_err(err, "Define PLP Health Check Interval");
 	} else {
@@ -2254,10 +2247,17 @@ static int error_injection_get(struct libnvme_transport_handle *hdl, const __u8 
 		if (sel == NVME_GET_FEATURES_SEL_SUPPORTED)
 			nvme_show_select_result(fid, result);
 		for (i = 0; i < cq_entry.nume; i++) {
+			__u8 flags = entry[i].flags;
+			__u16 type = le16_to_cpu(entry[i].type);
+
 			printf("Entry: %d, Flags: %x (%s%s), Type: %x (%s), NRTDP: %d\n", i,
-			       entry[i].flags, entry[i].enable ? "Enabled" : "Disabled",
-			       entry[i].single ? ", Single instance" : "", entry[i].type,
-			       erri_type_to_string(entry[i].type), entry[i].nrtdp);
+			       flags,
+			       OCP_GET(flags, ERRI_ENTRY_ENABLE) ?
+					"Enabled" : "Disabled",
+			       OCP_GET(flags, ERRI_ENTRY_SINGLE) ?
+					", Single instance" : "",
+			       type, erri_type_to_string(type),
+			       le16_to_cpu(entry[i].nrtdp));
 		}
 	} else {
 		nvme_show_error("Could not get feature: %#0*x. %d", fid ? 4 : 2, fid);
@@ -2341,10 +2341,10 @@ static int error_injection_set(struct libnvme_transport_handle *hdl, struct erri
 			return -errno;
 		}
 	} else {
-		entry->enable = 1;
-		entry->single = 1;
-		entry->type = cfg->type;
-		entry->nrtdp = cfg->nrtdp;
+		entry->flags = OCP_SET(1, ERRI_ENTRY_ENABLE) |
+			       OCP_SET(1, ERRI_ENTRY_SINGLE);
+		entry->type = cpu_to_le16(cfg->type);
+		entry->nrtdp = cpu_to_le16(cfg->nrtdp);
 	}
 
 	err = nvme_set_features(hdl, nsid, OCP_FID_ERRI, false, cfg->number,
