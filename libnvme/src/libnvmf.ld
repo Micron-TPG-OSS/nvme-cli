@@ -22,6 +22,7 @@ LIBNVMF_3 {
 		libnvmf_config_emit_free;
 		libnvmf_config_emit_install;
 		libnvmf_config_emit_new;
+		libnvmf_config_emit_write_file;
 		libnvmf_config_free;
 		libnvmf_config_get_discovered_params;
 		libnvmf_config_get_hostid;
@@ -94,6 +95,7 @@ LIBNVMF_3 {
 		libnvmf_lookup_keyring;
 		libnvmf_nbft_free;
 		libnvmf_nbft_read_files;
+		libnvmf_owner_equal;
 		libnvmf_params_for_each;
 		libnvmf_params_free;
 		libnvmf_params_get;

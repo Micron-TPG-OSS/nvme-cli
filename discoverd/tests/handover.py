@@ -202,7 +202,6 @@ class Fabric(MockController):
         subsys = self.sysfs / 'sys/class/nvme-subsystem' / f'nvme-subsys{inst}'
         subsys.mkdir(parents=True, exist_ok=True)
         (subsys / 'subsysnqn').write_text(f"{opts['nqn']}\n", encoding='utf-8')
-
         (subsys / f'nvme{inst}').mkdir(exist_ok=True)
 
     def handle_delete(self, conn, instance):
@@ -333,6 +332,11 @@ class Host:
         self.unit_nvme.chmod(0o755)
         self.discoverd_conf = self.base / 'nvme-discoverd.conf'
         self.discoverd_conf.write_text('', encoding='utf-8')
+        # The host boots into the initrd: nvme records the pre-OS
+        # connections only there (os-release(5)).
+        (self.base / 'etc').mkdir()
+        self.initrd_release = self.base / 'etc/initrd-release'
+        self.initrd_release.write_text('', encoding='utf-8')
 
     def unit_env(self):
         """The environment of a unit's commands. Its nvme sets the
@@ -397,12 +401,19 @@ class Host:
     # -- OS environment ------------------------------------------------ #
 
     def switch_root(self):
-        """Leave the initrd. /run (the registry) and the
+        """Leave the initrd. /run (the registry, pre-os.conf) and the
         controllers stay."""
+        self.initrd_release.unlink(missing_ok=True)
         # What the tests check is what the OS environment disconnects;
         # the kernel reuses the names the initrd freed.
         self.pump()
         self.disconnected = []
+
+    def pre_os_conf(self):
+        """The drop-ins of pre-os.conf the pre-OS environment wrote."""
+        d = self.base / 'pre-os.conf.d'
+        return sorted(f.read_text(encoding='utf-8')
+                      for f in d.glob('*.conf')) if d.is_dir() else []
 
     def start(self, extra_args=()):
         """Switch to the real root, and start nvme-discoverd there."""

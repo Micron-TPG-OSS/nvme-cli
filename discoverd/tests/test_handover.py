@@ -10,8 +10,11 @@
 Each test boots a host (handover.Host): the pre-OS environment connects
 the boot paths with the real nvme, as dracut does, and after switch-root
 nvme-discoverd takes over in a sandbox. The expectations follow the model
-of issue #4328: what the pre-OS environment connected stays connected,
-with its parameters, also over a restart, a reload and the shutdown.
+of libnvme/design/PRE-OS.md: the pre-OS environment connects with the
+owner pre-os and records what it wanted in pre-os.conf. nvme-discoverd
+keeps these connections connected, with their parameters and their
+owner, over a loss, a restart, a reload and an exclusion, and never
+disconnects them, also not at the shutdown. It never owns them.
 
 Where today's behaviour differs from the model, the test is an expected
 failure and says why. It starts to pass when the gap is closed.
@@ -19,6 +22,7 @@ failure and says why. It starts to pass when the gap is closed.
 Usage: NVME_DISCOVERD=<nvme-discoverd> python3 test_handover.py <nvme>
        <libmock_nvme.so>
 """
+import time
 import unittest
 
 from handover import DISC_NQN, Host
@@ -65,7 +69,7 @@ class HandoverTest(unittest.TestCase):
                         f'--nbft-path={host.sysfs}/sys/firmware/acpi/tables')
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertEqual(len(host.find(NBFT_NQN)), 1)
-        host.discoverd_config('[Global]\nnbft = true\n')
+        host.discoverd_config('[Global]\npre-os = true\n')
         return host.find(NBFT_NQN)[0]
 
     def fc_fabric(self):
@@ -77,13 +81,15 @@ class HandoverTest(unittest.TestCase):
         self.host.fabric.add_target('fc', FC_IO, '', IO_NQN,
                                     host_traddr=FC_HOST)
 
-    def boot_fc(self):
+    def boot_fc(self, owner=True):
         """FC boot connections, as dracut's FC kickstart runs connect-all
-        for the DC. They have no owner."""
+        for the DC, with the owner pre-os. Without @owner, as an initrd
+        of an older dracut does, they have no owner."""
         self.fc_fabric()
         res = self.host.nvme('connect-all', '--transport=fc',
                              f'--traddr={FC_DC}',
-                             f'--host-traddr={FC_HOST}')
+                             f'--host-traddr={FC_HOST}',
+                             *(['--owner=pre-os'] if owner else []))
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertEqual(len(self.host.find(IO_NQN)), 1)
         return self.host.find(IO_NQN)[0]
@@ -107,42 +113,66 @@ class HandoverTest(unittest.TestCase):
     # -- A: the hand-over ---------------------------------------------- #
 
     def test_a1_nbft_adopted(self):
-        """The NBFT boot path is adopted with owner nbft, not connected
+        """The NBFT boot path has the owner pre-os and ctrl_loss_tmo=-1.
+        nvme-discoverd keeps it, with that owner, and does not connect it
         again."""
         dev = self.boot_nbft()
-        self.assertEqual(self.host.owner(dev), 'nbft')
+        self.assertEqual(self.host.owner(dev), 'pre-os')
+        self.assertEqual(self.host.ctrl(dev)['ctrl_loss_tmo'], '-1')
         self.host.start()
         self.assertEqual(self.host.find(NBFT_NQN), [dev])
-        self.assertEqual(self.host.owner(dev), 'nbft')
+        self.assertEqual(self.host.owner(dev), 'pre-os')
         ctrls = self.tracked(dev)
         self.assertEqual(len(ctrls), 1)
-        self.assertTrue(ctrls[0]['nbft'])
+        self.assertTrue(ctrls[0]['pre_os'])
         self.assertEqual(self.host.disconnected, [])
 
     def test_a1_nbft_firmware_host_identity(self):
         """The boot path connects as the firmware's host, as nvme-cli 2
-        did, also when the system has a host NQN of its own (fixed by
-        #4384). After switch-root, nvme-discoverd connects as the NBFT's
-        host too, and the kernel makes no second controller to the boot
-        subsystem."""
+        did, also when the system has a host NQN of its own. After
+        switch-root, nvme-discoverd connects as the NBFT's host too, and
+        the kernel makes no second controller to the boot subsystem."""
         dev = self.boot_nbft(firmware_identity=False)
         self.assertEqual(self.host.ctrl(dev)['hostnqn'], NBFT_HOST_NQN)
         self.host.start()
         self.assertEqual(self.host.find(NBFT_NQN), [dev])
 
-    def test_a2_nbft_disabled(self):
-        """With nbft = false, the boot path is not touched."""
-        dev = self.boot_nbft()
-        self.host.discoverd_config('[Global]\nnbft = false\n')
-        self.host.start()
-        self.assertEqual(self.host.find(NBFT_NQN), [dev])
-        self.assertEqual(self.host.daemon.dump(), [])
-        self.assertEqual(self.host.unit_starts(), [])
+    def test_a2_pre_os_disabled(self):
+        """With pre-os = false, and with its old name nbft = false, the
+        pre-OS paths are not touched."""
+        for conf in ('pre-os = false', 'nbft = false'):
+            with self.subTest(conf=conf):
+                self.host.close()
+                self.host = Host()
+                self.addCleanup(self.host.close)
+                dev = self.boot_nbft()
+                self.host.discoverd_config(f'[Global]\n{conf}\n')
+                self.host.start()
+                self.assertEqual(self.host.find(NBFT_NQN), [dev])
+                self.assertEqual(self.host.daemon.dump(), [])
+                self.assertEqual(self.host.unit_starts(), [])
+                self.assertEqual(self.host.owner(dev), 'pre-os')
 
-    def test_a3_fc_boot_path_adopted(self):
-        """An unowned FC boot connection that nvme-discoverd wants is
-        adopted with owner discoverd, not connected again."""
+    def test_a3_fc_boot_path_kept(self):
+        """The FC boot path keeps the owner pre-os. nvme-discoverd learns
+        it from the DC in pre-os.conf and does not connect it again."""
         dev = self.boot_fc()
+        self.assertEqual(self.host.owner(dev), 'pre-os')
+        (conf,) = self.host.pre_os_conf()
+        self.assertIn(FC_DC, conf)
+        self.host.start()
+        self.assertEqual(self.host.find(IO_NQN), [dev])
+        self.assertEqual(self.host.owner(dev), 'pre-os')
+        ctrls = self.tracked(dev)
+        self.assertEqual(len(ctrls), 1)
+        self.assertTrue(ctrls[0]['pre_os'])
+        self.assertNotIn(dev, self.host.disconnected)
+
+    def test_a3_fc_boot_path_older_initrd(self):
+        """An initrd of an older dracut connects the FC boot path without
+        an owner. nvme-discoverd wants it and adopts it with owner
+        discoverd, not connecting it again."""
+        dev = self.boot_fc(owner=False)
         self.assertIsNone(self.host.owner(dev))
         self.host.start()
         self.assertEqual(self.host.find(IO_NQN), [dev])
@@ -160,48 +190,80 @@ class HandoverTest(unittest.TestCase):
         self.assertIsNone(self.host.owner(dev))
         self.assertEqual(self.host.unit_starts(), [])
 
-    @unittest.expectedFailure
     def test_a5_preos_parameters_kept(self):
-        """A connection the pre-OS environment made keeps its parameters.
-        The initrd connects without an owner, so nvme-discoverd adopts it
-        and connects it with the configured parameters when it is lost."""
+        """A connection the pre-OS environment made keeps its parameters
+        when it is lost, not those of the real root's configuration, and
+        its owner."""
         self.configure_io('ctrl-loss-tmo = 60\n')
-        dev = self.connect_io('--ctrl-loss-tmo=-1')
+        dev = self.connect_io('--owner=pre-os', '--ctrl-loss-tmo=-1')
         self.host.start()
         self.host.lose(dev)
         (dev,) = self.host.find(IO_NQN)
         self.assertEqual(self.host.ctrl(dev)['ctrl_loss_tmo'], '-1')
+        self.assertEqual(self.host.owner(dev), 'pre-os')
+
+    def test_a5_preos_default_ctrl_loss_tmo(self):
+        """Without a ctrl_loss_tmo, a pre-OS connection gets -1, in the
+        initrd and when nvme-discoverd connects it again."""
+        self.host.fabric.add_target('tcp', IO_TRADDR, '4420', IO_NQN)
+        dev = self.connect_io('--owner=pre-os')
+        self.assertEqual(self.host.ctrl(dev)['ctrl_loss_tmo'], '-1')
+        self.host.start()
+        self.host.lose(dev)
+        (dev,) = self.host.find(IO_NQN)
+        self.assertEqual(self.host.ctrl(dev)['ctrl_loss_tmo'], '-1')
+        self.assertEqual(self.host.owner(dev), 'pre-os')
 
     def test_a6_nbft_without_registry(self):
         """An initrd with nvme-cli 2 records no owner. The NBFT boot path
-        is still adopted as nbft, not connected again."""
+        is still kept as pre-os, not connected again."""
         host = self.host
         host.fabric.add_target('tcp', NBFT_TRADDR, '4420', NBFT_NQN)
         host.nbft(NBFT_TABLE)
         dev = host.plant('tcp', NBFT_TRADDR, '4420', NBFT_NQN,
                          host_traddr=NBFT_HOST_TRADDR,
                          hostnqn=NBFT_HOST_NQN, hostid=NBFT_HOST_ID)
-        host.discoverd_config('[Global]\nnbft = true\n')
+        host.discoverd_config('[Global]\npre-os = true\n')
         host.start()
         self.assertEqual(host.find(NBFT_NQN), [dev])
-        self.assertEqual(host.owner(dev), 'nbft')
+        self.assertEqual(host.owner(dev), 'pre-os')
 
     def test_a7_nbft_path_lost_before_switch_root(self):
         """A boot path the initrd connected and lost before switch-root is
-        connected again, with owner nbft."""
+        connected again, with owner pre-os. The initrd's registry entry
+        has the old name of the owner."""
         host = self.host
         host.fabric.add_target('tcp', NBFT_TRADDR, '4420', NBFT_NQN)
         host.nbft(NBFT_TABLE)
         reg = host.base / 'registry/nvme0'
         reg.mkdir(parents=True)
         (reg / 'owner').write_text('nbft\n', encoding='utf-8')
-        host.discoverd_config('[Global]\nnbft = true\n')
+        host.discoverd_config('[Global]\npre-os = true\n')
         host.start()
         (dev,) = host.find(NBFT_NQN)
-        self.assertEqual(host.owner(dev), 'nbft')
+        self.assertEqual(host.owner(dev), 'pre-os')
         self.assertEqual(host.ctrl(dev)['hostnqn'], NBFT_HOST_NQN)
 
-    def test_a8_other_owner_skipped(self):
+    def test_a8_path_failed_at_boot(self):
+        """A path the pre-OS environment could not connect is in
+        pre-os.conf. nvme-discoverd connects it once the target is back,
+        with the owner pre-os and the pre-OS environment's parameters."""
+        target = self.host.fabric.add_target('tcp', IO_TRADDR, '4420',
+                                             IO_NQN)
+        target.reachable = False
+        res = self.host.nvme('connect', '-t', 'tcp', '-a', IO_TRADDR,
+                             '-s', '4420', '-n', IO_NQN, '--owner=pre-os',
+                             '--ctrl-loss-tmo=-1')
+        self.assertNotEqual(res.returncode, 0)
+        self.assertEqual(self.host.find(IO_NQN), [])
+        self.assertEqual(len(self.host.pre_os_conf()), 1)
+        target.reachable = True
+        self.host.start()
+        (dev,) = self.host.find(IO_NQN)
+        self.assertEqual(self.host.owner(dev), 'pre-os')
+        self.assertEqual(self.host.ctrl(dev)['ctrl_loss_tmo'], '-1')
+
+    def test_a9_other_owner_skipped(self):
         """A controller another orchestrator owns is not touched."""
         self.configure_io()
         dev = self.connect_io('--owner=stas')
@@ -210,6 +272,48 @@ class HandoverTest(unittest.TestCase):
         self.assertEqual(self.host.find(IO_NQN), [dev])
         self.assertEqual(self.host.owner(dev), 'stas')
         self.assertEqual(self.host.unit_starts(), [])
+
+    def test_a10_stale_registry_entry(self):
+        """The kernel reuses device names. A registry entry the pre-OS
+        environment left for nvme0 now names another controller: it is
+        no pre-OS path, and the NBFT boot path is connected on its own."""
+        host = self.host
+        host.fabric.add_target('tcp', NBFT_TRADDR, '4420', NBFT_NQN)
+        host.nbft(NBFT_TABLE)
+        host.fabric.add_target('tcp', IO_TRADDR, '4420', IO_NQN)
+        other = host.plant('tcp', IO_TRADDR, '4420', IO_NQN)
+        reg = host.base / 'registry' / other
+        reg.mkdir(parents=True)
+        (reg / 'owner').write_text('nbft\n', encoding='utf-8')
+        host.discoverd_config('[Global]\npre-os = true\n')
+        host.start()
+        (dev,) = host.find(NBFT_NQN)
+        self.assertNotEqual(dev, other)
+        self.assertEqual(host.owner(dev), 'pre-os')
+        self.assertEqual(self.tracked(other), [])
+        self.assertEqual(host.find(IO_NQN), [other])
+        host.shutdown()
+        self.assertEqual(host.disconnected, [])
+
+    def test_a11_nbft_target_unreachable_at_boot(self):
+        """An NBFT path the firmware lists but the pre-OS environment
+        could not connect, e.g. an unavailable namespace, is connected
+        by nvme-discoverd once the target is back, as pre-os."""
+        host = self.host
+        target = host.fabric.add_target('tcp', NBFT_TRADDR, '4420',
+                                        NBFT_NQN)
+        target.reachable = False
+        host.nbft(NBFT_TABLE)
+        host.nvme('connect-all', '--nbft',
+                  f'--nbft-path={host.sysfs}/sys/firmware/acpi/tables')
+        self.assertEqual(host.find(NBFT_NQN), [])
+        target.reachable = True
+        host.discoverd_config('[Global]\npre-os = true\n')
+        host.start()
+        (dev,) = host.find(NBFT_NQN)
+        self.assertEqual(host.owner(dev), 'pre-os')
+        self.assertEqual(host.ctrl(dev)['hostnqn'], NBFT_HOST_NQN)
+        self.assertEqual(host.ctrl(dev)['ctrl_loss_tmo'], '-1')
 
     # -- B: the OS environment keeps the boot paths -------------------- #
 
@@ -226,13 +330,81 @@ class HandoverTest(unittest.TestCase):
         self.assertEqual(len(self.tracked(dev)), 1)
 
     def test_b1_nbft_path_lost(self):
-        """A lost boot path is connected again, with owner nbft."""
+        """A lost boot path is connected again, with owner pre-os."""
         dev = self.boot_nbft()
         self.host.start()
         self.host.lose(dev)
         (dev,) = self.host.find(NBFT_NQN)
-        self.assertEqual(self.host.owner(dev), 'nbft')
+        self.assertEqual(self.host.owner(dev), 'pre-os')
         self.assertEqual(len(self.tracked(dev)), 1)
+
+    def test_b1_multipath_path_lost(self):
+        """With two paths to the root subsystem, the one that is lost is
+        connected again as pre-os; the other one is not touched: a lost
+        path of a multipath root is no "game over", the head stays."""
+        host = self.host
+        host.fabric.add_target('tcp', IO_TRADDR, '4420', IO_NQN)
+        host.fabric.add_target('tcp', '192.0.2.21', '4420', IO_NQN)
+        for traddr in (IO_TRADDR, '192.0.2.21'):
+            res = host.nvme('connect', '-t', 'tcp', '-a', traddr, '-s',
+                            '4420', '-n', IO_NQN, '--owner=pre-os')
+            self.assertEqual(res.returncode, 0, res.stderr)
+        (first,) = host.find(IO_NQN, IO_TRADDR)
+        (second,) = host.find(IO_NQN, '192.0.2.21')
+        host.start()
+        host.lose(first)
+        self.assertEqual(host.find(IO_NQN, '192.0.2.21'), [second])
+        (again,) = host.find(IO_NQN, IO_TRADDR)
+        self.assertEqual(host.owner(again), 'pre-os')
+        self.assertEqual(host.ctrl(again)['ctrl_loss_tmo'], '-1')
+        self.assertEqual(host.disconnected, [])
+
+    def test_b1_fc_path_lost(self):
+        """FC deletes a controller after dev_loss_tmo, whatever
+        ctrl_loss_tmo says. nvme-discoverd connects the lost FC boot path
+        again, as pre-os."""
+        dev = self.boot_fc()
+        self.host.start()
+        self.host.lose(dev)
+        (dev,) = self.host.find(IO_NQN)
+        self.assertEqual(self.host.owner(dev), 'pre-os')
+        self.assertEqual(len(self.tracked(dev)), 1)
+
+    def test_b1_fc_path_lost_own(self):
+        """The same for an FC path nvme-discoverd owns itself: the FC
+        kickstart after the loss makes it read the DLP of the connected
+        DC again."""
+        dev = self.boot_fc(owner=False)
+        self.host.start()
+        self.assertEqual(self.host.owner(dev), 'discoverd')
+        self.host.lose(dev)
+        (dev,) = self.host.find(IO_NQN)
+        self.assertEqual(self.host.owner(dev), 'discoverd')
+
+    def test_b1_fc_path_lost_persistent_dc(self):
+        """With a persistent pre-OS DC, which stays connected, the FC
+        kickstart after the loss makes nvme-discoverd read its DLP again:
+        the DC has no timer to fire."""
+        self.fc_fabric()
+        res = self.host.nvme('connect-all', '--transport=fc',
+                             f'--traddr={FC_DC}', f'--host-traddr={FC_HOST}',
+                             '--persistent=force', '--owner=pre-os')
+        self.assertEqual(res.returncode, 0, res.stderr)
+        (dev,) = self.host.find(IO_NQN)
+        self.host.start()
+        self.assertEqual(len(self.host.find(DISC_NQN)), 1)
+        self.host.lose(dev)
+        (dev,) = self.host.find(IO_NQN)
+        self.assertEqual(self.host.owner(dev), 'pre-os')
+
+    def test_b1_preos_dc_parked(self):
+        """A pre-OS DC without persistence is disconnected after its DLP
+        is read, as the pre-OS environment did; its I/O controller stays."""
+        dev = self.boot_fc()
+        self.host.start()
+        self.assertEqual(self.host.find(DISC_NQN), [])
+        self.assertEqual(self.host.find(IO_NQN), [dev])
+        self.assertEqual(self.host.owner(dev), 'pre-os')
 
     def configure_fc(self, extra=''):
         """The FC DC in the fabrics configuration, not the pre-OS
@@ -267,9 +439,30 @@ class HandoverTest(unittest.TestCase):
         (dev,) = self.host.find(IO_NQN)
         self.assertEqual(self.host.owner(dev), 'discoverd')
 
+    def test_b1_retry_over_restart(self):
+        """A pre-OS path that fails to connect is retried, also after a
+        restart of nvme-discoverd while it still fails."""
+        host = self.host
+        target = host.fabric.add_target('tcp', IO_TRADDR, '4420', IO_NQN)
+        target.reachable = False
+        host.nvme('connect', '-t', 'tcp', '-a', IO_TRADDR, '-s', '4420',
+                  '-n', IO_NQN, '--owner=pre-os')
+        host.start()
+        self.assertEqual(host.find(IO_NQN), [])
+        host.restart()
+        self.assertEqual(host.find(IO_NQN), [])
+        target.reachable = True
+        for _ in range(20):
+            time.sleep(0.5)
+            host.settle()
+            if host.find(IO_NQN):
+                break
+        (dev,) = host.find(IO_NQN)
+        self.assertEqual(host.owner(dev), 'pre-os')
+
     def test_b2_reload_drops_configured_boot_path(self):
-        """A configuration reload that drops a connection the initrd made
-        releases it without a disconnect."""
+        """A configuration reload that drops a connection an initrd made
+        without an owner releases it without a disconnect."""
         self.configure_io()
         dev = self.connect_io()
         self.host.start()
@@ -281,9 +474,23 @@ class HandoverTest(unittest.TestCase):
         self.assertEqual(self.host.loaded_units(), [])
         self.assertEqual(self.host.disconnected, [])
 
+    def test_b2_reload_keeps_preos_path(self):
+        """A pre-OS connection the real root's configuration does not
+        list stays connected and kept over a reload."""
+        self.configure_io()
+        dev = self.connect_io('--owner=pre-os')
+        self.host.start()
+        self.host.fabrics_conf('')
+        self.host.reload()
+        self.assertEqual(self.host.find(IO_NQN), [dev])
+        self.assertEqual(self.host.owner(dev), 'pre-os')
+        self.assertEqual(len(self.tracked(dev)), 1)
+        self.assertEqual(self.host.disconnected, [])
+
     def test_b3_exclusion_keeps_nbft_path(self):
-        """An exclusion of the boot subsystem does not disconnect the boot
-        path."""
+        """The exclusion list does not apply to a pre-OS path: an
+        exclusion of the boot subsystem neither disconnects it nor stops
+        nvme-discoverd from connecting it again."""
         dev = self.boot_nbft()
         self.host.start()
         (self.host.base / 'exclusions.conf').write_text(
@@ -291,6 +498,9 @@ class HandoverTest(unittest.TestCase):
         self.host.reload()
         self.assertEqual(self.host.find(NBFT_NQN), [dev])
         self.assertEqual(self.host.disconnected, [])
+        self.host.lose(dev)
+        (dev,) = self.host.find(NBFT_NQN)
+        self.assertEqual(self.host.owner(dev), 'pre-os')
 
     def test_b4_fc_discovery_storm(self):
         """FC discovery events for a DC that is already known connect its
@@ -327,24 +537,83 @@ class HandoverTest(unittest.TestCase):
         self.assertEqual(host.find(DISC_NQN), [dc])
         self.assertEqual(host.disconnected, [])
 
+    def test_b6_preos_dc_options(self):
+        """What a pre-OS DC lists keeps the options the pre-OS
+        environment's connect-all gave it, also when it is lost."""
+        host = self.host
+        host.fabric.add_target(
+            'tcp', '192.0.2.10', '8009', DISC_NQN,
+            dlp=[{'transport': 'tcp', 'traddr': IO_TRADDR,
+                  'trsvcid': '4420', 'subsysnqn': IO_NQN}])
+        host.fabric.add_target('tcp', IO_TRADDR, '4420', IO_NQN)
+        res = host.nvme('connect-all', '-t', 'tcp', '-a', '192.0.2.10',
+                        '-s', '8009', '--owner=pre-os',
+                        '--ctrl-loss-tmo=30')
+        self.assertEqual(res.returncode, 0, res.stderr)
+        (dev,) = host.find(IO_NQN)
+        self.assertEqual(host.ctrl(dev)['ctrl_loss_tmo'], '30')
+        host.start()
+        host.lose(dev)
+        (dev,) = host.find(IO_NQN)
+        self.assertEqual(host.owner(dev), 'pre-os')
+        self.assertEqual(host.ctrl(dev)['ctrl_loss_tmo'], '30')
+
+    def test_b6_aen_from_preos_dc(self):
+        """A path that a pre-OS DC lists after an AEN is connected with
+        the owner pre-os too."""
+        host = self.host
+        dc_target = host.fabric.add_target(
+            'tcp', '192.0.2.10', '8009', DISC_NQN,
+            dlp=[{'transport': 'tcp', 'traddr': IO_TRADDR,
+                  'trsvcid': '4420', 'subsysnqn': IO_NQN}])
+        host.fabric.add_target('tcp', IO_TRADDR, '4420', IO_NQN)
+        res = host.nvme('connect-all', '-t', 'tcp', '-a', '192.0.2.10',
+                        '-s', '8009', '--persistent=force',
+                        '--owner=pre-os')
+        self.assertEqual(res.returncode, 0, res.stderr)
+        (dc,) = host.find(DISC_NQN)
+        host.start()
+        self.assertEqual(host.owner(dc), 'pre-os')
+
+        other = 'nqn.2026-11.org.example:more'
+        host.fabric.add_target('tcp', '192.0.2.21', '4420', other)
+        dc_target.dlp.append({'transport': 'tcp', 'traddr': '192.0.2.21',
+                              'trsvcid': '4420', 'subsysnqn': other})
+        host.aen(dc)
+        (dev,) = host.find(other)
+        self.assertEqual(host.owner(dev), 'pre-os')
+        self.assertEqual(host.ctrl(dev)['ctrl_loss_tmo'], '-1')
+        host.shutdown()
+        # The DC carries no file system: its unit disconnects it.
+        self.assertEqual(host.find(other), [dev])
+        self.assertNotIn(dev, host.disconnected)
+
     # -- C: the shutdown ----------------------------------------------- #
 
-    @unittest.expectedFailure
     def test_c1_shutdown_keeps_nbft_path(self):
-        """The shutdown does not disconnect the boot path (#4331). The
-        unit nvme-discoverd adopted it into disconnects on stop."""
+        """The shutdown does not disconnect the boot path: the
+        unit of a pre-OS path has no ExecStop=."""
         dev = self.boot_nbft()
         self.host.start()
         self.host.shutdown()
         self.assertEqual(self.host.find(NBFT_NQN), [dev])
 
-    @unittest.expectedFailure
     def test_c1_shutdown_keeps_fc_boot_path(self):
         """The shutdown does not disconnect the FC boot path (#4331)."""
         dev = self.boot_fc()
         self.host.start()
         self.host.shutdown()
         self.assertEqual(self.host.find(IO_NQN), [dev])
+
+    def test_c1_shutdown_keeps_preos_path(self):
+        """The shutdown does not disconnect a configured connection of
+        the pre-OS environment."""
+        self.configure_io()
+        dev = self.connect_io('--owner=pre-os')
+        self.host.start()
+        self.host.shutdown()
+        self.assertEqual(self.host.find(IO_NQN), [dev])
+        self.assertEqual(self.host.disconnected, [])
 
     def test_c1_shutdown_disconnects_own_connections(self):
         """What nvme-discoverd connected itself is disconnected at
@@ -355,6 +624,7 @@ class HandoverTest(unittest.TestCase):
         self.host.shutdown()
         self.assertEqual(self.host.find(IO_NQN), [])
         self.assertIn(dev, self.host.disconnected)
+
 
 
 if __name__ == '__main__':

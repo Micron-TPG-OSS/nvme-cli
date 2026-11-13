@@ -156,6 +156,7 @@ class FabricsController(MockController):
             'traddr': traddr,
             'trsvcid': trsvcid,
             'keep_alive_tmo': opts.get('keep_alive_tmo'),
+            'ctrl_loss_tmo': opts.get('ctrl_loss_tmo'),
             'nr_io_queues': opts.get('nr_io_queues'),
             'discovery': 'discovery' in flags,
             'dhchap_secret': opts.get('dhchap_secret'),
@@ -599,6 +600,229 @@ class FabricsMockCLITest(MockTestCase):
         self.assertEqual(
             self._connect_all_nbft('--hostnqn', self._OWNER_HOSTNQN),
             self._OWNER_HOSTNQN)
+
+    def test_connect_all_nbft_owner(self):
+        """The NBFT boot connections are the pre-OS environment's: they
+        get the owner pre-os, once called nbft."""
+        self._connect_all_nbft()
+        self.assertEqual(self._owner(0), 'pre-os')
+
+    def test_pre_os_ctrl_loss_tmo(self):
+        """The kernel never gives up a pre-OS path: the owner pre-os
+        connects with ctrl_loss_tmo=-1, unless one is given. Other
+        owners keep the kernel's default."""
+        self._connect_all_nbft()
+        self.assertEqual(self.server.controllers[0]['ctrl_loss_tmo'], '-1')
+
+        args = self._owner_connect_args('nqn.2014-08.org.nvmexpress:a')
+        self._run(*args, '--owner=pre-os', '--ctrl-loss-tmo=30')
+        self.assertEqual(self.server.controllers[1]['ctrl_loss_tmo'], '30')
+
+        args = self._owner_connect_args('nqn.2014-08.org.nvmexpress:b')
+        self._run(*args, '--owner=stas')
+        self.assertEqual(self.server.controllers[2]['ctrl_loss_tmo'], '600')
+
+    def test_pre_os_ctrl_loss_tmo_over_vendor(self):
+        """A pre-OS path keeps ctrl_loss_tmo=-1 over a vendor default:
+        it counts as the connection's own value."""
+        etc = Path(self.base_dir) / 'vendor.d'
+        etc.mkdir()
+        (etc / '90-local.conf').write_text(
+            '[Model]\nmodel = NetApp ONTAP Controller\n'
+            'ctrl-loss-tmo = 30\n')
+        self.server.sysfs_model = 'NetApp ONTAP Controller'
+
+        args = self._owner_connect_args('nqn.2014-08.org.nvmexpress:a')
+        self._run(*args, '--owner=pre-os')
+        self.assertEqual(self._vendor_attr(0, 'ctrl_loss_tmo'), '-1')
+
+        args = self._owner_connect_args('nqn.2014-08.org.nvmexpress:b')
+        self._run(*args)
+        self.assertEqual(self._vendor_attr(1, 'ctrl_loss_tmo'), '30')
+
+    # -- the pre-OS connections, recorded for the OS environment ------ #
+
+    def _initrd(self):
+        (Path(self.base_dir) / 'etc').mkdir(exist_ok=True)
+        (Path(self.base_dir) / 'etc/initrd-release').write_text('')
+
+    def _pre_os_conf(self):
+        d = Path(self.base_dir) / 'pre-os.conf.d'
+        if not d.is_dir():
+            return []
+        return [f.read_text() for f in sorted(d.glob('*.conf'))]
+
+    def test_pre_os_records_connect(self):
+        """In the initrd, a connect with the owner pre-os is recorded in
+        pre-os.conf.d, also when it fails, and once per connection."""
+        self._initrd()
+        self.server.connect_errno = errno.ECONNREFUSED
+        args = (*self._owner_connect_args(
+                    'nqn.2014-08.org.nvmexpress:boot-subsys'),
+                '--owner=pre-os', '--ctrl-loss-tmo=-1')
+        self._run(*args, expect_fail=True)
+        self.server.connect_errno = 0
+        self._run(*args)
+        (conf,) = self._pre_os_conf()
+        self.assertIn('[Subsystem]', conf)
+        self.assertIn('nqn.2014-08.org.nvmexpress:boot-subsys', conf)
+        self.assertIn('traddr=192.168.20.10', conf)
+        self.assertIn('ctrl-loss-tmo', conf)
+        self.assertIn(self._OWNER_HOSTNQN, conf)
+
+    def test_pre_os_records_discovery_controller(self):
+        """connect-all to a DC records the DC, not what its log page
+        lists: nvme-discoverd learns these from the DC."""
+        self._initrd()
+        self._dc_with_one_subsystem()
+        self._run('connect-all', '-t', 'tcp', '-a', self._DC_TRADDR,
+                  '-s', '8009', '--owner=pre-os')
+        (conf,) = self._pre_os_conf()
+        self.assertIn('[Discovery Controller]', conf)
+        self.assertIn(f'traddr={self._DC_TRADDR}', conf)
+        self.assertNotIn('boot-subsys', conf)
+
+    def test_pre_os_records_configuration(self):
+        """connect-all with the configuration records every connection
+        of it."""
+        self._initrd()
+        self._dc_with_one_subsystem()
+        (Path(self.base_dir) / 'nvme-fabrics.conf').write_text(
+            '[Discovery Controller]\n'
+            f'controller = transport=tcp;traddr={self._DC_TRADDR};'
+            'trsvcid=8009\n'
+            '[Subsystem]\n'
+            'nqn = nqn.2014-08.org.nvmexpress:data\n'
+            'controller = transport=tcp;traddr=192.168.40.30;'
+            'trsvcid=4420\n')
+        self._run('connect-all', '--no-nbft', '--owner=pre-os')
+        # One host per file: both connections are in the host's drop-in.
+        (conf,) = self._pre_os_conf()
+        self.assertIn(f'traddr={self._DC_TRADDR}', conf)
+        self.assertIn('traddr=192.168.40.30', conf)
+        self._assert_pre_os_conf_valid()
+
+    def _assert_pre_os_conf_valid(self):
+        conf = Path(self.base_dir) / 'pre-os.conf'
+        conf.touch()
+        self._run('config', 'validate', '-J', str(conf))
+
+    def test_pre_os_records_paths_of_one_host(self):
+        """Two paths to one subsystem and another subsystem of the same
+        host make one valid drop-in, recorded by three nvme runs."""
+        self._initrd()
+        for nqn, traddr in (('nqn.2014-08.org.nvmexpress:root', '192.168.20.10'),
+                            ('nqn.2014-08.org.nvmexpress:root', '192.168.20.11'),
+                            ('nqn.2014-08.org.nvmexpress:data', '192.168.20.12')):
+            self._run(*self._owner_connect_args(nqn, traddr),
+                      '--owner=pre-os')
+        (conf,) = self._pre_os_conf()
+        for traddr in ('192.168.20.10', '192.168.20.11', '192.168.20.12'):
+            self.assertIn(f'traddr={traddr}', conf)
+        self._assert_pre_os_conf_valid()
+
+    def test_pre_os_records_nothing_outside_initrd(self):
+        """nvme-discoverd reconnects pre-OS paths from the real root with
+        the same owner; that records nothing."""
+        self._run(*self._owner_connect_args(
+                      'nqn.2014-08.org.nvmexpress:boot-subsys'),
+                  '--owner=pre-os')
+        self.assertEqual(self._pre_os_conf(), [])
+
+    def test_pre_os_records_no_credentials(self):
+        """The record carries no KX-HMAC-CHAP secrets and no inline TLS
+        key: the pre-OS environment loads the keys into the kernel's
+        keyring, and nvme-keysd does in the OS environment."""
+        self._initrd()
+        dhchap = 'DHHC-1:00:EKN5fkA4mibMctEW+jyGddCJQZ/iNI1HXvsreK3ZypSStJiw:'
+        psk = 'NVMeTLSkey-1:01:9wCYVQqDvADjGIZo6q/v2SfmXZqqkNa9TcvYu97Ly3Q/gajh:'
+        self.nvme(*self._owner_connect_args(
+                      'nqn.2014-08.org.nvmexpress:boot-subsys'),
+                  '--owner=pre-os', '-S', dhchap, '-C', dhchap,
+                  '--tls', f'--tls-key={psk}')
+        (conf,) = self._pre_os_conf()
+        self.assertIn('boot-subsys', conf)
+        self.assertNotIn('DHHC-1', conf)
+        self.assertNotIn('NVMeTLSkey', conf)
+        self.assertNotIn('secret', conf)
+
+    def test_pre_os_records_nothing_on_dry_run(self):
+        """A dry run records nothing: nvme-discoverd would connect it
+        after the switch."""
+        self._initrd()
+        self._run(*self._owner_connect_args(
+                      'nqn.2014-08.org.nvmexpress:boot-subsys'),
+                  '--owner=pre-os', '--dry-run')
+        self.assertEqual(self._pre_os_conf(), [])
+
+    def test_pre_os_records_well_known_nqn_as_dc(self):
+        """A connection to the well-known discovery NQN is a discovery
+        controller, also without --discovery."""
+        self._initrd()
+        self.nvme('connect', '-t', 'tcp', '-a', self._DC_TRADDR,
+                  '-s', '8009', '-n', 'nqn.2014-08.org.nvmexpress.discovery',
+                  '--hostnqn', self._OWNER_HOSTNQN, '--owner=pre-os')
+        (conf,) = self._pre_os_conf()
+        self.assertIn('[Discovery Controller]', conf)
+        self.assertNotIn('[Subsystem]', conf)
+
+    def test_disconnect_honors_owner(self):
+        """nvme disconnect leaves an owned controller alone unless --owner
+        names its owner ("nbft" is "pre-os") or --force is given; an
+        unowned controller is anybody's."""
+        nqn = 'nqn.2014-08.org.nvmexpress:owned-subsys'
+        self._run(*self._owner_connect_args(nqn), '--owner=pre-os')
+        for args in (('-d', 'nvme0'), ('-n', nqn),
+                     ('-d', 'nvme0', '--owner=stas'),
+                     ('-t', 'tcp', '-a', '192.168.20.10', '-n', nqn)):
+            with self.subTest(args=args):
+                self._run('disconnect', *args, expect_fail=args[0] == '-d')
+                self._assert_persisted(0)
+        self._run('disconnect', '-d', 'nvme0', '--owner=nbft')
+        self._assert_disconnected(0)
+
+    def test_disconnect_exclude_before_disconnect(self):
+        """--exclude is written before the disconnect, so an orchestrator
+        that sees the removal finds the exclusion in place."""
+        for args in (('-d', 'nvme{n}'),
+                     ('-t', 'tcp', '-a', '192.168.20.10', '-n', '{nqn}')):
+            n = len(self.server.controllers)
+            nqn = f'nqn.2014-08.org.nvmexpress:excl{n}'
+            with self.subTest(args=args):
+                self._run(*self._owner_connect_args(nqn))
+                self._run('disconnect', '--exclude',
+                          *(a.format(n=n, nqn=nqn) for a in args))
+                self._assert_disconnected(n)
+                excl = Path(self.base_dir) / 'exclusions.conf'
+                self.assertIn(nqn, excl.read_text())
+                delete = self._ctrl_path(n) / 'delete_controller'
+                self.assertLessEqual(excl.stat().st_mtime_ns,
+                                     delete.stat().st_mtime_ns)
+                excl.unlink()
+
+    def test_disconnect_force_and_unowned(self):
+        """--force disconnects whatever the owner; an unowned controller
+        needs neither."""
+        self._run(*self._owner_connect_args(
+            'nqn.2014-08.org.nvmexpress:a'), '--owner=stas')
+        self._run(*self._owner_connect_args(
+            'nqn.2014-08.org.nvmexpress:b'))
+        self._run('disconnect', '-d', 'nvme0', '--force')
+        self._assert_disconnected(0)
+        self._run('disconnect', '-d', 'nvme1')
+        self._assert_disconnected(1)
+
+    def test_owner_nbft_is_pre_os(self):
+        """--owner nbft records the owner under its new name, and a
+        controller an older initrd recorded as nbft is pre-os's."""
+        subsysnqn = 'nqn.2014-08.org.nvmexpress:boot-subsys'
+        args = self._owner_connect_args(subsysnqn)
+        self._run(*args, '--owner=nbft')
+        self.assertEqual(self._owner(0), 'pre-os')
+
+        self._owner_path(0).write_text('nbft\n')
+        self._run('disconnect-all', '--owner=pre-os')
+        self._assert_disconnected(0)
 
     _DC_TRADDR = '192.168.40.10'
 

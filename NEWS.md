@@ -24,6 +24,11 @@
   controller connected by libnvme 1 under a reused name reads as owned
   by the old owner.
 
+* `nvme disconnect` (`-d`, `-n` and by address) honors the ownership
+  registry, as `disconnect-all` does: a controller with an owner is
+  disconnected only with `--owner` of its owner, or with `--force`. A
+  controller without an owner is disconnected as before.
+
 ### Fabrics
 
 * libnvme applies the defaults of storage vendors for their controllers
@@ -60,6 +65,21 @@
   after `dev_loss_tmo` behind a persistent discovery controller was not
   connected again.
 
+* nvme-discoverd keeps the connections of the pre-OS environment
+  connected without owning them: the NBFT's, those in
+  `/run/nvme/pre-os.conf`, and what a pre-OS discovery controller lists.
+  It connects them with the owner `pre-os` and the parameters the pre-OS
+  environment used, never disconnects their I/O controllers, also not at
+  the shutdown, and does not apply the exclusion list to them.
+  The `[Global]` key `nbft` of `nvme-discoverd.conf` is now `pre-os`;
+  `nbft` stays as its old name.
+  Upgrade note: an initrd needs a dracut that passes `--owner=pre-os`
+  (it checks `nvme connect-all --help` for `pre-os`). With an older one,
+  FC boot paths and configured connections of the initrd have no owner,
+  and nvme-discoverd still adopts them and disconnects them at the
+  shutdown, as before. Update dracut and rebuild the initrd together
+  with nvme-cli.
+
 ### nvmf-autoconnect
 
 * `nvmf-autoconnect.service` wants `network-online.target`; it was only
@@ -86,6 +106,27 @@
   enabled: nvme-discoverd replays the FC discovery events itself when it
   starts, and the unit ran before that, while the legacy rule was not
   masked yet (#4327).
+
+### Fabrics and the ownership registry
+
+* The owner of the connections of the pre-OS environment, the firmware
+  and the initrd, is `pre-os`: `nvme connect-all --nbft` records it, and
+  nvme-discoverd reconnects the NBFT paths with it. `nbft`, the owner
+  nvme-cli 3.0 to 3.2 record, is its old name: `--owner nbft` records
+  `pre-os`, and an `nbft` entry matches `pre-os`.
+
+* A connection with the owner `pre-os` gets `ctrl_loss_tmo=-1` unless one
+  is given: the kernel never gives a path of the pre-OS environment up.
+  This covers the NBFT, the configuration, the I/O controllers of a
+  discovery log page and the reconnects of nvme-discoverd.
+
+* In the initrd (`/etc/initrd-release`), `nvme connect` and `connect-all`
+  with the owner `pre-os` record each connection they are asked for in
+  `/run/nvme/pre-os.conf.d`, before they connect, for nvme-discoverd in
+  the real root: one drop-in per host, in the format of
+  nvme-fabrics.conf. The NBFT is not recorded; it is still there after
+  the switch. The help of `--owner` says so, which tells the initrd's
+  scripts that nvme follows this model.
 
 ## Changes in 3.2 (2026-10-30)
 

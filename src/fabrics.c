@@ -58,6 +58,7 @@
 #include "cleanup.h"
 #include "config-convert.h"
 #include "fabrics.h"
+#include "pre-os.h"
 #include "global-ctx.h"
 #include "logging.h"
 #include "nvme-print.h"
@@ -458,6 +459,9 @@ enum consume_mode {
 	CONSUME_CONNECT_ONLY,
 };
 
+static const char *nvmf_owner =
+	"registry owner; in the initrd, pre-os also records the connection";
+
 struct consume_state {
 	struct libnvme_global_ctx *ctx;
 	const struct libnvmf_config *cfg;
@@ -468,6 +472,7 @@ struct consume_state {
 	char *raw;
 	const char *hostnqn;
 	const char *hostid;
+	bool pre_os;	/* record the connections for the OS environment */
 	int err;
 };
 
@@ -552,6 +557,50 @@ static int fabrics_connect_nr_io_queues(const char *transport,
 /* libnvmf_config_conn_for_each() callback: settle addressing/identity,
  * check exclusion, then discover or connect.
  */
+/*
+ * Record a connection of the pre-OS environment for the OS environment
+ * (see pre-os.h). A failure is reported, but the connect goes ahead: the
+ * boot must not depend on it.
+ */
+static void pre_os_record(struct libnvme_global_ctx *ctx, bool is_dc,
+		const struct libnvmf_tid *tid,
+		const struct libnvmf_params *params)
+{
+	int err = nvme_pre_os_record(ctx, is_dc, tid, params);
+
+	if (err)
+		nvme_show_error(
+			"%s: failed to record the pre-OS connection: %s",
+			libnvmf_tid_get_canonical(tid),
+			libnvme_strerror(-err));
+}
+
+/*
+ * Record the connection the command line names, see pre_os_record().
+ */
+static void pre_os_record_args(struct libnvme_global_ctx *ctx, bool is_dc,
+		const struct nvmf_args *fa, const char *persistent)
+{
+	__cleanup_nvmf_tid struct libnvmf_tid *tid = NULL;
+	struct libnvmf_params *params;
+
+	if (libnvmf_tid_from_fields(fa->transport, fa->traddr, fa->trsvcid,
+			fa->subsysnqn, fa->host_traddr, fa->host_iface,
+			fa->hostnqn, fa->hostid, &tid) || !tid) {
+		nvme_show_error("failed to record the pre-OS connection");
+		return;
+	}
+
+	params = libnvmf_params_new();
+	if (!params)
+		return;
+	nvmf_args_to_params(params, fa);
+	if (is_dc && persistent)
+		libnvmf_params_set(params, "persistent", persistent);
+	pre_os_record(ctx, is_dc, tid, params);
+	libnvmf_params_free(params);
+}
+
 static void consume_conn(const struct libnvmf_config_conn *conn,
 		void *user_data)
 {
@@ -580,6 +629,10 @@ static void consume_conn(const struct libnvmf_config_conn *conn,
 				libnvmf_config_conn_get_source(conn));
 		return;
 	}
+
+	if (st->pre_os)
+		pre_os_record(st->ctx, is_dc, tid,
+			      libnvmf_config_conn_get_params(conn));
 
 	err = libnvmf_context_create(st->ctx, hook_decide_retry, hook_connected,
 			hook_already_connected, &hfd, &fctx);
@@ -904,7 +957,7 @@ unref:
 static int fabrics_discovery_config(struct libnvme_global_ctx *ctx,
 		char *config_file, const char *hostnqn_arg,
 		const char *hostid_arg, bool connect, bool no_reuse,
-		nvme_print_flags_t flags)
+		bool pre_os, nvme_print_flags_t flags)
 {
 	__cleanup_free char *ini_path = NULL;
 	__cleanup_free char *hostnqn = NULL;
@@ -953,6 +1006,7 @@ static int fabrics_discovery_config(struct libnvme_global_ctx *ctx,
 		.raw = raw,
 		.hostnqn = hostnqn,
 		.hostid = hostid,
+		.pre_os = connect && pre_os,
 	};
 	libnvmf_config_conn_for_each(cfg, consume_conn, &st);
 	libnvmf_config_free(cfg);
@@ -993,7 +1047,7 @@ static int check_ctrl_owner(struct libnvme_global_ctx *ctx,
 	if (!reg_owner)   /* no owner in registry */
 		return 0;
 
-	if (owner && streq(reg_owner, owner))
+	if (owner && libnvmf_owner_equal(reg_owner, owner))
 		return 0;
 
 	nvme_show_message(false,
@@ -1038,8 +1092,7 @@ int fabrics_discover(const char *desc, int argc, char **argv, bool connect)
 			 .old_name = "force"),
 		OPT_FLAG("nbft",    0,   &nbft,   "Only look at NBFT tables"),
 		OPT_FLAG("no-nbft", 0,   &nonbft, "Do not look at NBFT tables"),
-		OPT_STRING("owner", 0, "NAME", &owner,
-			   "record this owner in the registry"),
+		OPT_STRING("owner", 0, "NAME", &owner, nvmf_owner),
 		OPT_DIR("nbft-path", 0, &nbft_path,
 			"user-defined path for NBFT tables"),
 		OPT_END()
@@ -1074,12 +1127,11 @@ int fabrics_discover(const char *desc, int argc, char **argv, bool connect)
 	config_file = nvme_nvmf_config_file(config_file);
 
 	/*
-	 * --nbft defaults the owner to "nbft" so legacy boot scripts that
-	 * call "connect-all --nbft" record ownership unchanged.  An explicit
-	 * --owner overrides that default.
+	 * The NBFT's connections are the pre-OS environment's: --nbft
+	 * defaults the owner to "pre-os". An explicit --owner overrides it.
 	 */
 	if (owner || nbft) {
-		ret = libnvme_set_owner(ctx, owner ? owner : "nbft");
+		ret = libnvme_set_owner(ctx, owner ? owner : "pre-os");
 		if (ret) {
 			nvme_show_error("failed to set owner: %s",
 				libnvme_strerror(-ret));
@@ -1154,10 +1206,10 @@ int fabrics_discover(const char *desc, int argc, char **argv, bool connect)
 		if (!nbft && config_file)
 			ret = fabrics_discovery_config(ctx, config_file,
 				fa.hostnqn, fa.hostid, connect, no_reuse,
-				flags);
+				nvme_pre_os_records(owner), flags);
 	} else {
 		ret = check_ctrl_owner(ctx, fctx,
-				owner ? owner : (nbft ? "nbft" : NULL),
+				owner ? owner : (nbft ? "pre-os" : NULL),
 				no_reuse);
 		if (ret < 0) {
 			nvme_show_error("failed to check owner: %s",
@@ -1166,6 +1218,11 @@ int fabrics_discover(const char *desc, int argc, char **argv, bool connect)
 		}
 		if (ret)
 			return 0;
+
+		if (connect && !device &&
+		    nvme_pre_os_records(owner ? owner :
+					 (nbft ? "pre-os" : NULL)))
+			pre_os_record_args(ctx, true, &fa, persistent);
 
 		ret = libnvmf_discover(ctx, fctx);
 		if (ret == -ENVME_CONNECT_DRY_RUN) {
@@ -1185,7 +1242,7 @@ int fabrics_discover(const char *desc, int argc, char **argv, bool connect)
  */
 static int fabrics_connect_config(struct libnvme_global_ctx *ctx,
 		char *config_file, const char *hostnqn_arg,
-		const char *hostid_arg, nvme_print_flags_t flags)
+		const char *hostid_arg, bool pre_os, nvme_print_flags_t flags)
 {
 	__cleanup_free char *ini_path = NULL;
 	__cleanup_free char *hostnqn = NULL;
@@ -1227,6 +1284,7 @@ static int fabrics_connect_config(struct libnvme_global_ctx *ctx,
 		.raw = raw,
 		.hostnqn = hostnqn,
 		.hostid = hostid,
+		.pre_os = pre_os,
 	};
 	libnvmf_config_conn_for_each(cfg, consume_conn, &st);
 	libnvmf_config_free(cfg);
@@ -1255,8 +1313,7 @@ int fabrics_connect(const char *desc, int argc, char **argv)
 	OPT_ARGS(opts) = {
 		OPT_INCLUDE(nvmf, "Fabrics options"),
 		OPT_FILE("config", 'J', &config_file, nvmf_config_file),
-		OPT_STRING("owner", 0, "NAME", &owner,
-			   "record this owner in the registry"),
+		OPT_STRING("owner", 0, "NAME", &owner, nvmf_owner),
 		OPT_FILE("devid-file", 0, &devid_file,
 			 "write connected device name to FILE"),
 		OPT_FLAG("idempotent", 0, &idempotent,
@@ -1340,7 +1397,7 @@ do_connect:
 
 	if (config_file)
 		return fabrics_connect_config(ctx, config_file, fa.hostnqn,
-			fa.hostid, flags);
+			fa.hostid, nvme_pre_os_records(owner), flags);
 
 	struct hook_fabrics_data hfd = {
 		.flags = flags,
@@ -1373,6 +1430,9 @@ do_connect:
 				fa.subsysnqn ? fa.subsysnqn : "this controller");
 		libnvmf_tid_free(tid);
 	}
+
+	if (nvme_pre_os_records(owner))
+		pre_os_record_args(ctx, discovery, &fa, NULL);
 
 	ret = libnvmf_connect(ctx, fctx);
 	if (ret == -ENVME_CONNECT_ALREADY && idempotent)
@@ -1429,7 +1489,45 @@ static bool nvmf_ctrl_matches_args(struct libnvme_host *h, struct libnvme_ctrl *
 	       opt_matches(fa->hostid, libnvme_host_get_hostid(h));
 }
 
-static int nvmf_disconnect_nqn(struct libnvme_global_ctx *ctx, char *nqn)
+/*
+ * Who may disconnect a controller: one without an owner, anybody; one
+ * with an owner, only that --owner ("nbft" is "pre-os"), or --force.
+ */
+struct disconnect_policy {
+	const char *owner;
+	bool force;
+};
+
+/*
+ * Whether @pol allows to disconnect @c: 0 if it does, 1 if its owner
+ * keeps it, or a negative errno.
+ */
+static int may_disconnect(struct libnvme_global_ctx *ctx,
+		struct libnvme_ctrl *c, const struct disconnect_policy *pol)
+{
+	__cleanup_free char *reg_owner = NULL;
+	const char *name = libnvme_ctrl_get_name(c);
+	int err;
+
+	if (!pol->force) {
+		err = libnvmf_registry_retrieve(ctx, name, "owner", &reg_owner);
+		if (err && err != -ENOENT)
+			return err;
+		if (reg_owner && *reg_owner &&
+		    !(pol->owner &&
+		      libnvmf_owner_equal(reg_owner, pol->owner))) {
+			nvme_show_error(
+				"%s is owned by '%s': use --owner=%s or --force",
+				name, reg_owner, reg_owner);
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+static int nvmf_disconnect_nqn(struct libnvme_global_ctx *ctx, char *nqn,
+		const struct disconnect_policy *pol)
 {
 	int i = 0;
 	char *n = nqn;
@@ -1446,7 +1544,8 @@ static int nvmf_disconnect_nqn(struct libnvme_global_ctx *ctx, char *nqn)
 				if (strcmp(libnvme_subsystem_get_subsysnqn(s), p))
 					continue;
 				libnvme_subsystem_for_each_ctrl(s, c) {
-					if (!libnvmf_disconnect_ctrl(c))
+					if (!may_disconnect(ctx, c, pol) &&
+					    !libnvmf_disconnect_ctrl(c))
 						i++;
 				}
 			}
@@ -1522,11 +1621,12 @@ static int add_exclusion_subsysnqn(struct libnvme_global_ctx *ctx,
 }
 
 static int disconnect_by_device(struct libnvme_global_ctx *ctx,
-		char *device,  bool exclude)
+		char *device, bool exclude,
+		const struct disconnect_policy *pol)
 {
 	struct libnvme_ctrl *c;
+	int err, ret = 0;
 	char *p;
-	int err;
 
 	while ((p = shr_strsep(&device, ",")) != NULL) {
 		if (!strncmp(p, "/dev/", 5))
@@ -1538,20 +1638,27 @@ static int disconnect_by_device(struct libnvme_global_ctx *ctx,
 			return -ENODEV;
 		}
 
-		if (exclude)
-			add_exclusion_ctrl(ctx, c);
-
-		err = libnvmf_disconnect_ctrl(c);
+		err = may_disconnect(ctx, c, pol);
+		if (err == 1) {
+			ret = -EPERM;
+			continue;
+		}
+		if (!err) {
+			if (exclude)
+				add_exclusion_ctrl(ctx, c);
+			err = libnvmf_disconnect_ctrl(c);
+		}
 		if (err)
 			nvme_show_error("Failed to disconnect %s: %s\n",
 				p, libnvme_strerror(-err));
 	}
 
-	return 0;
+	return ret;
 }
 
 static int disconnect_by_args(struct libnvme_global_ctx *ctx,
-		const struct nvmf_args *fa, bool exclude)
+		const struct nvmf_args *fa, bool exclude,
+		const struct disconnect_policy *pol)
 {
 	struct libnvme_host *h;
 	struct libnvme_subsystem *s;
@@ -1564,10 +1671,14 @@ static int disconnect_by_args(struct libnvme_global_ctx *ctx,
 				if (!nvmf_ctrl_matches_args(h, c, fa))
 					continue;
 
-				if (exclude)
-					add_exclusion_ctrl(ctx, c);
-
-				err = libnvmf_disconnect_ctrl(c);
+				err = may_disconnect(ctx, c, pol);
+				if (err == 1)
+					continue;
+				if (!err) {
+					if (exclude)
+						add_exclusion_ctrl(ctx, c);
+					err = libnvmf_disconnect_ctrl(c);
+				}
 				if (err)
 					nvme_show_error("Failed to disconnect %s: %s\n",
 						libnvme_ctrl_get_name(c),
@@ -1587,7 +1698,7 @@ static int disconnect_by_args(struct libnvme_global_ctx *ctx,
 }
 
 static int disconnect_by_nqn(struct libnvme_global_ctx *ctx, const char *nqn,
-		bool exclude)
+		bool exclude, const struct disconnect_policy *pol)
 {
 	__cleanup_free char *n = NULL;
 
@@ -1611,7 +1722,7 @@ static int disconnect_by_nqn(struct libnvme_global_ctx *ctx, const char *nqn,
 		}
 	}
 
-	return nvmf_disconnect_nqn(ctx, n);
+	return nvmf_disconnect_nqn(ctx, n, pol);
 }
 
 int fabrics_disconnect(const char *desc, int argc, char **argv)
@@ -1630,14 +1741,21 @@ int fabrics_disconnect(const char *desc, int argc, char **argv)
 	struct config {
 		char *device;
 		bool  exclude;
+		char *owner;
+		bool  force;
 	};
 
 	struct config cfg = { 0 };
+	struct disconnect_policy pol;
 
 	OPT_ARGS(opts) = {
 		OPT_INCLUDE(nvmf, "Fabrics options"),
 		OPT_STRING("device", 'd', "DEV",        &cfg.device, device),
 		OPT_FLAG("exclude",  'x', &cfg.exclude, exclude_help),
+		OPT_STRING("owner",  0, "NAME",         &cfg.owner,
+			   "disconnect a controller owned by NAME too"),
+		OPT_FLAG("force",    0, &cfg.force,
+			 "disconnect regardless of ownership"),
 		OPT_END()
 	};
 
@@ -1686,13 +1804,16 @@ int fabrics_disconnect(const char *desc, int argc, char **argv)
 		return err;
 	}
 
+	pol.owner = cfg.owner;
+	pol.force = cfg.force;
+
 	if (cfg.device)
-		return disconnect_by_device(ctx, cfg.device, cfg.exclude);
+		return disconnect_by_device(ctx, cfg.device, cfg.exclude, &pol);
 
 	if (match_args)
-		return disconnect_by_args(ctx, &fa, cfg.exclude);
+		return disconnect_by_args(ctx, &fa, cfg.exclude, &pol);
 
-	return disconnect_by_nqn(ctx, fa.subsysnqn, cfg.exclude);
+	return disconnect_by_nqn(ctx, fa.subsysnqn, cfg.exclude, &pol);
 }
 
 /* disconnect-all policy: should controller @c be torn down? */
